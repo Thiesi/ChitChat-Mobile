@@ -1,6 +1,6 @@
 # Independently verifiable implementation milestones
 
-Status: M0 discovery delivered and decentralized push accepted; M1 debug/release builds, nine unit tests, lint and four API36 device tests pass, with current-head hosted CI/Claude review/merge evidence in [PR #4](https://github.com/Thiesi/ChitChat-Mobile/pull/4); M2-M8 not started. See [M1 evidence](milestones/M1-foundation.md). Ordinary-DM alerts and final public identity/distribution remain unconfirmed. This plan is the implementation backlog, not an assertion that later work has run. Every milestone produces a compiling native application, relevant success/failure tests, parity/status updates, a focused commit and a reviewable PR. Fetch/compare the Android base before each branch. Do not merge failed required checks or conflicts. Backend source remains read-only throughout.
+Status: M0 and M1 merged; M2a HTTP/password/recovery/session lifecycle is implemented and locally verified in [its evidence](milestones/M2a-session-auth.md). M2b registration, explicit account restoration and step-up remain pending, as do M3-M8. Historical M1 gates are in [PR #4](https://github.com/Thiesi/ChitChat-Mobile/pull/4). Ordinary-DM alerts and final public identity/distribution remain unconfirmed. Every slice compiles, tests, updates parity/status, and goes through the standing commit/push/PR/review/merge order. Fetch/compare the Android base before branching; never merge failed required checks or conflicts. Backend source remains read-only.
 
 | Milestone | Complete vertical slice | Required evidence before completion |
 |---|---|---|
@@ -21,6 +21,8 @@ Additional review gates: M4 reproduces a DM arriving between history retrieval a
 M1 -> M2 -> M3 -> M4 -> M5. M6 and M7 share M2 step-up and M5 interactions; their backend-independent work can proceed while B1-B6 are outstanding. M8 requires successful implementation gates and an actual accessible installation. Do not stall room/DM development on push. UnifiedPush uses existing Web Push, not the superseded FCM-token API proposals. Never ship a test fake as an integration fallback.
 
 Work within a milestone may be split into smaller reviewable commits/PRs, especially M5-M7; each sub-slice still builds and tests. The final parity audit cannot defer administration merely to shrink an initial alpha. Mark alpha scope and remaining rows explicitly. No calendar estimate promises completion of months of UI/backend-dependent work in a single pass.
+
+M2 is split to keep authentication changes reviewable: **M2a** adds HTTPS connectivity/IDNs, password sign-in, emergency recovery, encrypted bounded restoration, logout/invalidation and explicit missing-native-auth states; **M2b** adds registration/PoW, explicit closing-account restoration and the reusable step-up UI/flow. M2 remains unchecked until both slices and their acceptance evidence are recorded. M2a contains a typed restore API call but no user-facing restoration form or completion claim. Opt-in live tests use only a dedicated non-admin account in ignored `.env.integration`; public CI uses contract fixtures, not that file.
 
 ## Repeated milestone handoff record
 

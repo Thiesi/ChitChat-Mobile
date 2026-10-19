@@ -36,6 +36,23 @@ android {
 
 kotlin { jvmToolchain(17) }
 
+// Live tests are opt-in and never run against private credentials in ordinary CI.
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    if (name != "liveSessionTest") exclude("**/LiveSessionTest.class")
+}
+tasks.register<org.gradle.api.tasks.testing.Test>("liveSessionTest") {
+    group = "verification"
+    description = "Explicit live password/session test using ignored .env.integration (never prints credentials)."
+    val unitTests = tasks.named<org.gradle.api.tasks.testing.Test>("testDebugUnitTest")
+    dependsOn("compileDebugUnitTestKotlin", "processDebugUnitTestJavaRes")
+    testClassesDirs = unitTests.get().testClassesDirs
+    classpath = unitTests.get().classpath
+    include("**/LiveSessionTest.class")
+    systemProperty("chitchat.liveConfig", rootProject.file(".env.integration").absolutePath)
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+}
+
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
