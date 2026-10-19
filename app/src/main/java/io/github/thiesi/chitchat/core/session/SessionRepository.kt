@@ -293,7 +293,7 @@ class SessionRepository internal constructor(
         }
     }
 
-    private suspend fun persist(active: Runtime, user: SessionUser?) {
+    private suspend fun persist(active: Runtime, user: SessionUser?, finishOperation: Boolean = true) {
         // Called under lock: a late save cannot run after logout/server change.
         try {
             if (user == null || user.guest) vault.clear() else {
@@ -305,10 +305,73 @@ class SessionRepository internal constructor(
                 if (cookies.isEmpty()) throw IOException("No restorable session cookie")
                 vault.save(SavedSession(active.server.value, user.id, cookies, active.signedInAt!!, now))
             }
-            mutable.value = mutable.value.copy(storageWarning = false, busy = false)
+            mutable.value = mutable.value.copy(storageWarning = false, busy = if (finishOperation) false else mutable.value.busy)
         } catch (_: IOException) {
             try { vault.clear() } catch (_: IOException) { /* Warning stays visible. */ }
-            mutable.value = mutable.value.copy(storageWarning = true, busy = false)
+            mutable.value = mutable.value.copy(storageWarning = true, busy = if (finishOperation) false else mutable.value.busy)
+        }
+    }
+
+    /** A capability for one reauthorized runtime, not a second cookie/session manager. */
+    internal suspend fun openAccess(): SessionAccess = lock.withLock {
+        val current = mutable.value
+        val active = runtime ?: throw ApiFailure(FailureKind.EXPIRED)
+        if (current.phase != SessionPhase.AUTHENTICATED || current.user == null || current.busy ||
+            current.refreshRequired || active.csrf == null) throw ApiFailure(FailureKind.EXPIRED)
+        if (!active.withinLifetime(clock.millis())) {
+            invalidate(active, ApiFailure(FailureKind.EXPIRED))
+            throw ApiFailure(FailureKind.EXPIRED)
+        }
+        if (current.storageWarning) throw ApiFailure(FailureKind.STORAGE)
+        if (clock.millis() < current.retryAtMillis) throw ApiFailure(FailureKind.HTTP, 429,
+            retryAfterSeconds = (current.retryAtMillis - clock.millis() + 999) / 1000)
+        SessionAccess(current.generation, current.user.id, current.user.sessionVersion, active.api, active.csrf!!)
+    }
+
+    internal fun ensureCurrent(access: SessionAccess) {
+        val current = mutable.value
+        if (current.generation != access.generation || current.phase != SessionPhase.AUTHENTICATED ||
+            current.user?.id != access.userId || current.user.sessionVersion != access.sessionVersion ||
+            current.refreshRequired || current.storageWarning) throw CancellationException("Session is no longer current")
+    }
+
+    internal suspend fun recoveryConsumed(access: SessionAccess, remaining: Int) = lock.withLock {
+        ensureCurrent(access)
+        mutable.value = mutable.value.copy(recoveryCodesRemaining = remaining)
+    }
+
+    internal suspend fun <T> authorized(access: SessionAccess, operation: suspend SessionHttp.() -> T): T {
+        lock.withLock {
+            ensureCurrent(access)
+            val active = runtime ?: throw CancellationException("Session retired")
+            if (!active.withinLifetime(clock.millis())) {
+                invalidate(active, ApiFailure(FailureKind.EXPIRED))
+                throw ApiFailure(FailureKind.EXPIRED)
+            }
+            if (active.csrf != access.csrf) throw CancellationException("Session token changed")
+            if (clock.millis() < mutable.value.retryAtMillis) throw ApiFailure(FailureKind.HTTP, 429,
+                retryAfterSeconds = (mutable.value.retryAtMillis - clock.millis() + 999) / 1000)
+        }
+        try {
+            val result = access.api.operation()
+            lock.withLock {
+                ensureCurrent(access)
+                val active = runtime ?: throw CancellationException("Session retired")
+                persist(active, mutable.value.user, finishOperation = false)
+            }
+            return result
+        } catch (failure: ApiFailure) {
+            lock.withLock {
+                if (mutable.value.generation != access.generation) throw CancellationException("Session retired")
+                else {
+                    val active = runtime
+                    // Resource validation/permission errors belong to that screen, not global logout.
+                    if (active != null && (failure.status == 401 || failure.status == 429 || failure.status == 503 ||
+                            failure.code == "csrf_failed" || failure.kind in setOf(FailureKind.NETWORK,
+                            FailureKind.TIMEOUT, FailureKind.REDIRECT))) failLocked(active, failure)
+                }
+            }
+            throw failure
         }
     }
 
@@ -392,3 +455,7 @@ class SessionRepository internal constructor(
         }
     }
 }
+
+// No generated string representation for the captured CSRF/runtime capability.
+internal class SessionAccess(val generation: Long, val userId: Long, val sessionVersion: Int,
+    val api: SessionHttp, val csrf: String)
