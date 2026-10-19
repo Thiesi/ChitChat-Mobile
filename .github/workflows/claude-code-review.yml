@@ -29,6 +29,7 @@ jobs:
       pull-requests: write
       issues: read
     env:
+      LC_ALL: C.UTF-8
       GH_REPO: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
     steps:
@@ -45,8 +46,12 @@ jobs:
             exit 1
           fi
           echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
-          diff_bytes=$(gh pr diff "$PR_NUMBER" --repo "$GH_REPO" | wc -c)
-          comment_bytes=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --comments | wc -c)
+          diff_text=$(gh pr diff "$PR_NUMBER" --repo "$GH_REPO")
+          comment_text=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --comments)
+          diff_bytes=$(printf '%s' "$diff_text" | wc -c)
+          comment_bytes=$(printf '%s' "$comment_text" | wc -c)
+          echo "diff_chars=$(printf '%s' "$diff_text" | wc -m)" >> "$GITHUB_OUTPUT"
+          echo "comment_chars=$(printf '%s' "$comment_text" | wc -m)" >> "$GITHUB_OUTPUT"
           if [[ "$diff_bytes" -gt 140000 || "$comment_bytes" -gt 140000 ]]; then
             echo "::error::Review input exceeds the bounded output/context budget. Split the PR or reduce comment history; no partial review will count."
             exit 1
@@ -109,6 +114,8 @@ jobs:
       - name: Audit actual model tool exposure
         env:
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+          EXPECTED_DIFF_CHARS: ${{ steps.scope.outputs.diff_chars }}
+          EXPECTED_COMMENT_CHARS: ${{ steps.scope.outputs.comment_chars }}
         run: |
           test -f "$EXECUTION_FILE"
           runtime_tools=$(jq -sc '[.. | objects | select(.type? == "system" and .subtype? == "init") | .tools? // empty]' "$EXECUTION_FILE")
@@ -116,6 +123,14 @@ jobs:
           jq -e 'type == "array" and length > 0 and all(.[]; type == "array" and length > 0 and all(.[]; IN("Bash", "StructuredOutput", "EndConversation")))' <<< "$runtime_tools" > /dev/null
           result_lengths=$(jq -sc '[.. | objects | select(.type? == "tool_result") | .content | if type == "string" then length else (tostring | length) end]' "$EXECUTION_FILE")
           echo "Read tool result character counts: $result_lengths"
+          # Match each output to its exact command, not an unrelated large comment.
+          # Compare Unicode characters to characters, never bytes to characters.
+          jq -se --arg diff_cmd "gh pr diff $PR_NUMBER --repo $GH_REPO" \
+            --arg comment_cmd "gh pr view $PR_NUMBER --repo $GH_REPO --comments" \
+            --argjson diff_chars "$EXPECTED_DIFF_CHARS" --argjson comment_chars "$EXPECTED_COMMENT_CHARS" '
+            def text_length: if type == "string" then length elif type == "array" then [.[] | select(.type? == "text") | .text // ""] | join("") | length else 0 end; def delivered($command; $minimum): [.. | objects | select(.type? == "tool_use" and .name? == "Bash" and .input.command? == $command) | .id] as $calls | [.. | objects | select(.type? == "tool_result" and .is_error? != true) | select(.tool_use_id as $id | $calls | index($id) != null) | .content | text_length] as $sizes | ($sizes | length > 0) and any($sizes[]; . >= $minimum);
+            delivered($diff_cmd; $diff_chars) and delivered($comment_cmd; $comment_chars)
+          ' "$EXECUTION_FILE" > /dev/null
 
       - name: Validate and publish reviewed head
         env:
