@@ -1,0 +1,25 @@
+# Machine configuration and build outputs
+.gradle/
+.kotlin/
+**/build/
+local.properties
+.idea/
+*.iml
+captures/
+
+# Firebase environment configuration and sender credentials
+google-services.json
+**/google-services.json
+*service-account*.json
+*firebase-adminsdk*.json
+
+# Signing keys and local secrets
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+.env
+.env.*
+
+# Agent-local indexes and scratch state
+.codebase-memory/
