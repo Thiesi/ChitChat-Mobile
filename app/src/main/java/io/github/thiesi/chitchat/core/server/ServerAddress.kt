@@ -1,7 +1,7 @@
 package io.github.thiesi.chitchat.core.server
 
 import java.net.URI
-import java.util.Locale
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** The root-host deployment used by the current ChitChat API. No credentials belong in it. */
 @JvmInline
@@ -15,16 +15,15 @@ value class ServerAddress private constructor(val value: String) {
                 return AddressResult.Invalid(AddressError.INVALID)
             }
             if (!uri.scheme.equals("https", ignoreCase = true)) return AddressResult.Invalid(AddressError.HTTPS)
-            if (uri.host.isNullOrBlank() || uri.port !in -1..65535 || uri.port == 0) {
-                return AddressResult.Invalid(AddressError.INVALID)
-            }
-            if (uri.rawUserInfo != null || uri.rawQuery != null || uri.rawFragment != null ||
+            if (uri.rawUserInfo != null || uri.rawAuthority?.contains('@') == true || uri.rawQuery != null || uri.rawFragment != null ||
                 (!uri.rawPath.isNullOrEmpty() && uri.rawPath != "/")) {
                 return AddressResult.Invalid(AddressError.ORIGIN_ONLY)
             }
-            val host = uri.host.lowercase(Locale.ROOT)
-            val port = if (uri.port == -1 || uri.port == 443) "" else ":${uri.port}"
-            return AddressResult.Valid(ServerAddress("https://$host$port/"))
+            // HttpUrl provides maintained IDN/punycode, IPv6 and port handling.
+            // Inspect the raw URI first: URL normalization must not hide a page path.
+            val url = candidate.toHttpUrlOrNull() ?: return AddressResult.Invalid(AddressError.INVALID)
+            if (url.port == 0 || url.host.isBlank()) return AddressResult.Invalid(AddressError.INVALID)
+            return AddressResult.Valid(ServerAddress(url.toString()))
         }
     }
 }

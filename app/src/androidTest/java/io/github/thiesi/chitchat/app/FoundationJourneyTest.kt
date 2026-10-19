@@ -21,12 +21,16 @@ import io.github.thiesi.chitchat.core.settings.SettingsStore
 import io.github.thiesi.chitchat.core.settings.ThemePreference
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.delay
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import androidx.compose.runtime.remember
+import io.github.thiesi.chitchat.feature.auth.AuthViewModel
+import io.github.thiesi.chitchat.feature.auth.TestSessions
 
 class FoundationJourneyTest {
     @get:Rule val compose = createComposeRule()
@@ -46,10 +50,34 @@ class FoundationJourneyTest {
         return SettingsViewModel(store)
     }
 
+    @Test fun initialReadFailureKeepsNavigationAndSessionInactiveUntilRetry() {
+        val failRead = java.util.concurrent.atomic.AtomicBoolean(true)
+        val store = object : SettingsStore {
+            override val settings = flow {
+                if (failRead.get()) throw IOException("fixture")
+                emit(AppSettings())
+            }
+            override suspend fun saveServer(server: ServerAddress?) = Unit
+            override suspend fun saveTheme(theme: ThemePreference) = Unit
+        }
+        val model = SettingsViewModel(store)
+        val sessions = TestSessions()
+        val auth = AuthViewModel(sessions)
+        compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(model, auth) } }
+        compose.waitUntil(5000) { !model.state.value.loading }
+        compose.onNodeWithText("Settings").assertDoesNotExist()
+        compose.onNodeWithText("Save server").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(0L, sessions.state.value.generation) }
+        failRead.set(false)
+        compose.onNodeWithText("Try again").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Settings").assertIsDisplayed()
+        compose.onNodeWithText("Save server").performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun storageRetryPreservesTypedAddress() {
         val writes = AtomicInteger()
         val model = model(failFirstWrite = true, reloadDelayMillis = 200, writes = writes)
-        compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(model) } }
+        compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(model, remember { AuthViewModel(TestSessions()) }) } }
         compose.waitUntil(5000) { !model.state.value.loading }
         compose.onNodeWithText("Server address").performTextInput("chat.example.org")
         compose.onNodeWithText("Save server").performScrollTo().assertIsEnabled().assertIsDisplayed().performClick()
@@ -64,7 +92,7 @@ class FoundationJourneyTest {
 
     @Test fun rejectsCleartextAndAllowsCorrection() {
         val model = model()
-        compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(model) } }
+        compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(model, remember { AuthViewModel(TestSessions()) }) } }
         compose.onNodeWithText("Server address").performTextInput("http://chat.example.org")
         compose.onNodeWithText("Save server").performScrollTo().performClick()
         compose.onNodeWithText("Your server must use HTTPS.").performScrollTo().assertIsDisplayed()
@@ -75,7 +103,7 @@ class FoundationJourneyTest {
 
     @Test fun savesAddressChangesThemeAndForgetsServer() {
         val model = model()
-        compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(model) } }
+        compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(model, remember { AuthViewModel(TestSessions()) }) } }
         compose.onNodeWithText("Server address").performTextInput("chat.example.org")
         compose.onNodeWithText("Save server").performScrollTo().performClick()
         compose.onNodeWithText("https://chat.example.org/").assertIsDisplayed()

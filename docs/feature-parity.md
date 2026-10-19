@@ -1,6 +1,6 @@
 # Feature-parity matrix
 
-Baseline: [ChitChat v3.2.1, commit 4f53ff4](https://github.com/Thiesi/ChitChat/tree/4f53ff497f5572072fddad42d8ac3979e9cdf0d1). **Only M1 local server-address and System/Light/Dark settings are implemented; all server-backed features below remain unimplemented.** Debug/release builds, nine unit tests, lint and four API36 device tests pass; remote CI/review progress is tracked in [M1 evidence](milestones/M1-foundation.md). The feasibility column is not an implementation claim. Update status and evidence on every milestone PR; do not mark a dependency-blocked feature complete because a fake passes tests.
+Baseline: [ChitChat v3.2.1, commit 4f53ff4](https://github.com/Thiesi/ChitChat/tree/4f53ff497f5572072fddad42d8ac3979e9cdf0d1). M1 is merged. M2a adds HTTPS/password/recovery/session lifecycle; see [verification and limitations](milestones/M2a-session-auth.md). Other server-backed features below remain planned. Feasibility is not implementation status. M2b registration/restoration/step-up, chat and push are still pending; detailed row updates follow separately.
 
 Classification: **Existing** = existing backend contract, **Android** = client-only/system adaptation, **Dependency** = missing server support, **Special** = needs platform treatment, **Excluded** = browser/operator-only function with justification. Milestones are defined in [the plan](implementation-plan.md). Links below refer to the pinned backend snapshot.
 

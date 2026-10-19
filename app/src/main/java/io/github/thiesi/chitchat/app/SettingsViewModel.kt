@@ -24,6 +24,7 @@ data class SettingsUiState(
     val saving: Boolean = false,
     val storageError: Boolean = false,
     val addressError: AddressError? = null,
+    val hasLoadedSettings: Boolean = false,
 )
 
 class SettingsViewModel(private val store: SettingsStore) : ViewModel() {
@@ -40,7 +41,7 @@ class SettingsViewModel(private val store: SettingsStore) : ViewModel() {
         observation = viewModelScope.launch {
             try {
                 store.settings.collect { settings ->
-                    mutableState.update { it.copy(loading = false, settings = settings, storageError = false) }
+                    mutableState.update { it.copy(loading = false, settings = settings, storageError = false, hasLoadedSettings = true) }
                 }
             } catch (_: IOException) {
                 mutableState.update { it.copy(loading = false, storageError = true) }

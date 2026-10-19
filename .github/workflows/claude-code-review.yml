@@ -52,7 +52,7 @@ jobs:
           comment_bytes=$(printf '%s' "$comment_text" | wc -c)
           echo "diff_chars=$(printf '%s' "$diff_text" | wc -m)" >> "$GITHUB_OUTPUT"
           echo "comment_chars=$(printf '%s' "$comment_text" | wc -m)" >> "$GITHUB_OUTPUT"
-          if [[ "$diff_bytes" -gt 140000 || "$comment_bytes" -gt 140000 ]]; then
+          if [[ "$diff_bytes" -gt 126000 || "$comment_bytes" -gt 126000 ]]; then
             echo "::error::Review input exceeds the bounded output/context budget. Split the PR or reduce comment history; no partial review will count."
             exit 1
           fi
@@ -86,7 +86,9 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: false
-          settings: '{"bashOutputMaxChars":150000,"env":{"BASH_MAX_OUTPUT_LENGTH":"150000"}}'
+          # Claude Code supports at most 128000 inline characters. Keep the
+          # preflight below that ceiling; a larger setting is not an escape hatch.
+          settings: '{"bashOutputMaxChars":128000}'
           prompt: |
             Review ${{ github.repository }} PR #${{ env.PR_NUMBER }} at head
             ${{ steps.scope.outputs.head_sha }}. Review only; never implement changes.

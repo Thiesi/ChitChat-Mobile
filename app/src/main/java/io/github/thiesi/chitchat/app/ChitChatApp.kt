@@ -63,11 +63,21 @@ import io.github.thiesi.chitchat.core.server.AddressError
 import io.github.thiesi.chitchat.core.server.AddressResult
 import io.github.thiesi.chitchat.core.server.ServerAddress
 import io.github.thiesi.chitchat.core.settings.ThemePreference
+import io.github.thiesi.chitchat.feature.auth.AuthViewModel
+import io.github.thiesi.chitchat.feature.auth.AuthScreen
+import io.github.thiesi.chitchat.core.network.FailureKind
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChitChatApp(model: SettingsViewModel, onThemeChanged: (Boolean) -> Unit = {}) {
+fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
+    val session by auth.state.collectAsStateWithLifecycle()
+    LaunchedEffect(state.hasLoadedSettings, state.settings.server) {
+        if (state.hasLoadedSettings) auth.selectServer(state.settings.server)
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { auth.foreground() }
     val dark = when (state.settings.theme) {
         ThemePreference.SYSTEM -> isSystemInDarkTheme()
         ThemePreference.DARK -> true
@@ -91,7 +101,7 @@ fun ChitChatApp(model: SettingsViewModel, onThemeChanged: (Boolean) -> Unit = {}
                         if (!atHome) TextButton(onClick = { nav.popBackStack() }) { Text(stringResource(R.string.back)) }
                     },
                     actions = {
-                        if (atHome && !state.loading) TextButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
+                        if (atHome && state.hasLoadedSettings) TextButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
                             Text(stringResource(R.string.settings))
                         }
                     },
@@ -114,21 +124,26 @@ fun ChitChatApp(model: SettingsViewModel, onThemeChanged: (Boolean) -> Unit = {}
                         )
                         TextButton(onClick = model::reload) { Text(stringResource(R.string.retry)) }
                     }
-                    NavHost(navController = nav, startDestination = "home", modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (state.settings.serverError != null) Text(stringResource(R.string.saved_server_invalid),
+                        Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error)
+                    if (state.hasLoadedSettings) NavHost(navController = nav, startDestination = "home", modifier = Modifier.weight(1f).fillMaxWidth()) {
                         composable("home") {
                             // A successful save/forget replaces the page, not just its body:
                             // never retain the editor's scrolled offset on the confirmation.
-                            key(state.settings.server?.value) {
+                            key(state.settings.server?.value, session.generation) {
                                 ScreenContent {
                                     if (state.settings.server == null) {
-                                        ServerEditor(state, model, onSaved = {})
+                                        if (session.error?.kind == FailureKind.STORAGE || session.storageWarning) AuthScreen(session, auth)
+                                        else ServerEditor(state, model, onSaved = {})
                                     } else {
                                         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                                             Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.headlineLarge)
                                             Text(state.settings.server!!.value, style = MaterialTheme.typography.titleMedium)
-                                            Text(stringResource(R.string.server_saved_body))
-                                            Text(stringResource(R.string.preview_limit))
-                                            Button(onClick = { nav.navigate("server") }) { Text(stringResource(R.string.change_server)) }
+                                            AuthScreen(session, auth)
+                                            Button(onClick = { nav.navigate("server") }, enabled = session.canChangeServer) {
+                                                Text(stringResource(R.string.change_server))
+                                            }
+                                            if (!session.canChangeServer) Text(stringResource(R.string.sign_out_to_change_server))
                                             PrivacyCard()
                                         }
                                     }
@@ -136,10 +151,13 @@ fun ChitChatApp(model: SettingsViewModel, onThemeChanged: (Boolean) -> Unit = {}
                             }
                         }
                         composable("server") {
-                            ScreenContent { ServerEditor(state, model, onSaved = { nav.popBackStack() }) }
+                            ScreenContent {
+                                if (session.canChangeServer) ServerEditor(state, model, onSaved = { nav.popBackStack() })
+                                else Text(stringResource(R.string.sign_out_to_change_server))
+                            }
                         }
                         composable("settings") {
-                            ScreenContent { SettingsScreen(state, model) }
+                            ScreenContent { SettingsScreen(state, model, session.canChangeServer) }
                         }
                     }
                 }
@@ -221,8 +239,9 @@ private fun PrivacyCard() {
 }
 
 @Composable
-private fun SettingsScreen(state: SettingsUiState, model: SettingsViewModel) {
+private fun SettingsScreen(state: SettingsUiState, model: SettingsViewModel, canChangeServer: Boolean) {
     var confirmForget by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(canChangeServer) { if (!canChangeServer) confirmForget = false }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(stringResource(R.string.appearance), style = MaterialTheme.typography.titleLarge)
         ThemePreference.entries.forEach { choice ->
@@ -248,12 +267,13 @@ private fun SettingsScreen(state: SettingsUiState, model: SettingsViewModel) {
         if (state.settings.server != null) {
             Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.titleLarge)
             Text(state.settings.server.value)
-            OutlinedButton(onClick = { confirmForget = true }, enabled = !state.saving) {
+            OutlinedButton(onClick = { confirmForget = true }, enabled = !state.saving && canChangeServer) {
                 Text(stringResource(R.string.forget_server))
             }
+            if (!canChangeServer) Text(stringResource(R.string.sign_out_to_change_server))
         }
     }
-    if (confirmForget) AlertDialog(
+    if (confirmForget && canChangeServer) AlertDialog(
         onDismissRequest = { confirmForget = false },
         title = { Text(stringResource(R.string.forget_title)) },
         text = { Text(stringResource(R.string.forget_body)) },

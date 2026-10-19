@@ -8,6 +8,7 @@ import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -17,6 +18,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -76,6 +78,20 @@ class SettingsViewModelTest {
         assertFalse(model.state.value.loading)
         advanceUntilIdle()
         assertFalse(model.state.value.storageError)
+    }
+
+    @Test fun failedInitialReadDoesNotPublishAnUnknownServerOrEnableNavigation() = runTest(dispatcher) {
+        val store = object : SettingsStore {
+            override val settings = flow<AppSettings> { throw IOException("fixture") }
+            override suspend fun saveServer(server: ServerAddress?) = Unit
+            override suspend fun saveTheme(theme: ThemePreference) = Unit
+        }
+        val model = SettingsViewModel(store)
+        advanceUntilIdle()
+        assertFalse(model.state.value.loading)
+        assertFalse(model.state.value.hasLoadedSettings)
+        assertTrue(model.state.value.storageError)
+        assertNull(model.state.value.settings.server)
     }
 
     private class MemorySettingsStore : SettingsStore {
