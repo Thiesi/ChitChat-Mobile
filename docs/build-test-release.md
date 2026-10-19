@@ -1,6 +1,6 @@
 # Build, test and release
 
-Current status: **M1 locally verified**. Debug and shrunk unsigned release builds, nine unit tests, lint and four API36 connected tests passed locally in one all-gates run. Hosted CI/review/merge status is recorded on [PR #4](https://github.com/Thiesi/ChitChat-Mobile/pull/4), not inferred from compilation. Exact evidence and limitations are recorded in [M1](milestones/M1-foundation.md). See [milestones](implementation-plan.md).
+Current status: M1 merged; M2a authentication is implemented and locally verified. [M2a evidence](milestones/M2a-session-auth.md) records current actual build/test/review results and remaining M2 scope. Historical M1 results remain in [PR #4](https://github.com/Thiesi/ChitChat-Mobile/pull/4). Compilation is not live-server or review acceptance. See [milestones](implementation-plan.md).
 
 ## Toolchain setup
 
@@ -18,7 +18,18 @@ From the repository root with JDK/SDK configured:
 .\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-On Linux/macOS use `./gradlew` instead. Connected tests require an online supported device (`adb devices`); skipped instrumented tests are never counted as passed. Debug APK: `app/build/outputs/apk/debug/app-debug.apk`, development identity `io.github.thiesi.chitchat.debug`; install with `adb install -r` and launch normally. No server contact is made in M1. Unit/lint reports are under `app/build/reports/`; connected reports under `app/build/reports/androidTests/connected/debug/`. The release APK is shrunk but unsigned and not installable as a distributable artifact until separately signed. Public identity/distribution/signing remain unconfirmed.
+On Linux/macOS use `./gradlew` instead. Connected tests require an online supported device (`adb devices`); skipped tests never count as passed. Debug APK: `app/build/outputs/apk/debug/app-debug.apk`, development identity `io.github.thiesi.chitchat.debug`; install with `adb install -r` and launch normally. M2a contacts the chosen server only after its address is saved, using verified HTTPS. Unit/lint reports are under `app/build/reports/`; connected reports under `app/build/reports/androidTests/connected/debug/`. Release is shrunk but unsigned, not a distributable artifact until separately signed. Public identity/distribution/signing remain unconfirmed.
+
+## Opt-in live authentication test
+
+Ordinary `testDebugUnitTest` and CI entirely exclude `LiveSessionTest`. There is no hidden external-server test or automatic credential-file read during normal builds. To exercise the existing real password/session contracts explicitly:
+
+1. Provision a dedicated **password-only, non-admin, non-production** test account. This test must not consume a person's MFA recovery codes. Never put production credentials in this repository or chat.
+2. Create user-owned `.env.integration` at the repository root with `CHITCHAT_TEST_SERVER` (the test HTTPS origin), `CHITCHAT_TEST_USERNAME`, and `CHITCHAT_TEST_PASSWORD`, one `KEY=value` per line. Matching surrounding single/double quotes are supported; there is no shell expansion/evaluation. All three values must be nonempty. Keep values/whitespace inside a password as intended. Verify `git check-ignore .env.integration`; never stage it.
+3. Run `.\gradlew.bat :app:liveSessionTest --console=plain --max-workers=2` (or `./gradlew`). Do not enable HTTP body logging, Gradle debug logging, or print the configuration. The test loads values directly; secrets are not Gradle task inputs or command-line arguments. The task is deliberately non-cacheable and reruns every invocation.
+4. Inspect `app/build/reports/tests/liveSessionTest/`. The test signs in, refreshes, recreates the repository, signs out and attempts reuse of the now-logged-out cookie. It creates no account and changes no password; the server will record its normal authentication audit entries. Cleanup attempts server logout even after failure.
+
+This is an actual JVM HTTP/server integration check using transient in-memory credential storage, not an Android Keystore/process-death/UI acceptance claim. Android encryption and forms have separate instrumented tests. Live results must be recorded separately from fixture counts. The supplied test URL and credentials are not baked into the application or public CI.
 
 ## Automated coverage and CI
 
