@@ -77,7 +77,10 @@ jobs:
           prompt: |
             Review ${{ github.repository }} PR #${{ env.PR_NUMBER }} at head
             ${{ steps.scope.outputs.head_sha }}. Review only; never implement changes.
-            Inspect the full current diff and prior comments with gh pr diff/view.
+            Inspect the full diff and prior comments using exactly these commands:
+            gh pr diff ${{ env.PR_NUMBER }} --repo ${{ github.repository }}
+            gh pr view ${{ env.PR_NUMBER }} --repo ${{ github.repository }} --comments
+            No added flags, jq/template expressions, shell expansions or extra commands.
             Always perform a fresh review, including prior fixes, even if reviewed before.
             Report credible product breakage, security/privacy, data loss, contract errors
             and missing meaningful tests. Exclude nits/speculation without a user scenario.
@@ -89,8 +92,8 @@ jobs:
           claude_args: >-
             --max-turns 30
             --tools "Bash"
-            --allowedTools "Bash(gh pr diff:*),Bash(gh pr view:*)"
-            --disallowedTools "Read,Glob,Grep,Edit,Write,NotebookEdit,WebFetch,WebSearch"
+            --allowedTools "Bash(gh pr diff ${{ env.PR_NUMBER }} --repo ${{ github.repository }}),Bash(gh pr view ${{ env.PR_NUMBER }} --repo ${{ github.repository }} --comments)"
+            --disallowedTools "Read,Glob,Grep,Edit,Write,NotebookEdit,WebFetch,WebSearch,mcp__*"
             --json-schema '{"type":"object","required":["head_sha","summary","findings"],"additionalProperties":false,"properties":{"head_sha":{"type":"string"},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","required":["severity","path","line","detail"],"additionalProperties":false,"properties":{"severity":{"type":"string","enum":["high","medium","low"]},"path":{"type":"string"},"line":{"type":"integer","minimum":1},"detail":{"type":"string"}}}}}}'
 
       - name: Validate and publish reviewed head
@@ -103,6 +106,10 @@ jobs:
         run: |
           if [[ "$CONCLUSION" != success ]]; then
             echo "::error::Claude did not complete successfully; missing/skipped review is not approval."
+            exit 1
+          fi
+          if [[ $(printf '%s' "$REVIEW_JSON" | wc -c) -gt 50000 ]]; then
+            echo "::error::Review result exceeds the safe comment size; split the PR or request a more concise review."
             exit 1
           fi
           jq -e --arg head "$REVIEWED_HEAD" '
@@ -122,8 +129,12 @@ jobs:
           review_body=$(mktemp)
           trap 'rm -f "$review_body"' EXIT
           jq -r --arg marker "$AUDIT_MARKER" '
+            def safe: tostring | gsub("@"; "＠") | gsub("<"; "‹") | gsub("`"; "ˋ");
             "<!-- " + $marker + " -->\nReviewed head: `" + .head_sha + "`\n\n" +
-            .summary + "\n\n" + ([.findings[] |
-              "- **" + .severity + "** " + .path + ":" + (.line | tostring) + ": " + .detail] | join("\n\n"))
+            (if (.findings | length) == 0 then "No worthwhile fixable findings remain"
+             else "Findings require triage (" + (.findings | length | tostring) + ")" end) +
+            "\n\nUntrusted model analysis:\n```text\n" + (.summary | safe) + "\n\n" +
+            ([.findings[] | "- " + .severity + " " + (.path | safe) + ":" +
+              (.line | tostring) + ": " + (.detail | safe)] | join("\n\n")) + "\n```"
           ' <<< "$REVIEW_JSON" > "$review_body"
-          gh pr comment "$PR_NUMBER" --body-file "$review_body"
+          gh api --method POST "repos/$GH_REPO/issues/$PR_NUMBER/comments" -F "body=@$review_body" > /dev/null
