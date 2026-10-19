@@ -1,6 +1,6 @@
 # Add secure browser authentication handoff into native PHP sessions
 
-Status: proposed backend contract, not implemented. Android dependency: [M6 account/provider integration](https://github.com/Thiesi/ChitChat-Mobile/blob/docs/android-discovery/docs/implementation-plan.md).
+Status: proposed backend contract, not implemented. Android dependency: [M6 account/provider integration](https://github.com/Thiesi/ChitChat-Mobile/blob/main/docs/implementation-plan.md).
 
 Tracks [ChitChat-Mobile #1](https://github.com/Thiesi/ChitChat-Mobile/issues/1).
 

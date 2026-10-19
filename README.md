@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-**M1 native foundation implemented and locally verified; remote CI/review pending.** Debug and shrunk unsigned release APKs compile; eight unit tests, Android lint and three API36 emulator tests pass. Native server-address storage and appearance settings work locally; authentication, chat and push are not implemented yet. The audited backend baseline is [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). See [M1 evidence](docs/milestones/M1-foundation.md).
+**M1 native foundation implemented and locally verified.** Debug and shrunk unsigned release APKs compile; eight unit tests, Android lint and three API36 emulator tests pass. Current hosted CI, review and merge evidence is tracked in [PR #4](https://github.com/Thiesi/ChitChat-Mobile/pull/4). Native server-address storage and appearance settings work locally; authentication, chat and push are not implemented yet. The audited backend baseline is [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). See [M1 evidence](docs/milestones/M1-foundation.md).
 
 Core chat and UnifiedPush over HTTPS port 443 have existing APIs. Native passkeys and browser identity handoff require the [backend dependencies](docs/backend-dependencies.md); shared Web Push hardening and capability discovery remain tracked separately. Ordinary incoming-DM push is a separate, unapproved product proposal. The ChitChat backend checkout remains read-only.
 

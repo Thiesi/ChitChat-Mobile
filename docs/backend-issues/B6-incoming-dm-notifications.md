@@ -1,6 +1,6 @@
 # Add an explicit opt-in privacy-safe notification category for incoming direct messages
 
-Status: **product proposal awaiting maintainer decision**, not existing ChitChat behavior. Android [M6](https://github.com/Thiesi/ChitChat-Mobile/blob/docs/android-discovery/docs/implementation-plan.md) background DM alerts depend on approval and backend implementation; ordinary native DM/SSE remains supported without it.
+Status: **product proposal awaiting maintainer decision**, not existing ChitChat behavior. Android [M6](https://github.com/Thiesi/ChitChat-Mobile/blob/main/docs/implementation-plan.md) background DM alerts depend on approval and backend implementation; ordinary native DM/SSE remains supported without it.
 
 Tracks [ChitChat-Mobile #1](https://github.com/Thiesi/ChitChat-Mobile/issues/1).
 

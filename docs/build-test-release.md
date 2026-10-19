@@ -1,6 +1,6 @@
 # Build, test and release
 
-Current status: **M1 locally verified; remote CI/review pending**. Debug and shrunk unsigned release builds, eight unit tests, lint and three API36 connected tests passed locally in one all-gates run. Exact evidence and limitations are recorded in [M1](milestones/M1-foundation.md). See [milestones](implementation-plan.md).
+Current status: **M1 locally verified**. Debug and shrunk unsigned release builds, eight unit tests, lint and three API36 connected tests passed locally in one all-gates run. Hosted CI/review/merge status is recorded on [PR #4](https://github.com/Thiesi/ChitChat-Mobile/pull/4), not inferred from compilation. Exact evidence and limitations are recorded in [M1](milestones/M1-foundation.md). See [milestones](implementation-plan.md).
 
 ## Toolchain setup
 

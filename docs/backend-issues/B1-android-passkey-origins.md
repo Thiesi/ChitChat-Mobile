@@ -1,6 +1,6 @@
 # Support explicitly trusted Android passkey origins with the existing WebAuthn RP
 
-Status: proposed backend change, not an existing contract. Depends on Android M6 in the [delivery plan](https://github.com/Thiesi/ChitChat-Mobile/blob/docs/android-discovery/docs/implementation-plan.md).
+Status: proposed backend change, not an existing contract. Depends on Android M6 in the [delivery plan](https://github.com/Thiesi/ChitChat-Mobile/blob/main/docs/implementation-plan.md).
 
 Tracks [ChitChat-Mobile #1](https://github.com/Thiesi/ChitChat-Mobile/issues/1).
 

@@ -1,6 +1,6 @@
 # M1 native foundation evidence
 
-Date: 2026-10-19. Implementation and all local automated gates pass; remote CI and Claude-review gates are not yet complete. M2 has not started. Backend source remains untouched.
+Date: 2026-10-19. Implementation and all local automated gates pass; actual current-head remote CI, Claude review and merge evidence is maintained in [PR #4](https://github.com/Thiesi/ChitChat-Mobile/pull/4). M2 has not started. Backend source remains untouched. A source document is not a substitute for inspecting those gates.
 
 ## Implemented vertical slice
 
@@ -38,6 +38,6 @@ The additional software-keyboard screenshot command later returned exit1 without
 Hosted CI follow-up: the first Linux build failed only `OldTargetApi` because its SDK installation is newer than the local one. A scoped exception now records the deliberate M1 target36 policy and required later SDK/AGP/permission reassessment. The first hosted compact-emulator journey also exposed a real shared-scroll defect: the editor offset could carry into the saved-server page. Scroll state is now per destination, with the home page keyed by saved server, and Scaffold insets are consumed before IME insets. Both UI journeys now run in an explicit320x480dp viewport and scroll controls into view. The combined debug/release/unit/lint/three-device-test local follow-up passed (`BUILD SUCCESSFUL in 7m20s`); remote rerun remains required. The only subsequent Kotlin edit was indentation cleanup.
 
 - Complete any further keyboard/accessibility/device checks appropriate to later feature screens; baseline API26/TalkBack acceptance is still outstanding.
-- Push/open the M1 foundation PR and obtain real remote build/journey results.
-- Maintainer connects one Claude credential securely; complete the review/fix/re-review loop before merge.
+- Inspect PR #4 for actual hosted build/journey results on its current head, not only these local results.
+- The maintainer connected the Claude credential; use the completed review/fix/re-review evidence and all current-head checks before merge. PR #3 records setup validation.
 - Live server/password/chat and all push tests belong to later milestones and are unperformed. API26 device coverage, TalkBack and production signing/release acceptance remain future gates. No full application or end-to-end completion claim.

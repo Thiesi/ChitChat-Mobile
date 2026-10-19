@@ -1,6 +1,6 @@
 # Expose additive native-client capabilities and consistent public policy metadata
 
-Status: proposed compatibility/read-contract improvement. Android [M2/M6](https://github.com/Thiesi/ChitChat-Mobile/blob/docs/android-discovery/docs/implementation-plan.md) needs accurate server branding and reliable gating for new native features. Core v3.2.1 chat can work without this addition.
+Status: proposed compatibility/read-contract improvement. Android [M2/M6](https://github.com/Thiesi/ChitChat-Mobile/blob/main/docs/implementation-plan.md) needs accurate server branding and reliable gating for new native features. Core v3.2.1 chat can work without this addition.
 
 Tracks [ChitChat-Mobile #1](https://github.com/Thiesi/ChitChat-Mobile/issues/1).
 
