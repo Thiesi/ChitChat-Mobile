@@ -46,7 +46,7 @@ jobs:
           echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
           diff_bytes=$(gh pr diff "$PR_NUMBER" --repo "$GH_REPO" | wc -c)
           comment_bytes=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --comments | wc -c)
-          if [[ "$diff_bytes" -gt 200000 || "$comment_bytes" -gt 200000 ]]; then
+          if [[ "$diff_bytes" -gt 140000 || "$comment_bytes" -gt 140000 ]]; then
             echo "::error::Review input exceeds the bounded output/context budget. Split the PR or reduce comment history; no partial review will count."
             exit 1
           fi
@@ -80,7 +80,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: false
-          settings: '{"env":{"BASH_MAX_OUTPUT_LENGTH":"250000"}}'
+          settings: '{"bashOutputMaxChars":150000,"env":{"BASH_MAX_OUTPUT_LENGTH":"150000"}}'
           prompt: |
             Review ${{ github.repository }} PR #${{ env.PR_NUMBER }} at head
             ${{ steps.scope.outputs.head_sha }}. Review only; never implement changes.
