@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-**M1 merged; M2a authentication under verification.** Native HTTPS bootstrap, password/recovery forms, encrypted session restoration and local/server logout are implemented. Debug/release builds, lint, 50 unit tests and one live HTTP test pass; [M2a evidence](docs/milestones/M2a-session-auth.md) records device/review gates and limits. M2b registration/restoration/step-up, chat and push remain pending. Detailed architecture/status updates follow in a separate PR to keep complete code review within its size limit.
+**M1 merged; M2a authentication under verification.** Native HTTPS bootstrap, password/recovery forms, encrypted sessions and logout are implemented. See [M2a evidence](docs/milestones/M2a-session-auth.md) for exact checks and limits. M2b registration/restoration/step-up, chat and push remain pending. Detailed docs and additional acceptance harnesses follow separately for complete bounded review.
 
 Core chat and UnifiedPush over HTTPS port 443 have existing APIs. Native passkeys and browser identity handoff require the [backend dependencies](docs/backend-dependencies.md); shared Web Push hardening and capability discovery remain tracked separately. Ordinary incoming-DM push is a separate, unapproved product proposal. The ChitChat backend checkout remains read-only.
 
