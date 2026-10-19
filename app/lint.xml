@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Updates are reviewed as a compatible toolchain, not fetched during lint.
+         Keep all code/security/accessibility warnings fatal; only version hints
+         are non-gating. See docs/build-test-release.md. -->
+    <issue id="AndroidGradlePluginVersion,GradleDependency,NewerVersionAvailable" severity="ignore" />
+    <!-- Intentional M1 API36 target, not a release waiver: current Play floor36
+         and AGP8.13 supports at most36.1. Reassess SDK/AGP/API37 permissions
+         before production. Host-installed newer SDKs must not change this gate. -->
+    <issue id="OldTargetApi">
+        <ignore path="build.gradle.kts" />
+    </issue>
+</lint>

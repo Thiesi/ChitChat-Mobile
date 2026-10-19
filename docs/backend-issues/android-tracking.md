@@ -5,7 +5,7 @@ Implement the production native Kotlin/Compose ChitChat client in this repositor
 Discovery baseline: ChitChat v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf0d1`. No Android application/build/FCM end-to-end functionality exists at issue creation.
 
 - [ ] M0: discovery delivered; decentralized push accepted; ordinary-DM and public identity/distribution decisions remain open
-- [ ] M1: buildable native scaffold, CI, tests and navigation (in progress; no build passed yet)
+- [ ] M1: buildable native scaffold, CI, tests and navigation (local debug/release, nine unit tests, lint and four API36 device tests pass; remote CI/review gates pending)
 - [ ] M2: server selection, PHP cookie/CSRF sessions and authentication
 - [ ] M3: rooms, history/composition, foreground SSE/presence/reconciliation
 - [ ] M4: DMs, unread state, blocking/ignoring, notification center and navigation
@@ -14,7 +14,7 @@ Discovery baseline: ChitChat v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf0d1`
 - [ ] M7: guest, moderation, administration and remaining parity
 - [ ] M8: real-installation/device acceptance, accessibility, docs and release
 
-Reviewable specifications: [discovery](https://github.com/Thiesi/ChitChat-Mobile/blob/docs/android-discovery/docs/discovery.md), [architecture](https://github.com/Thiesi/ChitChat-Mobile/blob/docs/android-discovery/docs/architecture.md), [parity matrix](https://github.com/Thiesi/ChitChat-Mobile/blob/docs/android-discovery/docs/feature-parity.md), [gates](https://github.com/Thiesi/ChitChat-Mobile/blob/docs/android-discovery/docs/implementation-plan.md), [backend dependencies](https://github.com/Thiesi/ChitChat-Mobile/blob/docs/android-discovery/docs/backend-dependencies.md).
+Reviewable specifications: [discovery](https://github.com/Thiesi/ChitChat-Mobile/blob/main/docs/discovery.md), [architecture](https://github.com/Thiesi/ChitChat-Mobile/blob/main/docs/architecture.md), [parity matrix](https://github.com/Thiesi/ChitChat-Mobile/blob/main/docs/feature-parity.md), [gates](https://github.com/Thiesi/ChitChat-Mobile/blob/main/docs/implementation-plan.md), [backend dependencies](https://github.com/Thiesi/ChitChat-Mobile/blob/main/docs/backend-dependencies.md).
 
 Filed backend dependencies: [Android passkey origins #145](https://github.com/Thiesi/ChitChat/issues/145), [browser handoff #146](https://github.com/Thiesi/ChitChat/issues/146), [shared Web Push lifecycle/security #147](https://github.com/Thiesi/ChitChat/issues/147), [dispatch reliability/custom-port VAPID #148](https://github.com/Thiesi/ChitChat/issues/148), [capability/policy metadata #149](https://github.com/Thiesi/ChitChat/issues/149), and [opt-in incoming-DM proposal #150](https://github.com/Thiesi/ChitChat/issues/150). B3/B4 GitHub issues now supersede their FCM proposals with shared Web Push work. No issue is shipped or closed by documentation.
 
