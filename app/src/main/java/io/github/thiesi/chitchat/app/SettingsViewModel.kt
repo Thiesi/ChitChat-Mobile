@@ -35,7 +35,8 @@ class SettingsViewModel(private val store: SettingsStore) : ViewModel() {
 
     fun reload() {
         observation?.cancel()
-        mutableState.update { it.copy(loading = true, storageError = false) }
+        // Only the first load replaces content. Retry must keep form/scroll state.
+        mutableState.update { it.copy(storageError = false) }
         observation = viewModelScope.launch {
             try {
                 store.settings.collect { settings ->
@@ -47,11 +48,14 @@ class SettingsViewModel(private val store: SettingsStore) : ViewModel() {
         }
     }
 
-    fun saveServer(input: String) {
-        when (val result = ServerAddress.parse(input)) {
+    /** Valid means input accepted, not a successful persistence acknowledgement. */
+    fun saveServer(input: String): AddressResult {
+        val result = ServerAddress.parse(input)
+        when (result) {
             is AddressResult.Invalid -> mutableState.update { it.copy(addressError = result.reason) }
             is AddressResult.Valid -> write { store.saveServer(result.address) }
         }
+        return result
     }
 
     fun clearAddressError() { mutableState.update { it.copy(addressError = null) } }

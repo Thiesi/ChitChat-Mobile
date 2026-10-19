@@ -5,7 +5,7 @@ Implement the production native Kotlin/Compose ChitChat client in this repositor
 Discovery baseline: ChitChat v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf0d1`. No Android application/build/FCM end-to-end functionality exists at issue creation.
 
 - [ ] M0: discovery delivered; decentralized push accepted; ordinary-DM and public identity/distribution decisions remain open
-- [ ] M1: buildable native scaffold, CI, tests and navigation (local debug/release, eight unit tests, lint and three API36 device tests pass; remote CI/review gates pending)
+- [ ] M1: buildable native scaffold, CI, tests and navigation (local debug/release, nine unit tests, lint and four API36 device tests pass; remote CI/review gates pending)
 - [ ] M2: server selection, PHP cookie/CSRF sessions and authentication
 - [ ] M3: rooms, history/composition, foreground SSE/presence/reconciliation
 - [ ] M4: DMs, unread state, blocking/ignoring, notification center and navigation

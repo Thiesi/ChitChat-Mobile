@@ -68,6 +68,16 @@ class SettingsViewModelTest {
         assertEquals("https://chat.example.org/", model.state.value.settings.server?.value)
     }
 
+    @Test fun retryKeepsAlreadyVisibleContentMounted() = runTest(dispatcher) {
+        val model = SettingsViewModel(MemorySettingsStore())
+        advanceUntilIdle()
+        assertFalse(model.state.value.loading)
+        model.reload()
+        assertFalse(model.state.value.loading)
+        advanceUntilIdle()
+        assertFalse(model.state.value.storageError)
+    }
+
     private class MemorySettingsStore : SettingsStore {
         override val settings = MutableStateFlow(AppSettings())
         var failWrites = false

@@ -42,6 +42,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -160,6 +162,15 @@ private fun ScreenContent(content: @Composable () -> Unit) {
 private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSaved: () -> Unit) {
     var address by rememberSaveable { mutableStateOf(state.settings.server?.value.orEmpty()) }
     var submitted by rememberSaveable { mutableStateOf(false) }
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val submitAddress: () -> Unit = {
+        submitted = true
+        if (model.saveServer(address) is AddressResult.Valid) {
+            focus.clearFocus()
+            keyboard?.hide()
+        }
+    }
     LaunchedEffect(state.settings.server, state.saving, submitted) {
         val expected = (ServerAddress.parse(address) as? AddressResult.Valid)?.address
         if (submitted && expected != null && !state.saving && !state.storageError && state.settings.server == expected) {
@@ -187,10 +198,10 @@ private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSav
             singleLine = true,
             enabled = !state.saving,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { submitted = true; model.saveServer(address) }),
+            keyboardActions = KeyboardActions(onDone = { submitAddress() }),
         )
         Button(
-            onClick = { submitted = true; model.saveServer(address) },
+            onClick = submitAddress,
             enabled = !state.saving && address.isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
         ) { Text(stringResource(if (state.saving) R.string.saving else R.string.save_server)) }

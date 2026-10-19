@@ -4,6 +4,8 @@ Date: 2026-10-19. Implementation and all local automated gates pass; actual curr
 
 ## Implemented vertical slice
 
+Final review-regression verification: the full debug/unit/lint/shrunk-release/connected command below passed with **BUILD SUCCESSFUL in 4m17s**, 130 tasks, **9 unit and 4 device tests, zero failures/skips**. Retry keeps the form mounted; valid submit clears focus/hides IME so the second save stays reachable after a storage error. The delayed-storage journey asserts preserved input, visible/enabled controls and two actual store calls. `Valid` acknowledges validation only, not persistence. Compact test sizes respect window/IME constraints. This supersedes the initial8/3 historical counts below.
+
 - Native Compose welcome/server form, change-server route, settings, Back navigation and forget confirmation. All screens clearly describe the local-only early preview; saving an address never claims a successful connection.
 - Strict HTTPS root-origin validation/canonicalization, credentials/path/query/fragment rejection, default/custom ports and IPv6; local non-secret DataStore persistence; typed validation and storage error/retry state.
 - Persisted System/Light/Dark appearance, edge-to-edge system bars, scrollable/IME-aware forms, saved input, minimum theme touch targets and accessible labels/error announcements.
@@ -11,7 +13,7 @@ Date: 2026-10-19. Implementation and all local automated gates pass; actual curr
 - Checked-in checksum-pinned Gradle wrapper, version catalog, debug identity suffix, shrunk unsigned release variant, cleartext prohibition and full backup/transfer exclusions.
 - Credential-free Android CI definitions plus independent, credential-gated Claude review setup in [PR #3](https://github.com/Thiesi/ChitChat-Mobile/pull/3).
 
-## Environment and actual checks
+## Environment and initial verification history
 
 Windows PowerShell, JDK 17.0.20.1+1, Gradle 8.13, AGP 8.13.2, Kotlin 2.3.21, Compose BOM 2026.06.01, Android platform 36 revision 2. Toolchain downloads are isolated under ignored `.tooling/`; no global environment or Windows feature changes. Emulator 37.2.12, API36 Google APIs x86_64 revision7, Pixel7 profile, WHPX acceleration verified.
 
@@ -25,9 +27,9 @@ Eight unit tests, zero failures/skips; lint reports no issues; three connected t
 
 Unit coverage: canonical HTTPS and IPv6/ports, invalid addresses and credential/path rejection, validation-before-write, ViewModel recreation with the same repository, storage-write error and read retry. The three passing device tests cover cleartext rejection/correction, save/theme/forget navigation, and actual DataStore persistence across repository instances. Device persistence tests restore prior debug settings in `finally`. Tests use Compose's current v2 test API; no claim of process-death, authentication or chat coverage.
 
-Initial lint failed on newer-version notices and missing explicit Android12+ data-extraction rules. Explicit full exclusions now cover cloud and device transfer; only the three dependency-version suggestion checks are non-gating. All remaining lint warnings stay fatal. Initial test-APK compilation caught a missing test extension import, which was fixed and verified by the final successful run.
+Initial lint caught missing Android12+ extraction rules and version notices. Full backup/transfer exclusions are now explicit; version suggestions and the documented target36 declaration are excepted, while other warnings stay fatal. Initial test compilation caught a missing extension import. The later error-retry journey failed before the focus/IME fix and passed with strict visibility/store-call assertions afterward; it was not removed to obtain success.
 
-`actionlint` 1.7.12 passed on both workflow definitions. The official binary archive checksum was verified. The setup PR's actual hosted workflow reached and failed the missing-credential preflight as expected. No reviewer credential is configured; no completed Claude review or remote Android CI success has been claimed.
+`actionlint`1.7.12 passed on all three maintained workflows; its official binary checksum was verified. The initial missing-credential gate was exercised, then the maintainer connected the credential. Discovery #2 and reviewer #3 merged after actual repeated reviews, fixes and passing gates. Hosted Android jobs passed earlier M1 heads; final exact-head CI/review evidence belongs to PR #4. Reviewer tools, complete command-bound input delivery and trusted publication are mechanically checked; model reasoning still needs human product-impact triage.
 
 Manual screenshots/accessibility bounds were inspected for portrait, landscape at 150% font size and scrolling to the lower form controls: no overlapping form text or inaccessible lower controls observed. Initial inspection was obstructed by the emulator's **System UI** non-response dialog; it was dismissed and inspection repeated after stopping the build daemon. This is not a performance/device-reliability acceptance claim. TalkBack, baseline API26 and physical-device testing remain unperformed. Screenshots/logs stay in ignored `.tooling/ui-m1/`, not public artifacts containing real user data.
 
@@ -35,7 +37,7 @@ The additional software-keyboard screenshot command later returned exit1 without
 
 ## Remaining gates
 
-Hosted CI follow-up: the first Linux build failed only `OldTargetApi` because its SDK installation is newer than the local one. A scoped exception now records the deliberate M1 target36 policy and required later SDK/AGP/permission reassessment. The first hosted compact-emulator journey also exposed a real shared-scroll defect: the editor offset could carry into the saved-server page. Scroll state is now per destination, with the home page keyed by saved server, and Scaffold insets are consumed before IME insets. Both UI journeys now run in an explicit320x480dp viewport and scroll controls into view. The combined debug/release/unit/lint/three-device-test local follow-up passed (`BUILD SUCCESSFUL in 7m20s`); remote rerun remains required. The only subsequent Kotlin edit was indentation cleanup.
+Hosted CI initially found `OldTargetApi` and compact-screen shared scroll carryover. The intentional target36 exception/later SDK reassessment are documented; scrolling is now destination-local, home is keyed by server, and Scaffold insets are consumed before IME insets. The intermediate8/3 local run passed in7m20s and hosted build/journey checks later passed. Final9/4 error-retry evidence is recorded above; inspect PR #4 for its exact-head remote results.
 
 - Complete any further keyboard/accessibility/device checks appropriate to later feature screens; baseline API26/TalkBack acceptance is still outstanding.
 - Inspect PR #4 for actual hosted build/journey results on its current head, not only these local results.
