@@ -1,6 +1,6 @@
 # Independently verifiable implementation milestones
 
-Status: M0 discovery delivered and decentralized push accepted; M1 native foundation in progress; M2-M8 not started. Ordinary-DM alerts and final public identity/distribution remain unconfirmed. No Android build has passed yet. This plan is the implementation backlog, not an assertion that work has run. Every milestone produces a compiling native application, relevant success/failure tests, parity/status updates, a focused commit and a reviewable PR. Fetch/compare the Android base before each branch. Do not merge failed required checks or conflicts. Backend source remains read-only throughout.
+Status: M0 discovery delivered and decentralized push accepted; M1 debug/release builds, eight unit tests, lint and three API36 device tests pass, with remote CI/Claude review pending; M2-M8 not started. See [M1 evidence](milestones/M1-foundation.md). Ordinary-DM alerts and final public identity/distribution remain unconfirmed. This plan is the implementation backlog, not an assertion that later work has run. Every milestone produces a compiling native application, relevant success/failure tests, parity/status updates, a focused commit and a reviewable PR. Fetch/compare the Android base before each branch. Do not merge failed required checks or conflicts. Backend source remains read-only throughout.
 
 | Milestone | Complete vertical slice | Required evidence before completion |
 |---|---|---|

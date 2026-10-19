@@ -23,3 +23,5 @@ signing.properties
 
 # Agent-local indexes and scratch state
 .codebase-memory/
+.tooling/
+.review-body.md

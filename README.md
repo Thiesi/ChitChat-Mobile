@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-**Discovery complete; M1 native foundation is in progress.** No Android build, emulator run, live chat or push end-to-end integration has passed yet. The audited backend baseline is [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1).
+**M1 native foundation implemented and locally verified; remote CI/review pending.** Debug and shrunk unsigned release APKs compile; eight unit tests, Android lint and three API36 emulator tests pass. Native server-address storage and appearance settings work locally; authentication, chat and push are not implemented yet. The audited backend baseline is [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). See [M1 evidence](docs/milestones/M1-foundation.md).
 
 Core chat and UnifiedPush over HTTPS port 443 have existing APIs. Native passkeys and browser identity handoff require the [backend dependencies](docs/backend-dependencies.md); shared Web Push hardening and capability discovery remain tracked separately. Ordinary incoming-DM push is a separate, unapproved product proposal. The ChitChat backend checkout remains read-only.
 
@@ -23,6 +23,7 @@ Core chat and UnifiedPush over HTTPS port 443 have existing APIs. Native passkey
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)
 - [Build, test and release instructions](docs/build-test-release.md)
+- [Connect the Claude PR reviewer](docs/claude-review-setup.md)
 - [Current limitations](docs/known-limitations.md)
 
 Begin setup with the build guide. Public application identity/distribution and ordinary-DM alerts remain open decisions; the recommended namespace is used only for development until confirmed. A signing identity and integration server have not been supplied. No Firebase identifiers or configuration are needed for the accepted push approach. [Delivery tracking](https://github.com/Thiesi/ChitChat-Mobile/issues/1) records milestone completion.

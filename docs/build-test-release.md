@@ -1,28 +1,30 @@
 # Build, test and release
 
-Current status: **M1 foundation in progress**. No Android build/test command below has passed yet; these are M1 and later gates. Keep this status synchronized with the actual milestone evidence. See [milestones](implementation-plan.md).
+Current status: **M1 locally verified; remote CI/review pending**. Debug and shrunk unsigned release builds, eight unit tests, lint and three API36 connected tests passed locally in one all-gates run. Exact evidence and limitations are recorded in [M1](milestones/M1-foundation.md). See [milestones](implementation-plan.md).
 
-## Toolchain setup in M1
+## Toolchain setup
 
-Install/locate Android Studio or Android command-line tools, the JDK required by the selected stable Android Gradle Plugin, matching SDK platform/build tools and an emulator/device. Pin AGP/Kotlin/Compose/Gradle compatible versions after consulting their official release/compatibility documentation. Check in the Gradle wrapper including JAR/checksum and a version catalog. Keep machine `local.properties`, SDK paths, Firebase config and signing keys out of Git.
+Install Android Studio or Android command-line tools, **JDK17**, Android SDK platform **36** and an API26+ device/emulator. Accept the Android SDK licenses. AGP uses build-tools35.0.0 by default and can install it when licenses allow. Set `JAVA_HOME` and `ANDROID_HOME` to your own installation paths, or use Android Studio's SDK location/local `local.properties`. The wrapper downloads checksum-verified **Gradle8.13**. AGP8.13.2, Kotlin2.3.21 and Compose BOM2026.06.01 are pinned in `gradle/libs.versions.toml`; compile/target SDK36, minimum26. These are a deliberately compatible stable set, not a claim of newest-available versions. Review upgrades together and rerun all gates. Keep `local.properties`, SDK paths and signing keys out of Git.
 
-The inspected discovery shell had no `java`, `gradle` or `adb` on PATH, no Android/JAVA environment variables, and no SDK/Studio in the inspected standard locations. We have not attempted a build or claimed that a missing tool is installed. Android SDK license acceptance and actual downloads may require maintainer/environment support; report any specific inability at the M1 gate rather than accumulating unbuildable production code.
+For the agent validation environment, the JDK, SDK, Gradle cache and emulator were downloaded under ignored `.tooling/` and configured only per shell. They are not checked in and do not exist in a fresh clone. No Firebase project or `google-services.json` is needed. Windows restricted-profile execution can prevent adb finding its user directory; local connected tests used the approved unsandboxed runner, not weakened application security.
 
-## Planned local checks
+## Local checks
 
-After M1 creates actual variants, the credential-free check set will be equivalent to:
+From the repository root with JDK/SDK configured:
 
 ```powershell
 .\gradlew.bat --version
-.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease
 .\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-Keep this file synchronized with actual tasks as M1 establishes them. Emulator/device checks require a running supported device; skipped instrumented tests are never counted as passed. Neither the installed-distributor path nor optional embedded FCM fallback needs `google-services.json` or a Firebase project. The fallback is UnifiedPush's Web Push path, not Firebase SDK token registration. Release signing is separate from debug builds and awaits confirmed public identity/distribution.
+On Linux/macOS use `./gradlew` instead. Connected tests require an online supported device (`adb devices`); skipped instrumented tests are never counted as passed. Debug APK: `app/build/outputs/apk/debug/app-debug.apk`, development identity `io.github.thiesi.chitchat.debug`; install with `adb install -r` and launch normally. No server contact is made in M1. Unit/lint reports are under `app/build/reports/`; connected reports under `app/build/reports/androidTests/connected/debug/`. The release APK is shrunk but unsigned and not installable as a distributable artifact until separately signed. Public identity/distribution/signing remain unconfirmed.
 
 ## Automated coverage and CI
 
-M1 adds reliable credential-free GitHub checks: wrapper validation, build, unit tests and Android lint; add an emulator job for important Compose flows once stable. Use least-privilege workflow permissions, pinned action revisions with documented update policy and Gradle dependency verification as appropriate. Public CI never authenticates to a real ChitChat account or embeds Firebase/service/signing secrets. Test-only API/SSE fakes belong to test source sets.
+`.github/workflows/android.yml` defines credential-free JDK17 build/unit/lint/release checks and an API36 Google APIs emulator journey job. Gradle setup validates wrapper JARs. Reports and the development APK are uploaded as artifacts. Workflows have read-only repository access and pinned action revisions; review upstream releases/security changes deliberately before updating pins and rerun gates. Public CI never authenticates to a real ChitChat account or embeds Firebase/service/signing secrets. Test-only fakes belong to test source sets. Separate [Claude review setup](claude-review-setup.md) needs a maintainer-supplied Actions secret and is not required to compile the app.
+
+Lint warnings are fatal except `AndroidGradlePluginVersion`, `GradleDependency` and `NewerVersionAvailable`: these are newer-version suggestions, not code/security findings. They are excluded explicitly in `app/lint.xml` so unrelated online version changes cannot break a pinned build. This is not a general lint baseline or security-warning suppression.
 
 | Area | Meaningful cases |
 |---|---|

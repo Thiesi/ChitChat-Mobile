@@ -1,6 +1,6 @@
 # Native Android discovery
 
-Investigation date: 2026-10-19. Status: discovery delivered; decentralized push accepted; M1 native foundation in progress. No Android build, device validation, live chat or push delivery has passed yet.
+Investigation date: 2026-10-19. Status: discovery delivered; decentralized push accepted. M1 now has compiling debug/release builds and passed unit/lint checks; current device/CI/review evidence is maintained in [M1](milestones/M1-foundation.md), not the historical discovery checks below. Live chat and push delivery remain unperformed.
 
 ## Evidence and boundaries
 
@@ -53,4 +53,4 @@ Separately needed for integration acceptance: a non-production compatible HTTPS 
 
 Discovery checks: 18 Markdown documents checked, 48 relative links and 108 pinned backend source links resolved locally with zero missing paths/out-of-range cited lines. This checks paths/line bounds, not live remote anchors or server behavior. Independent read-only auth/chat reviews corrected CSRF status handling, native-handoff mutation boundaries, room metadata parameters and refresh requirements for state without SSE signals. Six backend issue bodies were independently fetched from GitHub and matched the submitted local text. Android #1 tracks delivery; backend #145-#150 track dependencies/proposals. `git diff --check` passed for the documentation changes.
 
-Discovery does not satisfy the application's definition of done. M1 is in progress; compilation, automated Android checks, rendered UX review, live sessions/chat and push/device delivery remain unverified. The accepted push decision permits foundation work to proceed; ordinary-DM alerts and release identity require separate decisions at their affected gates. Historical issue submissions/check counts above describe discovery, not the subsequently revised B3/B4 local bodies or current build evidence.
+Discovery does not satisfy the application's definition of done. M1 implementation/validation progress is recorded in [M1 evidence](milestones/M1-foundation.md); live sessions/chat and push/device acceptance remain unperformed. The accepted push decision permits foundation work to proceed; ordinary-DM alerts and release identity require separate decisions at their affected gates. Historical issue submissions/check counts above describe discovery, not the subsequently revised B3/B4 bodies or current build evidence.

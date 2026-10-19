@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">ChitChat</string>
+    <string name="welcome_title">Your conversations. Your server.</string>
+    <string name="welcome_body">A native home for your ChitChat community. Start by saving the address of your server.</string>
+    <string name="server_address">Server address</string>
+    <string name="server_hint">Use your server’s HTTPS address.</string>
+    <string name="save_server">Save server</string>
+    <string name="saving">Saving…</string>
+    <string name="settings">Settings</string>
+    <string name="back">Back</string>
+    <string name="appearance">Appearance</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="saved_server">Your server</string>
+    <string name="server_saved_body">This address is saved on this device. No connection has been made.</string>
+    <string name="preview_limit">This early build supports server settings and appearance. Sign-in and conversations are not available yet.</string>
+    <string name="change_server">Change server</string>
+    <string name="forget_server">Forget server</string>
+    <string name="forget_title">Forget this server?</string>
+    <string name="forget_body">Remove the saved server address from this device.</string>
+    <string name="cancel">Cancel</string>
+    <string name="privacy_title">Private by choice</string>
+    <string name="privacy_body">Your server hosts your conversations. ChitChat messages are not end-to-end encrypted.</string>
+    <string name="push_title">Notifications</string>
+    <string name="push_body">Push support will use your chosen UnifiedPush service, with an optional Play Services fallback. No publisher relay is required. Notifications are not enabled in this build.</string>
+    <string name="settings_error">Could not save your settings. Please try again.</string>
+    <string name="loading_settings">Loading your settings…</string>
+    <string name="retry">Try again</string>
+    <string name="invalid_server">Enter a valid server address.</string>
+    <string name="https_required">Your server must use HTTPS.</string>
+    <string name="server_origin_only">Use only the server address, without a page path, query, password or fragment.</string>
+</resources>

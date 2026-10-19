@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Updates are reviewed as a compatible toolchain, not fetched during lint.
+         Keep all code/security/accessibility warnings fatal; only version hints
+         are non-gating. See docs/build-test-release.md. -->
+    <issue id="AndroidGradlePluginVersion,GradleDependency,NewerVersionAvailable" severity="ignore" />
+</lint>

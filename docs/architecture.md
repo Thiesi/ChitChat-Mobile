@@ -1,8 +1,10 @@
 # Proposed Android architecture
 
-Status: M1 foundation in progress; architecture is not yet fully implemented or build-verified. The [decentralized push decision](push-architecture.md) is accepted; public identity/distribution and ordinary-DM alerts remain open. Backend source baseline and compatibility are recorded in [the contract](backend-compatibility.md).
+Status: M1 local configuration/theme foundation is implemented and compiles; the remaining architecture below is a plan, not working networking/chat/push. See [M1 evidence](milestones/M1-foundation.md). The [decentralized push decision](push-architecture.md) is accepted; public identity/distribution and ordinary-DM alerts remain open. Backend source baseline and compatibility are recorded in [the contract](backend-compatibility.md).
 
 ## Structure and dependencies
+
+The current single `:app` module has `app/` for Compose navigation and `SettingsViewModel`, `core/server/` for strict HTTPS-origin validation, and `core/settings/` for non-secret DataStore preferences. `ChitChatApplication` supplies the repository through a small lazy container; the activity constructs the ViewModel with an explicit factory. Test fakes exist only in test source sets. No HTTP client, session secret store, chat cache, notification receiver or Firebase configuration is included prematurely. The production manifest has no network permission at this local-only milestone, disables cleartext and excludes app data from backup/device transfer.
 
 Use Kotlin, Compose Material 3, a single activity, AndroidX navigation, ViewModels, coroutines, and Flow. Begin with one `:app` module and packages grouped by concrete responsibility:
 

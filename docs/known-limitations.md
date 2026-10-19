@@ -1,9 +1,10 @@
 # Current status and limitations
 
-As of discovery, 2026-10-19:
+As of M1 validation, 2026-10-19:
 
-- **M1 foundation is in progress; no Android build has passed yet.** Functional chat/auth screens, session store, SSE, push and APK acceptance remain pending M1-M8. Documentation and issue contracts are not working features.
-- No live compatible ChitChat server/account or release signing identity has been supplied. No live login/chat, rendered browser review, Android build, emulator, TalkBack or push-device test ran. Firebase project/configuration is unnecessary for the accepted push architecture.
+- **M1 local foundation passes debug/release builds, eight unit tests, lint and three API36 connected tests; remote CI/review is pending.** Native HTTPS-origin storage and appearance settings are implemented. Auth/chat screens, secure session store, SSE and push remain pending M2-M8. See [exact evidence](milestones/M1-foundation.md); documentation and proposed contracts are not working features.
+- No live compatible ChitChat server/account or release signing identity has been supplied. No live login/chat, TalkBack or push-device acceptance passed. The release APK is unsigned, not a production distribution artifact. Firebase project/configuration is unnecessary for the accepted push architecture.
+- Claude workflow setup is prepared in [PR #3](https://github.com/Thiesi/ChitChat-Mobile/pull/3); its repository credential is not connected. Review completion and merge remain blocked until the maintainer supplies it through Actions secrets, not chat. See [setup](claude-review-setup.md).
 - Native passkey origins and secure browser handoff are absent from v3.2.1. Existing recovery-code APIs work as contracts but are emergency credentials and do not complete passkey parity. Provider-only accounts need B2 for native end-to-end workflows.
 - UnifiedPush is accepted but not implemented. It supplies valid Web Push endpoint/keys for existing server subscriptions; raw Firebase SDK tokens remain incompatible. Prefer an installed distributor, optional embedded FCM fallback, no mandatory publisher relay. Ordinary-DM alerts and final public identity/distribution remain separate unconfirmed decisions. See [push architecture](push-architecture.md).
 - The effective installation-name override is not public JSON; native capabilities have no explicit discovery contract. The revision-review participant-notification policy flag disagrees with the documented/trigger-derived notification behavior; B5 requests clarification.
