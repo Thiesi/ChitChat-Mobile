@@ -26,6 +26,8 @@ On Linux/macOS use `./gradlew` instead. Connected tests require an online suppor
 
 Lint warnings are fatal except `AndroidGradlePluginVersion`, `GradleDependency` and `NewerVersionAvailable`: these are newer-version suggestions, not code/security findings. They are excluded explicitly in `app/lint.xml` so unrelated online version changes cannot break a pinned build. This is not a general lint baseline or security-warning suppression.
 
+The intentional M1 `targetSdk=36` declaration also has a narrowly scoped `OldTargetApi` exception in `app/lint.xml`: runners with newer SDKs otherwise disagree with the tested local SDK36 installation. API36 meets the [current 2026 Play submission floor](https://developer.android.com/google/play/requirements/target-sdk); [AGP8.13 supports at most36.1](https://developer.android.com/build/releases/agp-8-13-0-release-notes). This is not a production release waiver. Review the complete SDK/AGP/Kotlin set, current target requirements and Android17 local-network/privacy permissions before network/release acceptance. No other code/security lint rule is disabled.
+
 | Area | Meaningful cases |
 |---|---|
 | Session/auth | Cookie and CSRF rotations, 202 pending MFA, invalidated version, restored process, source-IP MFA failure, anonymous/guest expiry, 401 vs 403, logout clearing and late-response isolation |

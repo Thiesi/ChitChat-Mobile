@@ -3,6 +3,7 @@ package io.github.thiesi.chitchat.app
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +36,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -95,7 +97,7 @@ fun ChitChatApp(model: SettingsViewModel, onThemeChanged: (Boolean) -> Unit = {}
             },
         ) { insets ->
             Column(
-                Modifier.fillMaxSize().padding(insets).imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
+                Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets).imePadding(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (state.loading) {
@@ -110,31 +112,47 @@ fun ChitChatApp(model: SettingsViewModel, onThemeChanged: (Boolean) -> Unit = {}
                         )
                         TextButton(onClick = model::reload) { Text(stringResource(R.string.retry)) }
                     }
-                    NavHost(navController = nav, startDestination = "home", modifier = Modifier.widthIn(max = 600.dp)) {
+                    NavHost(navController = nav, startDestination = "home", modifier = Modifier.weight(1f).fillMaxWidth()) {
                         composable("home") {
-                            if (state.settings.server == null) {
-                                ServerEditor(state, model, onSaved = {})
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                                    Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.headlineLarge)
-                                    Text(state.settings.server!!.value, style = MaterialTheme.typography.titleMedium)
-                                    Text(stringResource(R.string.server_saved_body))
-                                    Text(stringResource(R.string.preview_limit))
-                                    Button(onClick = { nav.navigate("server") }) { Text(stringResource(R.string.change_server)) }
-                                    PrivacyCard()
+                            // A successful save/forget replaces the page, not just its body:
+                            // never retain the editor's scrolled offset on the confirmation.
+                            key(state.settings.server?.value) {
+                                ScreenContent {
+                                    if (state.settings.server == null) {
+                                        ServerEditor(state, model, onSaved = {})
+                                    } else {
+                                        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                                            Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.headlineLarge)
+                                            Text(state.settings.server!!.value, style = MaterialTheme.typography.titleMedium)
+                                            Text(stringResource(R.string.server_saved_body))
+                                            Text(stringResource(R.string.preview_limit))
+                                            Button(onClick = { nav.navigate("server") }) { Text(stringResource(R.string.change_server)) }
+                                            PrivacyCard()
+                                        }
+                                    }
                                 }
                             }
                         }
                         composable("server") {
-                            ServerEditor(state, model, onSaved = { nav.popBackStack() })
+                            ScreenContent { ServerEditor(state, model, onSaved = { nav.popBackStack() }) }
                         }
                         composable("settings") {
-                            SettingsScreen(state, model)
+                            ScreenContent { SettingsScreen(state, model) }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ScreenContent(content: @Composable () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(Modifier.widthIn(max = 600.dp).fillMaxWidth()) { content() }
     }
 }
 

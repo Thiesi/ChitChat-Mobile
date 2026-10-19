@@ -35,6 +35,8 @@ The additional software-keyboard screenshot command later returned exit1 without
 
 ## Remaining gates
 
+Hosted CI follow-up: the first Linux build failed only `OldTargetApi` because its SDK installation is newer than the local one. A scoped exception now records the deliberate M1 target36 policy and required later SDK/AGP/permission reassessment. The first hosted compact-emulator journey also exposed a real shared-scroll defect: the editor offset could carry into the saved-server page. Scroll state is now per destination, with the home page keyed by saved server, and Scaffold insets are consumed before IME insets. Both UI journeys now run in an explicit320x480dp viewport and scroll controls into view. The combined debug/release/unit/lint/three-device-test local follow-up passed (`BUILD SUCCESSFUL in 7m20s`); remote rerun remains required. The only subsequent Kotlin edit was indentation cleanup.
+
 - Complete any further keyboard/accessibility/device checks appropriate to later feature screens; baseline API26/TalkBack acceptance is still outstanding.
 - Push/open the M1 foundation PR and obtain real remote build/journey results.
 - Maintainer connects one Claude credential securely; complete the review/fix/re-review loop before merge.

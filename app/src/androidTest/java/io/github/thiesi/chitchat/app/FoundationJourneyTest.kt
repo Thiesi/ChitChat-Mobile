@@ -1,5 +1,9 @@
 package io.github.thiesi.chitchat.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -31,20 +35,20 @@ class FoundationJourneyTest {
 
     @Test fun rejectsCleartextAndAllowsCorrection() {
         val model = model()
-        compose.setContent { ChitChatApp(model) }
+        compose.setContent { Box(Modifier.requiredSize(320.dp, 480.dp)) { ChitChatApp(model) } }
         compose.onNodeWithText("Server address").performTextInput("http://chat.example.org")
-        compose.onNodeWithText("Save server").performClick()
-        compose.onNodeWithText("Your server must use HTTPS.").assertIsDisplayed()
+        compose.onNodeWithText("Save server").performScrollTo().performClick()
+        compose.onNodeWithText("Your server must use HTTPS.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Server address").performTextReplacement("https://chat.example.org")
-        compose.onNodeWithText("Save server").performClick()
+        compose.onNodeWithText("Save server").performScrollTo().performClick()
         compose.onNodeWithText("https://chat.example.org/").assertIsDisplayed()
     }
 
     @Test fun savesAddressChangesThemeAndForgetsServer() {
         val model = model()
-        compose.setContent { ChitChatApp(model) }
+        compose.setContent { Box(Modifier.requiredSize(320.dp, 480.dp)) { ChitChatApp(model) } }
         compose.onNodeWithText("Server address").performTextInput("chat.example.org")
-        compose.onNodeWithText("Save server").performClick()
+        compose.onNodeWithText("Save server").performScrollTo().performClick()
         compose.onNodeWithText("https://chat.example.org/").assertIsDisplayed()
         compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Dark").performClick()
@@ -52,6 +56,6 @@ class FoundationJourneyTest {
         compose.onNodeWithText("Forget this server?").assertIsDisplayed()
         compose.onAllNodesWithText("Forget server").onLast().performClick()
         compose.onNodeWithText("Back").performClick()
-        compose.onNodeWithText("Save server").assertIsDisplayed()
+        compose.onNodeWithText("Save server").performScrollTo().assertIsDisplayed()
     }
 }
