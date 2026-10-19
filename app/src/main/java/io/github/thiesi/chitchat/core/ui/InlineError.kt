@@ -1,4 +1,4 @@
-package io.github.thiesi.chitchat.feature.auth
+package io.github.thiesi.chitchat.core.ui
 
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -14,7 +14,7 @@ import androidx.compose.ui.semantics.semantics
 
 /** Long forms must expose errors to sighted users as well as announcing them to TalkBack. */
 @Composable
-internal fun AuthError(message: String) {
+internal fun InlineError(message: String) {
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(message) { requester.bringIntoView() }
     Text(message, Modifier.bringIntoViewRequester(requester).semantics { liveRegion = LiveRegionMode.Polite },

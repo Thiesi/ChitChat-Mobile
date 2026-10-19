@@ -10,6 +10,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.thiesi.chitchat.app.ChitChatApp
 import io.github.thiesi.chitchat.app.SettingsViewModel
 import io.github.thiesi.chitchat.feature.auth.AuthViewModel
+import io.github.thiesi.chitchat.feature.account.AccountViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,7 +21,8 @@ class MainActivity : ComponentActivity() {
                 factory = SettingsViewModel.factory((application as ChitChatApplication).settingsRepository),
             )
             val auth: AuthViewModel = viewModel(factory = AuthViewModel.factory((application as ChitChatApplication).sessions))
-            ChitChatApp(model, auth, onThemeChanged = { dark ->
+            val account: AccountViewModel = viewModel(factory = AccountViewModel.factory((application as ChitChatApplication).accounts))
+            ChitChatApp(model, auth, account, onThemeChanged = { dark ->
                 enableEdgeToEdge(
                     statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
                     navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },

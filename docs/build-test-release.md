@@ -1,6 +1,6 @@
 # Build, test and release
 
-Current status: M1 merged; M2a authentication is implemented and locally verified. [M2a evidence](milestones/M2a-session-auth.md) records current actual build/test/review results and remaining M2 scope. Historical M1 results remain in [PR #4](https://github.com/Thiesi/ChitChat-Mobile/pull/4). Compilation is not live-server or review acceptance. See [milestones](implementation-plan.md).
+Current status: M1/M2a/M2b1 merged; M2b2 implements shared step-up and native personal-data export. [Current evidence](milestones/M2b-step-up-export.md) records actual gates and remaining acceptance; historical authentication evidence is in [M2a](milestones/M2a-session-auth.md). Historical M1 results remain in [PR #4](https://github.com/Thiesi/ChitChat-Mobile/pull/4). Compilation is not live-server or review acceptance. See [milestones](implementation-plan.md).
 
 ## Toolchain setup
 
