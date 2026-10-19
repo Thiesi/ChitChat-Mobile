@@ -1,6 +1,6 @@
 # Claude review setup
 
-Status: workflow prepared; credentials have not been connected and no Claude review has completed. This is separate from credential-free Android CI.
+Status: the maintainer connected `CLAUDE_CODE_OAUTH_TOKEN` and installed the official App workflows in PR #5. Actual App reviews completed on the discovery/setup PRs. This revision consolidates PR triggers into `.github/workflows/claude-code-review.yml` and keeps `.github/workflows/claude.yml` for issue assistance only. This is separate from credential-free Android CI.
 
 ## One manual connection
 
@@ -17,8 +17,8 @@ If repository/organization policy disallows Actions comment writes or this third
 
 ## Verify the connection
 
-1. Add the secret before opening the setup/foundation PR, or rerun its failed **Claude review / review** job after adding it. Its `pull_request` trigger can test the proposed workflow before merge. Existing PRs with no workflow change need a new revision to pick up the workflow, or a later `@claude` request after it is on the default branch.
-2. Confirm the credential preflight and Claude execution succeeded. Inspect the actual newly posted PR comment: it must identify the current head SHA and provide findings or explicitly say no worthwhile fixable findings remain. A green run alone is not evidence of a useful or current review.
+1. Configure the credential if setting up a new repository, then run **Claude Code Review / claude-review** on a PR. Its `pull_request` trigger tests proposed workflow changes before merge. Existing PRs need a new revision or a later `@claude` request after it is on the default branch.
+2. Confirm preflight, Claude execution, structured-result validation and trusted comment publication succeeded. Inspect the posted comment: it must identify the current head SHA and provide findings or explicitly say no worthwhile fixable findings remain. The model cannot post comments directly; a trusted step validates its JSON/head and publishes it with a run/attempt/head audit marker. A green or skipped check alone is never evidence of a useful/current review.
 3. After the workflow reaches the default branch, comment `@claude Please review the current revision again, including prior fixes.` on an open PR. **New PR conversation comments**, not edited comments or inline review replies, are supported. The comment must be made by a repository writer; comments from a workflow's `GITHUB_TOKEN` do not trigger another workflow.
 4. Ensure the second run posts a fresh result for the current head. Never infer approval from silence, cancellation, quota exhaustion or a missing/skipped job.
 
@@ -28,7 +28,9 @@ The `issue_comment` trigger only becomes available when this workflow is on the 
 
 Automatic reviews run for new/reopened/updated, non-draft, same-repository PRs. Authorized `@claude` comments request another complete review, even if one already exists. The action independently verifies writer permissions. Forks, unknown contributors, bot triggers, closed PRs and drafts do not receive secrets or paid review; a maintainer must inspect and safely bring external work into a trusted branch before using this workflow. Never add `pull_request_target` with an untrusted head checkout or wildcard bot/non-writer permissions.
 
-The reviewer may inspect code and post comments, but is not an implementation/merge agent. It must not run project scripts or change code. Treat model output and source text as untrusted; tool restrictions and least-privilege tokens reduce, but do not eliminate, prompt-injection risk. No signing keys, real account credentials or backend secrets belong in this job. Only same-repository writer-controlled changes are eligible for credentialed review; review workflow changes carefully before pushing them.
+The model may use only the allowed `gh pr diff/view` commands, not filesystem-read tools, arbitrary shell commands, project scripts or direct comment publication. A trusted subsequent step posts validated structured output. These measures remove the direct runner-file-to-public-comment path flagged in the initial review, but tool permissions are not a complete security sandbox: treat source, model output and all PR-controlled workflow changes as untrusted. No signing keys, real account credentials or backend secrets belong in this job. Only same-repository writer-controlled changes are eligible for credentialed review; inspect workflow changes carefully before pushing them.
+
+Concurrency is job-scoped, after the trigger/actor eligibility condition, and does not cancel an active review. Unrelated/public/bot comments cannot cancel a review through a shared workflow-level concurrency group. Bot-authored events (including Dependabot) are excluded instead of running a credential preflight that cannot receive secrets. Such skipped/ineligible events do not satisfy the standing merge gate: inspect an actual completed current-head comment before merging, and bring external work into a trusted branch for automated review. If an eligible PR becomes closed/draft/otherwise ineligible, scope validation fails rather than silently succeeding.
 
 Standing milestone order: build/test, commit/push, open PR, wait for review completion, triage credible product impact, fix worthwhile findings, request another review tagging `@claude`, and repeat. Merge only once worthwhile findings are resolved, the review covers the current head, required checks pass and conflicts are absent. Then clean only verified obsolete owned branches/worktrees. CI/reviewer success never substitutes for actual test results or human/agent triage.
 
