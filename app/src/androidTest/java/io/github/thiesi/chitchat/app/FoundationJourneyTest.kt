@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.app
 
+import io.github.thiesi.chitchat.feature.account.TestChitChatApp as ChitChatApp
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier

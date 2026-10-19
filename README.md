@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-**Native session authentication, registration and restoration are implemented.** M2a supplies HTTPS/password/recovery, encrypted session restoration and local/server logout. M2b1 adds native registration with cancellable proof-of-work and explicit closing-account restoration, including pending MFA. See [M2b1 checks and limits](docs/milestones/M2b-registration-restoration.md); historical auth evidence is in [M2a](docs/milestones/M2a-session-auth.md). Shared step-up remains M2b2, so M2 is not complete; chat and push remain unimplemented. The audited backend baseline is [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1).
+**Native authentication and personal-data export are implemented.** M2a supplies HTTPS/password/recovery, encrypted session restoration and local/server logout; M2b1 adds native registration/PoW and closing-account restoration. M2b2 adds shared password/emergency-recovery step-up and native JSON export through Android’s document picker. See [current step-up/export checks and limits](docs/milestones/M2b-step-up-export.md), [registration/restoration](docs/milestones/M2b-registration-restoration.md), and [historical auth evidence](docs/milestones/M2a-session-auth.md). Live acceptance is still partial; chat and push remain unimplemented. The audited backend baseline is [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1).
 
 Core chat and UnifiedPush over HTTPS port 443 have existing APIs. Native passkeys and browser identity handoff require the [backend dependencies](docs/backend-dependencies.md); shared Web Push hardening and capability discovery remain tracked separately. Ordinary incoming-DM push is a separate, unapproved product proposal. The ChitChat backend checkout remains read-only.
 
@@ -19,7 +19,7 @@ Core chat and UnifiedPush over HTTPS port 443 have existing APIs. Native passkey
 - [Proposed architecture](docs/architecture.md)
 - [Verified API contracts and compatibility](docs/backend-compatibility.md)
 - [Implementation milestones and acceptance gates](docs/implementation-plan.md)
-- [Sensitive-action protocol foundation (UI follows separately)](docs/milestones/M2b2a-protocol-foundation.md)
+- [Sensitive-action protocol foundation](docs/milestones/M2b2a-protocol-foundation.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)

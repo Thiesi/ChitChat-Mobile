@@ -17,7 +17,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import io.github.thiesi.chitchat.app.ChitChatApp
+import io.github.thiesi.chitchat.feature.account.TestChitChatApp as ChitChatApp
 import io.github.thiesi.chitchat.app.SettingsViewModel
 import io.github.thiesi.chitchat.core.server.AddressResult
 import io.github.thiesi.chitchat.core.server.ServerAddress
@@ -78,6 +78,21 @@ class AuthJourneyTest {
         compose.onNodeWithText("Use recovery code").performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithText("Signed in as Alice").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, sessions.recoveries) }
+    }
+
+    @Test fun accountNavigationIsAuthenticatedAndRetiresBackStackOnLogout() {
+        content()
+        compose.onNodeWithText("Account").assertDoesNotExist()
+        enterCredentials()
+        compose.onNodeWithText("Account").performClick()
+        compose.onNodeWithText("Your personal data").assertIsDisplayed()
+        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithText("Signed in as Alice").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Account").performClick()
+        compose.runOnIdle { auth.signOut() }
+        compose.onNodeWithText("Your personal data").assertDoesNotExist()
+        compose.onNodeWithText("Back to sign-in").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Account").assertDoesNotExist()
     }
 
     @Test fun restoredFormDoesNotPutPasswordIntoSavedState() {

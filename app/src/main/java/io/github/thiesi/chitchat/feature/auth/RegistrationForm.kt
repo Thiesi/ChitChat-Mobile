@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.core.ui.InlineError
 import io.github.thiesi.chitchat.core.session.RegistrationPreparation
 import io.github.thiesi.chitchat.core.session.SessionState
 import java.time.Instant
@@ -92,7 +93,7 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { submit() }))
-        if (attempted && problem != null) AuthError(stringResource(when (problem) {
+        if (attempted && problem != null) InlineError(stringResource(when (problem) {
             RegistrationProblem.USERNAME -> R.string.username_policy
             RegistrationProblem.PASSWORD -> R.string.password_policy
             RegistrationProblem.CONFIRMATION -> R.string.password_mismatch

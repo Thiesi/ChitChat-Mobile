@@ -5,8 +5,12 @@ import io.github.thiesi.chitchat.core.settings.SettingsRepository
 import io.github.thiesi.chitchat.core.session.KeystoreSessionVault
 import io.github.thiesi.chitchat.core.session.SessionController
 import io.github.thiesi.chitchat.core.session.SessionRepository
+import io.github.thiesi.chitchat.core.account.AccountOperations
+import io.github.thiesi.chitchat.core.account.SessionAccountRepository
 
 class ChitChatApplication : Application() {
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
-    val sessions: SessionController by lazy { SessionRepository(KeystoreSessionVault(this)) }
+    private val sessionRepository by lazy { SessionRepository(KeystoreSessionVault(this)) }
+    val sessions: SessionController get() = sessionRepository
+    val accounts: AccountOperations by lazy { SessionAccountRepository(sessionRepository) }
 }

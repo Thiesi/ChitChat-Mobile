@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.core.ui.InlineError
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.session.SessionPhase
@@ -58,7 +59,7 @@ fun AuthScreen(state: SessionState, model: AuthViewModel) {
     val waiting = now < state.retryAtMillis
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         state.error?.let { failure ->
-            AuthError(errorText(failure))
+            InlineError(errorText(failure))
         }
         if (state.registrationMayHaveSucceeded) Text(stringResource(R.string.registration_unknown))
         if (waiting) {
