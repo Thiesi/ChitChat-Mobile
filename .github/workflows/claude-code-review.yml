@@ -26,8 +26,8 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      pull-requests: read
-      issues: write
+      pull-requests: write
+      issues: read
     env:
       GH_REPO: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
@@ -95,6 +95,15 @@ jobs:
             --allowedTools "Bash(gh pr diff ${{ env.PR_NUMBER }} --repo ${{ github.repository }}),Bash(gh pr view ${{ env.PR_NUMBER }} --repo ${{ github.repository }} --comments)"
             --disallowedTools "Read,Glob,Grep,Edit,Write,NotebookEdit,WebFetch,WebSearch,mcp__*"
             --json-schema '{"type":"object","required":["head_sha","summary","findings"],"additionalProperties":false,"properties":{"head_sha":{"type":"string"},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","required":["severity","path","line","detail"],"additionalProperties":false,"properties":{"severity":{"type":"string","enum":["high","medium","low"]},"path":{"type":"string"},"line":{"type":"integer","minimum":1},"detail":{"type":"string"}}}}}}'
+
+      - name: Audit actual model tool exposure
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          test -f "$EXECUTION_FILE"
+          runtime_tools=$(jq -sc '[.. | objects | select(.type? == "system" and .subtype? == "init") | .tools? // empty] | last' "$EXECUTION_FILE")
+          echo "Runtime model tools: $runtime_tools"
+          jq -e 'type == "array" and length > 0 and all(.[]; IN("Bash", "StructuredOutput", "EndConversation"))' <<< "$runtime_tools" > /dev/null
 
       - name: Validate and publish reviewed head
         env:
