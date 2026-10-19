@@ -2,6 +2,8 @@ package io.github.thiesi.chitchat.core.network
 
 import io.github.thiesi.chitchat.core.server.ServerAddress
 import io.github.thiesi.chitchat.core.session.OriginCookieJar
+import io.github.thiesi.chitchat.core.account.PersonalExport
+import io.github.thiesi.chitchat.core.account.VerificationMethods
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.time.ZonedDateTime
@@ -13,6 +15,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.ConnectionPool
@@ -81,6 +87,45 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
     suspend fun recovery(code: String, csrf: String): AuthReply =
         auth("mfa/login-recovery.php", apiJson.encodeToString(RecoveryRequest(code)), csrf, allowPending = false)
 
+    suspend fun verificationMethods(): VerificationMethods {
+        val mfa = decode<MfaStatusReply>(request("account/mfa/status.php").require200()).mfa
+        if (mfa.remaining !in 0..100) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        // Do not guess that an external-identity account has a usable password.
+        val identities = decode<IdentityMethodsReply>(request("account/identities/list.php").require200())
+        return VerificationMethods(mfa.enabled, identities.hasPassword, mfa.remaining)
+    }
+
+    suspend fun verifyPassword(password: String, csrf: String) {
+        val reply = decode<PasswordStepUpReply>(request("step-up.php",
+            apiJson.encodeToString(StepUpPasswordRequest(password)), csrf).require200())
+        requireActiveStepUp(reply.status, "password")
+    }
+
+    suspend fun verifyRecovery(code: String, csrf: String): Int {
+        val reply = decode<RecoveryStepUpReply>(request("mfa/step-up-recovery.php",
+            apiJson.encodeToString(RecoveryRequest(code)), csrf).require200())
+        requireActiveStepUp(reply.security.status, "recovery_code")
+        if (reply.remaining !in 0..100) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        return reply.remaining
+    }
+
+    suspend fun personalExport(csrf: String, userId: Long): PersonalExport {
+        val raw = request("account/export.php", "{}", csrf, export = true).require200()
+        return withContext(Dispatchers.Default) {
+            val reply = decode<ExportReply>(raw)
+            val format = reply.export["format"] as? JsonObject
+            val version = format?.get("version") as? JsonPrimitive
+            val account = reply.export["account"] as? JsonObject
+            val id = account?.get("id") as? JsonPrimitive
+            if (!reply.filename.matches(Regex("[A-Za-z0-9._-]{1,200}\\.json")) ||
+                (format?.get("name") as? JsonPrimitive)?.content != "chitchat-personal-data-export" ||
+                version == null || version.isString || version.intOrNull != 1 ||
+                id == null || id.isString || id.longOrNull != userId) throw ApiFailure(FailureKind.INCOMPATIBLE)
+            // Export only the documented object, not the transport envelope. No disk cache.
+            PersonalExport(reply.export.toString().encodeToByteArray())
+        }
+    }
+
     private suspend fun auth(path: String, body: String, csrf: String, successStatus: Int = 200, allowPending: Boolean = true): AuthReply {
         val raw = request(path, body, csrf)
         val reply = decode<AuthReply>(raw)
@@ -127,13 +172,16 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
                 }
             }.build()
 
-    private suspend fun request(path: String, body: String? = null, csrf: String? = null): RawReply {
-        val raw = execute(client.newCall(buildRequest(path, body, csrf)))
+    private suspend fun request(path: String, body: String? = null, csrf: String? = null, export: Boolean = false): RawReply {
+        // Shares this runtime's jar, dispatcher and pool, including cancellation on retirement.
+        val transport = if (export) client.newBuilder().readTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(120, TimeUnit.SECONDS).build() else client
+        val raw = execute(transport.newCall(buildRequest(path, body, csrf)), if (export) EXPORT_MAX_BYTES else 1_048_576)
         if (jar.invalid) throw ApiFailure(FailureKind.INCOMPATIBLE)
         return raw
     }
 
-    private suspend fun execute(call: Call): RawReply = suspendCancellableCoroutine { continuation ->
+    private suspend fun execute(call: Call, maxBytes: Long = 1_048_576): RawReply = suspendCancellableCoroutine { continuation ->
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -144,8 +192,10 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
                     val reply = response.use {
                         if (it.code in 300..399) throw ApiFailure(FailureKind.REDIRECT, it.code)
                         val source = it.body.source()
-                        source.request(1_048_577)
-                        if (source.buffer.size > 1_048_576) throw ApiFailure(FailureKind.INCOMPATIBLE)
+                        val limit = if (it.isSuccessful) maxBytes else 1_048_576
+                        source.request(limit + 1)
+                        if (source.buffer.size > limit) throw ApiFailure(
+                            if (maxBytes > 1_048_576 && it.isSuccessful) FailureKind.TOO_LARGE else FailureKind.INCOMPATIBLE)
                         val body = source.buffer.readUtf8()
                         if (!it.isSuccessful) {
                             val error = try { apiJson.decodeFromString<ErrorEnvelope>(body).error } catch (_: SerializationException) { null }
@@ -169,7 +219,14 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         catch (_: SerializationException) { throw ApiFailure(FailureKind.INCOMPATIBLE) }
     }
 
-    private class RawReply(val status: Int, val body: String)
+    private class RawReply(val status: Int, val body: String) {
+        fun require200(): RawReply {
+            if (status != 200) throw ApiFailure(FailureKind.INCOMPATIBLE)
+            return this
+        }
+    }
+
+    companion object { internal const val EXPORT_MAX_BYTES = 16L * 1024 * 1024 }
 
     @kotlinx.serialization.Serializable
     private class LogoutReply(val status: String)

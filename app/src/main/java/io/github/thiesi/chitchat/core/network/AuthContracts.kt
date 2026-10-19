@@ -70,7 +70,7 @@ internal class ErrorEnvelope(val error: ServerError)
 @Serializable
 internal class ServerError(val code: String, val message: String)
 
-enum class FailureKind { NETWORK, TLS, TIMEOUT, REDIRECT, INCOMPATIBLE, HTTP, STORAGE, EXPIRED }
+enum class FailureKind { NETWORK, TLS, TIMEOUT, REDIRECT, INCOMPATIBLE, HTTP, STORAGE, EXPIRED, TOO_LARGE }
 
 /** Safe metadata only; never retain a response body or low-level exception containing secrets. */
 class ApiFailure(

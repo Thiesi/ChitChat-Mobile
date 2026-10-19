@@ -489,6 +489,91 @@ class SessionRepositoryTest {
         assertNotNull(vault.saved)
     }
 
+    @Test fun protectedStepUpRejectionIsNotGlobalLogoutOrAnAutomaticRetry() = runTest {
+        login()
+        val access = io.github.thiesi.chitchat.core.account.SessionAccountRepository(sessions).open()
+        server.enqueue(error("step_up_required", 403))
+        val failure = try { access.export(); error("Expected step-up") }
+            catch (failure: io.github.thiesi.chitchat.core.network.ApiFailure) { failure }
+        assertEquals("step_up_required", failure.code)
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertNull(sessions.state.value.error)
+        assertFalse(sessions.state.value.refreshRequired)
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test fun authenticatedResource401InvalidatesAllCapturedCapabilities() = runTest {
+        login()
+        val access = io.github.thiesi.chitchat.core.account.SessionAccountRepository(sessions).open()
+        server.enqueue(error("authentication_required", 401))
+        try { access.verificationMethods(); fail("Expected invalidation") }
+        catch (_: io.github.thiesi.chitchat.core.network.ApiFailure) { }
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+        assertNull(vault.saved)
+        try { access.ensureCurrent(); fail("Expected stale capability") }
+        catch (_: kotlinx.coroutines.CancellationException) { }
+    }
+
+    @Test fun capturedCapabilityCannotBypassRateLimitOrLifetime() = runTest {
+        login()
+        val access = io.github.thiesi.chitchat.core.account.SessionAccountRepository(sessions).open()
+        server.enqueue(MockResponse.Builder().code(429).addHeader("Retry-After", "45")
+            .body("""{"error":{"code":"rate_limited","message":"fixture"}}""").build())
+        repeat(2) {
+            try { access.verifyPassword("fixture"); fail("Expected rate limit") }
+            catch (failure: io.github.thiesi.chitchat.core.network.ApiFailure) { assertEquals(429, failure.status) }
+        }
+        assertEquals(3, server.requestCount)
+        clock.now += 31L * 24 * 60 * 60 * 1000
+        try { access.export(); fail("Expected lifetime expiry") }
+        catch (failure: io.github.thiesi.chitchat.core.network.ApiFailure) {
+            assertEquals(io.github.thiesi.chitchat.core.network.FailureKind.EXPIRED, failure.kind)
+        }
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test fun recoveryStepUpUpdatesTheSharedRemainingCountWithoutChangingAccount() = runTest {
+        login()
+        val access = io.github.thiesi.chitchat.core.account.SessionAccountRepository(sessions).open()
+        server.enqueue(json("""{"security":{"privileged_step_up":{"active":true,"method":"recovery_code","verified_at":"2026-10-20T00:00:00Z","expires_at":"2026-10-20T00:10:00Z","max_age_seconds":600}},"recovery_codes_remaining":6}"""))
+        assertEquals(6, access.verifyRecovery(" UNUSED-FIXTURE-CODE "))
+        val request = server.takeRequest()
+        assertEquals("/api/v1/mfa/step-up-recovery.php", request.url.encodedPath)
+        assertEquals(b, request.headers["X-CSRF-Token"])
+        assertEquals("""{"recovery_code":"UNUSED-FIXTURE-CODE"}""", request.body!!.utf8())
+        assertEquals(6, sessions.state.value.recoveryCodesRemaining)
+        assertEquals(7L, vault.saved!!.userId)
+    }
+
+    @Test fun logoutRetiresCapturedResourceCapabilitiesBeforeAnyFurtherRequest() = runTest {
+        login()
+        val access = io.github.thiesi.chitchat.core.account.SessionAccountRepository(sessions).open()
+        server.enqueue(json("""{"status":"logged_out"}"""))
+        sessions.signOut()
+        val count = server.requestCount
+        try { access.export(); fail("Expected stale capability") }
+        catch (_: kotlinx.coroutines.CancellationException) { }
+        assertEquals(count, server.requestCount)
+        assertNull(vault.saved)
+    }
+
+    @Test fun logoutDuringExportDiscardsLatePrivateContent() = runTest {
+        login()
+        val access = io.github.thiesi.chitchat.core.account.SessionAccountRepository(sessions).open()
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Content-Type", "application/json")
+            .body("""{"filename":"fixture.json","export":{"format":{"name":"chitchat-personal-data-export","version":1},"account":{"id":7}}}""")
+            .bodyDelay(400, TimeUnit.MILLISECONDS).build())
+        val pending = async { runCatching { access.export() } }
+        kotlinx.coroutines.yield()
+        assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        server.enqueue(json("""{"status":"logged_out"}"""))
+        sessions.signOut()
+        assertTrue(pending.await().exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
+        assertNull(vault.saved)
+    }
+
     private class MemoryVault : SessionVault {
         var saved: SavedSession? = null
         var failWrites = false

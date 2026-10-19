@@ -144,4 +144,98 @@ class SessionHttpTest {
         assertEquals(60L, failure.retryAfterSeconds)
         assertNull(failure.code)
     }
+
+    private fun stepStatus(method: String = "password", active: Boolean = true, offset: String = "+00:00") =
+        """{"active":$active,"method":"$method","verified_at":"2026-10-20T00:00:00$offset","expires_at":"2026-10-20T00:10:00$offset","max_age_seconds":600}"""
+
+    @Test fun methodDiscoveryUsesBothExistingAuthenticatedMetadataEndpoints() = runTest {
+        server.enqueue(response("""{"mfa":{"enabled":true,"recovery_codes_remaining":8,"credentials":[]}}"""))
+        server.enqueue(response("""{"has_password":false,"providers":[],"identities":[]}"""))
+        val methods = api.verificationMethods()
+        assertTrue(methods.mfaEnabled)
+        assertFalse(methods.hasPassword)
+        assertEquals(8, methods.recoveryCodesRemaining)
+        assertEquals("/api/v1/account/mfa/status.php", server.takeRequest().url.encodedPath)
+        assertEquals("/api/v1/account/identities/list.php", server.takeRequest().url.encodedPath)
+    }
+
+    @Test fun missingPasswordMetadataNeverAssumesAPasswordExists() = runTest {
+        server.enqueue(response("""{"mfa":{"enabled":false,"recovery_codes_remaining":0}}"""))
+        server.enqueue(response("""{"providers":[]}"""))
+        val failure = try { api.verificationMethods(); error("Expected rejection") } catch (failure: ApiFailure) { failure }
+        assertEquals(FailureKind.INCOMPATIBLE, failure.kind)
+    }
+
+    @Test fun passwordAndRecoveryStepUpRespectTheirDistinctResponseEnvelopes() = runTest {
+        server.enqueue(response("""{"privileged_step_up":${stepStatus()}}"""))
+        api.verifyPassword("  exact fixture password  ", token)
+        val password = server.takeRequest()
+        assertEquals("/api/v1/step-up.php", password.url.encodedPath)
+        assertEquals(token, password.headers["X-CSRF-Token"])
+        assertEquals("""{"password":"  exact fixture password  "}""", password.body!!.utf8())
+        server.enqueue(response("""{"security":{"privileged_step_up":${stepStatus("recovery_code")}},"recovery_codes_remaining":7}"""))
+        assertEquals(7, api.verifyRecovery("UNUSED-FIXTURE-CODE", token))
+        val recovery = server.takeRequest()
+        assertEquals("/api/v1/mfa/step-up-recovery.php", recovery.url.encodedPath)
+        assertEquals("""{"recovery_code":"UNUSED-FIXTURE-CODE"}""", recovery.body!!.utf8())
+    }
+
+    @Test fun verificationRequiresActiveExpectedMethodAndValidLifetime() = runTest {
+        for (status in listOf(stepStatus(active = false), stepStatus("recovery_code"),
+            stepStatus().replace("2026-10-20T00:00:00+00:00", "invalid"),
+            stepStatus().replace("2026-10-20T00:10:00+00:00", "invalid"),
+            stepStatus(offset = ""),
+            stepStatus().replace("\"2026-10-20T00:00:00+00:00\"", "null"),
+            stepStatus().replace("600", "601"))) {
+            server.enqueue(response("""{"privileged_step_up":$status}"""))
+            val failure = try { api.verifyPassword("fixture", token); error("Expected rejection") } catch (failure: ApiFailure) { failure }
+            assertEquals(FailureKind.INCOMPATIBLE, failure.kind)
+        }
+        server.enqueue(response("""{"privileged_step_up":${stepStatus()}}""", 202))
+        val pending = try { api.verifyPassword("fixture", token); error("Expected rejection") } catch (failure: ApiFailure) { failure }
+        assertEquals(FailureKind.INCOMPATIBLE, pending.kind)
+    }
+
+    @Test fun passwordAndRecoveryStepUpAcceptZuluAndDateAtomTimestamps() = runTest {
+        for (offset in listOf("Z", "+00:00")) {
+            server.enqueue(response("""{"privileged_step_up":${stepStatus(offset = offset)}}"""))
+            api.verifyPassword("fixture", token)
+            server.enqueue(response("""{"security":{"privileged_step_up":${stepStatus("recovery_code", offset = offset)}},"recovery_codes_remaining":7}"""))
+            assertEquals(7, api.verifyRecovery("UNUSED-FIXTURE-CODE", token))
+        }
+        assertEquals(4, server.requestCount)
+    }
+
+    private fun exportBody(id: Long = 7, padding: String = "") =
+        """{"filename":"chitchat-personal-data-Alice-20261020-000000.json","export":{"format":{"name":"chitchat-personal-data-export","version":1},"account":{"id":$id},"fixture":"$padding"}}"""
+
+    @Test fun exportAllowsLargerPayloadButSavesOnlyTheAuthorizedObject() = runTest {
+        server.enqueue(response(exportBody(padding = "x".repeat(1_048_600))))
+        val export = api.personalExport(token, 7)
+        val request = server.takeRequest()
+        assertEquals("POST", request.method)
+        assertEquals("/api/v1/account/export.php", request.url.encodedPath)
+        assertEquals("{}", request.body!!.utf8())
+        assertEquals(token, request.headers["X-CSRF-Token"])
+        val json = apiJson.parseToJsonElement(export.bytes.decodeToString()).toString()
+        assertTrue(json.startsWith("{\"format\":"))
+        assertFalse(json.contains("\"filename\""))
+        assertFalse(export.toString().contains("Alice"))
+    }
+
+    @Test fun exportRejectsAnotherAccountAndUnknownFormatWithoutLeakingContent() = runTest {
+        for (body in listOf(exportBody(8), exportBody().replace("\"version\":1", "\"version\":2"), "private-invalid-export")) {
+            server.enqueue(response(body))
+            val failure = try { api.personalExport(token, 7); error("Expected rejection") } catch (failure: ApiFailure) { failure }
+            assertEquals(FailureKind.INCOMPATIBLE, failure.kind)
+            assertFalse(failure.toString().contains("private-invalid-export"))
+        }
+    }
+
+    @Test fun exportSizeLimitIsExplicitAndNeverReplaysThePost() = runTest {
+        server.enqueue(response("x".repeat(SessionHttp.EXPORT_MAX_BYTES.toInt() + 1)))
+        val failure = try { api.personalExport(token, 7); error("Expected size rejection") } catch (failure: ApiFailure) { failure }
+        assertEquals(FailureKind.TOO_LARGE, failure.kind)
+        assertEquals(1, server.requestCount)
+    }
 }
