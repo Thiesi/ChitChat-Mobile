@@ -145,8 +145,8 @@ class SessionHttpTest {
         assertNull(failure.code)
     }
 
-    private fun stepStatus(method: String = "password", active: Boolean = true) =
-        """{"active":$active,"method":"$method","verified_at":"2026-10-20T00:00:00+00:00","expires_at":"2026-10-20T00:10:00+00:00","max_age_seconds":600}"""
+    private fun stepStatus(method: String = "password", active: Boolean = true, offset: String = "+00:00") =
+        """{"active":$active,"method":"$method","verified_at":"2026-10-20T00:00:00$offset","expires_at":"2026-10-20T00:10:00$offset","max_age_seconds":600}"""
 
     @Test fun methodDiscoveryUsesBothExistingAuthenticatedMetadataEndpoints() = runTest {
         server.enqueue(response("""{"mfa":{"enabled":true,"recovery_codes_remaining":8,"credentials":[]}}"""))
@@ -182,7 +182,11 @@ class SessionHttpTest {
 
     @Test fun verificationRequiresActiveExpectedMethodAndValidLifetime() = runTest {
         for (status in listOf(stepStatus(active = false), stepStatus("recovery_code"),
-            stepStatus().replace("2026-10-20T00:10:00+00:00", "invalid"), stepStatus().replace("600", "601"))) {
+            stepStatus().replace("2026-10-20T00:00:00+00:00", "invalid"),
+            stepStatus().replace("2026-10-20T00:10:00+00:00", "invalid"),
+            stepStatus(offset = ""),
+            stepStatus().replace("\"2026-10-20T00:00:00+00:00\"", "null"),
+            stepStatus().replace("600", "601"))) {
             server.enqueue(response("""{"privileged_step_up":$status}"""))
             val failure = try { api.verifyPassword("fixture", token); error("Expected rejection") } catch (failure: ApiFailure) { failure }
             assertEquals(FailureKind.INCOMPATIBLE, failure.kind)
@@ -190,6 +194,16 @@ class SessionHttpTest {
         server.enqueue(response("""{"privileged_step_up":${stepStatus()}}""", 202))
         val pending = try { api.verifyPassword("fixture", token); error("Expected rejection") } catch (failure: ApiFailure) { failure }
         assertEquals(FailureKind.INCOMPATIBLE, pending.kind)
+    }
+
+    @Test fun passwordAndRecoveryStepUpAcceptZuluAndDateAtomTimestamps() = runTest {
+        for (offset in listOf("Z", "+00:00")) {
+            server.enqueue(response("""{"privileged_step_up":${stepStatus(offset = offset)}}"""))
+            api.verifyPassword("fixture", token)
+            server.enqueue(response("""{"security":{"privileged_step_up":${stepStatus("recovery_code", offset = offset)}},"recovery_codes_remaining":7}"""))
+            assertEquals(7, api.verifyRecovery("UNUSED-FIXTURE-CODE", token))
+        }
+        assertEquals(4, server.requestCount)
     }
 
     private fun exportBody(id: Long = 7, padding: String = "") =
