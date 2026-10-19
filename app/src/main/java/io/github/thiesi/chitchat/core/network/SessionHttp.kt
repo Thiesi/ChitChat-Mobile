@@ -126,15 +126,6 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         }
     }
 
-    private fun requireActiveStepUp(status: StepUpStatus, method: String) {
-        val verified = try { java.time.Instant.parse(status.verifiedAt) } catch (_: Exception) { null }
-        val expires = try { java.time.Instant.parse(status.expiresAt) } catch (_: Exception) { null }
-        if (!status.active || status.method != method || status.maxAgeSeconds !in 60..3600 ||
-            verified == null || expires == null || expires.epochSecond - verified.epochSecond != status.maxAgeSeconds.toLong()) {
-            throw ApiFailure(FailureKind.INCOMPATIBLE)
-        }
-    }
-
     private suspend fun auth(path: String, body: String, csrf: String, successStatus: Int = 200, allowPending: Boolean = true): AuthReply {
         val raw = request(path, body, csrf)
         val reply = decode<AuthReply>(raw)
