@@ -21,6 +21,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 enum class SessionPhase { NO_SERVER, CONNECTING, ANONYMOUS, PENDING_MFA, AUTHENTICATED, GUEST, INVALIDATED, SIGNED_OUT }
+enum class AuthFlow { SIGN_IN, REGISTER, RESTORE }
+enum class RegistrationPreparation { IDLE, PREPARING, READY, FAILED }
 
 data class PublicSession(
     val registrationEnabled: Boolean,
@@ -41,8 +43,12 @@ data class SessionState(
     val storageWarning: Boolean = false,
     val logoutUnconfirmed: Boolean = false,
     val recoveryCodesRemaining: Int? = null,
+    val authFlow: AuthFlow = AuthFlow.SIGN_IN,
+    val registration: RegistrationPreparation = RegistrationPreparation.IDLE,
+    val accountRestored: Boolean = false,
+    val registrationMayHaveSucceeded: Boolean = false,
 ) {
-    val canChangeServer get() = phase !in setOf(SessionPhase.AUTHENTICATED, SessionPhase.PENDING_MFA, SessionPhase.GUEST) && !storageWarning
+    val canChangeServer get() = phase !in setOf(SessionPhase.AUTHENTICATED, SessionPhase.PENDING_MFA, SessionPhase.GUEST) && !storageWarning && !busy
 }
 
 interface SessionController {
@@ -52,6 +58,9 @@ interface SessionController {
     suspend fun completeRecovery(code: String)
     suspend fun refresh()
     suspend fun signOut()
+    suspend fun selectAuthFlow(flow: AuthFlow)
+    suspend fun prepareRegistration()
+    suspend fun register(username: String, password: String, birthDate: String?)
 }
 
 /** Local transitions and vault writes are serialized; network calls never hold the lock. */
@@ -127,6 +136,14 @@ class SessionRepository internal constructor(
     override suspend fun signIn(username: String, password: String, restore: Boolean) {
         val active = begin(SessionPhase.ANONYMOUS) ?: return
         try {
+            lock.withLock {
+                if (runtime === active) {
+                    active.preparation++
+                    active.proof = null
+                    mutable.value = mutable.value.copy(authFlow = if (restore) AuthFlow.RESTORE else AuthFlow.SIGN_IN,
+                        registration = RegistrationPreparation.IDLE)
+                }
+            }
             val result = active.api.password(username.trim(), password, active.csrf!!, restore)
             authenticated(active, result)
         } catch (failure: ApiFailure) { failed(active, failure) }
@@ -134,8 +151,98 @@ class SessionRepository internal constructor(
 
     override suspend fun completeRecovery(code: String) {
         val active = begin(SessionPhase.PENDING_MFA) ?: return
-        try { authenticated(active, active.api.recovery(code.trim(), active.csrf!!)) }
+        try {
+            val reply = active.api.recovery(code.trim(), active.csrf!!)
+            if (mutable.value.authFlow == AuthFlow.RESTORE && !reply.restored) throw ApiFailure(FailureKind.INCOMPATIBLE)
+            authenticated(active, reply)
+        }
         catch (failure: ApiFailure) { failed(active, failure) }
+    }
+
+    override suspend fun selectAuthFlow(flow: AuthFlow) = lock.withLock {
+        val current = mutable.value
+        val active = runtime ?: return@withLock
+        if (current.phase != SessionPhase.ANONYMOUS || current.busy ||
+            (flow == AuthFlow.REGISTER && (current.public?.registrationEnabled != true || current.public.lockdown.enabled))) return@withLock
+        active.preparation++
+        active.proof = null
+        mutable.value = current.copy(authFlow = flow, registration = RegistrationPreparation.IDLE,
+            error = null, registrationMayHaveSucceeded = false)
+    }
+
+    override suspend fun prepareRegistration() {
+        val pending = lock.withLock {
+            val active = runtime ?: return@withLock null
+            val current = mutable.value
+            if (current.phase != SessionPhase.ANONYMOUS || current.authFlow != AuthFlow.REGISTER || current.busy ||
+                current.refreshRequired || current.public?.registrationEnabled != true ||
+                clock.millis() < current.retryAtMillis) return@withLock null
+            active.proof = null
+            val attempt = ++active.preparation
+            active.proofIssuedAt = clock.millis()
+            mutable.value = current.copy(registration = RegistrationPreparation.PREPARING, error = null)
+            active to attempt
+        } ?: return
+        try {
+            val proof = solveRegistration(pending.first.api.registrationChallenge())
+            lock.withLock {
+                if (runtime === pending.first && pending.first.preparation == pending.second) {
+                    pending.first.proof = proof
+                    mutable.value = mutable.value.copy(registration = RegistrationPreparation.READY)
+                }
+            }
+        } catch (failure: ApiFailure) {
+            lock.withLock {
+                if (runtime === pending.first && pending.first.preparation == pending.second) {
+                    failLocked(pending.first, failure)
+                    mutable.value = mutable.value.copy(registration = RegistrationPreparation.FAILED)
+                }
+            }
+        } finally {
+            withContext(NonCancellable) {
+                lock.withLock {
+                    if (runtime === pending.first && pending.first.preparation == pending.second &&
+                        mutable.value.registration == RegistrationPreparation.PREPARING) {
+                        mutable.value = mutable.value.copy(registration = RegistrationPreparation.IDLE)
+                    }
+                }
+            }
+        }
+    }
+
+    override suspend fun register(username: String, password: String, birthDate: String?) {
+        val pending = lock.withLock {
+            val active = runtime ?: return@withLock null
+            val current = mutable.value
+            if (current.phase != SessionPhase.ANONYMOUS || current.authFlow != AuthFlow.REGISTER || current.busy ||
+                current.refreshRequired || current.registration != RegistrationPreparation.READY ||
+                current.public?.registrationEnabled != true || clock.millis() < current.retryAtMillis) return@withLock null
+            val proof = active.proof ?: return@withLock null
+            active.proof = null // Single-use even after validation errors or ambiguous network failure.
+            if (clock.millis() < active.proofIssuedAt || clock.millis() - active.proofIssuedAt >= 1_800_000) {
+                mutable.value = current.copy(registration = RegistrationPreparation.FAILED,
+                    error = ApiFailure(FailureKind.HTTP, 400, "registration_challenge_expired"))
+                return@withLock null
+            }
+            mutable.value = current.copy(busy = true, error = null, registration = RegistrationPreparation.IDLE)
+            active to proof
+        } ?: return
+        try {
+            authenticated(pending.first, pending.first.api.register(username.trim(), password, birthDate,
+                pending.second.nonce, pending.second.solution, pending.first.csrf!!))
+        } catch (failure: ApiFailure) {
+            lock.withLock {
+                if (runtime === pending.first) {
+                    val uncertain = failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT,
+                        FailureKind.INCOMPATIBLE, FailureKind.REDIRECT) || (failure.status ?: 0) >= 500
+                    failLocked(pending.first, failure)
+                    mutable.value = mutable.value.copy(registrationMayHaveSucceeded = uncertain,
+                        registration = RegistrationPreparation.FAILED,
+                        public = if (failure.code == "registration_disabled") mutable.value.public?.copy(registrationEnabled = false)
+                            else mutable.value.public)
+                }
+            }
+        }
     }
 
     private suspend fun begin(phase: SessionPhase): Runtime? = lock.withLock {
@@ -162,6 +269,7 @@ class SessionRepository internal constructor(
                     phase = when { reply.user == null -> SessionPhase.ANONYMOUS; reply.user.guest -> SessionPhase.GUEST; else -> SessionPhase.AUTHENTICATED },
                     user = reply.user,
                     public = reply.publicSession(), busy = true, error = null, refreshRequired = false,
+                    registrationMayHaveSucceeded = if (reply.user != null) false else mutable.value.registrationMayHaveSucceeded,
                 )
                 persist(active, reply.user)
             }
@@ -179,7 +287,8 @@ class SessionRepository internal constructor(
             active.signedInAt = clock.millis()
             active.expectedUserId = reply.user!!.id
             mutable.value = mutable.value.copy(phase = SessionPhase.AUTHENTICATED, user = reply.user,
-                busy = true, error = null, recoveryCodesRemaining = reply.recoveryCodesRemaining)
+                busy = true, error = null, recoveryCodesRemaining = reply.recoveryCodesRemaining,
+                accountRestored = reply.restored, registrationMayHaveSucceeded = false)
             persist(active, reply.user)
         }
     }
@@ -203,15 +312,18 @@ class SessionRepository internal constructor(
         }
     }
 
-    private suspend fun failed(active: Runtime, failure: ApiFailure) = lock.withLock {
-        if (runtime !== active) return@withLock
+    private suspend fun failed(active: Runtime, failure: ApiFailure) = lock.withLock { failLocked(active, failure) }
+
+    private suspend fun failLocked(active: Runtime, failure: ApiFailure) {
+        if (runtime !== active) return
         val current = mutable.value
         if ((failure.status == 401 && current.phase != SessionPhase.ANONYMOUS) ||
             failure.kind == FailureKind.INCOMPATIBLE || failure.kind == FailureKind.REDIRECT) {
             invalidate(active, failure)
-            return@withLock
+            return
         }
-        val needsRefresh = failure.code == "csrf_failed" || failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT)
+        val needsRefresh = failure.code == "csrf_failed" || failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT) ||
+            (current.authFlow == AuthFlow.REGISTER && current.busy && (failure.status ?: 0) >= 500)
         if (needsRefresh) active.csrf = null
         mutable.value = current.copy(
             phase = if (current.phase == SessionPhase.CONNECTING) SessionPhase.INVALIDATED else current.phase,
@@ -269,6 +381,9 @@ class SessionRepository internal constructor(
         var signedInAt: Long? = null
         var lastValidatedAt: Long? = null
         var expectedUserId: Long? = null
+        var preparation = 0L
+        var proof: RegistrationProof? = null
+        var proofIssuedAt = 0L
         fun withinLifetime(now: Long): Boolean {
             val start = signedInAt ?: return false
             val last = lastValidatedAt ?: return false

@@ -39,6 +39,23 @@ internal class AuthReply(
     val methods: List<String> = emptyList(),
     @SerialName("recovery_codes_remaining") val recoveryCodesRemaining: Int? = null,
     val restored: Boolean = false,
+    @SerialName("restoration_pending") val restorationPending: Boolean = false,
+)
+
+@Serializable
+internal class RegistrationChallengeReply(val challenge: RegistrationChallenge?)
+
+@Serializable
+internal class RegistrationChallenge(val nonce: String, val bits: Int)
+
+@Serializable
+internal class RegistrationRequest(
+    val username: String,
+    val password: String,
+    @SerialName("birth_date") val birthDate: String?,
+    val website: String,
+    @SerialName("challenge_nonce") val nonce: String?,
+    @SerialName("challenge_solution") val solution: String?,
 )
 
 @Serializable

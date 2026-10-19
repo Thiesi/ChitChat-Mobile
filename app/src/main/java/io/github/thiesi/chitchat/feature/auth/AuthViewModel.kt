@@ -7,6 +7,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.thiesi.chitchat.core.server.ServerAddress
 import io.github.thiesi.chitchat.core.session.SessionController
+import io.github.thiesi.chitchat.core.session.AuthFlow
+import io.github.thiesi.chitchat.core.session.RegistrationPreparation
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -16,11 +18,13 @@ class AuthViewModel(private val sessions: SessionController) : ViewModel() {
     private var selected: ServerAddress? = null
     private var initialized = false
     private var operation: Job? = null
+    private var preparation: Job? = null
 
     fun selectServer(server: ServerAddress?) {
         if (initialized && selected == server) return
         initialized = true
         selected = server
+        preparation?.cancel()
         operation?.cancel()
         operation = viewModelScope.launch { sessions.connect(server) }
     }
@@ -30,9 +34,31 @@ class AuthViewModel(private val sessions: SessionController) : ViewModel() {
         operation = viewModelScope.launch { sessions.connect(selected) }
     }
 
-    fun signIn(username: String, password: String) {
+    fun signIn(username: String, password: String, restore: Boolean = false) {
         if (operation?.isActive == true) return
-        operation = viewModelScope.launch { sessions.signIn(username, password) }
+        preparation?.cancel()
+        operation = viewModelScope.launch { sessions.signIn(username, password, restore) }
+    }
+
+    fun selectForm(flow: AuthFlow) {
+        if (operation?.isActive == true) return
+        preparation?.cancel()
+        operation = viewModelScope.launch {
+            sessions.selectAuthFlow(flow)
+            if (state.value.authFlow == AuthFlow.REGISTER) prepareRegistration()
+        }
+    }
+
+    fun prepareRegistration() {
+        preparation?.cancel()
+        preparation = viewModelScope.launch { sessions.prepareRegistration() }
+    }
+
+    fun pauseRegistration() { preparation?.cancel() }
+
+    fun register(username: String, password: String, birthDate: String?) {
+        if (operation?.isActive == true) return
+        operation = viewModelScope.launch { sessions.register(username, password, birthDate) }
     }
 
     fun recovery(code: String) {
@@ -47,9 +73,11 @@ class AuthViewModel(private val sessions: SessionController) : ViewModel() {
 
     fun foreground() {
         if (state.value.phase in setOf(SessionPhase.AUTHENTICATED, SessionPhase.GUEST)) refresh()
+        else if (state.value.authFlow == AuthFlow.REGISTER && state.value.registration == RegistrationPreparation.IDLE) prepareRegistration()
     }
 
     fun signOut() {
+        preparation?.cancel()
         operation?.cancel()
         operation = viewModelScope.launch { sessions.signOut() }
     }

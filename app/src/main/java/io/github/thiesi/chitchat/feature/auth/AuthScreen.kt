@@ -26,9 +26,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentType
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,10 +41,12 @@ import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
+import io.github.thiesi.chitchat.core.session.AuthFlow
 import kotlinx.coroutines.delay
 
 @Composable
 fun AuthScreen(state: SessionState, model: AuthViewModel) {
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.pauseRegistration() }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(state.retryAtMillis, lifecycle) {
@@ -58,8 +58,9 @@ fun AuthScreen(state: SessionState, model: AuthViewModel) {
     val waiting = now < state.retryAtMillis
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         state.error?.let { failure ->
-            Text(errorText(failure), Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error)
+            AuthError(errorText(failure))
         }
+        if (state.registrationMayHaveSucceeded) Text(stringResource(R.string.registration_unknown))
         if (waiting) {
             val seconds = ((state.retryAtMillis - now + 999) / 1000).toInt()
             Text(pluralStringResource(R.plurals.retry_after, seconds, seconds))
@@ -85,12 +86,32 @@ fun AuthScreen(state: SessionState, model: AuthViewModel) {
                 if (state.refreshRequired) {
                     TextButton(onClick = model::refresh, enabled = !state.busy && !waiting) { Text(stringResource(R.string.refresh_session)) }
                 }
-                PasswordForm(model, !state.busy && !state.refreshRequired && !waiting)
+                val enabled = !state.busy && !state.refreshRequired && !waiting
+                if (state.authFlow == AuthFlow.REGISTER) {
+                    if (state.public?.registrationEnabled == true) RegistrationForm(state, model, enabled && !state.public.lockdown.enabled)
+                    else Text(stringResource(R.string.registration_disabled))
+                }
+                else {
+                    if (state.authFlow == AuthFlow.RESTORE) {
+                        Text(stringResource(R.string.restore_account), style = MaterialTheme.typography.titleLarge)
+                        Text(stringResource(R.string.restoration_explanation))
+                    }
+                    PasswordForm(model, enabled, state.authFlow == AuthFlow.RESTORE)
+                }
                 if (state.public?.providers?.isNotEmpty() == true) Text(stringResource(R.string.providers_unavailable))
-                if (state.public?.registrationEnabled == true) Text(stringResource(R.string.registration_pending))
+                if (state.authFlow != AuthFlow.SIGN_IN) TextButton(onClick = { model.selectForm(AuthFlow.SIGN_IN) }, enabled = !state.busy) {
+                    Text(stringResource(R.string.back_to_sign_in))
+                }
+                if (state.authFlow == AuthFlow.SIGN_IN) {
+                    TextButton(onClick = { model.selectForm(AuthFlow.RESTORE) }, enabled = !state.busy) { Text(stringResource(R.string.restore_account)) }
+                    if (state.public?.registrationEnabled == true && !state.public.lockdown.enabled) TextButton(onClick = { model.selectForm(AuthFlow.REGISTER) }, enabled = !state.busy) {
+                        Text(stringResource(R.string.create_account))
+                    }
+                }
             }
             SessionPhase.PENDING_MFA -> {
-                Text(stringResource(R.string.finish_sign_in), style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(if (state.authFlow == AuthFlow.RESTORE) R.string.finish_restoration else R.string.finish_sign_in), style = MaterialTheme.typography.titleLarge)
+                if (state.authFlow == AuthFlow.RESTORE) Text(stringResource(R.string.restoration_mfa_pending))
                 Text(stringResource(R.string.mfa_recovery_explanation))
                 if (state.refreshRequired) Text(stringResource(R.string.mfa_restart_needed))
                 RecoveryForm(model, !state.busy && !waiting && !state.refreshRequired)
@@ -99,6 +120,7 @@ fun AuthScreen(state: SessionState, model: AuthViewModel) {
             SessionPhase.AUTHENTICATED -> {
                 Text(stringResource(R.string.signed_in_as, state.user?.username.orEmpty()), style = MaterialTheme.typography.titleLarge)
                 Text(stringResource(R.string.auth_preview_limit))
+                if (state.accountRestored) Text(stringResource(R.string.account_restored))
                 if (!state.storageWarning && !state.busy) Text(stringResource(R.string.session_retention))
                 state.recoveryCodesRemaining?.let { Text(stringResource(R.string.recovery_remaining, it)) }
                 if (state.refreshRequired) Text(stringResource(R.string.session_refresh_needed))
@@ -128,10 +150,10 @@ fun AuthScreen(state: SessionState, model: AuthViewModel) {
 }
 
 @Composable
-private fun PasswordForm(model: AuthViewModel, enabled: Boolean) {
+private fun PasswordForm(model: AuthViewModel, enabled: Boolean, restore: Boolean) {
     var username by rememberSaveable { mutableStateOf("") }
     // Never put a password or recovery code in saved instance state or a ViewModel.
-    var password by remember { mutableStateOf("") }
+    var password by remember(restore) { mutableStateOf("") }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { password = "" }
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -141,7 +163,7 @@ private fun PasswordForm(model: AuthViewModel, enabled: Boolean) {
             val entered = password
             password = ""
             focus.clearFocus(); keyboard?.hide()
-            model.signIn(username, entered)
+            model.signIn(username, entered, restore)
         }
     }
     OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().semantics { contentType = ContentType.Username },
@@ -152,7 +174,9 @@ private fun PasswordForm(model: AuthViewModel, enabled: Boolean) {
         visualTransformation = PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { submit() }))
-    Button(onClick = submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.sign_in)) }
+    Button(onClick = submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth()) {
+        Text(stringResource(if (restore) R.string.restore_and_sign_in else R.string.sign_in))
+    }
 }
 
 @Composable
@@ -192,6 +216,16 @@ private fun errorText(failure: ApiFailure): String = stringResource(when {
     failure.code == "csrf_failed" -> R.string.session_refresh_needed
     failure.code == "account_banned" -> R.string.account_banned
     failure.code == "mfa_enrollment_required" -> R.string.mfa_setup_required
+    failure.code == "account_closure_pending" -> R.string.account_closure_pending
+    failure.code == "account_closed" || failure.code == "account_restoration_expired" -> R.string.account_cannot_restore
+    failure.code == "account_not_pending" -> R.string.account_not_pending
+    failure.code == "registration_disabled" -> R.string.registration_disabled
+    failure.code == "username_taken" -> R.string.username_taken
+    failure.code == "invalid_username" -> R.string.username_policy
+    failure.code == "weak_password" -> R.string.password_policy
+    failure.code == "invalid_birth_date" -> R.string.invalid_birth_date
+    failure.code == "registration_too_fast" -> R.string.registration_too_fast
+    failure.code?.startsWith("registration_") == true -> R.string.registration_check_failed
     failure.status == 401 -> R.string.session_expired
     else -> R.string.request_rejected
 })

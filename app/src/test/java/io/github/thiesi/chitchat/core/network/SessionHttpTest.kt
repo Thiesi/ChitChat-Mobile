@@ -53,6 +53,41 @@ class SessionHttpTest {
         assertFalse(signedIn.toString().contains(rotated))
     }
 
+    @Test fun registrationUses201WithOptionalDateDecoyAndExactChallengeFields() = runTest {
+        server.enqueue(response("""{"challenge":{"nonce":"${"a".repeat(32)}","bits":16}}"""))
+        assertEquals(16, api.registrationChallenge()!!.bits)
+        assertEquals("/api/v1/registration-challenge.php", server.takeRequest().url.encodedPath)
+        server.enqueue(response("""{"csrf_token":"$rotated","user":${user()}}""", 201))
+        assertEquals(7L, api.register("Alice", "fixture-password", "1990-05-12", "a".repeat(32), "123", token).user!!.id)
+        val request = server.takeRequest()
+        val body = apiJson.parseToJsonElement(request.body!!.utf8()).toString()
+        assertEquals("/api/v1/register.php", request.url.encodedPath)
+        assertTrue(body.contains("\"birth_date\":\"1990-05-12\""))
+        assertTrue(body.contains("\"website\":\"\""))
+        assertTrue(body.contains("\"challenge_solution\":\"123\""))
+        assertEquals(token, request.headers["X-CSRF-Token"])
+    }
+
+    @Test fun registrationDoesNotAcceptInvented200SuccessOrPendingMfa() = runTest {
+        for (code in listOf(200, 202)) {
+            server.enqueue(response("""{"csrf_token":"$rotated","user":${user()}}""", code))
+            val failure = try { api.register("Alice", "fixture-password", null, null, null, token); error("Expected rejection") }
+                catch (failure: ApiFailure) { failure }
+            assertEquals(FailureKind.INCOMPATIBLE, failure.kind)
+        }
+    }
+
+    @Test fun restorationMustExplicitlyReportCompletionOrPendingState() = runTest {
+        server.enqueue(response("""{"csrf_token":"$rotated","user":${user()}}"""))
+        val invalid = try { api.password("Alice", "fixture-password", token, true); error("Expected rejection") }
+            catch (failure: ApiFailure) { failure }
+        assertEquals(FailureKind.INCOMPATIBLE, invalid.kind)
+        server.enqueue(response("""{"csrf_token":"$rotated","user":${user()},"restored":true,"restoration_pending":false}"""))
+        assertTrue(api.password("Alice", "fixture-password", token, true).restored)
+        server.takeRequest()
+        assertEquals("/api/v1/account/restore.php", server.takeRequest().url.encodedPath)
+    }
+
     @Test fun pendingMfaIsNotAnAuthenticatedUser() = runTest {
         server.enqueue(response("""{"csrf_token":"$rotated","mfa_required":true,"methods":["passkey","recovery_code"]}""", 202))
         val pending = api.password("Alice", "private-test-password", token)

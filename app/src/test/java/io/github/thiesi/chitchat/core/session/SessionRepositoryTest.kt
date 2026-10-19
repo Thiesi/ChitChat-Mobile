@@ -306,6 +306,189 @@ class SessionRepositoryTest {
         assertFalse("Retrying local cleanup must retain an already-confirmed server logout", sessions.state.value.logoutUnconfirmed)
     }
 
+    private suspend fun registrationReady(challenge: String = "null") {
+        sessions.selectAuthFlow(AuthFlow.REGISTER)
+        server.enqueue(json("""{"challenge":$challenge}"""))
+        sessions.prepareRegistration()
+        assertEquals("/api/v1/registration-challenge.php", server.takeRequest(5, TimeUnit.SECONDS)!!.url.encodedPath)
+        assertEquals(RegistrationPreparation.READY, sessions.state.value.registration)
+    }
+
+    @Test fun registrationAdoptsServerAssignedRolesAndRotatedCredentials() = runTest {
+        anonymous()
+        registrationReady()
+        server.enqueue(json("""{"csrf_token":"$b","user":${user.replace("member", "super_admin")}}""", 201,
+            "SITE=registered; Secure; HttpOnly; Path=/"))
+        sessions.register("Alice", "fixture-password", null)
+        val request = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("/api/v1/register.php", request.url.encodedPath)
+        assertEquals(a, request.headers["X-CSRF-Token"])
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertEquals(listOf("super_admin"), sessions.state.value.user!!.roles)
+        assertTrue(vault.saved!!.cookies.single().contains("registered"))
+    }
+
+    @Test fun rejectedRegistrationConsumesProofAndRequiresExplicitRefresh() = runTest {
+        anonymous()
+        registrationReady("""{"nonce":"${"a".repeat(32)}","bits":0}""")
+        server.enqueue(error("registration_too_fast", 400))
+        sessions.register("Alice", "fixture-password", "1990-05-12")
+        assertEquals(RegistrationPreparation.FAILED, sessions.state.value.registration)
+        assertEquals("registration_too_fast", sessions.state.value.error!!.code)
+        val count = server.requestCount
+        sessions.register("Alice", "fixture-password", null)
+        assertEquals(count, server.requestCount)
+        server.takeRequest()
+        registrationReady()
+        assertNull(vault.saved)
+    }
+
+    @Test fun registrationHonorsRateLimitAcrossChallengeRefresh() = runTest {
+        anonymous()
+        registrationReady()
+        server.enqueue(error("rate_limited", 429))
+        sessions.register("Alice", "fixture-password", null)
+        val count = server.requestCount
+        sessions.prepareRegistration()
+        assertEquals(count, server.requestCount)
+        clock.now += 31_000
+        server.takeRequest()
+        registrationReady()
+    }
+
+    @Test fun expiredLocalChallengeCannotBeSentOrReused() = runTest {
+        anonymous()
+        registrationReady()
+        clock.now += 1_800_001
+        val count = server.requestCount
+        sessions.register("Alice", "fixture-password", null)
+        assertEquals(count, server.requestCount)
+        assertEquals("registration_challenge_expired", sessions.state.value.error!!.code)
+    }
+
+    @Test fun registrationDisabledIsEnforcedBelowTheUi() = runTest {
+        server.enqueue(json(bootstrapBody().replace("\"registration_enabled\":true", "\"registration_enabled\":false")))
+        sessions.connect(address())
+        sessions.selectAuthFlow(AuthFlow.REGISTER)
+        sessions.prepareRegistration()
+        sessions.register("Alice", "fixture-password", null)
+        assertEquals(AuthFlow.SIGN_IN, sessions.state.value.authFlow)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test fun cancelledFormCannotBeRepopulatedByALateChallenge() = runTest {
+        anonymous()
+        sessions.selectAuthFlow(AuthFlow.REGISTER)
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Content-Type", "application/json")
+            .body("""{"challenge":null}""").bodyDelay(200, TimeUnit.MILLISECONDS).build())
+        val preparation = async { sessions.prepareRegistration() }
+        kotlinx.coroutines.yield()
+        assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        sessions.selectAuthFlow(AuthFlow.SIGN_IN)
+        preparation.await()
+        assertEquals(AuthFlow.SIGN_IN, sessions.state.value.authFlow)
+        assertEquals(RegistrationPreparation.IDLE, sessions.state.value.registration)
+    }
+
+    @Test fun malformedRegistrationSuccessWarnsThatTheAccountMayExist() = runTest {
+        anonymous()
+        registrationReady()
+        server.enqueue(json("""{"csrf_token":"$b","user":null}""", 201))
+        sessions.register("Alice", "fixture-password", null)
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+        assertTrue(sessions.state.value.registrationMayHaveSucceeded)
+        assertNull(vault.saved)
+    }
+
+    @Test fun restorationMfaKeepsClosurePendingUntilServerConfirmedRecovery() = runTest {
+        anonymous()
+        server.enqueue(json("""{"csrf_token":"$b","restored":false,"restoration_pending":true,"mfa_required":true,"methods":["recovery_code"]}""", 202))
+        sessions.signIn("Alice", "fixture-password", restore = true)
+        assertEquals("/api/v1/account/restore.php", server.takeRequest(5, TimeUnit.SECONDS)!!.url.encodedPath)
+        assertEquals(SessionPhase.PENDING_MFA, sessions.state.value.phase)
+        assertEquals(AuthFlow.RESTORE, sessions.state.value.authFlow)
+        assertFalse(sessions.state.value.accountRestored)
+        assertNull(vault.saved)
+        server.enqueue(json("""{"csrf_token":"$c","user":$user,"restored":true,"recovery_codes_remaining":3}""",
+            cookie = "SITE=restored; Secure; HttpOnly; Path=/"))
+        sessions.completeRecovery("UNUSED-FIXTURE-CODE")
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertTrue(sessions.state.value.accountRestored)
+        assertEquals(3, sessions.state.value.recoveryCodesRemaining)
+    }
+
+    @Test fun expiredRestorationRemainsAnonymousAndCannotClaimRestored() = runTest {
+        anonymous()
+        server.enqueue(error("account_restoration_expired", 410))
+        sessions.signIn("Alice", "fixture-password", restore = true)
+        assertEquals(SessionPhase.ANONYMOUS, sessions.state.value.phase)
+        assertFalse(sessions.state.value.accountRestored)
+        assertNull(vault.saved)
+    }
+
+    @Test fun pausedChallengeReturnsToIdleAndCanBeExplicitlyPreparedAgain() = runTest {
+        anonymous()
+        sessions.selectAuthFlow(AuthFlow.REGISTER)
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Content-Type", "application/json")
+            .body("""{"challenge":null}""").bodyDelay(300, TimeUnit.MILLISECONDS).build())
+        val preparation = async { sessions.prepareRegistration() }
+        kotlinx.coroutines.yield()
+        assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        preparation.cancel()
+        preparation.join()
+        assertEquals(RegistrationPreparation.IDLE, sessions.state.value.registration)
+        assertEquals(SessionPhase.ANONYMOUS, sessions.state.value.phase)
+        registrationReady()
+    }
+
+    @Test fun serverRegistrationDisableRemovesTheStaleUiCapability() = runTest {
+        anonymous()
+        registrationReady()
+        server.enqueue(error("registration_disabled", 403))
+        sessions.register("Alice", "fixture-password", null)
+        assertFalse(sessions.state.value.public!!.registrationEnabled)
+        val count = server.requestCount
+        sessions.prepareRegistration()
+        assertEquals(count, server.requestCount)
+    }
+
+    @Test fun signOutWhileRegistrationIsInFlightCannotRestoreLateCredentials() = runTest {
+        anonymous()
+        registrationReady()
+        server.enqueue(MockResponse.Builder().code(201).addHeader("Content-Type", "application/json")
+            .addHeader("Set-Cookie", "SITE=late; Secure; HttpOnly; Path=/")
+            .body("""{"csrf_token":"$b","user":$user}""").bodyDelay(400, TimeUnit.MILLISECONDS).build())
+        val registration = async { sessions.register("Alice", "fixture-password", null) }
+        kotlinx.coroutines.yield()
+        assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        assertFalse(sessions.state.value.canChangeServer)
+        server.enqueue(error("csrf_failed", 403))
+        sessions.signOut()
+        registration.await()
+        assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
+        assertNull(vault.saved)
+        assertNull(sessions.state.value.user)
+    }
+
+    @Test fun ambiguousRegistrationReconcilesAuthoritativelyWithoutReplayingTheWrite() = runTest {
+        anonymous()
+        registrationReady()
+        server.enqueue(json("""{"error":{"code":"internal_error","message":"fixture failure"}}""", 500,
+            "SITE=created; Secure; HttpOnly; Path=/"))
+        sessions.register("Alice", "fixture-password", null)
+        server.takeRequest()
+        assertTrue(sessions.state.value.registrationMayHaveSucceeded)
+        assertTrue(sessions.state.value.refreshRequired)
+        server.enqueue(json(bootstrapBody(user, c)))
+        sessions.refresh()
+        val request = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("GET", request.method)
+        assertEquals("/api/v1/session.php", request.url.encodedPath)
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertFalse(sessions.state.value.registrationMayHaveSucceeded)
+        assertNotNull(vault.saved)
+    }
+
     private class MemoryVault : SessionVault {
         var saved: SavedSession? = null
         var failWrites = false
