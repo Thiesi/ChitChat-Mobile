@@ -1,31 +1,29 @@
-# Deliver existing account notifications through FCM without changing privacy or Web Push behavior
+# Improve shared Web Push dispatch reliability and custom-port VAPID support
 
-Status: proposed backend integration. Depends on B3 device lifecycle and the publisher/operator push-topology decision. Android [M6](https://github.com/Thiesi/ChitChat-Mobile/blob/docs/android-discovery/docs/implementation-plan.md) depends on actual delivery; a Firebase test message alone is insufficient.
+Status: revised proposal following accepted UnifiedPush architecture, submitted to [ChitChat #148](https://github.com/Thiesi/ChitChat/issues/148). This supersedes the FCM sender/independent-ledger proposal; the filename is retained for tracking. Tracks [ChitChat-Mobile #1](https://github.com/Thiesi/ChitChat-Mobile/issues/1), M6/M8. No new native sender or publisher relay is required.
 
-Tracks [ChitChat-Mobile #1](https://github.com/Thiesi/ChitChat-Mobile/issues/1).
+## Requirement and existing behavior
 
-## User-facing requirement and evidence
+Eligible account notifications should reach browser and Android Web Push subscriptions reliably while preserving authorization, quiet hours and preferences. The existing [`WebPushDispatcher`](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/WebPush/WebPushDispatcher.php#L127) already uses VAPID and `aes128gcm`, interoperating with compatible UnifiedPush subscriptions on HTTPS port 443. A single shared worker avoids the second-sender/global-marker race described in the original proposal.
 
-When the app is backgrounded, eligible existing account notifications should reach registered native devices through FCM, with account preferences, privacy and authorization matching ChitChat. Foreground messaging continues to use SSE.
+The worker currently marks attempts complete even after transient failure; scheduling adds roughly 30–60 seconds before transport delivery. The pinned `minishlink/web-push` v11.0.0 also builds a VAPID audience without a non-default endpoint port. An investigation request-generation check reproduced that defect for `https://…:8443`; strict services may reject it. See [dependency source](https://github.com/web-push-libs/web-push-php/blob/v11.0.0/src/WebPush.php#L337) and [RFC 8292](https://www.rfc-editor.org/info/rfc8292/). Basic port-443 interoperability does not depend on these improvements.
 
-At v3.2.1 [WebPushDispatcher::dispatchOne](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/WebPush/WebPushDispatcher.php#L127) sends VAPID Web Push after checking quiet hours and mention/ping preferences. It marks a single `account_notifications.push_dispatched_at` even when suppressed/failed. A second independent FCM sweep over that field could cause starvation/duplicate/racy delivery. [PrivacyNotificationService](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/Account/PrivacyNotificationService.php#L214) renders text shared with browser push; later kinds can contain moderation reasons, so forwarding all rendered bodies is not a safe content-free Android default.
+## Proposed changes and compatibility
 
-## Proposed delivery contract
+Fix/update the upstream dependency so VAPID `aud` includes the endpoint's scheme/host/non-default port as required. Prefer a maintained upstream release; retain signature, encryption and endpoint-validation checks. Until fixed, document a port-443 reverse proxy as the workaround for push services.
 
-Use a durable per-transport/device delivery ledger or one coordinated dispatcher with atomic claims and independent outcomes for Web Push and FCM. Define notification ID + registration binding as the dedupe key. Retain bounded retries/backoff for transient FCM errors, prune confirmed invalid/unregistered tokens, distinguish project/credential/configuration failures from expired tokens, and document best-effort delivery/TTL. Do not mark browser dispatch complete because native dispatch ran, or vice versa.
+Use atomic work claims and bounded retry/backoff for transient transport failures with safe concurrent-worker behavior. Track per-subscription outcomes where necessary to avoid retrying successful recipients while losing failed ones; a shared Web Push delivery ledger may implement this without inventing another transport. Distinguish permanent expired subscriptions from configuration/network failures. Define TTL/urgency, retry deadline, operational scheduling/health and duplicate-delivery expectations. Never promise exactly-once delivery.
 
-Proposed FCM **data-only** payload fields, all strings: `{schema_version:"1",registration_binding:"<opaque>",notification_id:"<id>",category:"<existing kind>"}`. Optional route IDs must be validated and contain no message body, caption, filename, search text, recovery/identity material, free-text reason, username or room name. The app shows a generic private notification and retrieves authorized details after entry. Prefer opaque binding over raw user/server identifiers so Google/relay sees minimal metadata. Scope route binding to the configured server/device; notification tap must reauthorize. No arbitrary URL navigation from payload.
+Keep existing `{title,body,link,app_name}` payload keys and API routes. Optional notification IDs/bindings can improve native/browser deduplication but cannot be assumed by old clients. Preserve current quiet-hour suppression (no deferred morning replay without a separate product decision), mention/ping preferences and security/policy semantics. Recheck recipient/subscription eligibility before dispatch/retry. Ordinary incoming-DM alerts remain separate unapproved B6 behavior.
 
-Preserve current account-level mention/ping toggles and quiet-hour suppression semantics, including no deferred morning replay unless separately agreed. Security/policy categories stay non-optional at account preference level; Android OS/device permissions can still disable all alerts. Do not treat a push receipt as read acknowledgment. Ordinary DM push is separate B6 proposed product behavior. Recheck recipient/device eligibility at dispatch, including revocation, room access changes, closed/banned accounts, ignores and expired registrations; never use a raw client-provided user ID as delivery authorization.
+## Security and privacy
 
-## Sender ownership/security
-
-For a matching operator build, server-side OAuth/FCM HTTP v1 credentials belong to that operator and match the app's Firebase project. For a universal publisher build, use an explicitly agreed authenticated relay with trusted instance enrollment, quotas, replay protection, per-device authorization and no raw content. Do not grant arbitrary hosts unrestricted publisher-project send permission, accept client-selected relay URLs, or copy sender keys into the APK. No relay deployment/hosting is authorized by this issue alone.
+Continue RFC 8291 encryption and installation-owned VAPID keys; keep private keys on the ChitChat server. Do not add Firebase server credentials or a mandatory publisher relay. Redact endpoints/keys/decrypted content from logs. Android shows generic lock-screen text, validates local account generation and reauthorizes taps; chat is not E2EE. Coordinate destination protections and subscription lifecycle with B3 without treating a raw endpoint as user authorization.
 
 ## Acceptance criteria
 
-- Existing categories reach a real background Android device and route to reauthorized native state; denied permissions, no-GMS and force-stop/delayed delivery remain honestly reported limitations.
-- Web Push and FCM coexist without duplicate ledger processing, starvation or changes to existing browser behavior.
-- Tests cover registration expiry/revoke/account switch, duplicate/reordered messages, transient failures, invalid tokens, project mismatch, preference changes, quiet hours/timezones, ignored users and authorization loss.
-- Lock-screen payload and transport logs contain no sensitive content; service credentials remain server-only.
-- Document dispatch scheduling/health, relay or direct configuration, category semantics and end-to-end verification steps.
+- Strict compatible push servers accept VAPID for HTTPS port 443 and a non-default HTTPS port; wrong audiences still fail.
+- Existing browser delivery and at least two UnifiedPush distributors continue working with unchanged subscription fields/encryption.
+- Tests cover concurrent claims, transient retry/expiry, permanent invalid subscriptions, partial multi-device failure, duplicates and configuration errors.
+- Preferences/quiet hours, ignored users, revoked/closed/unauthorized recipients remain correct across retries.
+- Operational delay and failure/retry behavior are documented; actual background device delivery is tested separately from request-generation/unit tests.

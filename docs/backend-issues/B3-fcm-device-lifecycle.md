@@ -1,36 +1,29 @@
-# Add authenticated FCM device registration, rotation and revocation
+# Harden the shared Web Push subscription lifecycle and endpoint security
 
-Status: proposed backend contract; missing in v3.2.1. Android [M6](https://github.com/Thiesi/ChitChat-Mobile/blob/docs/android-discovery/docs/implementation-plan.md) needs this before native token association is functional. Delivery is separate B4 work.
+Status: revised proposal following accepted UnifiedPush architecture, submitted to [ChitChat #147](https://github.com/Thiesi/ChitChat/issues/147). This supersedes the original FCM-token lifecycle proposal; the filename is retained for tracking. No `/push/fcm/*` route is required or implemented. Tracks [ChitChat-Mobile #1](https://github.com/Thiesi/ChitChat-Mobile/issues/1), M6.
 
-Tracks [ChitChat-Mobile #1](https://github.com/Thiesi/ChitChat-Mobile/issues/1).
+## Requirement and current behavior
 
-## User-facing requirement and existing behavior
+Browser and native users need safe device registration, rotation, removal and logout. Existing authenticated, CSRF-protected [`push/subscribe.php`](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/api/v1/push/subscribe.php) accepts `{endpoint,p256dh,auth}`. Modern UnifiedPush connectors provide those exact values; no native token API or Firebase credentials are necessary. Existing subscription listing/removal works across compatible providers. [`PushSubscriptionService`](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/WebPush/PushSubscriptionService.php) validates HTTPS but needs stronger endpoint/key ownership/security treatment. Current [`logout.php`](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/api/v1/logout.php) does not remove subscriptions.
 
-An authenticated user must explicitly enable/disable native background push, rotate a device token, list/revoke devices and safely sign out/switch accounts. Existing [push/subscribe.php](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/api/v1/push/subscribe.php) accepts Web Push endpoint/P-256/auth material; it is not an FCM registration API. [PushSubscriptionService](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/WebPush/PushSubscriptionService.php) and browser device IDs must retain their existing meaning.
+## Proposed backwards-compatible contract
 
-## Proposed API contract
+Retain existing routes/required fields and browser behavior. Strengthen P-256/auth decoding and size validation, authenticated ownership/rate limits/device caps, and optional registration confirmation proving the registrant can receive/decrypt at the chosen endpoint. Design any challenge flow additively and document migration/legacy behavior before enforcing it. Treat subscription endpoints as routing secrets, never account authentication.
 
-Keep PHP sessions and CSRF. Suggested additive routes, subject to backend review:
+Add optional installation/registration binding and display-safe device labels if useful; old clients need not send them. Specify atomic endpoint/key replacement, revocation, optional bounded authenticated renewal/expiry and account-invalidated/closed behavior. List metadata without raw endpoint/key secrets where compatibility permits. A revocation capability, if introduced, must be narrowly scoped and cannot read, register or send.
 
-- `POST /api/v1/push/fcm/register.php`: `{installation_id,token,client_id,device_label}`. Project/sender identity comes from server-approved `client_id`, not arbitrary client credentials or sender URLs. Validate bounds/format; atomically upsert the current authenticated account's installation/token and return `{device:{id,transport:"fcm",label},registration_binding,expires_at}`. `registration_binding` is an opaque per-registration routing value, not an account secret or login token. Re-registration/token rotation is idempotent and invalidates the old binding/token association. A fresh registration must not silently steal another account's binding: specify a secure installation-ownership proof or require prior unbinding.
-- `GET /api/v1/push/fcm/devices.php`: own display-safe device metadata, state and expiry only, never full token/registration secret. Browser and native device listings remain distinguishable.
-- `POST /api/v1/push/fcm/revoke.php`: `{device_id}` for an authenticated owner; missing/foreign IDs are nondisclosing no-ops. Support current-device logout revocation and remote device removal.
-- Define bounded authenticated renewal/registration expiry (proposed at most seven days without renewal), token rotation races and an installation-scoped revocation capability if needed for offline logout. A revocation capability must allow only revoking its binding, never registering, reading or sending.
+Guard server-side delivery against SSRF: validate destinations and redirects, DNS resolution/rebinding and unintended private/internal addresses at connection time. Preserve arbitrary public compatible push providers. Support deliberately private self-hosted providers through explicit operator policy/exceptions rather than a fixed vendor allowlist. Define validation errors and safe rollout without silently breaking existing browser subscriptions. See [UnifiedPush security guidance](https://unifiedpush.org/developers/intro/#server-security).
 
-Advertise configured FCM support, approved client/project compatibility and lifecycle contract version through additive capability metadata. An unconfigured server must return a stable unsupported error, never accept-and-ignore tokens.
+Optional notification IDs/opaque bindings may be added to the existing `{title,body,link,app_name}` payload; retain current keys. Native clients must still scope connector instances locally and reject stale account generations. Offline logout must immediately unregister locally, discard keys/bindings and cancel notifications even when server cleanup fails; server expiry is additional protection, not proof that an offline revoke succeeded.
 
-## Security, privacy, compatibility
+## Security and compatibility
 
-Tokens are sensitive routing identifiers, not proof of ChitChat login. Scope by installation/server/account/client and enforce authenticated ownership. Rate limit registration/revocation, cap devices, redact tokens/secrets from logs/audit/listing/export, use HTTPS and server-side secure storage. No topic subscription that lets clients target other users. No Firebase service account or sender credential in APK or registration response.
-
-Explicit logout/closure/device removal must revoke the matching association; account invalidation must suspend participation delivery. Define generic security-event treatment separately so account-reset notices do not disclose private content through an invalid session. Offline logout must clear local routing/notifications immediately, reject stale payloads, and have a bounded server expiry/invalidation story rather than assuming a request succeeded. Guests cannot register FCM. Separate registrations per self-hosted server; late workers cannot bind an old account's token under a new login.
-
-No change to existing Web Push endpoints/subscriptions, account quiet hours or durable notification read state.
+Keep PHP sessions/CSRF, current guest restrictions, account authorization, preferences and quiet hours. Redact endpoints/keys/payloads from logs and public issue data. No Firebase Authentication, FCM sender credentials, publisher enrollment, mandatory relay or native-only notification semantics. Encryption through a push provider does not make chat E2EE. Basic UnifiedPush HTTPS-443 delivery is already feasible; these are shared production-hardening improvements.
 
 ## Acceptance criteria
 
-- Authenticated token registration/renewal/rotation is idempotent; old tokens/bindings stop receiving after rotation/revoke.
-- Foreign account IDs, token/binding takeover, stale session/generation, expired registration, guest/anonymous requests and project mismatch are rejected or nondisclosing as appropriate.
-- Online/offline logout, remote revoke, account switch, kick/ban/reset/closure and uninstall/stale-token cases have documented tested outcomes.
-- Device listing never returns raw routing secrets; no credentials enter logs, APK or public issues.
-- Real Android configuration can register and revoke against a deployed compatible backend; delivery remains separately dependent on B4.
+- Existing browsers and at least two compatible UnifiedPush distributors register/rotate/remove using the shared APIs.
+- Foreign-account removal, endpoint takeover, invalid key material, rate-limit bypass, SSRF/redirect/rebinding and unintended internal destinations fail safely; explicit private-provider configuration is tested.
+- Online/offline logout, account switch, remote revoke, session invalidation and closure have documented outcomes; stale local callbacks cannot expose prior accounts.
+- Optional metadata/challenge/expiry changes have versioned additive contracts and migration coverage; no raw routing secrets leak through logs/listing.
+- Real server/device evidence is recorded separately from Android mock tests. No invented FCM-token route is required.
