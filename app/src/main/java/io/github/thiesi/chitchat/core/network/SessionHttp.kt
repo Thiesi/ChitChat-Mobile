@@ -61,22 +61,36 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         return reply
     }
 
-    suspend fun password(username: String, password: String, csrf: String, restore: Boolean = false): AuthReply =
-        auth(if (restore) "account/restore.php" else "login.php", apiJson.encodeToString(PasswordRequest(username, password)), csrf)
+    suspend fun password(username: String, password: String, csrf: String, restore: Boolean = false): AuthReply {
+        val reply = auth(if (restore) "account/restore.php" else "login.php", apiJson.encodeToString(PasswordRequest(username, password)), csrf)
+        if (restore && ((!reply.mfaRequired && !reply.restored) || (reply.mfaRequired &&
+                (!reply.restorationPending || reply.restored)))) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        return reply
+    }
+
+    suspend fun registrationChallenge(): RegistrationChallenge? {
+        val raw = request("registration-challenge.php")
+        if (raw.status != 200) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        return decode<RegistrationChallengeReply>(raw).challenge
+    }
+
+    suspend fun register(username: String, password: String, birthDate: String?, nonce: String?, solution: String?, csrf: String): AuthReply =
+        auth("register.php", apiJson.encodeToString(RegistrationRequest(username, password, birthDate, "", nonce, solution)),
+            csrf, successStatus = 201, allowPending = false)
 
     suspend fun recovery(code: String, csrf: String): AuthReply =
-        auth("mfa/login-recovery.php", apiJson.encodeToString(RecoveryRequest(code)), csrf)
+        auth("mfa/login-recovery.php", apiJson.encodeToString(RecoveryRequest(code)), csrf, allowPending = false)
 
-    private suspend fun auth(path: String, body: String, csrf: String): AuthReply {
+    private suspend fun auth(path: String, body: String, csrf: String, successStatus: Int = 200, allowPending: Boolean = true): AuthReply {
         val raw = request(path, body, csrf)
         val reply = decode<AuthReply>(raw)
         requireValidCsrf(reply.csrfToken)
         if (raw.status == 202) {
-            if (!reply.mfaRequired || reply.user != null || "recovery_code" !in reply.methods) {
+            if (!allowPending || !reply.mfaRequired || reply.user != null || "recovery_code" !in reply.methods) {
                 throw ApiFailure(FailureKind.INCOMPATIBLE)
             }
         } else {
-            if (raw.status != 200 || reply.mfaRequired || reply.user == null || reply.user.guest) {
+            if (raw.status != successStatus || reply.mfaRequired || reply.user == null || reply.user.guest) {
                 throw ApiFailure(FailureKind.INCOMPATIBLE)
             }
             requireValidUser(reply.user)

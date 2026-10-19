@@ -51,7 +51,7 @@ class AuthJourneyTest {
         sessions.failNextLogin = true
         content()
         enterCredentials()
-        compose.onNodeWithText("The username or password is incorrect.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("The username or password is incorrect.").assertIsDisplayed()
         compose.onNodeWithText("Username").assertTextContains("Alice")
         compose.onNodeWithText("Password").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
         compose.onNodeWithText("Password").performScrollTo().performTextInput("corrected-fixture-password")
@@ -89,5 +89,76 @@ class AuthJourneyTest {
         compose.onNodeWithText("Username").assertTextContains("Alice")
         compose.onNodeWithText("Password").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
         compose.runOnIdle { assertEquals(0, sessions.logins) }
+    }
+
+    private fun registrationForm() {
+        sessions.registrationEnabled = true
+        content()
+        compose.onNodeWithText("Create account").performScrollTo().performClick()
+        compose.onNodeWithText("Join this server").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
+        compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
+    }
+
+    @Test fun registrationValidatesConfirmationBeforeSendingAndKeepsFormReachable() {
+        registrationForm()
+        compose.onNodeWithText("Confirm password").performScrollTo().performTextInput("different-password")
+        compose.onNodeWithText("Create account").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("The passwords do not match.").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, sessions.registrations) }
+    }
+
+    @Test fun registrationFailureClearsSecretsAndRequiresFreshCheck() {
+        sessions.failNextRegistration = true
+        registrationForm()
+        compose.onNodeWithText("Confirm password").performScrollTo().performTextInput("fixture-password")
+        compose.onNodeWithText("Create account").performScrollTo().performClick()
+        compose.onNodeWithText("That username is already registered. Choose another, or sign in.").assertIsDisplayed()
+        compose.onNodeWithText("Username").assertTextContains("Alice")
+        for (label in listOf("Password", "Confirm password")) compose.onNodeWithText(label)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        compose.onNodeWithText("Create account").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("Refresh anti-bot check").performScrollTo().performClick()
+        compose.onNodeWithText("Anti-bot check ready.").performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { assertEquals(1, sessions.registrations) }
+    }
+
+    @Test fun birthDatePickerIsOptionalAndCancellable() {
+        registrationForm()
+        compose.onNodeWithText("Add birth date (optional)").performScrollTo().performClick()
+        compose.onNodeWithText("Use this date").assertIsNotEnabled()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.onNodeWithText("Use this date").assertDoesNotExist()
+        compose.onNodeWithText("Add birth date (optional)").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun registrationSavedStateDoesNotRetainEitherPassword() {
+        sessions.registrationEnabled = true
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(settings, auth) } }
+        compose.onNodeWithText("Create account").performScrollTo().performClick()
+        compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
+        for (label in listOf("Password", "Confirm password")) compose.onNodeWithText(label).performScrollTo().performTextInput("fixture-password")
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("Username").assertTextContains("Alice")
+        for (label in listOf("Password", "Confirm password")) compose.onNodeWithText(label)
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        compose.runOnIdle { assertEquals(0, sessions.registrations) }
+    }
+
+    @Test fun restorationExplainsPendingClosureAndRequiresMfaBeforeConfirmation() {
+        sessions.requireMfa = true
+        content()
+        compose.onNodeWithText("Create account").assertDoesNotExist()
+        compose.onNodeWithText("Restore account").performScrollTo().performClick()
+        compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
+        compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
+        compose.onNodeWithText("Restore and sign in").performScrollTo().performClick()
+        compose.onNodeWithText("Finish account restoration").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("The server confirmed that your account was restored.").assertDoesNotExist()
+        compose.onNodeWithText("Recovery code").performScrollTo().performTextInput("UNUSED-FIXTURE-CODE")
+        compose.onNodeWithText("Use recovery code").performScrollTo().performClick()
+        compose.onNodeWithText("The server confirmed that your account was restored.").performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { assertEquals(1, sessions.restores); assertEquals(1, sessions.recoveries) }
     }
 }

@@ -6,7 +6,7 @@ Discovery baseline: ChitChat v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf0d1`
 
 - [x] M0: discovery merged in #2; decentralized push accepted; ordinary-DM and public identity/distribution decisions remain later gates
 - [x] M1: native scaffold/CI/tests/navigation merged in #4 after local, hosted and Claude gates
-- [ ] M2: M2a HTTP/password/recovery/session lifecycle implemented; M2b registration/PoW/restoration/step-up pending
+- [ ] M2: M2a HTTP/password/recovery/session lifecycle merged; M2b1 native registration/PoW/restoration implemented with documented verification boundaries; M2b2 shared sensitive-action step-up pending
 - [ ] M3: rooms, history/composition, foreground SSE/presence/reconciliation
 - [ ] M4: DMs, unread state, blocking/ignoring, notification center and navigation
 - [ ] M5: interactions, attachments/sharing, search, profiles and reports
