@@ -37,6 +37,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           metadata=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq '[.state, .draft, (.head.repo.full_name // ""), .head.sha] | @tsv')
           IFS=$'\t' read -r state draft head_repo head_sha <<< "$metadata"
           if [[ "$state" != open || "$draft" != false || "$head_repo" != "$GH_REPO" ]]; then
@@ -113,6 +114,8 @@ jobs:
           runtime_tools=$(jq -sc '[.. | objects | select(.type? == "system" and .subtype? == "init") | .tools? // empty]' "$EXECUTION_FILE")
           echo "Runtime model tools: $runtime_tools"
           jq -e 'type == "array" and length > 0 and all(.[]; type == "array" and length > 0 and all(.[]; IN("Bash", "StructuredOutput", "EndConversation")))' <<< "$runtime_tools" > /dev/null
+          result_lengths=$(jq -sc '[.. | objects | select(.type? == "tool_result") | .content | if type == "string" then length else (tostring | length) end]' "$EXECUTION_FILE")
+          echo "Read tool result character counts: $result_lengths"
 
       - name: Validate and publish reviewed head
         env:
