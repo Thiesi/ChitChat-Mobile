@@ -12,6 +12,12 @@ class ServerAddressTest {
     @Test fun preservesExplicitHttpsPortAndIpv6() {
         assertEquals("https://[::1]:8443/", (ServerAddress.parse("https://[::1]:8443") as AddressResult.Valid).address.value)
     }
+    @Test fun canonicalizesIdnsWithoutAcceptingUnicodeHostCredentialsOrNormalizedPaths() {
+        assertEquals("https://xn--bcher-kva.example/", (ServerAddress.parse("https://bücher.example") as AddressResult.Valid).address.value)
+        listOf("https://user:secret@bücher.example", "https://@bücher.example", "https://bücher.example/a/../").forEach {
+            assertEquals(AddressResult.Invalid(AddressError.ORIGIN_ONLY), ServerAddress.parse(it))
+        }
+    }
     @Test fun rejectsCredentialsPathsQueriesAndFragments() {
         listOf("https://user:secret@example.org", "https://example.org/index.php", "https://example.org/?token=secret", "https://example.org/#fragment").forEach {
             assertEquals(it, AddressResult.Invalid(AddressError.ORIGIN_ONLY), ServerAddress.parse(it))

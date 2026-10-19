@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -35,6 +36,23 @@ android {
 
 kotlin { jvmToolchain(17) }
 
+// Live tests are opt-in and never run against private credentials in ordinary CI.
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    if (name != "liveSessionTest") exclude("**/LiveSessionTest.class")
+}
+tasks.register<org.gradle.api.tasks.testing.Test>("liveSessionTest") {
+    group = "verification"
+    description = "Explicit live password/session test using ignored .env.integration (never prints credentials)."
+    val unitTests = tasks.named<org.gradle.api.tasks.testing.Test>("testDebugUnitTest")
+    dependsOn("compileDebugUnitTestKotlin", "processDebugUnitTestJavaRes")
+    testClassesDirs = unitTests.get().testClassesDirs
+    classpath = unitTests.get().classpath
+    include("**/LiveSessionTest.class")
+    systemProperty("chitchat.liveConfig", rootProject.file(".env.integration").absolutePath)
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+}
+
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -45,8 +63,12 @@ dependencies {
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.navigation.compose)
     implementation(libs.datastore.preferences)
+    implementation(libs.okhttp)
+    implementation(libs.serialization.json)
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.okhttp.tls)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test)
     androidTestImplementation(libs.androidx.test.ext)

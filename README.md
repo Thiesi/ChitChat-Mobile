@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-**M1 native foundation implemented and locally verified.** Debug and shrunk unsigned release APKs compile; nine unit tests, Android lint and four API36 emulator tests pass. Current hosted CI, review and merge evidence is tracked in [PR #4](https://github.com/Thiesi/ChitChat-Mobile/pull/4). Native server-address storage and appearance settings work locally; authentication, chat and push are not implemented yet. The audited backend baseline is [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). See [M1 evidence](docs/milestones/M1-foundation.md).
+**M1 merged; M2a authentication under verification.** Native HTTPS bootstrap, password/recovery forms, encrypted session restoration and local/server logout are implemented. Debug/release builds, lint, 50 unit tests and one live HTTP test pass; [M2a evidence](docs/milestones/M2a-session-auth.md) records device/review gates and limits. M2b registration/restoration/step-up, chat and push remain pending. Detailed architecture/status updates follow in a separate PR to keep complete code review within its size limit.
 
 Core chat and UnifiedPush over HTTPS port 443 have existing APIs. Native passkeys and browser identity handoff require the [backend dependencies](docs/backend-dependencies.md); shared Web Push hardening and capability discovery remain tracked separately. Ordinary incoming-DM push is a separate, unapproved product proposal. The ChitChat backend checkout remains read-only.
 
@@ -26,4 +26,4 @@ Core chat and UnifiedPush over HTTPS port 443 have existing APIs. Native passkey
 - [Connect the Claude PR reviewer](docs/claude-review-setup.md)
 - [Current limitations](docs/known-limitations.md)
 
-Begin setup with the build guide. Public application identity/distribution and ordinary-DM alerts remain open decisions; the recommended namespace is used only for development until confirmed. A signing identity and integration server have not been supplied. No Firebase identifiers or configuration are needed for the accepted push approach. [Delivery tracking](https://github.com/Thiesi/ChitChat-Mobile/issues/1) records milestone completion.
+Begin setup with the build guide. Public application identity/distribution and ordinary-DM alerts remain open decisions; the recommended namespace is used only for development until confirmed. A test server and dedicated ignored local account configuration have been supplied; release signing remains unconfigured. No Firebase identifiers or configuration are needed for the accepted push approach. [Delivery tracking](https://github.com/Thiesi/ChitChat-Mobile/issues/1) records milestone completion.
