@@ -1,0 +1,18 @@
+# ChitChat Android engineering
+
+- This repository owns the native Kotlin/Jetpack Compose client only. Never edit, commit, fetch into, or otherwise mutate the sibling `Thiesi/ChitChat` checkout. Backend issues are permitted; backend patches are not.
+- Read [discovery](docs/discovery.md), [compatibility](docs/backend-compatibility.md), [parity](docs/feature-parity.md), [push decision](docs/push-architecture.md), and [milestones](docs/implementation-plan.md) before implementation. Discovery is complete; M1 is in progress. Public application identity/distribution and ordinary-DM alerts remain unconfirmed; they do not block development scaffolding.
+- For structural codebase exploration use the installed `codebase-memory` skill. Check index freshness and coverage; read source for missing, stale, or unusable coverage. Do not reindex the backend as part of this task: that writes to its checkout.
+- Fetch the Android remote and compare the base before branching. Preserve unrelated work. Use focused commits and reviewable milestone PRs; never merge failing checks or conflicts.
+- Standing delivery order after each buildable milestone: commit/push, open a PR to trigger Claude review, wait for completion, triage realistic product impact and fix worthwhile findings, then comment tagging `@claude` for another review. Repeat until no worthwhile fixable findings remain; merge only after required checks pass and conflicts are resolved. Remove only verified obsolete branches/worktrees, preserving others' work.
+- Existing contracts use PHP session cookies, `X-CSRF-Token`, foreground SSE, and Web Push `{endpoint,p256dh,auth}` subscriptions. UnifiedPush uses that existing push contract, installation VAPID key and `aes128gcm` worker. Prefer an installed distributor; an embedded FCM distributor is optional. No mandatory publisher relay, Firebase project, `google-services.json`, or sender credentials. Superseded FCM-token API drafts are not existing APIs; neither are proposed native-auth routes.
+- Use Compose, ViewModels, coroutines/Flow, typed DTOs, and repositories. Keep UI out of networking and authorization decisions on the server. Extract abstractions only for concrete reuse or testing.
+- Scope secrets, content, cursors, requests, jobs, and notifications by server, account, and local session generation. A stale callback must never repopulate a signed-out account. Never log credentials, cookies, CSRF, tokens, search terms, or message bodies.
+- Preserve DM non-E2EE/retention/inspection disclosures, ignore versus block semantics, guest restrictions, step-up, mute/rank rules, and the difference between membership and active presence.
+- No automatic retries of ambiguous message/upload POSTs: the existing API has no send idempotency key. SSE is an invalidation/replay transport, not complete authoritative storage. Reconcile on foreground entry.
+- Every milestone must compile, pass relevant tests, update the parity/status docs, and commit. Report exactly what ran. Do not equate mocked tests, compilation, or foreground chat with device/FCM end-to-end success.
+- Signing material and final public application identity must be confirmed by the maintainer. No invented identifiers, private keys, service accounts, or production URLs. Optional embedded FCM uses UnifiedPush's Web Push registration path, not the Firebase SDK; verify its Play Services IPC compatibility on devices before release. Keep test fakes out of production source sets.
+
+<!-- codebase-memory-mcp:start -->
+For structural codebase exploration, use the installed `codebase-memory` skill.
+<!-- codebase-memory-mcp:end -->
