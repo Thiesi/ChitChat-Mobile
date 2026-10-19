@@ -16,6 +16,8 @@ Status: M0 discovery delivered and decentralized push accepted; M1 debug/release
 
 ## Dependency order and scope
 
+Additional review gates: M4 reproduces a DM arriving between history retrieval and whole-peer read, refetches after the POST and preserves local unseen-attention separately from canonical server unread state (including delayed SSE/background changes). M6 verifies guests cannot see push opt-in and receive `guest_not_allowed` from subscribe with valid CSRF. M6 also records actual post-offline-logout dispatch status/pruning versus provider-accepted stale deliveries; local key destruction must prevent display regardless. See [UI/read policy](architecture.md#ui-navigation-and-accessibility) and [push lifecycle](firebase-setup.md).
+
 M1 -> M2 -> M3 -> M4 -> M5. M6 and M7 share M2 step-up and M5 interactions; their backend-independent work can proceed while B1-B6 are outstanding. M8 requires successful implementation gates and an actual accessible installation. Do not stall room/DM development on push. UnifiedPush uses existing Web Push, not the superseded FCM-token API proposals. Never ship a test fake as an integration fallback.
 
 Work within a milestone may be split into smaller reviewable commits/PRs, especially M5-M7; each sub-slice still builds and tests. The final parity audit cannot defer administration merely to shrink an initial alpha. Mark alpha scope and remaining rows explicitly. No calendar estimate promises completion of months of UI/backend-dependent work in a single pass.
