@@ -80,10 +80,14 @@ class AccountRecreationTest {
         compose.waitUntil(5_000) { account.state.value.stage == ExportStage.SAVED }
         compose.onNodeWithText("Your export was saved to the location you chose.").performScrollTo().assertIsDisplayed()
     }
-    private fun visibleAfterRecreation(text: String) {
+    private fun visibleAfterRecreation(text: String, scroll: Boolean = false) {
         // ActivityScenario is resumed before its replacement window is necessarily drawn.
         compose.waitUntil(5_000) {
-            runCatching { compose.onNodeWithText(text, substring = true).assertIsDisplayed() }.isSuccess
+            runCatching {
+                val node = compose.onNodeWithText(text, substring = true)
+                if (scroll) node.performScrollTo()
+                node.assertIsDisplayed()
+            }.isSuccess
         }
     }
 
@@ -107,7 +111,7 @@ class AccountRecreationTest {
         compose.waitUntil(5_000) { writes == 1 }
         recreate()
         compose.runOnIdle { assertEquals(ExportStage.RUNNING, account.state.value.stage) }
-        visibleAfterRecreation("Preparing and saving your export")
+        visibleAfterRecreation("Preparing and saving your export", scroll = true)
         compose.runOnIdle { assertEquals(ExportStage.RUNNING, account.state.value.stage); gate.complete(Unit) }
         saved()
         compose.runOnIdle { assertEquals(1, writes); assertEquals(2, fake.exports); assertEquals(1, fake.passwordChecks) }

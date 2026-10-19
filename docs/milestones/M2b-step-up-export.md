@@ -24,6 +24,8 @@ Claude's worthwhile lifecycle finding is addressed with configuration-aware canc
 
 The complete change initially exceeded the reviewer’s126KB input gate. It is split into the separately verified [protocol prerequisite](M2b2a-protocol-foundation.md) and this native UI/export PR, rather than dropping coverage or allowing partial review. Hosted exact-head CI, complete Claude review/triage/re-review and merge are separate publication gates; record their actual runs on each PR.
 
+Hosted run39341445575 exposed a viewport-dependent assertion in the new write/recreation fixture: retained RUNNING state passed, but the progress label was below the smaller emulator viewport. The test now explicitly scrolls to that label, retaining the visibility, same-ViewModel and exactly-once assertions rather than extending its timeout or skipping it. Subsequent current-head rerun results are recorded on PR #10; the earlier failed run is not counted as a passing merge gate.
+
 ## Acceptance boundary and next milestone
 
 Normal/hosted tests use fixtures and never read `.env.integration`. Only the existing explicit live task reads that ignored user-owned file for the dedicated-account password/session regression; no credentials are logged or committed. Live export/step-up and MFA-code consumption have not been performed. Live disposable registration/closure/restoration still needs permission; no such account mutation was made. Manual SAF/cloud-provider/large-font/TalkBack/process-death/API26 acceptance remains M8 work, not inferred from injected picker results or provider fixtures. Release remains unsigned; no chat, SSE or push completeness is claimed.
