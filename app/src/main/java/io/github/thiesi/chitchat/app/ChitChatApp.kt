@@ -100,7 +100,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             if (entry?.destination?.route == "account" && session.phase != SessionPhase.AUTHENTICATED) {
                 nav.popBackStack("home", false)
                 account.cancel()
-            } else if (entry?.destination?.route != "account") account.cancel()
+            } else if (entry?.destination?.route != null && entry?.destination?.route != "account") account.cancel()
         }
         Scaffold(
             topBar = {

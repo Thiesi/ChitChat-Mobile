@@ -14,6 +14,7 @@ import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.feature.auth.AuthViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.StateFlow
 
 internal class TestAccounts(override val session: StateFlow<SessionState>) : AccountOperations {
@@ -22,6 +23,7 @@ internal class TestAccounts(override val session: StateFlow<SessionState>) : Acc
     var exports = 0
     var passwordChecks = 0
     var recoveries = 0
+    var recoveryGate: CompletableDeferred<Unit>? = null
     override suspend fun open(): AccountAccess {
         val generation = session.value.generation
         var verified = false
@@ -45,6 +47,7 @@ internal class TestAccounts(override val session: StateFlow<SessionState>) : Acc
             override suspend fun verifyRecovery(code: String): Int {
                 recoveries++
                 check(code.isNotBlank())
+                recoveryGate?.await()
                 verified = true
                 return methods.recoveryCodesRemaining - 1
             }

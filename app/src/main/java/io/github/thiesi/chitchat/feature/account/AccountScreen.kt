@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.feature.account
 
 import android.content.ActivityNotFoundException
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.LocalActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -45,12 +46,16 @@ fun AccountScreen(model: AccountViewModel, session: SessionState, onRefresh: () 
 private fun AccountContent(model: AccountViewModel, session: SessionState, onRefresh: () -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     val resolver = LocalContext.current.applicationContext.contentResolver
+    val activity = LocalActivity.current
     var pickerMissing by remember { mutableStateOf(false) }
     val pickerGeneration = remember { session.generation }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         model.destinationSelected(uri?.let { DocumentExportDestination(resolver, it) }, pickerGeneration)
     }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.background() }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        // Requests belong to the surviving ViewModel; rotation is not leaving the app.
+        if (activity?.isChangingConfigurations != true) model.background()
+    }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(session.retryAtMillis) {
         do { now = System.currentTimeMillis(); if (now < session.retryAtMillis) delay(1000) }

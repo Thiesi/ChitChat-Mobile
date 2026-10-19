@@ -19,7 +19,7 @@ Core chat and UnifiedPush over HTTPS port 443 have existing APIs. Native passkey
 - [Proposed architecture](docs/architecture.md)
 - [Verified API contracts and compatibility](docs/backend-compatibility.md)
 - [Implementation milestones and acceptance gates](docs/implementation-plan.md)
-- [Sensitive-action protocol foundation (UI follows separately)](docs/milestones/M2b2a-protocol-foundation.md)
+- [Sensitive-action protocol foundation](docs/milestones/M2b2a-protocol-foundation.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)
