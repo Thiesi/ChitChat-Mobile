@@ -18,7 +18,7 @@ Reuse `MessageInput` (persistent label + EditableText), pinned Send and one fiel
 
 Final local six-task gate passed5m53s:338JVM/81native, zero failures/errors/skips, lint clean, debug/testAPK and R8 release. Strict software-IME readiness enabled; `.tooling/m4b-final-integrated-81-native-pass`. Final-head hosted CI and completed/fresh reviews remain separate gates.
 
-Revised10-case landscape/font150% passed65s, every case asserting actual configuration; report: ignored `.tooling/m4b-final-asserted-landscape-10-pass`. Full integrated gates remain pending. Historical passes: initial338JVM/76native six-task gate, asserted9-case landscape and integrated338JVM/10-native portrait focus before expansion. A repeat passed75/76 with old issue24 room Send0. [PR29](https://github.com/Thiesi/ChitChat-Mobile/pull/29) records earlier-head evidence; none substitutes for final gates.
+Revised10-case landscape/font150% passed65s, every case asserting actual configuration; report: ignored `.tooling/m4b-final-asserted-landscape-10-pass`. Hosted final-head gates remain pending. Historical passes: initial338JVM/76native six-task gate, asserted9-case landscape and integrated338JVM/10-native portrait focus before expansion. A repeat passed75/76 with old issue24 room Send0. [PR29](https://github.com/Thiesi/ChitChat-Mobile/pull/29) records earlier-head evidence; none substitutes for final gates.
 
 PR30 (`c3baa73`) passed336JVM/71native and two actual clean reviews. Integration preserved the consumer tree exactly; old PR29 head14fb4ca's CI/review cannot approve later revisions.
 
