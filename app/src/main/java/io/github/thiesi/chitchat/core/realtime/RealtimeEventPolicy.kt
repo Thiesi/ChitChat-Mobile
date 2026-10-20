@@ -13,7 +13,6 @@ import io.github.thiesi.chitchat.core.network.requireValidMessage
 import io.github.thiesi.chitchat.core.network.requireValidPing
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -46,11 +45,7 @@ internal fun requireValidRealtimePayload(event: RealtimeEvent, viewerId: Long) {
             }
             "ping" -> requireValidPing(apiJson.decodeFromJsonElement<RoomPing>(payload.required("ping")),
                 event.roomId ?: incompatible(), viewerId)
-            "typing" -> {
-                val room = payload.required("room_id")
-                incompatibleUnless(if (event.roomId == null) room == JsonNull else room.strictId() == event.roomId)
-                (payload.required("user") as? JsonObject ?: incompatible()).positiveId("id")
-            }
+            "typing" -> io.github.thiesi.chitchat.core.typing.typingPerson(event)
             "room_broadcast", "global_broadcast" -> {
                 val message = payload.string("message")
                 // Maintenance broadcasts include a prefix and do not have an ordinary sender object.

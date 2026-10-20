@@ -40,6 +40,9 @@ import io.github.thiesi.chitchat.core.ui.messageTime
 import io.github.thiesi.chitchat.core.ui.canAcknowledgeVisibleRead
 import io.github.thiesi.chitchat.core.ui.isReadEdgeVisible
 import io.github.thiesi.chitchat.core.ui.MessageInput
+import io.github.thiesi.chitchat.core.typing.TypingTarget
+import io.github.thiesi.chitchat.core.typing.hasTypingContent
+import io.github.thiesi.chitchat.feature.realtime.TypingStatus
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import kotlinx.coroutines.delay
@@ -197,6 +200,9 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     }
                     item("end") { Spacer(Modifier.height(1.dp)) }
                 }
+                TypingStatus(model.typing, session, TypingTarget.Direct(peer),
+                    viewing = state.loaded && !state.stale && !blockConfirm && state.context?.relationship?.messagingAvailable == true,
+                    publishing = ready && model.canSend())
                 Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 12.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                     run {
@@ -217,7 +223,8 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             }
                         }
                     }
-                    MessageInput(state.draft, model::updateDraft, !state.sending && model.canEditDraft(),
+                    MessageInput(state.draft, { value -> model.updateDraft(value)
+                        model.typing?.input(session, TypingTarget.Direct(peer), hasTypingContent(value)) }, !state.sending && model.canEditDraft(),
                         stringResource(R.string.dm_message), compact, Modifier.weight(1f).testTag("dm_composer"))
                     Button(onClick = model::send, enabled = ready && model.canSend(), modifier = Modifier.testTag("dm_send")) { Text(stringResource(R.string.dm_send)) }
                 }

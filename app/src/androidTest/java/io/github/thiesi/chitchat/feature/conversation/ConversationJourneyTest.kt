@@ -57,11 +57,16 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import io.github.thiesi.chitchat.feature.realtime.NativeTypingHarness
+import io.github.thiesi.chitchat.testing.tapNativeInput
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextEquals
 
 class ConversationJourneyTest {
     @get:Rule val compose = createComposeRule()
     private val fake = TestConversations()
-    private val model = ConversationViewModel(fake)
+    private val typing = NativeTypingHarness(fake.session)
+    private val model = ConversationViewModel(fake, typing = typing.controller)
     @Volatile private var imeBottom = 0
     @Volatile private var focused = false
     @Volatile private var lifecycleState = ""
@@ -71,7 +76,7 @@ class ConversationJourneyTest {
         args.getString("expectedOrientation")?.let { assertEquals(it.toInt(), config.orientation) }
         args.getString("expectedFontScale")?.let { assertEquals(it.toFloat(), config.fontScale, 0.01f) }
     }
-    @After fun tearDown() { model.cancel() }
+    @After fun tearDown() { androidx.test.espresso.Espresso.closeSoftKeyboard(); model.cancel(); typing.close() }
     private fun content(height: Int = 640) {
         compose.setContent {
             val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
@@ -82,9 +87,29 @@ class ConversationJourneyTest {
         }
         loaded()
     }
+    @Test fun nativeTypingKeepsRoomKeyboardSendVisibleAndOptOutClearsImmediately() {
+        fake.session.value = fake.session.value.copy(shareTyping = true, chatPolicy = ChatPolicy(emptySet(), null, DisplayPreferences()))
+        content()
+        val requireIme = InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true"
+        compose.tapNativeInput("conversation_composer", { imeBottom }).performTextInput("Typing fixture")
+        compose.waitUntil(5_000) { typing.requests.get() == 1 }
+        compose.runOnIdle { typing.hint(42) }
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("typing_status").assertIsDisplayed() }.isSuccess }
+        compose.onNodeWithTag("typing_status").assertTextEquals("Peer is typing…")
+        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsEnabled()
+        if (requireIme) assertTrue(imeBottom > 0)
+        typing.capture("room-typing-keyboard.png")
+        compose.runOnIdle { fake.session.value = fake.session.value.copy(shareTyping = false) }
+        compose.waitUntil(5_000) { typing.controller.state.value.people.isEmpty() }
+        compose.onNodeWithTag("typing_status").assertDoesNotExist()
+    }
+
     private fun loaded() { compose.waitUntil(5_000) { model.state.value.loaded && !model.state.value.busy } }
     private fun send(body: String) {
-        compose.onNodeWithTag("conversation_composer").assertIsDisplayed().performTextInput(body)
+        compose.tapNativeInput("conversation_composer", { imeBottom }) {
+            runCatching { captureFixture("room-tap-failure.png") }
+            "windowFocus=$focused, lifecycle=$lifecycleState, sends=${fake.sends}, busy=${model.state.value.busy}"
+        }.performTextInput(body)
         compose.runOnIdle { assertTrue("Fixture input reached its VM", body == model.state.value.draft) }
         val semantics = compose.onNodeWithTag("conversation_composer").fetchSemanticsNode().config
         assertEquals(body, semantics[SemanticsProperties.EditableText].text)
@@ -243,11 +268,15 @@ class ConversationJourneyTest {
         content(); send("Possibly sent fixture")
         compose.waitUntil(5_000) { model.state.value.uncertainSend }
         compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Room details").assertIsDisplayed().performClick()
         compose.onNodeWithText("Allow another send despite duplicate risk").assertDoesNotExist()
         compose.runOnIdle { fake.sendFailure = null }
-        compose.onNodeWithText("Refresh latest").performScrollTo().performClick(); loaded()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        fun detailsText(id: Int) = compose.onNode(hasText(context.getString(id)) and hasAnyAncestor(isDialog()))
+        detailsText(io.github.thiesi.chitchat.R.string.conversation_refresh).performScrollTo().assertIsDisplayed().performClick(); loaded()
         compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
-        compose.onNodeWithText("Allow another send despite duplicate risk").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Room details").assertIsDisplayed().performClick()
+        detailsText(io.github.thiesi.chitchat.R.string.conversation_allow_resend).performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, fake.sends); assertEquals("Possibly sent fixture", model.state.value.draft) }
         compose.onNodeWithText("Send").assertIsDisplayed().assertIsEnabled().performClick()
         compose.waitUntil(5_000) { fake.sends == 2 && !model.state.value.busy }
@@ -261,7 +290,7 @@ class ConversationJourneyTest {
         timelineText("Ignored message · Reveal temporarily")
         compose.onNodeWithText("Ignored message · Reveal temporarily").performClick()
         timelineText("Ignored fixture")
-        compose.onNodeWithText("Private pings").performScrollTo().performClick()
+        openPrivatePings()
         compose.onNodeWithText("No private pings in this room.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Private ping fixture").assertDoesNotExist()
     }
@@ -310,9 +339,15 @@ class ConversationJourneyTest {
         content(); send("/ping Bob Private ping fixture")
         sentOutcome()
         compose.onNodeWithText("Private ping fixture").assertDoesNotExist()
-        compose.onNodeWithText("Private pings").performScrollTo().performClick()
+        openPrivatePings()
         compose.onNodeWithText("Private ping fixture").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(listOf(2L, 3L), model.state.value.messages.map { it.id }) }
+    }
+
+    private fun openPrivatePings() {
+        compose.onNodeWithContentDescription("Room details").assertIsDisplayed().performClick()
+        val label = InstrumentationRegistry.getInstrumentation().targetContext.getString(io.github.thiesi.chitchat.R.string.conversation_pings)
+        compose.onNode(hasText(label) and hasAnyAncestor(isDialog())).performScrollTo().assertIsDisplayed().performClick()
     }
 
     @Test fun compositionRestorationKeepsOnlyVmDraftAndLogoutScrubsContent() {

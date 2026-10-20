@@ -801,6 +801,38 @@ class SessionRepositoryTest {
 
     private fun typingBootstrap(shared: Boolean) = json(bootstrapBody(user, c).dropLast(1) + ",\"share_typing\":$shared}")
 
+    @Test fun typingSignalSharesCookieCsrfAndUnknownConsentDoesNotContactOrValidateServer() = runTest {
+        login()
+        val typing = io.github.thiesi.chitchat.core.typing.SessionTypingRepository(sessions)
+        val target = io.github.thiesi.chitchat.core.typing.TypingTarget.Room(42)
+        val count = server.requestCount
+        val validated = vault.saved!!.lastValidatedAt
+        clock.now += 1000
+        assertFalse(typing.signal(sessions.state.value, target))
+        assertEquals(count, server.requestCount); assertEquals(validated, vault.saved!!.lastValidatedAt)
+        server.enqueue(typingBootstrap(true)); sessions.refresh(); server.takeRequest()
+        server.enqueue(json("""{"signalled":false}"""))
+        assertFalse(typing.signal(sessions.state.value, target))
+        val request = server.takeRequest()
+        assertEquals("/api/v1/typing.php", request.url.encodedPath)
+        assertEquals("SITE=auth", request.headers["Cookie"]); assertEquals(c, request.headers["X-CSRF-Token"])
+        assertEquals("""{"room_id":42}""", request.body!!.utf8())
+    }
+
+    @Test fun typingSignalCsrfFailureRequiresRevalidationAndNeverReplaysEphemeralPost() = runTest {
+        login(); server.enqueue(typingBootstrap(true)); sessions.refresh(); server.takeRequest()
+        val typing = io.github.thiesi.chitchat.core.typing.SessionTypingRepository(sessions)
+        val expected = sessions.state.value
+        server.enqueue(error("csrf_failed", 403))
+        try { typing.signal(expected, io.github.thiesi.chitchat.core.typing.TypingTarget.Direct(8)); fail("Expected CSRF failure") }
+        catch (failure: ApiFailure) { assertEquals("csrf_failed", failure.code) }
+        server.takeRequest(); assertTrue(sessions.state.value.refreshRequired)
+        val count = server.requestCount
+        try { typing.signal(expected, io.github.thiesi.chitchat.core.typing.TypingTarget.Direct(8)); fail("Must revalidate") }
+        catch (_: ApiFailure) { }
+        assertEquals(count, server.requestCount)
+    }
+
     @Test fun typingPreferenceUsesSessionCsrfAndPublishesOnlyTheConfirmedValue() = runTest {
         login(); assertNull(sessions.state.value.shareTyping)
         server.enqueue(typingBootstrap(true)); sessions.refresh(); server.takeRequest()

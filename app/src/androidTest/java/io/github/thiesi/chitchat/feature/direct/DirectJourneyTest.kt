@@ -34,6 +34,8 @@ import io.github.thiesi.chitchat.core.realtime.*
 import io.github.thiesi.chitchat.feature.account.TestChitChatApp
 import io.github.thiesi.chitchat.feature.auth.AuthViewModel
 import io.github.thiesi.chitchat.feature.auth.TestSessions
+import io.github.thiesi.chitchat.feature.realtime.NativeTypingHarness
+import io.github.thiesi.chitchat.testing.tapNativeInput
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,7 +50,8 @@ import org.junit.Test
 class DirectJourneyTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val api = NativeDirects()
-    private val model = DirectThreadViewModel(api)
+    private val typing = NativeTypingHarness(api.session)
+    private val model = DirectThreadViewModel(api, typing = typing.controller)
     @Volatile private var imeBottom = 0
     private val keyboardHides = java.util.concurrent.atomic.AtomicInteger()
     private val keyboardShows = java.util.concurrent.atomic.AtomicInteger()
@@ -62,7 +65,7 @@ class DirectJourneyTest {
         args.getString("expectedOrientation")?.let { assertEquals(it.toInt(), config.orientation) }
         args.getString("expectedFontScale")?.let { assertEquals(it.toFloat(), config.fontScale, 0.01f) }
     }
-    @After fun stop() { compose.runOnIdle { model.background(); api.readGate?.complete(Unit) } }
+    @After fun stop() { closeSoftKeyboard(); compose.runOnIdle { model.background(); api.readGate?.complete(Unit); typing.close() } }
     private fun content(ready: Boolean = true, loadFailure: Boolean = false, height: Int = 640) {
         compose.setContent {
             val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
@@ -72,24 +75,43 @@ class DirectJourneyTest {
         compose.waitUntil(5_000) { if (loadFailure) model.state.value.error != null && !model.state.value.busy
             else model.state.value.loaded && (!ready || !model.state.value.busy) }
     }
+    @Test fun nativeTypingKeepsKeyboardSendVisibleAndOptOutClearsImmediately() {
+        val sessions = api.session as MutableStateFlow<SessionState>
+        // Room ignore is not a DM block: this unblocked peer's direct hint must still display.
+        sessions.value = sessions.value.copy(shareTyping = true, chatPolicy = ChatPolicy(setOf(8), null, DisplayPreferences()))
+        content()
+        tapInput("dm_composer").performTextInput("Typing fixture")
+        compose.waitUntil(5_000) { typing.requests.get() == 1 }
+        compose.runOnIdle { typing.hint(null) }
+        displayed("typing_status").assertTextEquals("Peer is typing…")
+        keyboardSend()
+        typing.capture("dm-typing-keyboard.png")
+        compose.runOnIdle { sessions.value = sessions.value.copy(shareTyping = false) }
+        compose.waitUntil(5_000) { typing.controller.state.value.people.isEmpty() }
+        compose.onNodeWithTag("typing_status").assertDoesNotExist()
+        tapInput("dm_composer").performTextInput(" more")
+        compose.runOnIdle { assertEquals(1, typing.requests.get()) }
+    }
+
     private fun displayed(tag: String): SemanticsNodeInteraction {
         val node = compose.onNodeWithTag(tag)
         compose.waitUntil(5_000) { runCatching { node.assertIsDisplayed() }.isSuccess }
         return node.assertIsDisplayed()
     }
     private fun tapInput(tag: String): SemanticsNodeInteraction {
-        val node = displayed(tag)
-        val before = node.fetchSemanticsNode().boundsInWindow
-        node.performClick()
-        val requireIme = InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true"
-        // Text injection itself requests focus. Prove the one real tap focused/opened input FIRST.
-        try { compose.waitUntil(5_000) { (!requireIme || imeBottom > 0) &&
-            runCatching { node.assertIsFocused().assertIsDisplayed() }.isSuccess } }
-        catch (failure: androidx.compose.ui.test.ComposeTimeoutException) {
-            val input = node.fetchSemanticsNode()
-            throw AssertionError("Tap fixture: tag=$tag, IME=$imeBottom, focused=${input.config[SemanticsProperties.Focused]}, before=$before, after=${input.boundsInWindow}, hides=${keyboardHides.get()}", failure)
+        return compose.tapNativeInput(tag, { imeBottom }) {
+            val platform = compose.runOnIdle {
+                val activity = compose.activity
+                val decor = activity.window.decorView
+                val focused = decor.findFocus()
+                val imm = activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                val visible = if (android.os.Build.VERSION.SDK_INT >= 30)
+                    decor.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime()) else null
+                "windowFocus=${decor.hasWindowFocus()}, lifecycle=${activity.lifecycle.currentState}, platformIme=$visible, active=${imm.isActive}, accepting=${imm.isAcceptingText}, editorView=${focused?.javaClass?.simpleName}, softMode=${activity.window.attributes.softInputMode}"
+            }
+            runCatching { captureFixture("dm-tap-failure.png") }
+            "shows=${keyboardShows.get()}, hides=${keyboardHides.get()}, $platform"
         }
-        return node.assertIsFocused().assertIsDisplayed()
     }
     private fun keyboardSend(): SemanticsNodeInteraction {
         val node = compose.onNodeWithTag("dm_send")

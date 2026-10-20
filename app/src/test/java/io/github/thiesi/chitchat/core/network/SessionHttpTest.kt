@@ -51,6 +51,24 @@ class SessionHttpTest {
         }
     }
 
+    @Test fun typingSignalPostsExactlyOneDestinationNoTextAndAcceptsSuppression() = runTest {
+        for ((target, expected) in listOf(
+            io.github.thiesi.chitchat.core.typing.TypingTarget.Room(42) to """{"room_id":42}""",
+            io.github.thiesi.chitchat.core.typing.TypingTarget.Direct(8) to """{"recipient_user_id":8}""")) {
+            server.enqueue(response("""{"signalled":false}"""))
+            assertFalse(api.typingSignal(target, token))
+            val request = server.takeRequest()
+            assertEquals("POST", request.method); assertEquals("/api/v1/typing.php", request.url.encodedPath)
+            assertEquals(token, request.headers["X-CSRF-Token"])
+            assertEquals(expected, request.body!!.utf8())
+        }
+        for (body in listOf("{}", """{"signalled":"true"}""")) {
+            server.enqueue(response(body))
+            try { api.typingSignal(io.github.thiesi.chitchat.core.typing.TypingTarget.Room(42), token); fail("Invalid signal acknowledgment") }
+            catch (failure: ApiFailure) { assertEquals(FailureKind.INCOMPATIBLE, failure.kind) }
+        }
+    }
+
     @Test fun absentSessionTypingPreferenceIsUnknownNotOptIn() = runTest {
         server.enqueue(response(anonymous()))
         assertNull(api.bootstrap().shareTyping)
