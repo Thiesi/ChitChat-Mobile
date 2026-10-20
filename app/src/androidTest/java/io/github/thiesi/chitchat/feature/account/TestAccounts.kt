@@ -8,6 +8,8 @@ import io.github.thiesi.chitchat.app.EmptyRoomOperations
 import io.github.thiesi.chitchat.app.EmptyConversationOperations
 import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
 import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
+import io.github.thiesi.chitchat.feature.direct.DirectInboxViewModel
+import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import io.github.thiesi.chitchat.core.account.AccountAccess
 import io.github.thiesi.chitchat.core.account.AccountOperations
 import io.github.thiesi.chitchat.core.account.PersonalExport
@@ -17,6 +19,7 @@ import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.feature.auth.AuthViewModel
+import io.github.thiesi.chitchat.core.realtime.RealtimeController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.StateFlow
@@ -61,9 +64,11 @@ internal class TestAccounts(override val session: StateFlow<SessionState>) : Acc
 
 @Composable
 internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel? = null,
-    roomModel: RoomsViewModel? = null, conversationModel: ConversationViewModel? = null) {
+    roomModel: RoomsViewModel? = null, conversationModel: ConversationViewModel? = null,
+    directInbox: DirectInboxViewModel? = null, directThread: DirectThreadViewModel? = null,
+    realtime: RealtimeController? = null) {
     val accountModel = account ?: remember(auth) { AccountViewModel(TestAccounts(auth.state)) }
     val rooms = roomModel ?: remember(auth) { RoomsViewModel(EmptyRoomOperations(auth.state)) }
     val conversations = conversationModel ?: remember(auth) { ConversationViewModel(EmptyConversationOperations(auth.state)) }
-    ChitChatApp(settings, auth, accountModel, rooms, conversations)
+    ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox, directThread = directThread)
 }

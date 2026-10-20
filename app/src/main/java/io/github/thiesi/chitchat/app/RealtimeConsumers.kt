@@ -11,6 +11,8 @@ import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
 import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
+import io.github.thiesi.chitchat.feature.direct.DirectInboxViewModel
+import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -18,9 +20,10 @@ import kotlinx.coroutines.launch
 /** Every new account/lifecycle scope reconciles even if its predecessor dropped buffered hints. */
 @Composable
 internal fun RealtimeConsumers(realtime: RealtimeController?, session: SessionState,
-    rooms: RoomsViewModel, conversations: ConversationViewModel) {
+    rooms: RoomsViewModel, conversations: ConversationViewModel, inbox: DirectInboxViewModel? = null,
+    direct: DirectThreadViewModel? = null) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(realtime, lifecycle, session.server, session.generation, session.phase,
+    LaunchedEffect(realtime, lifecycle, inbox, direct, session.server, session.generation, session.phase,
         session.user?.id, session.user?.sessionVersion) {
         if (realtime == null || session.phase != SessionPhase.AUTHENTICATED) return@LaunchedEffect
         fun currentSession(): Boolean {
@@ -40,7 +43,10 @@ internal fun RealtimeConsumers(realtime: RealtimeController?, session: SessionSt
                         "room_message", "message_deleted", "ping", "message_reaction_changed" -> if (event.roomId != null) {
                             rooms.invalidate()
                             if (conversations.state.value.roomId == event.roomId) conversations.invalidate()
+                        } else if (event.type in setOf("message_deleted", "message_reaction_changed")) {
+                            inbox?.invalidate(); direct?.invalidate()
                         }
+                        "direct_message" -> { inbox?.invalidate(); direct?.invalidate() }
                     }
                 }
             }
@@ -51,10 +57,12 @@ internal fun RealtimeConsumers(realtime: RealtimeController?, session: SessionSt
                         if (currentSession() && hint.generation == session.generation) {
                             if (hint.phase == RealtimePhase.OFFLINE || hint.phase == RealtimePhase.ERROR || hint.failed) {
                                 rooms.connectionLost(); conversations.connectionLost()
+                                inbox?.connectionLost(); direct?.connectionLost()
                             }
                             if (hint.phase != RealtimePhase.OFFLINE && hint.revision != reconciledHint) {
                                 reconciledHint = hint.revision
                                 rooms.invalidate(); conversations.invalidate()
+                                inbox?.invalidate(); direct?.invalidate()
                             }
                         }
                     }

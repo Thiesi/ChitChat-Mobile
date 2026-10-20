@@ -35,7 +35,7 @@ data class DirectThreadState(val peerId: Long? = null, val context: DirectContex
 
 /** One serialized operation per thread: hints queue behind writes, never cancel/replay a POST. */
 class DirectThreadViewModel(private val operations: DirectOperations,
-    private val realtime: RealtimeController? = null) : ViewModel() {
+    val realtime: RealtimeController? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(DirectThreadState())
     val state = mutable.asStateFlow()
