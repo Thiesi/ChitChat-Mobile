@@ -75,15 +75,18 @@ import io.github.thiesi.chitchat.feature.conversation.ConversationScreen
 import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.network.FailureKind
+import io.github.thiesi.chitchat.core.realtime.RealtimeController
+import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel, rooms: RoomsViewModel,
-    conversations: ConversationViewModel, onThemeChanged: (Boolean) -> Unit = {}) {
+    conversations: ConversationViewModel, realtime: RealtimeController? = null, onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by auth.state.collectAsStateWithLifecycle()
+    val connection = realtime?.state?.collectAsStateWithLifecycle()?.value
     LaunchedEffect(state.hasLoadedSettings, state.settings.server) {
         if (state.hasLoadedSettings) auth.selectServer(state.settings.server)
     }
@@ -146,6 +149,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets).imePadding(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                if (session.phase == SessionPhase.AUTHENTICATED && realtime != null && connection?.generation == session.generation) {
+                    RealtimeStatus(connection, realtime::retry, realtime::dismissBroadcast)
+                }
                 if (state.loading) {
                     CircularProgressIndicator()
                     Text(stringResource(R.string.loading_settings), Modifier.padding(top = 16.dp))
