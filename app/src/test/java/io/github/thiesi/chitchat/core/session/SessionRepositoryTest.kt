@@ -799,6 +799,114 @@ class SessionRepositoryTest {
         catch (_: CancellationException) { }
     }
 
+    private fun typingBootstrap(shared: Boolean) = json(bootstrapBody(user, c).dropLast(1) + ",\"share_typing\":$shared}")
+
+    @Test fun typingPreferenceUsesSessionCsrfAndPublishesOnlyTheConfirmedValue() = runTest {
+        login(); assertNull(sessions.state.value.shareTyping)
+        server.enqueue(typingBootstrap(true)); sessions.refresh(); server.takeRequest()
+        assertEquals(true, sessions.state.value.shareTyping)
+        server.enqueue(json("""{"share_typing":false}"""))
+        assertFalse(sessions.setTypingPreference(true))
+        val request = server.takeRequest()
+        assertEquals(c, request.headers["X-CSRF-Token"])
+        assertEquals("SITE=auth", request.headers["Cookie"])
+        assertEquals("/api/v1/account/typing.php", request.url.encodedPath)
+        assertEquals(false, sessions.state.value.shareTyping)
+        assertFalse(sessions.state.value.busy)
+    }
+
+    @Test fun cancelledTypingPreferenceReleasesBusyRequiresRevalidationAndNeverReplays() = runTest {
+        login()
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body("""{"share_typing":false}""").bodyDelay(2, TimeUnit.SECONDS).build())
+        val write = async { sessions.setTypingPreference(false) }
+        kotlinx.coroutines.yield(); assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        assertTrue(sessions.state.value.busy); assertNull(sessions.state.value.shareTyping)
+        write.cancel(); write.join()
+        assertFalse(sessions.state.value.busy); assertTrue(sessions.state.value.refreshRequired)
+        assertNull(sessions.state.value.shareTyping)
+        val count = server.requestCount
+        try { sessions.setTypingPreference(false); fail("Must revalidate") } catch (_: ApiFailure) { }
+        assertEquals(count, server.requestCount)
+        server.enqueue(typingBootstrap(false)); sessions.refresh(); server.takeRequest()
+        assertEquals(false, sessions.state.value.shareTyping)
+    }
+
+    @Test fun typingPostAndBootstrapDoNotRaceOrOverwriteOneAnother() = runTest {
+        login()
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body("""{"share_typing":false}""").bodyDelay(300, TimeUnit.MILLISECONDS).build())
+        val write = async { sessions.setTypingPreference(false) }
+        kotlinx.coroutines.yield(); assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        val count = server.requestCount
+        sessions.refresh(); assertEquals(count, server.requestCount)
+        assertFalse(write.await()); assertEquals(false, sessions.state.value.shareTyping)
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body(bootstrapBody(user, c)).bodyDelay(300, TimeUnit.MILLISECONDS).build())
+        val refresh = async { sessions.refresh() }
+        kotlinx.coroutines.yield(); assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        try { sessions.setTypingPreference(true); fail("Must not race bootstrap") } catch (_: ApiFailure) { }
+        assertEquals(count + 1, server.requestCount); refresh.await()
+        assertNull(sessions.state.value.shareTyping)
+    }
+
+    @Test fun unrelatedFailureCannotUnlockRefreshWhileTypingPostIsStillRunning() = runTest {
+        login(); val existing = sessions.openAccess()
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body("""{"share_typing":false}""").bodyDelay(2, TimeUnit.SECONDS).build())
+        val write = async { sessions.setTypingPreference(false) }
+        kotlinx.coroutines.yield(); assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        server.enqueue(error("rate_limited", 429))
+        try { sessions.authorized(existing) { verificationMethods() }; fail("Expected unrelated failure") }
+        catch (failure: ApiFailure) { assertEquals(429, failure.status) }
+        server.takeRequest()
+        assertFalse(sessions.state.value.busy) // Global error presentation is not an operation lock.
+        val count = server.requestCount
+        sessions.refresh(); assertEquals(count, server.requestCount)
+        assertFalse(write.await()); assertEquals(false, sessions.state.value.shareTyping)
+    }
+
+    @Test fun unrelatedFailureCannotUnlockTypingPostWhileBootstrapIsStillRunning() = runTest {
+        login(); val existing = sessions.openAccess()
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body(bootstrapBody(user, c).dropLast(1) + ",\"share_typing\":true}")
+            .bodyDelay(2, TimeUnit.SECONDS).build())
+        val refresh = async { sessions.refresh() }
+        kotlinx.coroutines.yield(); assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        server.enqueue(error("rate_limited", 429))
+        try { sessions.authorized(existing) { verificationMethods() }; fail("Expected unrelated failure") }
+        catch (failure: ApiFailure) { assertEquals(429, failure.status) }
+        server.takeRequest(); assertFalse(sessions.state.value.busy)
+        clock.now += 31_000 // Eliminate cooldown as the reason for denying the competing write.
+        val count = server.requestCount
+        try { sessions.setTypingPreference(false); fail("Bootstrap still owns the runtime gate") }
+        catch (failure: ApiFailure) { assertEquals(FailureKind.EXPIRED, failure.kind) }
+        assertEquals(count, server.requestCount); refresh.await()
+        assertEquals(true, sessions.state.value.shareTyping)
+    }
+
+    @Test fun lateTypingReplyCannotRepopulateSignedOutState() = runTest {
+        login()
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body("""{"share_typing":true}""").bodyDelay(500, TimeUnit.MILLISECONDS).build())
+        val write = async { runCatching { sessions.setTypingPreference(true) } }
+        kotlinx.coroutines.yield(); assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut()
+        assertTrue(write.await().exceptionOrNull() is CancellationException)
+        assertNull(sessions.state.value.shareTyping); assertNull(sessions.state.value.user)
+        assertFalse(sessions.state.value.busy); assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
+    }
+
+    @Test fun typingCsrfFailureIsUnknownAndRequiresGetNotPostReplay() = runTest {
+        login(); server.enqueue(error("csrf_failed", 403))
+        try { sessions.setTypingPreference(false); fail("Expected CSRF failure") } catch (_: ApiFailure) { }
+        assertNull(sessions.state.value.shareTyping); assertFalse(sessions.state.value.busy)
+        assertTrue(sessions.state.value.refreshRequired)
+        val count = server.requestCount
+        try { sessions.setTypingPreference(false); fail("Expected guarded retry") } catch (_: ApiFailure) { }
+        assertEquals(count, server.requestCount)
+    }
+
     private class MemoryVault : SessionVault {
         var saved: SavedSession? = null
         var failWrites = false

@@ -36,6 +36,33 @@ class SessionHttpTest {
     private fun anonymous(csrf: String = token) = """{"csrf_token":"$csrf","user":null,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false},"future_field":true}"""
     private fun user() = """{"id":7,"username":"Alice","roles":["member"],"session_version":2,"guest":false}"""
 
+    @Test fun typingPreferenceUsesExistingBooleanPostAndRequiresExplicitBooleanReply() = runTest {
+        server.enqueue(response("""{"share_typing":false}"""))
+        assertFalse(api.setTypingPreference(true, token)) // Server result, not requested optimism.
+        val request = server.takeRequest()
+        assertEquals("/api/v1/account/typing.php", request.url.encodedPath)
+        assertEquals("POST", request.method)
+        assertEquals(token, request.headers["X-CSRF-Token"])
+        assertEquals("""{"share_typing":true}""", request.body!!.utf8())
+        for (body in listOf("{}", """{"share_typing":null}""", """{"share_typing":"true"}""")) {
+            server.enqueue(response(body))
+            try { api.setTypingPreference(false, token); fail("Missing/invalid consent must fail") }
+            catch (failure: ApiFailure) { assertEquals(FailureKind.INCOMPATIBLE, failure.kind) }
+        }
+    }
+
+    @Test fun absentSessionTypingPreferenceIsUnknownNotOptIn() = runTest {
+        server.enqueue(response(anonymous()))
+        assertNull(api.bootstrap().shareTyping)
+        server.enqueue(response(anonymous().dropLast(1) + ",\"share_typing\":false}"))
+        assertEquals(false, api.bootstrap().shareTyping)
+        server.enqueue(response(anonymous().dropLast(1) + ",\"share_typing\":null}"))
+        assertNull(api.bootstrap().shareTyping)
+        server.enqueue(response(anonymous().dropLast(1) + ",\"share_typing\":\"true\"}"))
+        try { api.bootstrap(); fail("Quoted consent must fail") }
+        catch (failure: ApiFailure) { assertEquals(FailureKind.INCOMPATIBLE, failure.kind) }
+    }
+
     @Test fun adoptsCustomCookieAndCsrfRotationWithoutAssumingPhpName() = runTest {
         server.enqueue(response(anonymous(), cookie = "COMMUNITY=anonymous; Secure; HttpOnly; Path=/"))
         api.bootstrap()

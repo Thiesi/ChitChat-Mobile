@@ -18,6 +18,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.espresso.Espresso.closeSoftKeyboard
+import androidx.test.platform.app.InstrumentationRegistry
+import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.server.AddressError
 import io.github.thiesi.chitchat.core.server.ServerAddress
 import io.github.thiesi.chitchat.core.settings.AppSettings
@@ -80,7 +82,7 @@ class FoundationJourneyTest {
         compose.onNodeWithText("Try again").assertIsDisplayed().performClick()
         compose.onNodeWithText("Settings").assertIsDisplayed()
         compose.onNodeWithText("Save server").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("This development build supports sign-in and foreground room and direct conversations. Typing and notifications are not available yet.")
+        compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.preview_limit))
             .performScrollTo().assertIsDisplayed()
     }
 

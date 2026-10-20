@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-**Native authentication, export and foreground room/direct conversations are implemented.** M4b2 adds the native DM inbox, recipient search, privacy-aware conversation/composer, blocking and read-race attention. Typing, notification center, push and remaining parity are still pending; live chat acceptance is not established. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). Exact verification boundaries are linked from the milestone plan.
+**Native authentication, export and foreground room/direct conversations are implemented.** M4b2 adds the native DM inbox, recipient search, privacy-aware conversation/composer, blocking and read-race attention. M4c1 adds account-wide typing privacy; native typing signals/indicators, notification center, push and remaining parity are still pending. Live chat acceptance is not established. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). Exact verification boundaries are linked from the milestone plan.
 
 ## Engineering documents
 
@@ -28,6 +28,7 @@ M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native 
 - [Bounded direct-message state prerequisite; native consumer follows](docs/milestones/M4b1-direct-state.md)
 - [Pinned room composer and compact controls](docs/milestones/room-composer-send-target.md)
 - [Native direct-message consumer and verification](docs/milestones/M4b2-native-direct-messages.md)
+- [Account-wide typing privacy and remaining signal work](docs/milestones/M4c1-typing-privacy.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)

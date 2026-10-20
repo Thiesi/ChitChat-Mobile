@@ -36,6 +36,7 @@ internal class SessionReply(
     @SerialName("muted_everywhere") val mutedEverywhere: RoomMute? = null,
     val preferences: DisplayPreferences? = null,
     val privacy: MessagePrivacy? = null,
+    @SerialName("share_typing") @Serializable(with = StrictTypingBoolean::class) val shareTyping: Boolean? = null,
 )
 
 @Serializable

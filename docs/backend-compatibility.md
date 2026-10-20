@@ -50,6 +50,10 @@ M3b implements the room HTTP subset through the existing session transport; [sou
 
 Only `/me` and `/ping` are server commands. `/dm`, `/topic`, `/shrug`, `/help` are implemented by the browser through ordinary APIs/local behavior; port them intentionally. Formatting is ChitChat's restricted grammar, not arbitrary HTML or full Markdown. [Browser commands](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/assets/js/slash-commands.js), [formatting](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/assets/js/message-format.js).
 
+## Account-wide typing preference
+
+M4c1 consumes top-level optional `session.php.share_typing` and existing `POST account/typing.php` with current session CSRF and a JSON Boolean. Its HTTP200 Boolean is authoritative, not the requested value. Missing/null bootstrap values stay unknown; quoted Boolean strings are incompatible. Failed/cancelled changes need explicit session GET reconciliation, never POST replay. The setting is bilateral across rooms/DMs and all devices, not a notification toggle. Native signal publication/display remains M4c2; no new backend capability or live acceptance is implied. See [contract and tests](milestones/M4c1-typing-privacy.md).
+
 ## SSE, presence, and state recovery
 
 `GET events/stream.php` authenticates via cookie and releases the PHP session lock before polling. Header `Last-Event-ID` wins over `after_id`. Stream duration is about 25 seconds, polling 500ms in batches of 100; comment heartbeat every ten seconds, `retry:1000`. [Stream source](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/api/v1/events/stream.php#L20).
