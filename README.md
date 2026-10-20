@@ -30,6 +30,7 @@ M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native 
 - [Native direct-message consumer and verification](docs/milestones/M4b2-native-direct-messages.md)
 - [Account-wide typing privacy and remaining signal work](docs/milestones/M4c1-typing-privacy.md)
 - [Foreground native typing and verification](docs/milestones/M4c2-foreground-typing.md)
+- [Room-ignore protocol prerequisite; native controls pending](docs/milestones/M4c3a-ignore-protocol.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)

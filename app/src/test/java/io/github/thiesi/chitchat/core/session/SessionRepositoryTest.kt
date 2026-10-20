@@ -939,6 +939,117 @@ class SessionRepositoryTest {
         assertEquals(count, server.requestCount)
     }
 
+    private suspend fun ignoreReady() {
+        login()
+        server.enqueue(json(bootstrapBody(user, c).dropLast(1) + ",\"ignored_user_ids\":[9],\"preferences\":{\"hour_cycle\":\"h23\"}}"))
+        sessions.refresh(); server.takeRequest()
+    }
+
+    @Test fun ignorePublishesCompleteListWithOriginalCookieCsrfAndOtherPolicy() = runTest {
+        ignoreReady(); val original = sessions.state.value
+        server.enqueue(json("""{"ignored_user_ids":[8,10]}"""))
+        assertEquals(setOf(8L, 10L), sessions.setIgnored(8, true, original))
+        val request = server.takeRequest()
+        assertEquals(c, request.headers["X-CSRF-Token"])
+        assertEquals("SITE=auth", request.headers["Cookie"])
+        assertEquals(setOf(8L, 10L), sessions.state.value.chatPolicy!!.ignoredUserIds)
+        assertEquals("h23", sessions.state.value.chatPolicy!!.display.hourCycle)
+        assertFalse(sessions.state.value.busy); assertFalse(sessions.state.value.refreshRequired)
+        val count = server.requestCount
+        try { sessions.setIgnored(7, true, sessions.state.value); fail("No self-ignore") }
+        catch (failure: ApiFailure) { assertEquals(400, failure.status) }
+        assertEquals(count, server.requestCount)
+    }
+
+    @Test fun ignoreRequiresKnownPolicyAndOriginalSession() = runTest {
+        login(); val unknown = sessions.state.value
+        val count = server.requestCount
+        try { sessions.setIgnored(8, true, unknown); fail("Unknown is not an empty list") }
+        catch (failure: ApiFailure) { assertEquals(FailureKind.EXPIRED, failure.kind) }
+        assertEquals(count, server.requestCount)
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut()
+        try { sessions.setIgnored(8, true, unknown); fail("Stale callback") } catch (_: Exception) { }
+        assertEquals(count + 1, server.requestCount)
+    }
+
+    @Test fun cancelledIgnoreRequiresExplicitGetAndNeverReplays() = runTest {
+        ignoreReady()
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body("""{"ignored_user_ids":[8]}""").bodyDelay(2, TimeUnit.SECONDS).build())
+        val write = async { sessions.setIgnored(8, true, sessions.state.value) }
+        kotlinx.coroutines.yield(); assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        write.cancel(); write.join()
+        assertFalse(sessions.state.value.busy); assertTrue(sessions.state.value.refreshRequired)
+        assertEquals(setOf(9L), sessions.state.value.chatPolicy!!.ignoredUserIds)
+        val count = server.requestCount
+        try { sessions.setIgnored(8, true, sessions.state.value); fail("Requires reconciliation") } catch (_: ApiFailure) { }
+        assertEquals(count, server.requestCount)
+        server.enqueue(json(bootstrapBody(user, c).dropLast(1) + ",\"ignored_user_ids\":[8]}"))
+        sessions.refresh(); assertEquals("GET", server.takeRequest().method)
+        assertEquals(setOf(8L), sessions.state.value.chatPolicy!!.ignoredUserIds)
+    }
+
+    @Test fun ignoreSharesRuntimeGateWithTypingEvenIfUnrelatedErrorClearsBusy() = runTest {
+        ignoreReady(); val existing = sessions.openAccess()
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body("""{"ignored_user_ids":[8]}""").bodyDelay(2, TimeUnit.SECONDS).build())
+        val write = async { sessions.setIgnored(8, true, sessions.state.value) }
+        kotlinx.coroutines.yield(); assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        server.enqueue(error("rate_limited", 429))
+        try { sessions.authorized(existing) { verificationMethods() }; fail("Unrelated failure") } catch (_: ApiFailure) { }
+        server.takeRequest(); clock.now += 31_000
+        assertFalse(sessions.state.value.busy)
+        val count = server.requestCount
+        sessions.refresh()
+        try { sessions.setTypingPreference(false); fail("Ignore still owns runtime gate") } catch (_: ApiFailure) { }
+        assertEquals(count, server.requestCount)
+        assertEquals(setOf(8L), write.await())
+    }
+
+    @Test fun lateIgnoreCannotRepopulateSignedOutPolicy() = runTest {
+        ignoreReady(); val expected = sessions.state.value
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body("""{"ignored_user_ids":[8]}""").bodyDelay(500, TimeUnit.MILLISECONDS).build())
+        val write = async { runCatching { sessions.setIgnored(8, true, expected) } }
+        kotlinx.coroutines.yield(); assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut()
+        assertTrue(write.await().exceptionOrNull() is CancellationException)
+        assertNull(sessions.state.value.user); assertNull(sessions.state.value.chatPolicy)
+        assertFalse(sessions.state.value.busy)
+    }
+
+    @Test fun bootstrapStillBlocksIgnoreAfterUnrelatedErrorClearsBusy() = runTest {
+        ignoreReady(); val existing = sessions.openAccess()
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body(bootstrapBody(user, c).dropLast(1) + ",\"ignored_user_ids\":[9]}")
+            .bodyDelay(2, TimeUnit.SECONDS).build())
+        val refresh = async { sessions.refresh() }
+        kotlinx.coroutines.yield(); assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        server.enqueue(error("rate_limited", 429))
+        try { sessions.authorized(existing) { verificationMethods() }; fail("Unrelated failure") } catch (_: ApiFailure) { }
+        server.takeRequest(); clock.now += 31_000
+        assertFalse(sessions.state.value.busy)
+        val count = server.requestCount
+        try { sessions.setIgnored(8, true, sessions.state.value); fail("Bootstrap owns runtime gate") }
+        catch (failure: ApiFailure) { assertEquals(FailureKind.EXPIRED, failure.kind) }
+        assertEquals(count, server.requestCount); refresh.await()
+    }
+
+    @Test fun failedIgnorePreservesLastConfirmedListAndRequiresExplicitGetBeforeRetry() = runTest {
+        ignoreReady(); server.enqueue(error("csrf_failed", 403))
+        try { sessions.setIgnored(8, true, sessions.state.value); fail("Server refusal") } catch (_: ApiFailure) { }
+        assertFalse(sessions.state.value.busy); assertTrue(sessions.state.value.refreshRequired)
+        assertEquals(setOf(9L), sessions.state.value.chatPolicy!!.ignoredUserIds)
+        val count = server.requestCount
+        try { sessions.setIgnored(8, true, sessions.state.value); fail("No POST replay") } catch (_: ApiFailure) { }
+        assertEquals(count, server.requestCount)
+        server.enqueue(json(bootstrapBody(user, c).dropLast(1) + ",\"ignored_user_ids\":[8]}"))
+        sessions.refresh(); server.takeRequest() // Drain the original POST, not a retry.
+        assertEquals("GET", server.takeRequest().method)
+        assertEquals(setOf(8L), sessions.state.value.chatPolicy!!.ignoredUserIds)
+        assertFalse(sessions.state.value.refreshRequired)
+    }
+
     private class MemoryVault : SessionVault {
         var saved: SavedSession? = null
         var failWrites = false

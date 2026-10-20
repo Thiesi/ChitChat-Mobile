@@ -66,6 +66,8 @@ Multiline input uses explicit send by default; respect IME insets, focus restora
 
 Each screen specifies loading, empty, content, stale/offline, retryable error, and authorization-lost states. Guest expiry, muted/read-only rooms, generic DM unavailability, lockdown, and rate limiting need understandable explanations. Preserve typed drafts on transient failure. Never make a toast the only record of a failed send or an account operation.
 
+[M4c3a](milestones/M4c3a-ignore-protocol.md) reuses that session transport through an original-session ignore capability. A runtime policy-write gate serializes ignore and typing preferences against bootstrap independently of the UI busy flag. Publish complete authoritative IDs, preserve last-confirmed policy on uncertain outcomes and require explicit GET reconciliation; native controls/context reconciliation remain the separate M4c3b consumer.
+
 ## Network and session security
 
 Canonicalize user-entered HTTPS URLs with an explicit origin and deployment base-path policy. The current web deployment uses root `/api/v1/*.php`; do not advertise arbitrary subpath hosting until tested. Reject URL user-info, fragments and arbitrary API-path input; confirm any host-changing redirect before credentials are sent. Use normal platform TLS verification, no trust-all code, and no globally enabled cleartext. Debug-only local HTTP may be added narrowly for tests; a self-signed server must be configured with a trusted certificate rather than a bypass.

@@ -50,6 +50,10 @@ M3b implements the room HTTP subset through the existing session transport; [sou
 
 Only `/me` and `/ping` are server commands. `/dm`, `/topic`, `/shrug`, `/help` are implemented by the browser through ordinary APIs/local behavior; port them intentionally. Formatting is ChitChat's restricted grammar, not arbitrary HTML or full Markdown. [Browser commands](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/assets/js/slash-commands.js), [formatting](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/assets/js/message-format.js).
 
+## Room-ignore mutation prerequisite
+
+[M4c3a](milestones/M4c3a-ignore-protocol.md) uses existing `POST users/ignore.php` with `{user_id,ignored}` and current session CSRF. Its complete `ignored_user_ids` result replaces confirmed IDs while preserving other policy. Unknown policy is not empty; original session scope, a shared runtime policy-write/bootstrap gate and non-cancellable fenced cleanup prevent stale replies. Failed/cancelled changes require explicit session GET, not POST replay. This is room presentation/attention, not DM blocking; native management/canonical consumer reconciliation remains M4c3b.
+
 ## Account-wide typing preference
 
 M4c1 consumes top-level optional `session.php.share_typing` and existing `POST account/typing.php` with current session CSRF and a JSON Boolean. Its HTTP200 Boolean is authoritative, not the requested value. Missing/null bootstrap values stay unknown; quoted Boolean strings are incompatible. Failed/cancelled changes need explicit session GET reconciliation, never POST replay. The setting is bilateral across rooms/DMs and all devices, not a notification toggle. See [preference contract/tests](milestones/M4c1-typing-privacy.md).
