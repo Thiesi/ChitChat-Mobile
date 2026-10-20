@@ -8,6 +8,7 @@ import io.github.thiesi.chitchat.core.rooms.CreateRoom
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
 import io.github.thiesi.chitchat.core.rooms.validateRoomCreation
 import io.github.thiesi.chitchat.core.conversation.*
+import io.github.thiesi.chitchat.core.direct.*
 import io.github.thiesi.chitchat.core.realtime.PresenceStatus
 import io.github.thiesi.chitchat.core.realtime.PresenceUser
 import java.io.IOException
@@ -258,6 +259,101 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
                 is IllegalArgumentException -> ApiFailure(FailureKind.NETWORK)
                 else -> ApiFailure(FailureKind.INCOMPATIBLE)
             }
+        }
+    }
+
+    suspend fun directUsers(prefix: String, limit: Int, viewer: Long): List<MessagePerson> {
+        if (!validateDirectSearch(prefix) || limit !in 1..50) throw ApiFailure(FailureKind.HTTP, 400, "validation_error")
+        val query = origin.newBuilder().addQueryParameter("search", prefix.phpTrim()).addQueryParameter("limit", "$limit").build().encodedQuery!!
+        return decode<DirectUsersReply>(request("direct-messages/users.php?$query").require200()).users.also { users ->
+            incompatibleUnless(users.size <= limit && users.map { it.id }.distinct().size == users.size)
+            users.forEach { requireDirectPerson(it); incompatibleUnless(it.id != viewer) }
+        }
+    }
+
+    suspend fun directStatus(peer: Long, viewer: Long): Pair<MessagePerson, DirectRelationship> {
+        requireDirectPeer(peer, viewer)
+        val reply = decode<DirectStatusReply>(request("direct-messages/block-status.php?user_id=$peer").require200())
+        requireDirectPerson(reply.user); incompatibleUnless(reply.user.id == peer); requireDirectRelationship(reply.relationship)
+        return reply.user to reply.relationship
+    }
+
+    suspend fun directConversations(viewer: Long): List<DirectConversation> {
+        val values = decode<DirectConversationsReply>(request("direct-messages/conversations.php?limit=100").require200()).conversations
+        incompatibleUnless(values.size <= 100 && values.map { it.user.id }.distinct().size == values.size &&
+            values.zipWithNext().all { (a, b) -> a.last.id > b.last.id })
+        values.forEach { value ->
+            requireDirectPerson(value.user); requireDirectPeer(value.user.id, viewer)
+            incompatibleUnless(value.last.id > 0 && value.unreadCount >= 0 && serverInstant(value.last.createdAt) != null &&
+                value.last.senderId == (if (value.last.outgoing) viewer else value.user.id))
+        }
+        val (mutations, files) = directMetadata(values.map { it.last.id })
+        return values.mapNotNull { value ->
+            val raw = value.last
+            val metadata = mutations[raw.id] ?: return@mapNotNull null // Retention race: never show an unenriched stale body.
+            requireDirectMutation(metadata, raw.outgoing, if (raw.outgoing) value.user.id else viewer)
+            DirectConversation(value.user, DirectPreview(raw.id, if (metadata.deleted) null else metadata.body,
+                raw.createdAt, raw.outgoing, metadata.deleted, metadata.editedAt,
+                if (metadata.deleted) null else files[raw.id]?.model()), value.unreadCount)
+        }
+    }
+
+    suspend fun directHistory(peer: Long, before: Long?, limit: Int, viewer: Long): DirectPage {
+        requireDirectPeer(peer, viewer)
+        require((before == null || before > 0) && limit in 1..100)
+        val path = "direct-messages/history.php?user_id=$peer&limit=$limit" + (before?.let { "&before_id=$it" } ?: "")
+        val raw = decode<DirectHistoryReply>(request(path).require200()).messages
+        incompatibleUnless(raw.size <= limit && raw.zipWithNext().all { (a, b) -> a.id < b.id })
+        raw.forEach { requireDirectWire(it, viewer, peer); incompatibleUnless(before == null || it.id < before) }
+        val (mutations, files) = directMetadata(raw.map { it.id })
+        val messages = raw.mapNotNull { value ->
+            val metadata = mutations[value.id] ?: return@mapNotNull null
+            requireDirectMutation(metadata, value.outgoing, value.recipient.id)
+            DirectMessage(value.id, value.sender, value.recipient, if (metadata.deleted) null else metadata.body,
+                value.readAt, value.createdAt, value.outgoing, metadata.deleted, metadata.editedAt, metadata.canEdit,
+                metadata.canDelete, if (metadata.deleted) null else value.replyTo,
+                if (metadata.deleted) emptyList() else metadata.mentions, metadata.reactions,
+                if (metadata.deleted) null else files[value.id]?.model())
+        }
+        return DirectPage(messages, raw.firstOrNull()?.id, raw.size == limit)
+    }
+
+    private suspend fun directMetadata(ids: List<Long>): Pair<Map<Long, DirectMutation>, Map<Long, DirectAttachment>> {
+        if (ids.isEmpty()) return emptyMap<Long, DirectMutation>() to emptyMap()
+        incompatibleUnless(ids.size <= 100 && ids.distinct().size == ids.size && ids.all { it > 0 })
+        val query = ids.joinToString(",")
+        val mutations = decode<DirectMutationsReply>(request("direct-messages/message-mutations.php?message_ids=$query").require200()).messages
+        incompatibleUnless(mutations.size <= ids.size && mutations.map { it.id }.distinct().size == mutations.size && mutations.all { it.id in ids })
+        val files = decode<DirectAttachmentsReply>(request("direct-messages/attachments/metadata.php?message_ids=$query").require200()).attachments
+        incompatibleUnless(files.size <= ids.size && files.map { it.id }.distinct().size == files.size &&
+            files.map { it.messageId }.distinct().size == files.size)
+        files.forEach { incompatibleUnless(it.id > 0 && it.messageId in ids && it.sizeBytes >= 0 &&
+            it.name.isNotBlank() && it.mimeType.isNotBlank() && it.sha256.matches(Regex("[a-fA-F0-9]{64}"))) }
+        return mutations.associateBy { it.id } to files.associateBy { it.messageId }
+    }
+
+    suspend fun directSend(peer: Long, body: String, replyId: Long?, csrf: String, viewer: Long): Long {
+        requireDirectPeer(peer, viewer)
+        validateDirectBody(body)?.let { throw ApiFailure(FailureKind.HTTP, 400, it) }
+        require(replyId == null || replyId > 0)
+        val raw = request("direct-messages/send.php", apiJson.encodeToString(DirectSendRequest(peer, body, replyId)), csrf)
+        incompatibleUnless(raw.status == 201)
+        val message = decode<DirectSendReply>(raw).message
+        requireDirectWire(message, viewer, peer); incompatibleUnless(message.outgoing)
+        return message.id // Do not hide a known POST acknowledgment behind a fallible enrichment GET.
+    }
+
+    suspend fun directRead(peer: Long, csrf: String, viewer: Long): Int {
+        requireDirectPeer(peer, viewer)
+        return decode<DirectReadReply>(request("direct-messages/read.php", apiJson.encodeToString(DirectPeerRequest(peer)), csrf)
+            .require200()).updated.also { incompatibleUnless(it >= 0) }
+    }
+
+    suspend fun directBlock(peer: Long, blocked: Boolean, csrf: String, viewer: Long): DirectRelationship {
+        requireDirectPeer(peer, viewer)
+        return decode<DirectRelationshipReply>(request("direct-messages/${if (blocked) "block" else "unblock"}.php",
+            apiJson.encodeToString(DirectPeerRequest(peer)), csrf).require200()).relationship.also {
+            requireDirectRelationship(it); incompatibleUnless(it.blockedByMe == blocked)
         }
     }
 

@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import io.github.thiesi.chitchat.core.conversation.DisplayPreferences
 import io.github.thiesi.chitchat.core.conversation.RoomMute
+import io.github.thiesi.chitchat.core.direct.MessagePrivacy
 
 internal val apiJson = Json { ignoreUnknownKeys = true }
 
@@ -34,6 +35,7 @@ internal class SessionReply(
     @SerialName("ignored_user_ids") val ignoredUserIds: List<Long>? = null,
     @SerialName("muted_everywhere") val mutedEverywhere: RoomMute? = null,
     val preferences: DisplayPreferences? = null,
+    val privacy: MessagePrivacy? = null,
 )
 
 @Serializable
