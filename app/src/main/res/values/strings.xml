@@ -13,7 +13,7 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="saved_server">Your server</string>
-    <string name="preview_limit">This development build adds server sign-in. Conversations and notifications are not available yet.</string>
+    <string name="preview_limit">This development build supports sign-in and manually refreshed room conversations. Direct messages and notifications are not available yet.</string>
     <string name="change_server">Change server</string>
     <string name="forget_server">Forget server</string>
     <string name="forget_title">Forget this server?</string>
