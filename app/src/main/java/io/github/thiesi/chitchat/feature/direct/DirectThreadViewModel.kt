@@ -19,7 +19,9 @@ import kotlinx.coroutines.launch
 
 data class DirectAnchor(val id: Long, val offset: Int, val revision: Long = 0)
 class DirectDraft(val peer: Long, val name: String?, val body: String, val uncertain: Boolean, val checked: Boolean)
-class DirectAttention(val ids: Set<Long> = emptySet(), val additionalMayBeRead: Boolean = false)
+data class DirectAttention(val ids: Set<Long> = emptySet(), val additionalMayBeRead: Boolean = false) {
+    override fun toString() = "DirectAttention"
+}
 data class DirectThreadState(val peerId: Long? = null, val context: DirectContext? = null,
     val messages: List<DirectMessage> = emptyList(), val draft: String = "", val loaded: Boolean = false,
     val busy: Boolean = false, val sending: Boolean = false, val stale: Boolean = true,
@@ -181,7 +183,9 @@ class DirectThreadViewModel(private val operations: DirectOperations,
             olderCursor = if (trimmed) rows.firstOrNull()?.id else window.olderCursor,
             mayHaveOlder = trimmed || window.mayHaveOlder, latestWindow = live,
             fixedUpper = if (live) null else upper,
-            newerAvailable = !live, incompleteRange = false, error = null,
+            newerAvailable = !live || !scroll && (old.newerAvailable ||
+                previous != null && rows.lastOrNull()?.id?.let { it > previous } == true),
+            incompleteRange = false, error = null,
             anchorLost = viewport != null && anchor?.id != viewport?.id,
             anchor = if (scroll) null else anchor,
             scrollRequest = mutable.value.scrollRequest + if (scroll) 1 else 0,
@@ -215,7 +219,8 @@ class DirectThreadViewModel(private val operations: DirectOperations,
         localAttention.value[peer]?.let { attention ->
             setAttention(peer, DirectAttention(attention.ids - visible, attention.additionalMayBeRead))
         }
-        mutable.value = mutable.value.copy(atLatest = edge && mutable.value.latestWindow)
+        mutable.value = mutable.value.copy(atLatest = edge && mutable.value.latestWindow,
+            newerAvailable = mutable.value.newerAvailable && !(edge && mutable.value.latestWindow))
         maybeRead()
     }
     private fun maybeRead() {
