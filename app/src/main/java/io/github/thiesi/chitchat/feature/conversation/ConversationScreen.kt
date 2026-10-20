@@ -19,10 +19,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,12 +37,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -55,6 +60,7 @@ import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.PresencePhase
 import io.github.thiesi.chitchat.core.ui.InlineError
+import io.github.thiesi.chitchat.core.ui.MessageInput
 import io.github.thiesi.chitchat.core.ui.canAcknowledgeVisibleRead
 import io.github.thiesi.chitchat.core.ui.isReadEdgeVisible
 import kotlinx.coroutines.delay
@@ -79,6 +85,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val lifecycleState by lifecycle.currentStateAsState()
     val window = LocalWindowInfo.current
     var pingsOpen by remember { mutableStateOf(false) }
+    var detailsOpen by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val timeline = rememberLazyListState()
     LaunchedEffect(roomId) { model.open(roomId) }
@@ -103,7 +110,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
         }
     }
-    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, lifecycle,
+    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, detailsOpen, lifecycle,
         connection?.presencePhase, connection?.selectedRoomId, lifecycleState) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             snapshotFlow {
@@ -114,33 +121,33 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val last = visible.firstOrNull { it.key == "message:$newest" }
                 val edgeVisible = last != null && isReadEdgeVisible(last.offset, last.size,
                     timeline.layoutInfo.viewportStartOffset, timeline.layoutInfo.viewportEndOffset)
-                val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused, !pingsOpen)
+                val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused, !pingsOpen && !detailsOpen)
                 Triple(anchor, if (edgeVisible && readable) newest else null, !timeline.canScrollForward && readable)
             }.collect { (anchor, newest, edge) -> model.viewport(anchor, newest, edge) }
         }
     }
     val ready = !session.busy && !session.refreshRequired && !session.storageWarning && now >= session.retryAtMillis
     BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+    val compact = maxHeight < 240.dp
     val headerLimit = maxHeight * 0.3f
-    val composerLimit = maxHeight * 0.45f
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Column(Modifier.fillMaxWidth().heightIn(max = headerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+    val composerLimit = (maxHeight * 0.45f).coerceAtLeast(56.dp)
+    val header: @Composable (() -> Unit) -> Unit = { close ->
             Text(state.context?.room?.name ?: stringResource(R.string.conversation_title), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(if (model.realtime == null) R.string.conversation_manual else R.string.conversation_realtime),
                 style = MaterialTheme.typography.bodySmall)
             if (model.realtime != null && state.loaded) RoomPresencePanel(
                 presenceHere,
                 state.context?.let(model::presenceEligible) == true,
-                canEnter = ready && !state.busy && !state.stale, enter = model::enterRoom)
+                canEnter = ready && !state.busy && !state.stale, enter = { close(); model.enterRoom() })
             if (state.syncing) Text(stringResource(R.string.conversation_syncing))
             if (state.anchorUnavailable) Text(stringResource(R.string.conversation_anchor_unavailable))
-            if (state.newerAvailable) TextButton(onClick = model::latest, enabled = ready && !state.busy) {
+            if (state.newerAvailable) TextButton(onClick = { close(); model.latest() }, enabled = ready && !state.busy) {
                 Text(stringResource(R.string.conversation_jump_new))
             }
             if (state.stale && state.loaded) Text(stringResource(R.string.conversation_stale))
             if (session.busy) Text(stringResource(R.string.checking_session))
             if (session.refreshRequired || session.storageWarning) {
-                TextButton(onClick = onRefreshSession, enabled = !session.busy && now >= session.retryAtMillis) {
+                TextButton(onClick = { close(); onRefreshSession() }, enabled = !session.busy && now >= session.retryAtMillis) {
                     Text(stringResource(R.string.refresh_session))
                 }
             }
@@ -149,11 +156,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             state.syncError?.let {
                 InlineError(if (it.code == "history_range_unavailable") stringResource(R.string.conversation_range_unavailable)
                     else conversationError(it))
-                TextButton(onClick = model::latest, enabled = ready && !state.busy) { Text(stringResource(R.string.conversation_latest)) }
+                TextButton(onClick = { close(); model.latest() }, enabled = ready && !state.busy) { Text(stringResource(R.string.conversation_latest)) }
             }
             state.readError?.let {
                 Text(stringResource(R.string.conversation_read_failed))
-                TextButton(onClick = model::retryRead, enabled = ready && !state.busy && state.atLatest) { Text(stringResource(R.string.conversation_retry_read)) }
+                TextButton(onClick = { close(); model.retryRead() }, enabled = ready && !state.busy && state.latestWindow) { Text(stringResource(R.string.conversation_retry_read)) }
             }
             state.validation?.let { InlineError(validationMessage(it)) }
             state.notice?.let { notice -> Text(stringResource(when (notice) {
@@ -162,11 +169,39 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 "latest_reset" -> R.string.conversation_latest_reset
                 else -> R.string.conversation_cancelled
             }), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = model::refresh, enabled = ready && !state.busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.conversation_refresh)) }
-                TextButton(onClick = { pingsOpen = true }, enabled = state.loaded, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.conversation_pings)) }
-                if (state.busy || state.syncing) TextButton(onClick = model::cancelRequest, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cancel)) }
+            if (!state.atLatest || !state.latestWindow) TextButton(onClick = { close(); model.latest() }, enabled = ready && !state.busy) {
+                Text(stringResource(R.string.conversation_latest))
             }
+            if (state.uncertainSend) {
+                Text(stringResource(R.string.conversation_uncertain))
+                if (state.reconciledAfterUncertain) TextButton(onClick = { close(); model.acknowledgeDuplicateRisk() }, enabled = !state.busy) {
+                    Text(stringResource(R.string.conversation_allow_resend))
+                }
+            }
+            state.context?.let { context ->
+                when {
+                    context.mute != null -> Text(stringResource(R.string.conversation_muted, context.mute!!.reason,
+                        context.mute!!.expiresAt?.let { displayTime(it, context) } ?: stringResource(R.string.conversation_indefinite)))
+                    !context.room.isMember -> Text(stringResource(R.string.conversation_membership))
+                    session.user?.guest == true && context.room.guestAccess != "write" -> Text(stringResource(R.string.conversation_guest_readonly))
+                }
+                if (model.realtime != null && model.presenceEligible(context) && !activePresence) {
+                    TextButton(onClick = { close(); model.enterRoom() }, enabled = ready && state.loaded && !state.busy && !state.stale &&
+                        presenceHere?.presencePhase != PresencePhase.CONNECTING) {
+                        Text(stringResource(if (presenceHere?.presencePhase == PresencePhase.CONNECTING)
+                            R.string.presence_entering else R.string.presence_enter))
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { close(); model.refresh() }, enabled = ready && !state.busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.conversation_refresh)) }
+                TextButton(onClick = { close(); pingsOpen = true }, enabled = state.loaded, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.conversation_pings)) }
+                if (state.busy || state.syncing) TextButton(onClick = { close(); model.cancelRequest() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cancel)) }
+            }
+    }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (!compact) Column(Modifier.fillMaxWidth().heightIn(max = headerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+            header {}
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("conversation_timeline"), state = timeline,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -192,38 +227,33 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             }
             item(key = "history_end") { Spacer(Modifier.height(1.dp)) }
         }
-        Column(Modifier.fillMaxWidth().heightIn(max = composerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (!state.atLatest || !state.latestWindow) TextButton(onClick = model::latest, enabled = ready && !state.busy) {
-                Text(stringResource(R.string.conversation_latest))
-            }
-            if (state.uncertainSend) {
-                Text(stringResource(R.string.conversation_uncertain))
-                if (state.reconciledAfterUncertain) TextButton(onClick = model::acknowledgeDuplicateRisk, enabled = !state.busy) {
-                    Text(stringResource(R.string.conversation_allow_resend))
+        Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+            run {
+                val label = stringResource(R.string.conversation_details)
+                val blocked = !ready || state.busy || !model.canSend()
+                val status = stringResource(if (blocked) R.string.conversation_send_unavailable_details else R.string.conversation_details_attention)
+                val attention = state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend ||
+                    state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
+                    state.notice != null || blocked
+                BadgedBox(badge = { if (attention) Badge() }) {
+                    IconButton(onClick = { detailsOpen = true }, modifier = Modifier.semantics {
+                        contentDescription = label
+                        if (attention) stateDescription = status
+                    }) { Text("\u22ee") }
                 }
             }
-            state.context?.let { context ->
-                when {
-                    context.mute != null -> Text(stringResource(R.string.conversation_muted, context.mute!!.reason,
-                        context.mute!!.expiresAt?.let { displayTime(it, context) } ?: stringResource(R.string.conversation_indefinite)))
-                    !context.room.isMember -> Text(stringResource(R.string.conversation_membership))
-                    session.user?.guest == true && context.room.guestAccess != "write" -> Text(stringResource(R.string.conversation_guest_readonly))
-                }
-                if (model.realtime != null && model.presenceEligible(context) && !activePresence) {
-                    TextButton(onClick = model::enterRoom, enabled = ready && state.loaded && !state.busy && !state.stale &&
-                        presenceHere?.presencePhase != PresencePhase.CONNECTING) {
-                        Text(stringResource(if (presenceHere?.presencePhase == PresencePhase.CONNECTING)
-                            R.string.presence_entering else R.string.presence_enter))
-                    }
-                }
-            }
-            OutlinedTextField(value = state.draft, onValueChange = model::updateDraft, enabled = !state.sending,
-                label = { Text(stringResource(R.string.conversation_message)) }, minLines = 2, maxLines = 5,
-                modifier = Modifier.fillMaxWidth().testTag("conversation_composer"))
+            MessageInput(state.draft, model::updateDraft, !state.sending,
+                stringResource(R.string.conversation_message), compact,
+                Modifier.weight(1f).testTag("conversation_composer"))
             Button(onClick = model::send, enabled = ready && !state.busy && model.canSend() && state.draft.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()) { Text(stringResource(if (state.sending) R.string.conversation_sending else R.string.conversation_send)) }
+                modifier = Modifier.testTag("conversation_send")) { Text(stringResource(if (state.sending) R.string.conversation_sending else R.string.conversation_send)) }
         }
     }
+    if (detailsOpen) AlertDialog(onDismissRequest = { detailsOpen = false },
+        title = { Text(stringResource(R.string.conversation_details)) },
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) { header { detailsOpen = false } } },
+        confirmButton = { TextButton(onClick = { detailsOpen = false }) { Text(stringResource(R.string.rooms_close)) } })
     }
     if (pingsOpen) AlertDialog(onDismissRequest = { pingsOpen = false },
         title = { Text(stringResource(R.string.conversation_pings)) },
