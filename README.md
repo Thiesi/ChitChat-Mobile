@@ -20,6 +20,7 @@ M3a adds a [native room directory](docs/milestones/M3a-room-directory.md), known
 - [Verified API contracts and compatibility](docs/backend-compatibility.md)
 - [Implementation milestones and acceptance gates](docs/implementation-plan.md)
 - [Sensitive-action protocol foundation](docs/milestones/M2b2a-protocol-foundation.md)
+- [SSE/presence protocol foundation and pending foreground integration](docs/milestones/M3c1-realtime-protocol.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)

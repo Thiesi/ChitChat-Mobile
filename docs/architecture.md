@@ -1,6 +1,6 @@
 # Proposed Android architecture
 
-Status: M1/M2a/M2b1 are merged. M2b2 implements shared step-up with personal-data export as its first usable consumer; [its evidence](milestones/M2b-step-up-export.md) distinguishes actual checks from pending acceptance. All chat/push work below is still planned. The [decentralized push decision](push-architecture.md) is accepted; public identity/distribution and ordinary-DM alerts remain open. Backend source baseline and compatibility are recorded in [the contract](backend-compatibility.md).
+Status: M1/M2a/M2b1/M2b2/M3a/M3b are merged; room conversations currently use explicit manual refresh. M3c's [shared-session SSE/presence protocol foundation](milestones/M3c1-realtime-protocol.md) precedes its foreground lifecycle/presentation consumer, not a claim of working realtime UI. Push and the fuller target design below remain planned where not explicitly implemented. The [decentralized push decision](push-architecture.md) is accepted; public identity/distribution and ordinary-DM alerts remain open. Backend source baseline and compatibility are recorded in [the contract](backend-compatibility.md).
 
 ## Structure and dependencies
 
@@ -77,6 +77,8 @@ Local cache is a view of server-authorized data, not proof of current authorizat
 Server IDs define order within each message kind; room and DM IDs are separate namespaces. Distinguish optimistic local pending rows from acknowledged server rows. A send response and its SSE event must converge to one row. There is no idempotency key: on an ambiguous timeout mark the attempt `unknown`, reconcile history, and let the user explicitly decide to resend with duplicate-risk context. Do not retry a message/upload automatically or match two identical texts as proof of one send.
 
 ## Realtime and lifecycle
+
+M3c1 implements only typed SSE/presence operations over the existing session transport. OkHttp SSE supplies framing with bounded response/queue adapters; the consumer owns reconnects and acknowledgment. Two logout shapes, retained logout versions and PHP's empty-array room signals are handled explicitly. No connection starts from production UI yet. Cursor/reduction transactions below describe the future cache-backed design; no disk cursor/content cache is claimed for the memory-only client.
 
 One connection per active authenticated app session, not one per screen. Process lifecycle starts/stops it; Compose screen lifecycle alone must not own it. Closing the app stops stream, presence and typing. No unrestricted permanent service or frequent background worker. On background transition send a best-effort presence heartbeat with `room_id:null`, then let the lease expire if the request cannot finish; never block backgrounding on it.
 
