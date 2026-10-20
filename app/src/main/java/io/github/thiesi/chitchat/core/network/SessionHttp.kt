@@ -8,6 +8,8 @@ import io.github.thiesi.chitchat.core.rooms.CreateRoom
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
 import io.github.thiesi.chitchat.core.rooms.validateRoomCreation
 import io.github.thiesi.chitchat.core.conversation.*
+import io.github.thiesi.chitchat.core.realtime.PresenceStatus
+import io.github.thiesi.chitchat.core.realtime.PresenceUser
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.time.ZonedDateTime
@@ -216,6 +218,47 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         require(roomId > 0 && messageId > 0)
         return decode<ReadReply>(request("rooms/read.php", apiJson.encodeToString(ReadRequest(roomId, messageId)), csrf).require200())
             .messageId.also { incompatibleUnless(it >= 0) }
+    }
+
+    suspend fun presenceHeartbeat(connectionId: String, roomId: Long?, interacted: Boolean, csrf: String): PresenceStatus {
+        val input = presenceHeartbeatRequest(connectionId, roomId, interacted)
+        return decode<PresenceReply>(request("presence/heartbeat.php", apiJson.encodeToString(input), csrf).require200())
+            .presence.also { requireValidPresenceStatus(it, roomId) }
+    }
+
+    suspend fun roomPresence(roomId: Long): List<PresenceUser> {
+        require(roomId > 0)
+        return decode<PresenceUsersReply>(request("rooms/presence.php?room_id=$roomId").require200())
+            .users.also(::requireValidPresenceUsers)
+    }
+
+    fun events(afterId: Long): kotlinx.coroutines.flow.Flow<io.github.thiesi.chitchat.core.realtime.RealtimeSignal> {
+        require(afterId >= 0)
+        val request = buildRequest("events/stream.php").newBuilder()
+            .header("Accept", "text/event-stream").header("Last-Event-ID", afterId.toString()).build()
+        return sessionEventStream(client, request, { jar.invalid }) { cause, response ->
+            if (response != null && !response.isSuccessful) {
+                if (response.code in 300..399) ApiFailure(FailureKind.REDIRECT, response.code)
+                else {
+                    val source = response.body.source()
+                    source.request(1_048_577)
+                    if (source.buffer.size > 1_048_576) ApiFailure(FailureKind.INCOMPATIBLE)
+                    else {
+                        val error = try { apiJson.decodeFromString<ErrorEnvelope>(source.readUtf8()).error }
+                            catch (_: SerializationException) { null }
+                        ApiFailure(FailureKind.HTTP, response.code, error?.code?.take(100), retryAfter(response.header("Retry-After")))
+                    }
+                }
+            } else when (cause) {
+                is ApiFailure -> cause
+                is IOException -> ApiFailure(transportKind(cause))
+                // The pinned standard reader reports an unterminated data line at EOF as an
+                // IllegalArgumentException. Treat incomplete transport as reconnectable, never
+                // as a delivered/acknowledged event. No exception text/body is retained.
+                is IllegalArgumentException -> ApiFailure(FailureKind.NETWORK)
+                else -> ApiFailure(FailureKind.INCOMPATIBLE)
+            }
+        }
     }
 
     private suspend fun auth(path: String, body: String, csrf: String, successStatus: Int = 200, allowPending: Boolean = true): AuthReply {

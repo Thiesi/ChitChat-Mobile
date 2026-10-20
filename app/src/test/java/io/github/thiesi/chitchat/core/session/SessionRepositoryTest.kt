@@ -1,6 +1,9 @@
 package io.github.thiesi.chitchat.core.session
 
 import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.network.FailureKind
+import io.github.thiesi.chitchat.core.realtime.RealtimeSignal
+import io.github.thiesi.chitchat.core.realtime.SessionRealtimeRepository
 
 import io.github.thiesi.chitchat.core.network.SessionHttp
 import io.github.thiesi.chitchat.core.server.AddressResult
@@ -13,6 +16,7 @@ import java.time.ZoneOffset
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -67,6 +71,78 @@ class SessionRepositoryTest {
         sessions.signIn("Alice", "fixture-password")
         server.takeRequest(5, TimeUnit.SECONDS)
         assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+    }
+
+    private fun sse(body: String) = MockResponse.Builder().addHeader("Content-Type", "text/event-stream")
+        .body(body).build()
+    private fun event(id: Int = 41, type: String = "rooms_changed", payload: String = "[]") =
+        "id: $id\nevent: $type\ndata: " +
+            """{"id":$id,"type":"$type","room_id":null,"actor_user_id":7,"payload":$payload,"created_at":"2026-07-17 08:00:00+00"}""" + "\n\n"
+
+    @Test fun persistentRealtimeLogoutRetiresTheCurrentSessionAndVault() = runTest {
+        login()
+        server.enqueue(sse(event(type = "forced_logout", payload = """{"session_version":3,"reason":"Private fixture"}""")))
+        try { SessionRealtimeRepository(sessions).stream(0) {}; error("Expected cancellation") }
+        catch (_: CancellationException) { }
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase); assertNull(vault.saved)
+        assertNull(sessions.state.value.user); assertNull(sessions.state.value.chatPolicy)
+    }
+    @Test fun unnumberedLogoutAfterNumberedEventAlsoClearsTheSession() = runTest {
+        login()
+        server.enqueue(sse(event() + "event: forced_logout\ndata: {\"reason\":\"session_invalidated\"}\n\n"))
+        val seen = mutableListOf<Long>()
+        try {
+            SessionRealtimeRepository(sessions).stream(0) { if (it is RealtimeSignal.Event) seen.add(it.value.id) }
+            error("Expected cancellation")
+        } catch (_: CancellationException) { }
+        assertEquals(listOf(41L), seen); assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+        assertNull(vault.saved)
+    }
+    @Test fun retainedLogoutForAnOlderVersionDoesNotUndoFreshSignIn() = runTest {
+        login()
+        val generation = sessions.state.value.generation
+        server.enqueue(sse(event(type = "forced_logout", payload = """{"session_version":2}""")))
+        val seen = mutableListOf<Long>()
+        SessionRealtimeRepository(sessions).stream(0) { if (it is RealtimeSignal.Event) seen.add(it.value.id) }
+        assertEquals(listOf(41L), seen); assertEquals(generation, sessions.state.value.generation)
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase); assertNotNull(vault.saved)
+    }
+    @Test fun realtimeHttp401UsesTheExistingGlobalInvalidationPath() = runTest {
+        login(); server.enqueue(error("authentication_required", 401))
+        try { SessionRealtimeRepository(sessions).stream(0) {}; error("Expected failure") }
+        catch (failure: ApiFailure) { assertEquals(401, failure.status) }
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase); assertNull(vault.saved)
+    }
+    @Test fun logoutCancelsAnOpenStreamBeforeDelayedPrivateEventsCanRepopulateState() = runTest {
+        login()
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "text/event-stream")
+            .body(event()).bodyDelay(300, TimeUnit.MILLISECONDS).build())
+        val opened = CompletableDeferred<Unit>()
+        val seen = mutableListOf<Long>()
+        val stream = async {
+            try { SessionRealtimeRepository(sessions).stream(0) {
+                if (it == RealtimeSignal.Opened) opened.complete(Unit)
+                if (it is RealtimeSignal.Event) seen.add(it.value.id)
+            } } catch (_: CancellationException) { }
+        }
+        opened.await()
+        server.enqueue(json("""{"status":"logged_out"}"""))
+        sessions.signOut(); stream.await()
+        assertTrue(seen.isEmpty()); assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
+        assertNull(sessions.state.value.user); assertNull(vault.saved)
+    }
+    @Test fun failedConsumerDoesNotInventACursorOrAcknowledgeLaterEvents() = runTest {
+        login()
+        val realtime = SessionRealtimeRepository(sessions)
+        server.enqueue(sse(event() + event(99)))
+        val seen = mutableListOf<Long>()
+        try { realtime.stream(0) {
+            if (it is RealtimeSignal.Event) { seen.add(it.value.id); throw ApiFailure(FailureKind.INCOMPATIBLE) }
+        }; error("Expected failure") } catch (_: ApiFailure) { }
+        assertEquals(listOf(41L), seen)
+        server.enqueue(sse(event()))
+        realtime.stream(0) { if (it is RealtimeSignal.Event) seen.add(it.value.id) }
+        assertEquals(listOf(41L, 41L), seen); assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
     }
 
     @Test fun anonymousCookiesAreNotSaved() = runTest {

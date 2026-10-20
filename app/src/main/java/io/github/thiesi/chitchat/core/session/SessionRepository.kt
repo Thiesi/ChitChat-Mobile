@@ -346,6 +346,11 @@ class SessionRepository internal constructor(
         mutable.value = mutable.value.copy(recoveryCodesRemaining = remaining)
     }
 
+    internal suspend fun invalidateFromRealtime(access: SessionAccess) = lock.withLock {
+        ensureCurrent(access)
+        runtime?.let { invalidate(it, ApiFailure(FailureKind.EXPIRED)) }
+    }
+
     internal suspend fun <T> authorized(access: SessionAccess, operation: suspend SessionHttp.() -> T): T {
         lock.withLock {
             ensureCurrent(access)
