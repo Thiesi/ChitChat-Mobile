@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[M4c4b2a](milestones/M4c4b2a-target-adoption-state.md) corrects historical empty-range widening and freezes existing input/send/block/entry callback scopes. Its tested target-adoption/denial state is not a native quote/notification consumer. The preserved native work follows separately; no live/push or full-parity completion is inferred.
+
 As of native room-draft recovery after M4c3b member room-ignore controls (live chat/typing/ignore acceptance pending), 2026-10-20:
 
 [Room drafts](milestones/room-draft-retention.md) are retained across room navigation in scoped VM memory, with a 100-entry cap, explicit manager/discard and preserved delivery-unknown guards. Signing out/account switching/process death clears them; this is intentionally not durable offline composition. Native fixture verification is not live delivery acceptance. Notification center/routing and push remain pending.

@@ -20,6 +20,10 @@ import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
+import io.github.thiesi.chitchat.core.targets.MessageTarget
+import io.github.thiesi.chitchat.core.targets.TargetSnapshot
+import io.github.thiesi.chitchat.core.targets.TargetRequest
+import io.github.thiesi.chitchat.core.targets.withCurrentPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
@@ -35,7 +39,8 @@ data class ConversationUiState(
     val roomId: Long? = null, val context: ConversationContext? = null,
     val messages: List<RoomMessage> = emptyList(), val pings: List<RoomPing> = emptyList(),
     val draft: String = "", val loaded: Boolean = false, val busy: Boolean = false,
-    val sending: Boolean = false, val stale: Boolean = true, val latestWindow: Boolean = true,
+    val sending: Boolean = false, val reading: Boolean = false, val stale: Boolean = true, val latestWindow: Boolean = true,
+    val fixedUpper: Long? = null, val highlightedMessageId: Long? = null,
     val olderCursor: Long? = null, val mayHaveOlder: Boolean = false,
     val atLatest: Boolean = false, val scrollRequest: Long = 0, val anchor: TimelineAnchor? = null,
     val unreadDividerId: Long? = null, val readCursor: Long = 0,
@@ -165,9 +170,52 @@ class ConversationViewModel(private val operations: ConversationOperations,
             savedDrafts.value + (roomId to RoomDraft(owner, roomId, name, value.draft, value.uncertainSend))
     }
     fun reveal(id: Long) { mutable.value = mutable.value.copy(revealed = mutable.value.revealed + id) }
-    private fun loadEntry() { request { current -> reload(current) } }
-    fun refresh() { request { current -> reload(current, explicitReconciliation = true) } }
+    private fun loadEntry() { request { current -> refreshWindow(current) } }
+    fun refresh() { request { current -> refreshWindow(current, explicit = true) } }
     fun latest() { request { current -> reload(current, forceLatest = true, explicitReconciliation = true) } }
+
+    private suspend fun refreshWindow(current: () -> Unit, explicit: Boolean = false) {
+        val value = mutable.value
+        if (value.loaded && !value.latestWindow && !(explicit && value.uncertainSend))
+            synchronizeWindow(value, sequence, current)
+        else reload(current, explicitReconciliation = explicit)
+    }
+
+    /** Reply navigation is same-room only; future cross-room routes need their own draft/entry handoff. */
+    fun canAdoptTarget(snapshot: TargetSnapshot.RoomMessage): Boolean = foreground && ready(session.value) &&
+        snapshot.matches(session.value) && snapshot.available && snapshot.context.room.id == mutable.value.roomId &&
+        !mutable.value.busy && !postInFlight && readJob?.isActive != true
+
+    fun belongsTo(expected: SessionState) = expected.identity() != null && expected.identity() == identity &&
+        identity == session.value.identity()
+
+    fun targetDenied(request: TargetRequest, error: ApiFailure) {
+        val target = request.target as? MessageTarget.RoomMessage ?: return
+        if (!request.matches(session.value) || !belongsTo(request.original) || target.roomId != mutable.value.roomId ||
+            error.status !in setOf(403, 404) || error.code == "csrf_failed") return
+        clearUnauthorized(error) // Confirmed access loss retires content, preserving any unknown delivery/draft.
+    }
+
+    fun adoptTarget(snapshot: TargetSnapshot.RoomMessage): Boolean {
+        val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.RoomMessage ?: return false
+        if (!canAdoptTarget(fresh)) return false
+        val target = fresh.request.target as? MessageTarget.RoomMessage ?: return false
+        val value = mutable.value
+        stopSync() // GET work only: active send/read POSTs were rejected above, never cancelled/replayed.
+        sequence++; readSequence++; job?.cancel(); job = null
+        readJob?.cancel(); readJob = null; visibleNewest = null; attemptedRead = 0
+        viewport = TimelineAnchor(target.id, 0, sequence)
+        mutable.value = value.copy(context = fresh.context, messages = fresh.page.messages, pings = fresh.pings,
+            loaded = true, stale = false, syncing = false, syncError = null, latestWindow = false,
+            fixedUpper = target.id, highlightedMessageId = target.id, atLatest = false,
+            olderCursor = fresh.page.olderCursor, mayHaveOlder = fresh.page.mayHaveOlder,
+            anchor = viewport, anchorUnavailable = false, newerAvailable = true, revealed = emptySet(),
+            error = value.error.takeIf { value.uncertainSend }, validation = null,
+            readCursor = maxOf(value.readCursor, fresh.context.room.lastReadMessageId ?: 0),
+            reconciledAfterUncertain = false)
+        rememberDraft(); drainSync()
+        return true
+    }
 
     /** Invalidation is queued while a user operation runs; it never cancels or replays a POST. */
     fun invalidate() {
@@ -214,8 +262,14 @@ class ConversationViewModel(private val operations: ConversationOperations,
             current()
             val merged = (page.messages + mutable.value.messages).distinctBy { it.id }.sortedBy { it.id }
             val trimmed = merged.take(500)
+            val old = mutable.value
+            val live = old.latestWindow && merged.size <= 500
+            val targetLost = old.highlightedMessageId != null && trimmed.none { it.id == old.highlightedMessageId }
             mutable.value = mutable.value.copy(messages = trimmed, olderCursor = page.olderCursor,
-                mayHaveOlder = page.mayHaveOlder, latestWindow = mutable.value.latestWindow && merged.size <= 500,
+                mayHaveOlder = page.mayHaveOlder, latestWindow = live,
+                fixedUpper = if (live) null else if (merged.size > 500) trimmed.lastOrNull()?.id else old.fixedUpper ?: trimmed.lastOrNull()?.id,
+                highlightedMessageId = old.highlightedMessageId.takeUnless { targetLost },
+                anchorUnavailable = old.anchorUnavailable || targetLost,
                 anchor = anchor?.copy(revision = sequence), notice = if (merged.size > 500) "window" else null)
         }
     }
@@ -227,6 +281,9 @@ class ConversationViewModel(private val operations: ConversationOperations,
         }
     }
 
+    fun send(expected: SessionState, roomId: Long?) {
+        if (belongsTo(expected) && roomId != null && mutable.value.roomId == roomId) send()
+    }
     fun send() {
         val value = mutable.value
         if (!canSend() || value.busy) return
@@ -278,6 +335,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         val roomId = value.roomId ?: return
         attemptedRead = newest
         val readAttempt = ++readSequence
+        mutable.value = mutable.value.copy(reading = true)
         readJob = viewModelScope.launch {
             try {
                 if (!isReadCurrent(expected, readAttempt, roomId)) return@launch
@@ -293,6 +351,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
             } finally {
                 if (isReadCurrent(expected, readAttempt, roomId)) {
                     readJob = null
+                    mutable.value = mutable.value.copy(reading = false)
                     viewport(viewport, visibleNewest, mutable.value.atLatest)
                 }
             }
@@ -326,6 +385,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         attemptedRead = 0
         mutable.value = value.copy(context = context, messages = page.messages.takeLast(500), pings = pings.filterNot {
             it.sender.id in context.policy.ignoredUserIds }.sortedBy { it.id }.takeLast(100), loaded = true, stale = false, latestWindow = true,
+            fixedUpper = null, highlightedMessageId = null,
             olderCursor = page.olderCursor, mayHaveOlder = page.mayHaveOlder, atLatest = false,
             scrollRequest = value.scrollRequest + if (automatic || reset) 1 else 0,
             anchor = if (!automatic && !reset) anchor?.copy(revision = sequence) else null, unreadDividerId = divider,
@@ -390,8 +450,9 @@ class ConversationViewModel(private val operations: ConversationOperations,
         val snapshotContext = operations.context(roomId)
         current()
         val lower = original.olderCursor ?: original.messages.firstOrNull()?.id ?: 1L
-        val upper = original.messages.lastOrNull()?.id
+        val upper = original.fixedUpper ?: original.messages.lastOrNull()?.id
         var latest = original.latestWindow
+        if (!latest && upper == null) throw ApiFailure(FailureKind.HTTP, code = "history_range_unavailable")
         var snapshot = operations.window(roomId, lower, if (latest) null else upper)
         current()
         var attention = upper != null && snapshot.messages.any { it.id > upper }
@@ -418,6 +479,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         val context = currentPolicy(snapshotContext)
         val messages = snapshot.messages.takeLast(500)
         val previous = mutable.value
+        val targetLost = previous.highlightedMessageId != null && messages.none { it.id == previous.highlightedMessageId }
         val savedAnchor = viewport ?: previous.anchor
         val anchorLost = !following && savedAnchor != null && messages.none { it.id == savedAnchor.id }
         val anchor = if (following || savedAnchor == null) null else {
@@ -427,10 +489,12 @@ class ConversationViewModel(private val operations: ConversationOperations,
         mutable.value = previous.copy(context = context, messages = messages,
             pings = pings.filterNot { it.sender.id in context.policy.ignoredUserIds }.sortedBy { it.id }.takeLast(100),
             stale = false, syncError = null, latestWindow = latest,
+            fixedUpper = if (latest) null else upper,
+            highlightedMessageId = previous.highlightedMessageId.takeUnless { targetLost },
             olderCursor = if (snapshot.messages.size > 500) messages.firstOrNull()?.id else snapshot.olderCursor,
             mayHaveOlder = snapshot.mayHaveOlder || snapshot.messages.size > 500,
             scrollRequest = previous.scrollRequest + if (following) 1 else 0, anchor = anchor,
-            newerAvailable = attention && !following, anchorUnavailable = previous.anchorUnavailable || anchorLost,
+            newerAvailable = attention && !following, anchorUnavailable = previous.anchorUnavailable || anchorLost || targetLost,
             readCursor = maxOf(previous.readCursor, context.room.lastReadMessageId ?: 0))
         selectPresence()
     }
@@ -478,6 +542,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         mutable.value = mutable.value.copy(context = null, messages = emptyList(), pings = emptyList(),
             loaded = false, stale = true, busy = false, sending = false, error = error, revealed = emptySet(),
             unreadDividerId = null, olderCursor = null, mayHaveOlder = false, anchor = null, readCursor = 0,
+            fixedUpper = null, highlightedMessageId = null,
             uncertainSend = uncertain, reconciledAfterUncertain = false)
         dividerEstablished = false
         rememberDraft()
@@ -490,7 +555,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         sequence++; readSequence++; job?.cancel(); readJob?.cancel(); readJob = null; syncJob?.cancel(); syncJob = null
         postInFlight = false; viewport = null; visibleNewest = null; attemptedRead = 0
         requestedSync = 0; attemptedSync = 0; appliedSync = 0; deliberateSelection = false
-        mutable.value = mutable.value.copy(syncing = false)
+        mutable.value = mutable.value.copy(syncing = false, reading = false)
     }
     private fun isReadCurrent(expected: Identity, attempt: Long, roomId: Long) = readSequence == attempt &&
         session.value.identity() == expected && mutable.value.roomId == roomId

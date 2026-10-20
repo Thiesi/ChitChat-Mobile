@@ -35,6 +35,7 @@ M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native 
 - [Room-switch draft retention and explicit recovery](docs/milestones/room-draft-retention.md)
 - [Notification HTTP/native-route prerequisite; center UI still pending](docs/milestones/M4c4a-notification-contracts.md)
 - [Exact-message lookup/state prerequisite; native target consumer still pending](docs/milestones/M4c4b1-message-target-state.md)
+- [Historical-boundary/scoped-callback corrections and target-adoption state](docs/milestones/M4c4b2a-target-adoption-state.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)

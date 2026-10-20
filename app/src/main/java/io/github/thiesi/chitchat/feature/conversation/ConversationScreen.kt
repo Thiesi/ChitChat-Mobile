@@ -289,7 +289,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 !state.sending && model.canEditDraft(),
                 stringResource(R.string.conversation_message), compact,
                 Modifier.weight(1f).testTag("conversation_composer"))
-            Button(onClick = model::send, enabled = ready && !state.busy && model.canSend() && state.draft.isNotBlank(),
+            Button(onClick = { model.send(displayedSession, roomId) }, enabled = ready && !state.busy && model.canSend() && state.draft.isNotBlank(),
                 modifier = Modifier.testTag("conversation_send")) { Text(stringResource(if (state.sending) R.string.conversation_sending else R.string.conversation_send)) }
         }
     }
