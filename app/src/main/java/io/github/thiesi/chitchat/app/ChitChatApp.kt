@@ -89,6 +89,9 @@ import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import io.github.thiesi.chitchat.feature.direct.DirectInboxScreen
 import io.github.thiesi.chitchat.feature.direct.DirectThreadScreen
 import io.github.thiesi.chitchat.feature.direct.directIdentity
+import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
+import io.github.thiesi.chitchat.feature.targets.ReplyTargetHost
+import io.github.thiesi.chitchat.core.targets.TargetSnapshot
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
@@ -102,10 +105,13 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     conversations: ConversationViewModel, realtime: RealtimeController? = null,
     directInbox: DirectInboxViewModel? = null, directThread: DirectThreadViewModel? = null,
     typingPreferences: TypingPreferenceViewModel? = null, ignores: IgnorePersonViewModel? = null,
+    messageTargets: MessageTargetViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by auth.state.collectAsStateWithLifecycle()
     val displayedSession = session
+    val targetState = messageTargets?.state?.collectAsStateWithLifecycle()?.value
+    val targetObscured = targetState?.request?.matches(session) == true
     val roomDrafts by conversations.drafts.collectAsStateWithLifecycle()
     val roomDraftCount = roomDrafts.values.count { it.matches(displayedSession) }
     val connection = realtime?.state?.collectAsStateWithLifecycle()?.value
@@ -288,7 +294,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         composable("conversation/{roomId}", arguments = listOf(navArgument("roomId") { type = NavType.LongType })) { destination ->
                             val id = destination.arguments?.getLong("roomId") ?: 0L
                             if (session.phase == SessionPhase.AUTHENTICATED && id > 0)
-                                ConversationScreen(conversations, id, auth::refresh, ignores)
+                                ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured)
                         }
                         composable(DIRECT_INBOX_ROUTE, arguments = directArguments()) { destination ->
                             val args = destination.arguments
@@ -301,7 +307,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             val peer = args?.getLong("peerId", -1) ?: -1
                             if (directThread != null && args != null && peer > 0 && peer != session.user?.id && matchesDirectScope(session,
                                 args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
-                                DirectThreadScreen(directThread, peer, auth::refresh)
+                                DirectThreadScreen(directThread, peer, auth::refresh, messageTargets, targetObscured)
                         }
                     }
                 }
@@ -309,6 +315,32 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         }
         }
         RoomDraftsDialog(conversations, session, openRoom)
+        if (messageTargets != null && targetState != null) {
+            val route = entry?.destination?.route
+            val args = entry?.arguments
+            val roomId = args?.getLong("roomId")?.takeIf { route == "conversation/{roomId}" && it > 0 }
+            val peerId = args?.getLong("peerId")?.takeIf { route == DIRECT_THREAD_ROUTE && it > 0 &&
+                matchesDirectScope(session, args.getLong("generation", -1), args.getLong("viewer", -1),
+                    args.getInt("version", -1), args.getString("server")) }
+            ReplyTargetHost(messageTargets, targetState, session, conversations, directThread, entry != null, roomId, peerId,
+                onAccept = { snapshot ->
+                    // Effects may outlive their rendered entry. Check the REAL current back-stack entry too.
+                    val actual = nav.currentBackStackEntry
+                    val actualArgs = actual?.arguments
+                    if (!snapshot.matches(auth.state.value)) false else when (snapshot) {
+                        is TargetSnapshot.RoomMessage -> actual?.destination?.route == "conversation/{roomId}" &&
+                            actualArgs?.getLong("roomId") == snapshot.context.room.id && conversations.adoptTarget(snapshot)
+                        is TargetSnapshot.DirectMessage -> actual?.destination?.route == DIRECT_THREAD_ROUTE && actualArgs != null &&
+                            actualArgs.getLong("peerId") == snapshot.context.peer.id && matchesDirectScope(auth.state.value,
+                                actualArgs.getLong("generation", -1), actualArgs.getLong("viewer", -1),
+                                actualArgs.getInt("version", -1), actualArgs.getString("server")) && directThread?.adoptTarget(snapshot) == true
+                        else -> false
+                    }
+                }, onDenied = { request, failure ->
+                    conversations.targetDenied(request, failure)
+                    directThread?.targetDenied(request, failure)
+                }, refreshSession = auth::refresh)
+        }
     }
 }
 

@@ -39,6 +39,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -46,6 +47,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -70,23 +72,31 @@ import io.github.thiesi.chitchat.feature.account.IgnorePersonViewModel
 import io.github.thiesi.chitchat.feature.account.IgnorePersonDialog
 import io.github.thiesi.chitchat.core.ui.canAcknowledgeVisibleRead
 import io.github.thiesi.chitchat.core.ui.isReadEdgeVisible
+import io.github.thiesi.chitchat.core.targets.MessageTarget
+import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
+import io.github.thiesi.chitchat.feature.targets.ReplyPreview
+import io.github.thiesi.chitchat.feature.targets.RequestedMessageMarker
 import kotlinx.coroutines.delay
 
 @Composable
 fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
-    ignores: IgnorePersonViewModel? = null) {
+    ignores: IgnorePersonViewModel? = null, targets: MessageTargetViewModel? = null, obscured: Boolean = false) {
     val session by model.session.collectAsStateWithLifecycle()
+    val displayedSession = session
     key(roomId, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
-        ConversationContent(model, roomId, onRefreshSession, ignores)
+        LaunchedEffect(roomId) { model.open(roomId, expected = displayedSession) }
+        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured)
     }
 }
 
 @Composable
 private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
-    ignores: IgnorePersonViewModel?) {
+    ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session // Freeze callback origin; delegated Flow values can change before recomposition.
+    if (!model.belongsTo(displayedSession)) return // No old-account frame while collectors catch up.
+    val focus = LocalFocusManager.current
     val savedDrafts by model.drafts.collectAsStateWithLifecycle()
     val draftCount = savedDrafts.values.count { it.matches(displayedSession) }
     val ignoreState = ignores?.state?.collectAsStateWithLifecycle()?.value
@@ -103,7 +113,6 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     var detailsOpen by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val timeline = rememberLazyListState()
-    LaunchedEffect(roomId) { model.open(roomId, expected = displayedSession) }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) {
         model.background(); ignores?.leaveRoom(session, roomId)
@@ -127,7 +136,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
         }
     }
-    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, detailsOpen, personDialog, state.draftsOpen, lifecycle,
+    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, detailsOpen, personDialog, state.draftsOpen, obscured, lifecycle,
         connection?.presencePhase, connection?.selectedRoomId, lifecycleState) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             snapshotFlow {
@@ -139,7 +148,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val edgeVisible = last != null && isReadEdgeVisible(last.offset, last.size,
                     timeline.layoutInfo.viewportStartOffset, timeline.layoutInfo.viewportEndOffset)
                 val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused,
-                    !pingsOpen && !detailsOpen && !personDialog && !state.draftsOpen)
+                    !pingsOpen && !detailsOpen && !personDialog && !state.draftsOpen && !obscured)
                 Triple(anchor, if (edgeVisible && readable) newest else null, !timeline.canScrollForward && readable)
             }.collect { (anchor, newest, edge) -> model.viewport(anchor, newest, edge) }
         }
@@ -158,7 +167,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 state.context?.let(model::presenceEligible) == true,
                 canEnter = ready && !state.busy && !state.stale, enter = { close(); model.enterRoom() })
             if (state.syncing) Text(stringResource(R.string.conversation_syncing))
-            if (state.anchorUnavailable) Text(stringResource(R.string.conversation_anchor_unavailable))
+            if (state.anchorUnavailable && state.messages.isNotEmpty()) Text(stringResource(R.string.conversation_anchor_unavailable))
             if (state.newerAvailable) TextButton(onClick = { close(); model.latest() }, enabled = ready && !state.busy) {
                 Text(stringResource(R.string.conversation_jump_new))
             }
@@ -230,14 +239,18 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             item(key = "history_header") {
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     if (state.busy && !state.sending) CircularProgressIndicator()
-                    if (state.loaded && state.messages.isEmpty()) Text(stringResource(R.string.conversation_empty))
+                    if (state.loaded && state.messages.isEmpty()) Text(stringResource(
+                        if (state.latestWindow) R.string.conversation_empty else R.string.conversation_empty_range))
                     if (state.mayHaveOlder) TextButton(onClick = model::older, enabled = !state.busy && !state.stale && !state.uncertainSend) {
                         Text(stringResource(R.string.conversation_older))
                     }
                 }
             }
             items(state.messages, key = { "message:${it.id}" }) { message ->
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("message:${message.id}")) {
+                val highlighted = state.highlightedMessageId == message.id
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("message:${message.id}")
+                    .then(if (highlighted) Modifier.semantics { selected = true } else Modifier)) {
+                    if (highlighted) RequestedMessageMarker(message.id)
                     if (state.unreadDividerId == message.id) {
                         HorizontalDivider(); Text(stringResource(R.string.conversation_unread), style = MaterialTheme.typography.labelMedium)
                     }
@@ -257,14 +270,18 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     }
                     if (ignored && message.id !in state.revealed) TextButton(onClick = { model.reveal(message.id) }) {
                         Text(stringResource(R.string.conversation_ignored))
-                    } else MessageContent(message, state.context)
+                    } else MessageContent(message, state.context, targets?.let { coordinator -> { id ->
+                        focus.clearFocus()
+                        coordinator.load(displayedSession, MessageTarget.RoomMessage(roomId, id))
+                        Unit
+                    } })
                 }
             }
             item(key = "history_end") { Spacer(Modifier.height(1.dp)) }
         }
         TypingStatus(model.typing, session, TypingTarget.Room(roomId),
-            viewing = state.loaded && !state.stale && state.context != null && !pingsOpen && !detailsOpen && !personDialog && !state.draftsOpen,
-            publishing = ready && !state.busy && model.canSend())
+            viewing = state.loaded && !state.stale && state.context != null && !pingsOpen && !detailsOpen && !personDialog && !state.draftsOpen && !obscured,
+            publishing = ready && !state.busy && !obscured && model.canSend())
         Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
             run {
@@ -320,17 +337,21 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
 }
 
 @Composable
-private fun MessageContent(message: RoomMessage, context: ConversationContext?) {
+private fun MessageContent(message: RoomMessage, context: ConversationContext?, onOpenReply: ((Long) -> Unit)? = null) {
     val sender = message.username ?: stringResource(R.string.conversation_unknown_user)
     when {
         message.deleted -> Text(stringResource(R.string.conversation_deleted), style = MaterialTheme.typography.bodyMedium)
         else -> {
             message.replyTo?.let { reply ->
                 val original = reply.message
-                Text(if (!reply.available || original == null || original.deleted)
-                stringResource(R.string.conversation_reply_unavailable)
-            else stringResource(R.string.conversation_reply, original.sender?.username ?: stringResource(R.string.conversation_unknown_user),
-                original.body.orEmpty().take(160)), style = MaterialTheme.typography.bodySmall) }
+                val text = when {
+                    !reply.available || original == null -> stringResource(R.string.conversation_reply_unavailable)
+                    original.deleted -> stringResource(R.string.conversation_deleted)
+                    else -> stringResource(R.string.conversation_reply, original.sender?.username ?: stringResource(R.string.conversation_unknown_user),
+                        original.body.orEmpty().take(160))
+                }
+                ReplyPreview(text, onOpenReply?.takeIf { reply.available && original != null }?.let { open -> { open(reply.messageId) } },
+                    Modifier.testTag("room_reply:${message.id}")) }
             if (message.type == "emote") Text(stringResource(R.string.conversation_emote, sender, message.body.orEmpty()))
             else message.body?.let { Text(it) }
             message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }

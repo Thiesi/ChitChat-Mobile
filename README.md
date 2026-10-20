@@ -10,6 +10,8 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 **Native authentication, export and foreground room/direct conversations are implemented.** M4b2 adds the native DM inbox, recipient search, privacy-aware conversation/composer, blocking and read-race attention. M4c1/2 add typing privacy and foreground member typing; M4c3b adds private room-ignore controls and policy reconciliation. Room switching retains scoped memory-only drafts and delivery-unknown guards, with explicit recovery/discard controls. Notification center, push and remaining parity are still pending. Live chat/typing/ignore acceptance is not established. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). Exact verification boundaries are linked from the milestone plan.
 
+Room and DM reply previews can open the exact original as a marked historical window in the normal pane, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Reply composition and general notification/search routing remain pending; see [native reply-target scope and verification](docs/milestones/M4c4b2-native-reply-targets.md).
+
 ## Engineering documents
 
 M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native announcements. M3c3a/b add bounded canonical history and native room/directory/presence consumers. An open event connection does not prove current history; stale/gap/retry states remain explicit. See actual checks and acceptance limits below.
@@ -34,8 +36,9 @@ M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native 
 - [Native room-ignore controls and verification](docs/milestones/M4c3b-native-ignore.md)
 - [Room-switch draft retention and explicit recovery](docs/milestones/room-draft-retention.md)
 - [Notification HTTP/native-route prerequisite; center UI still pending](docs/milestones/M4c4a-notification-contracts.md)
-- [Exact-message lookup/state prerequisite; native target consumer still pending](docs/milestones/M4c4b1-message-target-state.md)
+- [Exact-message lookup/state prerequisite](docs/milestones/M4c4b1-message-target-state.md)
 - [Historical-boundary/scoped-callback corrections and target-adoption state](docs/milestones/M4c4b2a-target-adoption-state.md)
+- [Native same-conversation reply-target navigation](docs/milestones/M4c4b2-native-reply-targets.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)

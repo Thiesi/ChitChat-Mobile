@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.*
@@ -45,6 +46,10 @@ import io.github.thiesi.chitchat.core.typing.hasTypingContent
 import io.github.thiesi.chitchat.feature.realtime.TypingStatus
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
+import io.github.thiesi.chitchat.core.targets.MessageTarget
+import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
+import io.github.thiesi.chitchat.feature.targets.ReplyPreview
+import io.github.thiesi.chitchat.feature.targets.RequestedMessageMarker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -129,115 +134,126 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
 }
 
 @Composable
-fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSession: () -> Unit) {
+fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSession: () -> Unit,
+    targets: MessageTargetViewModel? = null, obscured: Boolean = false) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     val connection = model.realtime?.state?.collectAsStateWithLifecycle()?.value?.takeIf { it.generation == session.generation }
     key(peer, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
         val state by model.state.collectAsStateWithLifecycle()
-        val attention by model.attention.collectAsStateWithLifecycle()
-        val now = rememberSessionNow(session.retryAtMillis)
-        val ready = sessionReady(session, now)
-        val timeline = rememberLazyListState()
-        var blockConfirm by remember { mutableStateOf(false) }
         LaunchedEffect(peer) { model.open(peer, displayedSession) }
         DirectLifecycle(model::foreground, model::background, model::invalidate)
-        LaunchedEffect(state.scrollRequest) {
-            if (state.scrollRequest > 0 && state.messages.isNotEmpty()) timeline.scrollToItem(state.messages.size + 1)
-        }
-        LaunchedEffect(state.anchor) { state.anchor?.let { anchor ->
-            val index = state.messages.indexOfFirst { it.id == anchor.id }
-            if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
-        } }
-        val lifecycle = LocalLifecycleOwner.current.lifecycle
-        val lifecycleState by lifecycle.currentStateAsState()
-        val window = LocalWindowInfo.current
-        LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, lifecycle, lifecycleState) {
-            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                snapshotFlow {
-                    val info = timeline.layoutInfo
-                    val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused)
-                    val visible = info.visibleItemsInfo.filter { it.offset < info.viewportEndOffset && it.offset + it.size > info.viewportStartOffset }
-                    val first = visible.firstOrNull { (it.key as? String)?.startsWith("direct:") == true }
-                    val anchor = first?.let { DirectAnchor((it.key as String).substringAfter(':').toLong(), -it.offset) }
-                    val newest = state.messages.lastOrNull()?.id
-                    val last = visible.firstOrNull { it.key == "direct:$newest" }
-                    val incoming = visible.mapNotNull { (it.key as? String)?.removePrefix("direct:")?.toLongOrNull() }
-                        .filter { id -> state.messages.any { it.id == id && !it.outgoing } }.toSet()
-                    DirectViewport(anchor, incoming.takeIf { readable }.orEmpty(),
-                        newest.takeIf { readable && last != null && isReadEdgeVisible(last.offset, last.size, info.viewportStartOffset, info.viewportEndOffset) },
-                        readable && !timeline.canScrollForward)
-                }.distinctUntilChanged().collect { model.viewport(it.anchor, it.incoming, it.newest, it.edge) }
+        if (model.belongsTo(displayedSession)) {
+            val focus = LocalFocusManager.current
+            val attention by model.attention.collectAsStateWithLifecycle()
+            val now = rememberSessionNow(session.retryAtMillis)
+            val ready = sessionReady(session, now)
+            val timeline = rememberLazyListState()
+            var blockConfirm by remember { mutableStateOf(false) }
+            LaunchedEffect(state.scrollRequest) {
+                if (state.scrollRequest > 0 && state.messages.isNotEmpty()) timeline.scrollToItem(state.messages.size + 1)
             }
-        }
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            val compact = maxHeight < 240.dp
-            val headerLimit = maxHeight * 0.3f
-            val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
-            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (!compact) Column(Modifier.fillMaxWidth().heightIn(max = headerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-                    SessionNotice(session, now, onRefreshSession)
-                    Text(state.context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleLarge)
-                    state.context?.let { Text(stringResource(R.string.dm_privacy_short, it.privacy.direct.retention), style = MaterialTheme.typography.bodySmall) }
-                    ThreadFeedback(model, state, attention[peer], ready)
+            LaunchedEffect(state.anchor) { state.anchor?.let { anchor ->
+                val index = state.messages.indexOfFirst { it.id == anchor.id }
+                if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
+            } }
+            val lifecycle = LocalLifecycleOwner.current.lifecycle
+            val lifecycleState by lifecycle.currentStateAsState()
+            val window = LocalWindowInfo.current
+            LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, obscured, lifecycle, lifecycleState) {
+                lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    snapshotFlow {
+                        val info = timeline.layoutInfo
+                        val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused, !obscured)
+                        val visible = info.visibleItemsInfo.filter { it.offset < info.viewportEndOffset && it.offset + it.size > info.viewportStartOffset }
+                        val first = visible.firstOrNull { (it.key as? String)?.startsWith("direct:") == true }
+                        val anchor = first?.let { DirectAnchor((it.key as String).substringAfter(':').toLong(), -it.offset) }
+                        val newest = state.messages.lastOrNull()?.id
+                        val last = visible.firstOrNull { it.key == "direct:$newest" }
+                        val incoming = visible.mapNotNull { (it.key as? String)?.removePrefix("direct:")?.toLongOrNull() }
+                            .filter { id -> state.messages.any { it.id == id && !it.outgoing } }.toSet()
+                        DirectViewport(anchor, incoming.takeIf { readable }.orEmpty(),
+                            newest.takeIf { readable && last != null && isReadEdgeVisible(last.offset, last.size, info.viewportStartOffset, info.viewportEndOffset) },
+                            readable && !timeline.canScrollForward)
+                    }.distinctUntilChanged().collect { model.viewport(it.anchor, it.incoming, it.newest, it.edge) }
                 }
-                LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("dm_timeline"), timeline,
-                    contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    item("older") { if (state.mayHaveOlder) TextButton(onClick = model::older, enabled = !state.busy && !state.stale) {
-                        Text(stringResource(R.string.conversation_older))
-                    } }
-                    if (state.loaded && state.messages.isEmpty()) item("empty") {
-                        Text(stringResource(when {
-                            !state.latestWindow || state.newerAvailable -> R.string.dm_empty_range
-                            state.mayHaveOlder -> R.string.dm_empty_page
-                            else -> R.string.dm_empty
-                        }))
+            }
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val compact = maxHeight < 240.dp
+                val headerLimit = maxHeight * 0.3f
+                val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (!compact) Column(Modifier.fillMaxWidth().heightIn(max = headerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+                        SessionNotice(session, now, onRefreshSession)
+                        Text(state.context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleLarge)
+                        state.context?.let { Text(stringResource(R.string.dm_privacy_short, it.privacy.direct.retention), style = MaterialTheme.typography.bodySmall) }
+                        ThreadFeedback(model, state, attention[peer], ready)
                     }
-                    items(state.messages, key = { "direct:${it.id}" }) { message ->
-                        Column(Modifier.fillMaxWidth().testTag("direct:${message.id}")) {
-                            if (message.id == state.unreadDividerId) Text(stringResource(R.string.dm_new_divider), style = MaterialTheme.typography.labelMedium)
-                            DirectMessageRow(message, state.context)
+                    LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("dm_timeline"), timeline,
+                        contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        item("older") { if (state.mayHaveOlder) TextButton(onClick = model::older, enabled = !state.busy && !state.stale) {
+                            Text(stringResource(R.string.conversation_older))
+                        } }
+                        if (state.loaded && state.messages.isEmpty()) item("empty") {
+                            Text(stringResource(when {
+                                !state.latestWindow || state.newerAvailable -> R.string.dm_empty_range
+                                state.mayHaveOlder -> R.string.dm_empty_page
+                                else -> R.string.dm_empty
+                            }))
                         }
-                    }
-                    item("end") { Spacer(Modifier.height(1.dp)) }
-                }
-                TypingStatus(model.typing, session, TypingTarget.Direct(peer),
-                    viewing = state.loaded && !state.stale && !blockConfirm && state.context?.relationship?.messagingAvailable == true,
-                    publishing = ready && model.canSend())
-                Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                    run {
-                        val context = state.context
-                        DirectPrivacyNotice(context?.privacy, R.string.dm_details, compact = true,
-                            needsAttention = state.stale || state.error != null || state.validation != null || state.newerAvailable ||
-                                state.uncertainSend || state.uncertainRead || state.readError != null || state.uncertainBlock ||
-                                attention[peer] != null || state.draftLimit || !model.canEditDraft() ||
-                                context?.relationship?.messagingAvailable == false || context?.mutedEverywhere != null || !ready ||
-                                connection?.let { it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null } } == true) { dismiss ->
-                            if (connection != null)
-                                RealtimeStatus(connection, model.realtime::retry, model.realtime::dismissBroadcast, roomId = null)
-                            Text(context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleMedium)
-                            SessionNotice(session, now, onRefreshSession)
-                            ThreadFeedback(model, state, attention[peer], ready, true, dismiss)
-                            if (context != null) TextButton(onClick = { dismiss(); blockConfirm = true }, enabled = ready && !state.busy && !state.uncertainBlock) {
-                                Text(stringResource(if (context.relationship.blockedByMe) R.string.dm_unblock else R.string.dm_block))
+                        items(state.messages, key = { "direct:${it.id}" }) { message ->
+                            val highlighted = state.highlightedMessageId == message.id
+                            Column(Modifier.fillMaxWidth().testTag("direct:${message.id}")
+                                .then(if (highlighted) Modifier.semantics { selected = true } else Modifier)) {
+                                if (highlighted) RequestedMessageMarker(message.id)
+                                if (message.id == state.unreadDividerId) Text(stringResource(R.string.dm_new_divider), style = MaterialTheme.typography.labelMedium)
+                                DirectMessageRow(message, state.context, targets?.let { coordinator -> { id ->
+                                    focus.clearFocus()
+                                    coordinator.load(displayedSession, MessageTarget.DirectMessage(peer, id))
+                                    Unit
+                                } })
                             }
                         }
+                        item("end") { Spacer(Modifier.height(1.dp)) }
                     }
-                    MessageInput(state.draft, { value ->
-                        if (model.updateDraft(displayedSession, peer, value))
-                            model.typing?.input(displayedSession, TypingTarget.Direct(peer), hasTypingContent(value)) }, !state.sending && model.canEditDraft(),
-                        stringResource(R.string.dm_message), compact, Modifier.weight(1f).testTag("dm_composer"))
-                    Button(onClick = { model.send(displayedSession, peer) }, enabled = ready && model.canSend(), modifier = Modifier.testTag("dm_send")) { Text(stringResource(R.string.dm_send)) }
+                    TypingStatus(model.typing, session, TypingTarget.Direct(peer),
+                        viewing = state.loaded && !state.stale && !blockConfirm && !obscured && state.context?.relationship?.messagingAvailable == true,
+                        publishing = ready && !obscured && model.canSend())
+                    Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 12.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                        run {
+                            val context = state.context
+                            DirectPrivacyNotice(context?.privacy, R.string.dm_details, compact = true,
+                                needsAttention = state.stale || state.error != null || state.validation != null || state.newerAvailable ||
+                                    state.uncertainSend || state.uncertainRead || state.readError != null || state.uncertainBlock ||
+                                    attention[peer] != null || state.draftLimit || !model.canEditDraft() ||
+                                    context?.relationship?.messagingAvailable == false || context?.mutedEverywhere != null || !ready ||
+                                    connection?.let { it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null } } == true) { dismiss ->
+                                if (connection != null)
+                                    RealtimeStatus(connection, model.realtime::retry, model.realtime::dismissBroadcast, roomId = null)
+                                Text(context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleMedium)
+                                SessionNotice(session, now, onRefreshSession)
+                                ThreadFeedback(model, state, attention[peer], ready, true, dismiss)
+                                if (context != null) TextButton(onClick = { dismiss(); blockConfirm = true }, enabled = ready && !state.busy && !state.uncertainBlock) {
+                                    Text(stringResource(if (context.relationship.blockedByMe) R.string.dm_unblock else R.string.dm_block))
+                                }
+                            }
+                        }
+                        MessageInput(state.draft, { value ->
+                            if (model.updateDraft(displayedSession, peer, value))
+                                model.typing?.input(displayedSession, TypingTarget.Direct(peer), hasTypingContent(value)) }, !state.sending && model.canEditDraft(),
+                            stringResource(R.string.dm_message), compact, Modifier.weight(1f).testTag("dm_composer"))
+                        Button(onClick = { model.send(displayedSession, peer) }, enabled = ready && model.canSend(), modifier = Modifier.testTag("dm_send")) { Text(stringResource(R.string.dm_send)) }
+                    }
                 }
             }
-        }
-        if (blockConfirm && state.context != null) {
-            val blocked = state.context!!.relationship.blockedByMe
-            AlertDialog(onDismissRequest = { blockConfirm = false }, title = { Text(stringResource(if (blocked) R.string.dm_unblock else R.string.dm_block)) },
-                text = { Text(stringResource(R.string.dm_block_help)) },
-                confirmButton = { TextButton(onClick = { blockConfirm = false; model.setBlocked(displayedSession, peer, !blocked) }, Modifier.testTag("dm_confirm_block")) { Text(stringResource(if (blocked) R.string.dm_unblock else R.string.dm_block)) } },
-                dismissButton = { TextButton(onClick = { blockConfirm = false }) { Text(stringResource(R.string.cancel)) } })
+            if (blockConfirm && state.context != null) {
+                val blocked = state.context!!.relationship.blockedByMe
+                AlertDialog(onDismissRequest = { blockConfirm = false }, title = { Text(stringResource(if (blocked) R.string.dm_unblock else R.string.dm_block)) },
+                    text = { Text(stringResource(R.string.dm_block_help)) },
+                    confirmButton = { TextButton(onClick = { blockConfirm = false; model.setBlocked(displayedSession, peer, !blocked) }, Modifier.testTag("dm_confirm_block")) { Text(stringResource(if (blocked) R.string.dm_unblock else R.string.dm_block)) } },
+                    dismissButton = { TextButton(onClick = { blockConfirm = false }) { Text(stringResource(R.string.cancel)) } })
+            }
         }
     }
 }
@@ -277,7 +293,7 @@ private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadStat
 }
 
 @Composable
-private fun DirectMessageRow(message: DirectMessage, context: DirectContext?) {
+private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, onOpenReply: ((Long) -> Unit)? = null) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (message.outgoing) Alignment.End else Alignment.Start) {
     val tint = if (message.outgoing) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
     Surface(Modifier.widthIn(max = 560.dp), shape = MaterialTheme.shapes.medium,
@@ -287,9 +303,14 @@ private fun DirectMessageRow(message: DirectMessage, context: DirectContext?) {
             messageTime(message.createdAt, context?.display)), style = MaterialTheme.typography.labelMedium)
         if (message.deleted) Text(stringResource(R.string.conversation_deleted)) else {
             message.replyTo?.let { reply ->
-                Text(if (!reply.available || reply.message?.deleted != false) stringResource(R.string.conversation_reply_unavailable)
-                    else stringResource(R.string.conversation_reply, reply.message.sender.username.orEmpty(), reply.message.body.take(160)),
-                    style = MaterialTheme.typography.bodySmall)
+                val original = reply.message
+                val text = when {
+                    !reply.available || original == null -> stringResource(R.string.conversation_reply_unavailable)
+                    original.deleted -> stringResource(R.string.conversation_deleted)
+                    else -> stringResource(R.string.conversation_reply, original.sender.username.orEmpty(), original.body.take(160))
+                }
+                ReplyPreview(text, onOpenReply?.takeIf { reply.available && reply.message != null }?.let { open -> { open(reply.messageId) } },
+                    Modifier.testTag("direct_reply:${message.id}"))
             }
             SelectionContainer { message.body?.let { Text(it) } }
             message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }

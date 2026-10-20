@@ -153,6 +153,7 @@
     <string name="conversation_syncing">Updating conversation…</string>
     <string name="rooms_syncing">Updating rooms…</string>
     <string name="conversation_anchor_unavailable">Your previous position was removed from retained history. Showing the nearest available message.</string>
+    <string name="conversation_empty_range">No messages remain in this range. Jump to latest to check for newer messages.</string>
     <string name="conversation_jump_new">New messages available — jump to latest</string>
     <string name="conversation_range_unavailable">This history range could not be synchronized within the app’s bounded window. Your position and draft were kept. Refresh to retry or jump to the latest messages.</string>
     <string name="presence_reading_only">Reading without active room presence.</string>
@@ -208,4 +209,14 @@
     <string name="typing_one">%1$s is typing…</string>
     <string name="typing_two">%1$s and %2$s are typing…</string>
     <string name="typing_several">Several people are typing…</string>
+    <string name="message_target_title">Original message</string>
+    <string name="message_target_open_quote">Open original message</string>
+    <string name="message_target_marker">Requested message</string>
+    <string name="message_target_loading">Loading the original message…</string>
+    <string name="message_target_unavailable">The original message is no longer available, or you do not have access. Your draft is kept.</string>
+    <string name="message_target_error">Could not load the original message. Check your connection and try again. Your draft is kept.</string>
+    <string name="message_target_incompatible">This server did not provide the information required to open the original message safely.</string>
+    <string name="message_target_session">Refresh the session before opening this message. Your draft is kept.</string>
+    <string name="message_target_waiting">Waiting for the current conversation operation to finish…</string>
+    <string name="message_target_rate">The server asked us to wait before retrying. Your draft is kept.</string>
 </resources>

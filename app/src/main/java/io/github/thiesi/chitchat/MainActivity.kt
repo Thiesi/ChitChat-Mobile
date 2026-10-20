@@ -17,6 +17,7 @@ import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
 import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
 import io.github.thiesi.chitchat.feature.direct.DirectInboxViewModel
 import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
+import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,7 +42,9 @@ class MainActivity : ComponentActivity() {
             val directThread: DirectThreadViewModel = viewModel(factory = DirectThreadViewModel.factory(
                 (application as ChitChatApplication).directMessages, (application as ChitChatApplication).realtime,
                 (application as ChitChatApplication).typing))
-            ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread,
+            val targets: MessageTargetViewModel = viewModel(factory = MessageTargetViewModel.factory(
+                (application as ChitChatApplication).messageTargets))
+            ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores, onThemeChanged = { dark ->
                 enableEdgeToEdge(
                     statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
