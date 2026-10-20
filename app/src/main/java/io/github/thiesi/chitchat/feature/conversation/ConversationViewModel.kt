@@ -44,6 +44,7 @@ data class ConversationUiState(
     val revealed: Set<Long> = emptySet(), val notice: String? = null,
     val syncing: Boolean = false, val syncError: ApiFailure? = null,
     val newerAvailable: Boolean = false, val anchorUnavailable: Boolean = false,
+    val draftsOpen: Boolean = false, val draftLimit: Boolean = false,
 ) { override fun toString() = "ConversationUiState" }
 
 class ConversationViewModel(private val operations: ConversationOperations,
@@ -52,6 +53,8 @@ class ConversationViewModel(private val operations: ConversationOperations,
     val session = operations.session
     private val mutable = MutableStateFlow(ConversationUiState())
     val state = mutable.asStateFlow()
+    private val savedDrafts = MutableStateFlow<Map<Long, RoomDraft>>(emptyMap())
+    val drafts = savedDrafts.asStateFlow()
     private var identity = session.value.identity()
     private var sequence = 0L
     private var job: Job? = null
@@ -73,6 +76,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         if (current.identity() != identity) {
             retire(); identity = current.identity(); dividerEstablished = false
             mutable.value = ConversationUiState()
+            savedDrafts.value = emptyMap()
         } else {
             val value = mutable.value
             val context = value.context
@@ -87,28 +91,34 @@ class ConversationViewModel(private val operations: ConversationOperations,
         }
     } } }
 
-    fun open(roomId: Long, interacted: Boolean = false) {
-        if (roomId <= 0 || session.value.identity() == null) return
+    fun open(roomId: Long, interacted: Boolean = false, expected: SessionState = session.value) {
+        val owner = expected.identity() ?: return
+        if (roomId <= 0 || owner != session.value.identity()) return
+        if (owner != identity) {
+            retire(); identity = owner; savedDrafts.value = emptyMap(); mutable.value = ConversationUiState()
+        }
         if (mutable.value.roomId != roomId) {
-            retire(); dividerEstablished = false
+            val wasForeground = foreground
+            background(); foreground = wasForeground; dividerEstablished = false
             realtime?.selectRoom(null, false)
-            mutable.value = ConversationUiState(roomId = roomId)
+            val memo = savedDrafts.value[roomId]?.takeIf { it.matches(expected) }
+            mutable.value = ConversationUiState(roomId = roomId, draft = memo?.body.orEmpty(), uncertainSend = memo?.uncertain == true)
         }
         if (interacted) deliberateSelection = true
-        if (!mutable.value.loaded && !mutable.value.busy) refresh()
+        if (!mutable.value.loaded && !mutable.value.busy) loadEntry()
         else if (interacted) invalidate()
     }
 
     fun foreground() {
         foreground = true
         if (mutable.value.loaded && realtime != null) invalidate()
-        else if (mutable.value.roomId != null && !mutable.value.busy) refresh()
+        else if (mutable.value.roomId != null && !mutable.value.busy) loadEntry()
     }
     fun background() {
         foreground = false
         val anchor = viewport
         cancelRequest()
-        mutable.value = mutable.value.copy(revealed = emptySet(), atLatest = false, anchor = anchor)
+        mutable.value = mutable.value.copy(revealed = emptySet(), atLatest = false, anchor = anchor, draftsOpen = false)
     }
     fun cancel() { background(); realtime?.selectRoom(null, false) }
 
@@ -117,12 +127,47 @@ class ConversationViewModel(private val operations: ConversationOperations,
         retire()
         mutable.value = mutable.value.copy(busy = false, sending = false, stale = true,
             uncertainSend = uncertain, reconciledAfterUncertain = false, notice = "cancelled")
+        rememberDraft()
     }
 
-    fun updateDraft(value: String) { if (!mutable.value.sending) mutable.value = mutable.value.copy(draft = value, validation = null) }
+    fun canEditDraft() = mutable.value.roomId in savedDrafts.value || savedDrafts.value.size < 100
+    fun updateDraft(value: String) { updateDraft(session.value, mutable.value.roomId, value) }
+    fun updateDraft(expected: SessionState, roomId: Long?, value: String): Boolean {
+        if (roomId == null || roomId != mutable.value.roomId || expected.identity() == null ||
+            expected.identity() != identity || expected.identity() != session.value.identity() || mutable.value.sending) return false
+        if (!canEditDraft() && value.isNotEmpty()) { mutable.value = mutable.value.copy(draftLimit = true); return false }
+        mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false)
+        rememberDraft(); return true
+    }
+    fun showDrafts(expected: SessionState = session.value) {
+        if (expected.identity() != null && expected.identity() == identity && expected.identity() == session.value.identity())
+            mutable.value = mutable.value.copy(draftsOpen = true)
+    }
+    fun hideDrafts(expected: SessionState = session.value) {
+        if (expected.identity() == identity && expected.identity() == session.value.identity())
+            mutable.value = mutable.value.copy(draftsOpen = false)
+    }
+    fun discardDraft(draft: RoomDraft) {
+        if (!draft.matches(session.value) || mutable.value.sending || savedDrafts.value[draft.roomId] !== draft) return
+        savedDrafts.value = savedDrafts.value - draft.roomId
+        mutable.value = if (mutable.value.roomId == draft.roomId) mutable.value.copy(draft = "", uncertainSend = false,
+            reconciledAfterUncertain = false, draftLimit = false, validation = null) else mutable.value.copy(draftLimit = false)
+    }
+    private fun rememberDraft() {
+        if (identity == null || identity != session.value.identity()) return
+        val value = mutable.value; val roomId = value.roomId ?: return
+        val owner = session.value.roomDraftAccount() ?: return
+        val previous = savedDrafts.value[roomId]
+        val name = value.context?.room?.name ?: previous?.roomName
+        if (previous != null && previous.matches(session.value) && previous.body == value.draft &&
+            previous.uncertain == value.uncertainSend && previous.roomName == name) return
+        savedDrafts.value = if (value.draft.isEmpty() && !value.uncertainSend) savedDrafts.value - roomId else
+            savedDrafts.value + (roomId to RoomDraft(owner, roomId, name, value.draft, value.uncertainSend))
+    }
     fun reveal(id: Long) { mutable.value = mutable.value.copy(revealed = mutable.value.revealed + id) }
-    fun refresh() { request { current -> reload(current) } }
-    fun latest() { request { current -> reload(current, forceLatest = true) } }
+    private fun loadEntry() { request { current -> reload(current) } }
+    fun refresh() { request { current -> reload(current, explicitReconciliation = true) } }
+    fun latest() { request { current -> reload(current, forceLatest = true, explicitReconciliation = true) } }
 
     /** Invalidation is queued while a user operation runs; it never cancels or replays a POST. */
     fun invalidate() {
@@ -176,8 +221,10 @@ class ConversationViewModel(private val operations: ConversationOperations,
     }
 
     fun acknowledgeDuplicateRisk() {
-        if (mutable.value.uncertainSend && mutable.value.reconciledAfterUncertain && !mutable.value.busy)
+        if (mutable.value.uncertainSend && mutable.value.reconciledAfterUncertain && !mutable.value.busy) {
             mutable.value = mutable.value.copy(uncertainSend = false, reconciledAfterUncertain = false, notice = "duplicate_risk")
+            rememberDraft()
+        }
     }
 
     fun send() {
@@ -213,7 +260,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         val value = mutable.value
         val current = session.value
         val context = value.context ?: return false
-        return ready(current) && !value.stale && !value.uncertainSend && activePresence() && context.room.isMember &&
+        return ready(current) && canEditDraft() && !value.stale && !value.uncertainSend && activePresence() && context.room.isMember &&
             (!current.user!!.guest || context.room.guestAccess == "write") && context.mute == null
     }
 
@@ -258,7 +305,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         viewport(viewport, visibleNewest, mutable.value.atLatest)
     }
 
-    private suspend fun reload(current: () -> Unit, forceLatest: Boolean = false) {
+    private suspend fun reload(current: () -> Unit, forceLatest: Boolean = false, explicitReconciliation: Boolean = false) {
         val revision = requestedSync
         val roomId = checkNotNull(mutable.value.roomId)
         val snapshotContext = operations.context(roomId)
@@ -283,7 +330,8 @@ class ConversationViewModel(private val operations: ConversationOperations,
             scrollRequest = value.scrollRequest + if (automatic || reset) 1 else 0,
             anchor = if (!automatic && !reset) anchor?.copy(revision = sequence) else null, unreadDividerId = divider,
             readCursor = maxOf(value.readCursor, context.room.lastReadMessageId ?: 0), readError = null,
-            reconciledAfterUncertain = value.uncertainSend, notice = if (reset) "latest_reset" else value.notice,
+            reconciledAfterUncertain = value.uncertainSend && (value.reconciledAfterUncertain || explicitReconciliation),
+            notice = if (reset) "latest_reset" else value.notice,
             syncError = null, newerAvailable = false, anchorUnavailable = false)
         appliedSync = maxOf(appliedSync, revision); attemptedSync = maxOf(attemptedSync, revision)
         selectPresence()
@@ -416,6 +464,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
             } finally {
                 if (isCurrent(expected, attempt, roomId)) {
                     postInFlight = false; mutable.value = mutable.value.copy(busy = false, sending = false)
+                    rememberDraft()
                     drainSync()
                 }
             }
@@ -431,6 +480,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
             unreadDividerId = null, olderCursor = null, mayHaveOlder = false, anchor = null, readCursor = 0,
             uncertainSend = uncertain, reconciledAfterUncertain = false)
         dividerEstablished = false
+        rememberDraft()
     }
     /** A delayed history GET must not restore policy captured before an acknowledged local change. */
     private fun currentPolicy(context: ConversationContext) = session.value.chatPolicy

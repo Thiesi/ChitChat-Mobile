@@ -3,7 +3,7 @@
     <string name="rooms_open_conversation">Open conversation</string>
     <string name="rooms_title">Rooms</string>
     <string name="rooms_presence_disclosure">Joining is lasting membership, not active presence. Browsing these details does not show you as active in a room.</string>
-    <string name="rooms_slice_disclosure">Open a room conversation to read and send messages. Live updates and active presence are not implemented yet.</string>
+    <string name="rooms_slice_disclosure">Open a room conversation to read and send messages. Live updates require a connection; active room presence can expire after inactivity.</string>
     <string name="rooms_refresh">Refresh rooms</string>
     <string name="rooms_reconcile">Check current room state</string>
     <string name="rooms_stale">Room information may be out of date. Refresh before changing membership or creating a room.</string>

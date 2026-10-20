@@ -86,6 +86,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     ignores: IgnorePersonViewModel?) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
+    val displayedSession = session // Freeze callback origin; delegated Flow values can change before recomposition.
+    val savedDrafts by model.drafts.collectAsStateWithLifecycle()
+    val draftCount = savedDrafts.values.count { it.matches(displayedSession) }
     val ignoreState = ignores?.state?.collectAsStateWithLifecycle()?.value
     val personDialog = ignoreState?.target?.let { it.roomId == roomId && it.matches(session) } == true
     val ignoredIds = session.chatPolicy?.ignoredUserIds ?: state.context?.policy?.ignoredUserIds.orEmpty()
@@ -100,7 +103,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     var detailsOpen by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val timeline = rememberLazyListState()
-    LaunchedEffect(roomId) { model.open(roomId) }
+    LaunchedEffect(roomId) { model.open(roomId, expected = displayedSession) }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) {
         model.background(); ignores?.leaveRoom(session, roomId)
@@ -124,7 +127,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
         }
     }
-    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, detailsOpen, personDialog, lifecycle,
+    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, detailsOpen, personDialog, state.draftsOpen, lifecycle,
         connection?.presencePhase, connection?.selectedRoomId, lifecycleState) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             snapshotFlow {
@@ -135,7 +138,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val last = visible.firstOrNull { it.key == "message:$newest" }
                 val edgeVisible = last != null && isReadEdgeVisible(last.offset, last.size,
                     timeline.layoutInfo.viewportStartOffset, timeline.layoutInfo.viewportEndOffset)
-                val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused, !pingsOpen && !detailsOpen && !personDialog)
+                val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused,
+                    !pingsOpen && !detailsOpen && !personDialog && !state.draftsOpen)
                 Triple(anchor, if (edgeVisible && readable) newest else null, !timeline.canScrollForward && readable)
             }.collect { (anchor, newest, edge) -> model.viewport(anchor, newest, edge) }
         }
@@ -166,6 +170,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 }
             }
             if (now < session.retryAtMillis) Text(stringResource(R.string.rate_limited))
+            if (state.draftLimit || !model.canEditDraft()) Text(stringResource(R.string.room_draft_limit))
+            if (draftCount > 0) TextButton(onClick = { close(); model.showDrafts(displayedSession) }) {
+                Text(stringResource(R.string.room_drafts_count, draftCount))
+            }
             state.error?.let { InlineError(conversationError(it)) }
             state.syncError?.let {
                 InlineError(if (it.code == "history_range_unavailable") stringResource(R.string.conversation_range_unavailable)
@@ -240,7 +248,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                         if (ignores != null && message.senderId != null && message.senderId != session.user?.id &&
                             session.user?.guest == false) {
                             val label = stringResource(R.string.ignore_author_actions, author)
-                            TextButton(onClick = { ignores.open(session, roomId, message.senderId, message.username) },
+                            TextButton(onClick = { ignores.open(displayedSession, roomId, message.senderId, message.username) },
                                 enabled = !state.busy && !session.busy,
                                 modifier = Modifier.testTag("room_author:${message.id}").semantics { contentDescription = label }) {
                                 Text(author, style = MaterialTheme.typography.labelMedium)
@@ -255,7 +263,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             item(key = "history_end") { Spacer(Modifier.height(1.dp)) }
         }
         TypingStatus(model.typing, session, TypingTarget.Room(roomId),
-            viewing = state.loaded && !state.stale && state.context != null && !pingsOpen && !detailsOpen && !personDialog,
+            viewing = state.loaded && !state.stale && state.context != null && !pingsOpen && !detailsOpen && !personDialog && !state.draftsOpen,
             publishing = ready && !state.busy && model.canSend())
         Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
@@ -275,8 +283,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     }) { Text("\u22ee") }
                 }
             }
-            MessageInput(state.draft, { value -> model.updateDraft(value)
-                model.typing?.input(session, TypingTarget.Room(roomId), hasTypingContent(value)) }, !state.sending,
+            MessageInput(state.draft, { value ->
+                if (model.updateDraft(displayedSession, roomId, value))
+                    model.typing?.input(displayedSession, TypingTarget.Room(roomId), hasTypingContent(value)) },
+                !state.sending && model.canEditDraft(),
                 stringResource(R.string.conversation_message), compact,
                 Modifier.weight(1f).testTag("conversation_composer"))
             Button(onClick = model::send, enabled = ready && !state.busy && model.canSend() && state.draft.isNotBlank(),
