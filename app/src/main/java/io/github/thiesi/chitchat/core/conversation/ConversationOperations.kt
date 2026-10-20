@@ -54,6 +54,8 @@ interface ConversationOperations {
     val session: StateFlow<SessionState>
     suspend fun context(roomId: Long): ConversationContext
     suspend fun history(roomId: Long, beforeId: Long? = null, limit: Int = 50): MessagePage
+    suspend fun window(roomId: Long, lowerInclusive: Long, upperInclusive: Long? = null): WindowSnapshot =
+        readCanonicalRoomWindow(roomId, lowerInclusive, upperInclusive) { before, limit -> history(roomId, before, limit) }
     suspend fun pings(roomId: Long): List<RoomPing>
     suspend fun send(roomId: Long, body: String): SendResult
     suspend fun read(roomId: Long, messageId: Long): Long

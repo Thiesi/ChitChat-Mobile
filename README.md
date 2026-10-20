@@ -24,6 +24,7 @@ M3c1's shared-session protocol foundation is merged. M3c2 adds foreground sessio
 - [Sensitive-action protocol foundation](docs/milestones/M2b2a-protocol-foundation.md)
 - [SSE/presence protocol foundation and pending foreground integration](docs/milestones/M3c1-realtime-protocol.md)
 - [Foreground session events, announcements and remaining room-consumer work](docs/milestones/M3c2-foreground-runtime.md)
+- [Bounded canonical-history prerequisite for the realtime room consumer](docs/milestones/M3c3a-canonical-history.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)
