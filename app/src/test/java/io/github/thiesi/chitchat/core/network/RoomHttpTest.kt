@@ -82,6 +82,24 @@ class RoomHttpTest {
         assertEquals(0, server.requestCount)
     }
 
+    @Test fun creationPreservesHttpErrorsBeforeCheckingSuccessful201WithoutReplay() = runTest {
+        val errors = listOf("unauthenticated" to 401, "forbidden" to 403, "csrf_failed" to 403,
+            "fixture_conflict" to 409, "fixture_validation" to 422, "rate_limited" to 429)
+        for ((code, status) in errors) {
+            server.enqueue(MockResponse.Builder().code(status).addHeader("Content-Type", "application/json")
+                .addHeader("Retry-After", "30").body("""{"error":{"code":"$code","message":"private fixture detail"}}""").build())
+            val failure = failure { api.createRoom(CreateRoom("general", "General", "", "public", 0, 0, "none"), csrf, 7) }
+            assertEquals(FailureKind.HTTP, failure.kind)
+            assertEquals(status, failure.status); assertEquals(code, failure.code)
+            assertEquals(30L, failure.retryAfterSeconds)
+            assertFalse(failure.toString().contains("private fixture detail"))
+            val request = server.takeRequest()
+            assertEquals("/api/v1/rooms/create.php", request.url.encodedPath)
+            assertEquals("POST", request.method); assertEquals(csrf, request.headers["X-CSRF-Token"])
+        }
+        assertEquals(errors.size, server.requestCount)
+    }
+
     @Test fun metadataSchemaFailsClosedWithoutReplayingMutations() = runTest {
         for (body in listOf(room(id = 0), room(id = 43), room().replace("\"member_role\":null,", ""),
             room().replace("\"visibility\":\"public\"", "\"visibility\":\"future\""))) {

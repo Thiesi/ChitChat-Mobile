@@ -620,6 +620,33 @@ class SessionRepositoryTest {
         assertEquals(requests, server.requestCount)
     }
 
+    @Test fun roomCreationCsrfFailureRequiresRefreshAndNeverReplaysPost() = runTest {
+        login()
+        val rooms = io.github.thiesi.chitchat.core.rooms.SessionRoomRepository(sessions)
+        val input = io.github.thiesi.chitchat.core.rooms.CreateRoom("general", "General", "", "public", 0, 0, "none")
+        server.enqueue(error("csrf_failed", 403))
+        try { rooms.create(input); fail("Expected CSRF refresh") } catch (failure: ApiFailure) {
+            assertEquals("csrf_failed", failure.code)
+        }
+        val requests = server.requestCount
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertTrue(sessions.state.value.refreshRequired)
+        try { rooms.create(input); fail("Expected guarded retry") } catch (_: ApiFailure) { }
+        assertEquals(requests, server.requestCount)
+    }
+
+    @Test fun roomCreationUnauthorizedResponseInvalidatesAndClearsSession() = runTest {
+        login()
+        val rooms = io.github.thiesi.chitchat.core.rooms.SessionRoomRepository(sessions)
+        server.enqueue(error("unauthenticated", 401))
+        try {
+            rooms.create(io.github.thiesi.chitchat.core.rooms.CreateRoom("general", "General", "", "public", 0, 0, "none"))
+            fail("Expected invalidation")
+        } catch (failure: ApiFailure) { assertEquals(401, failure.status) }
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+        assertNull(vault.saved)
+    }
+
     private class MemoryVault : SessionVault {
         var saved: SavedSession? = null
         var failWrites = false
