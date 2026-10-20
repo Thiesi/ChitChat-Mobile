@@ -4,6 +4,9 @@ import io.github.thiesi.chitchat.core.server.ServerAddress
 import io.github.thiesi.chitchat.core.session.OriginCookieJar
 import io.github.thiesi.chitchat.core.account.PersonalExport
 import io.github.thiesi.chitchat.core.account.VerificationMethods
+import io.github.thiesi.chitchat.core.rooms.CreateRoom
+import io.github.thiesi.chitchat.core.rooms.RoomInfo
+import io.github.thiesi.chitchat.core.rooms.validateRoomCreation
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.time.ZonedDateTime
@@ -123,6 +126,41 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
                 id == null || id.isString || id.longOrNull != userId) throw ApiFailure(FailureKind.INCOMPATIBLE)
             // Export only the documented object, not the transport envelope. No disk cache.
             PersonalExport(reply.export.toString().encodeToByteArray())
+        }
+    }
+
+    suspend fun rooms(): List<RoomInfo> {
+        val rooms = decode<RoomsReply>(request("rooms/list.php").require200()).rooms
+        rooms.forEach { requireValidRoom(it) }
+        if (rooms.map { it.id }.toSet().size != rooms.size) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        return rooms
+    }
+
+    suspend fun room(roomId: Long): RoomInfo {
+        require(roomId > 0)
+        return decode<RoomReply>(request("rooms/detail.php?room_id=$roomId").require200()).room
+            .also { requireValidRoom(it, roomId) }
+    }
+
+    suspend fun joinRoom(roomId: Long, csrf: String): RoomInfo {
+        require(roomId > 0)
+        return decode<RoomReply>(request("rooms/join.php", apiJson.encodeToString(RoomIdRequest(roomId)), csrf).require200()).room
+            .also { requireValidRoom(it, roomId); if (!it.isMember) throw ApiFailure(FailureKind.INCOMPATIBLE) }
+    }
+
+    suspend fun leaveRoom(roomId: Long, csrf: String) {
+        require(roomId > 0)
+        val reply = decode<RoomLeftReply>(request("rooms/leave.php", apiJson.encodeToString(RoomIdRequest(roomId)), csrf).require200())
+        if (reply.status != "left") throw ApiFailure(FailureKind.INCOMPATIBLE)
+    }
+
+    suspend fun createRoom(input: CreateRoom, csrf: String, userId: Long): RoomInfo {
+        validateRoomCreation(input)?.let { throw ApiFailure(FailureKind.HTTP, 400, it) }
+        val raw = request("rooms/create.php", apiJson.encodeToString(input.normalized()), csrf)
+        if (raw.status != 201) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        return decode<RoomReply>(raw).room.also {
+            requireValidRoom(it)
+            if (it.memberRole != "owner" || it.createdBy != userId) throw ApiFailure(FailureKind.INCOMPATIBLE)
         }
     }
 
