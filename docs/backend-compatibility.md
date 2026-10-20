@@ -20,6 +20,8 @@ Handle HTTP 400 validation, 401 invalidation, 403 `csrf_failed` or resource auth
 
 ## Conversation and media contracts
 
+[Room-draft retention](milestones/room-draft-retention.md) is entirely client-side; it adds no endpoint, idempotency key, event or send guarantee. Existing send timeouts/cancellation remain ambiguous across room navigation. A fresh automatic GET is not consent to retry: retain the unknown flag until explicit history reconciliation and a duplicate-risk choice, or explicit local discard. Discard cannot retract an accepted message.
+
 | Existing request | Actual payload/response implications | Source |
 |---|---|---|
 | `GET rooms/list.php`, `detail.php?room_id=42` | Joined role/invitation/room restrictions, unread and `last_read_message_id`; public read does not imply joined realtime | [rooms](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/docs/api/rooms.md) |

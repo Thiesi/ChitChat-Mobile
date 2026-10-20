@@ -186,6 +186,15 @@
     <string name="typing_saving">Saving typing preference…</string>
     <string name="typing_unconfirmed">The change was not confirmed and will not be retried automatically. Refresh before trying again.</string>
     <string name="ignore_author_actions">Room actions for %1$s</string>
+    <string name="room_drafts_title">Saved room drafts</string>
+    <string name="room_drafts_count">Saved room drafts (%1$d)</string>
+    <string name="room_drafts_scope">Drafts stay only in this app’s memory for this account and server. Signing out or closing the app process clears them. Discard removes local text only; it cannot retract a message already accepted by the server.</string>
+    <string name="room_drafts_empty">No saved room drafts.</string>
+    <string name="room_draft_room">Room #%1$d</string>
+    <string name="room_draft_open">Open room</string>
+    <string name="room_draft_discard">Discard draft</string>
+    <string name="room_draft_unknown">Delivery was not confirmed. Check the room history explicitly before choosing another send.</string>
+    <string name="room_draft_limit">There are 100 saved room drafts. Open Saved room drafts and discard one before composing in another room. Nothing was evicted.</string>
     <string name="ignore_scope">A private choice across rooms on this server. Their room messages collapse and their room mentions and pings stop notifying you. They are not told. Direct messages are unaffected; blocking is separate.</string>
     <string name="ignore_confirmed">Ignoring in rooms</string>
     <string name="ignore_not_ignored">Not ignoring in rooms</string>

@@ -1,6 +1,8 @@
 # Current status and limitations
 
-As of M4c3b native member room-ignore controls (live chat/typing/ignore acceptance pending), 2026-10-20:
+As of native room-draft recovery after M4c3b member room-ignore controls (live chat/typing/ignore acceptance pending), 2026-10-20:
+
+[Room drafts](milestones/room-draft-retention.md) are retained across room navigation in scoped VM memory, with a 100-entry cap, explicit manager/discard and preserved delivery-unknown guards. Signing out/account switching/process death clears them; this is intentionally not durable offline composition. Native fixture verification is not live delivery acceptance. Notification center/routing and push remain pending.
 
 [M4c3a](milestones/M4c3a-ignore-protocol.md) is the historical shared-session prerequisite. [M4c3b](milestones/M4c3b-native-ignore.md) adds native member controls, immediate room policy and canonical ping reconciliation; its current verification record is separate from live acceptance. Native guests remain pending.
 

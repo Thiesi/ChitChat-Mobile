@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.app
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -48,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -80,6 +82,8 @@ import io.github.thiesi.chitchat.feature.rooms.RoomsScreen
 import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
 import io.github.thiesi.chitchat.feature.conversation.ConversationScreen
 import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
+import io.github.thiesi.chitchat.feature.conversation.RoomDraftsDialog
+import io.github.thiesi.chitchat.feature.conversation.roomDraftAccount
 import io.github.thiesi.chitchat.feature.direct.DirectInboxViewModel
 import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import io.github.thiesi.chitchat.feature.direct.DirectInboxScreen
@@ -101,6 +105,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by auth.state.collectAsStateWithLifecycle()
+    val displayedSession = session
+    val roomDrafts by conversations.drafts.collectAsStateWithLifecycle()
+    val roomDraftCount = roomDrafts.values.count { it.matches(displayedSession) }
     val connection = realtime?.state?.collectAsStateWithLifecycle()?.value
     RealtimeConsumers(realtime, session, rooms, conversations, directInbox, directThread)
     LaunchedEffect(state.hasLoadedSettings, state.settings.server) {
@@ -124,9 +131,17 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         val focus = LocalFocusManager.current
         val openDirect: (Long?) -> Unit = { peer ->
             val actual = auth.state.value
-            if (actual.directIdentity() == session.directIdentity()) directRoute(actual, peer)?.let { route ->
+            if (actual.directIdentity() == displayedSession.directIdentity()) directRoute(actual, peer)?.let { route ->
                 focus.clearFocus()
                 nav.navigate(route) { launchSingleTop = true }
+            }
+        }
+        val openRoom: (Long) -> Unit = { id ->
+            val actual = auth.state.value
+            if (displayedSession.roomDraftAccount() != null && actual.roomDraftAccount() == displayedSession.roomDraftAccount() && id > 0) {
+                focus.clearFocus()
+                conversations.open(id, interacted = true, expected = displayedSession)
+                nav.navigate("conversation/$id") { launchSingleTop = true }
             }
         }
         val atHome = entry?.destination?.route.let { it == null || it == "home" }
@@ -262,9 +277,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             }
                         }
                         composable("rooms") {
-                            if (session.phase == SessionPhase.AUTHENTICATED) RoomsScreen(rooms, auth::refresh) { id ->
-                                conversations.open(id, interacted = true)
-                                nav.navigate("conversation/$id") { launchSingleTop = true }
+                            if (session.phase == SessionPhase.AUTHENTICATED) Column(Modifier.fillMaxSize()) {
+                                if (roomDraftCount > 0) TextButton(onClick = { conversations.showDrafts(displayedSession) },
+                                    modifier = Modifier.fillMaxWidth().testTag("room_directory_drafts")) {
+                                    Text(stringResource(R.string.room_drafts_count, roomDraftCount))
+                                }
+                                Box(Modifier.weight(1f)) { RoomsScreen(rooms, auth::refresh, openRoom) }
                             }
                         }
                         composable("conversation/{roomId}", arguments = listOf(navArgument("roomId") { type = NavType.LongType })) { destination ->
@@ -290,6 +308,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             }
         }
         }
+        RoomDraftsDialog(conversations, session, openRoom)
     }
 }
 
