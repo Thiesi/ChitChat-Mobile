@@ -47,6 +47,26 @@ class AuthJourneyTest {
         compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().performClick()
     }
 
+    @Test fun authenticatedRoomsNavigationReturnsToTheExistingAccountHome() {
+        content(); enterCredentials()
+        compose.onNodeWithText("Rooms").performScrollTo().performClick()
+        compose.onNodeWithText("No rooms are available to this account.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithText("Sign out").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun logoutWhileViewingRoomsRetiresTheProtectedDestination() {
+        content(); enterCredentials()
+        compose.onNodeWithText("Rooms").performScrollTo().performClick()
+        compose.onNodeWithText("No rooms are available to this account.").performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { auth.signOut() }
+        compose.onNodeWithText("Back to sign-in").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Back").assertDoesNotExist()
+        assertEquals(io.github.thiesi.chitchat.core.session.SessionPhase.SIGNED_OUT, sessions.state.value.phase)
+        compose.onNodeWithText("Back to sign-in").performClick()
+        compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun failedLoginClearsPasswordPreservesUsernameAndAllowsCorrection() {
         sessions.failNextLogin = true
         content()

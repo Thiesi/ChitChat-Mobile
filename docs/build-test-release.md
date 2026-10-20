@@ -4,6 +4,8 @@ Current status: M1/M2a/M2b1 merged; M2b2 implements shared step-up and native pe
 
 ## Toolchain setup
 
+M3a adds the [native room directory/membership/creation slice](milestones/M3a-room-directory.md). Its opt-in live case additionally GETs the authenticated room list and a visible room's details; provision at least one visible room for the dedicated account. It never joins/leaves/creates rooms, changes presence/reads or posts messages. Fixture/native tests and the remaining M3b/c chat/realtime acceptance are separate gates.
+
 Install Android Studio or Android command-line tools, **JDK17**, Android SDK platform **36** and an API26+ device/emulator. Accept the Android SDK licenses. AGP uses build-tools35.0.0 by default and can install it when licenses allow. Set `JAVA_HOME` and `ANDROID_HOME` to your own installation paths, or use Android Studio's SDK location/local `local.properties`. The wrapper downloads checksum-verified **Gradle8.13**. AGP8.13.2, Kotlin2.3.21 and Compose BOM2026.06.01 are pinned in `gradle/libs.versions.toml`; compile/target SDK36, minimum26. These are a deliberately compatible stable set, not a claim of newest-available versions. Review upgrades together and rerun all gates. Keep `local.properties`, SDK paths and signing keys out of Git.
 
 For the agent validation environment, the JDK, SDK, Gradle cache and emulator were downloaded under ignored `.tooling/` and configured only per shell. They are not checked in and do not exist in a fresh clone. No Firebase project or `google-services.json` is needed. Windows restricted-profile execution can prevent adb finding its user directory; local connected tests used the approved unsandboxed runner, not weakened application security.

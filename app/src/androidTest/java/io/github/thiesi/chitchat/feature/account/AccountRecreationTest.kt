@@ -10,7 +10,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
-import io.github.thiesi.chitchat.app.ChitChatApp
+import io.github.thiesi.chitchat.feature.account.TestChitChatApp as ChitChatApp
 import io.github.thiesi.chitchat.app.SettingsViewModel
 import io.github.thiesi.chitchat.core.account.VerificationMethods
 import io.github.thiesi.chitchat.core.server.AddressResult

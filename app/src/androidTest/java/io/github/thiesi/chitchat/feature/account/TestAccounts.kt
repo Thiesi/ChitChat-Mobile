@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import io.github.thiesi.chitchat.app.ChitChatApp
 import io.github.thiesi.chitchat.app.SettingsViewModel
+import io.github.thiesi.chitchat.app.EmptyRoomOperations
+import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
 import io.github.thiesi.chitchat.core.account.AccountAccess
 import io.github.thiesi.chitchat.core.account.AccountOperations
 import io.github.thiesi.chitchat.core.account.PersonalExport
@@ -56,7 +58,8 @@ internal class TestAccounts(override val session: StateFlow<SessionState>) : Acc
 }
 
 @Composable
-internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel) {
-    val account = remember(auth) { AccountViewModel(TestAccounts(auth.state)) }
-    ChitChatApp(settings, auth, account)
+internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel? = null) {
+    val accountModel = account ?: remember(auth) { AccountViewModel(TestAccounts(auth.state)) }
+    val rooms = remember(auth) { RoomsViewModel(EmptyRoomOperations(auth.state)) }
+    ChitChatApp(settings, auth, accountModel, rooms)
 }

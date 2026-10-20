@@ -26,6 +26,8 @@ M2 is split to keep authentication changes reviewable: **M2a** adds HTTPS connec
 
 ## Repeated milestone handoff record
 
+M3 is split into **M3a** native room directory, known-ID lookup, membership and permitted creation ([evidence](milestones/M3a-room-directory.md)); **M3b** paginated room history/composition and visible read state; **M3c** foreground SSE, deduplication/replay/reconciliation and presence/inactivity. Every slice has native UI and its own gates; M3 remains unchecked until all slices and real two-account chat acceptance pass. M3a does not synthesize realtime or mark conversations read from a room list.
+
 Each PR must record: implemented user behavior; actual backend version/capabilities used; completed parity rows; known/unblocked dependencies; exact build/test commands and results; emulator/device/live-server evidence or what was unavailable; any migration/configuration steps. Keep [limitations](known-limitations.md) and [README](../README.md) current. Commit only owned files and finish with a clean or fully explained worktree.
 
 After **each buildable milestone**, commit and push, open a PR to trigger Claude review, and wait for that review to complete. Triage findings by realistic user/SysOp impact; fix worthwhile, actionable findings and record reasonable deferrals. After fixes, comment on the PR tagging `@claude` and request another review. Repeat until no worthwhile fixable findings remain. Merge only with required checks passing and conflicts resolved. Then remove only verified obsolete branches/worktrees; preserve other work and shared checkouts. This is the maintainer's standing delivery order, not an optional final-release step.
