@@ -52,6 +52,11 @@ class AccountRecreationTest {
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         compose.onNodeWithText("Sign in").performScrollTo().performClick()
+        // Authentication state collection can finish after the click's idle boundary.
+        // Wait for the destination affordance, not a timing-dependent immediate query.
+        compose.waitUntil(5_000) {
+            runCatching { compose.onNodeWithText("Account").assertIsDisplayed() }.isSuccess
+        }
         compose.onNodeWithText("Account").performClick()
         compose.runOnIdle {
             assertTrue(account.chooseDestination())
