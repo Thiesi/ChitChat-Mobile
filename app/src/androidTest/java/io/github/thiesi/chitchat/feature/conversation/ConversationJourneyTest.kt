@@ -74,6 +74,19 @@ class ConversationJourneyTest {
         }
     }
 
+    @Test fun tallNewestHistoryAcknowledgesOnlyAtVisibleLiveEdgeWithoutSending() {
+        val body = (1..30).joinToString("\n") { "Tall history fixture line $it" }
+        fake.messages = listOf(message(2, "Earlier fixture"), message(3, body))
+        var readAtLiveEdge = false
+        fake.onRead = { id -> if (id == 3L) readAtLiveEdge = model.state.value.atLatest }
+        content()
+        compose.waitUntil(5_000) { fake.lastRead == 3L }
+        compose.runOnIdle {
+            assertEquals(3L, fake.lastRead); assertTrue(readAtLiveEdge)
+            assertEquals(0, fake.sends)
+        }
+    }
+
     @Test fun uncertainSendRequiresGetReconciliationAndExplicitDuplicateRiskChoice() {
         fake.sendFailure = ApiFailure(FailureKind.TIMEOUT)
         content(); send("Possibly sent fixture")
@@ -98,7 +111,7 @@ class ConversationJourneyTest {
         compose.onNodeWithText("Ignored message · Reveal temporarily").performClick()
         timelineText("Ignored fixture")
         compose.onNodeWithText("Private pings").performScrollTo().performClick()
-        compose.onNodeWithText("No private pings in this room.").assertIsDisplayed()
+        compose.onNodeWithText("No private pings in this room.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Private ping fixture").assertDoesNotExist()
     }
 
@@ -147,7 +160,7 @@ class ConversationJourneyTest {
         compose.waitUntil(5_000) { fake.sends == 1 && !model.state.value.busy }
         compose.onNodeWithText("Private ping fixture").assertDoesNotExist()
         compose.onNodeWithText("Private pings").performScrollTo().performClick()
-        compose.onNodeWithText("Private ping fixture").assertIsDisplayed()
+        compose.onNodeWithText("Private ping fixture").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(listOf(2L, 3L), model.state.value.messages.map { it.id }) }
     }
 
