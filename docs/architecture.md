@@ -1,6 +1,6 @@
 # Proposed Android architecture
 
-Status: M1/M2a/M2b1/M2b2/M3a/M3b are merged; room conversations currently use explicit manual refresh. M3c's [shared-session SSE/presence protocol foundation](milestones/M3c1-realtime-protocol.md) precedes its foreground lifecycle/presentation consumer, not a claim of working realtime UI. Push and the fuller target design below remain planned where not explicitly implemented. The [decentralized push decision](push-architecture.md) is accepted; public identity/distribution and ordinary-DM alerts remain open. Backend source baseline and compatibility are recorded in [the contract](backend-compatibility.md).
+Status: M1/M2a/M2b1/M2b2/M3a/M3b and M3c1 are merged. M3c2 adds the [foreground session-event runtime](milestones/M3c2-foreground-runtime.md), status and announcements. Room/directory canonical consumers and presence UI remain M3c3; conversations still explicitly use manual refresh. Push and the fuller target design below remain planned where not explicitly implemented. The [decentralized push decision](push-architecture.md) is accepted; public identity/distribution and ordinary-DM alerts remain open. Backend source baseline and compatibility are recorded in [the contract](backend-compatibility.md).
 
 ## Structure and dependencies
 
@@ -78,7 +78,7 @@ Server IDs define order within each message kind; room and DM IDs are separate n
 
 ## Realtime and lifecycle
 
-M3c1 implements only typed SSE/presence operations over the existing session transport. OkHttp SSE supplies framing with bounded response/queue adapters; the consumer owns reconnects and acknowledgment. Two logout shapes, retained logout versions and PHP's empty-array room signals are handled explicitly. No connection starts from production UI yet. Cursor/reduction transactions below describe the future cache-backed design; no disk cursor/content cache is claimed for the memory-only client.
+M3c1 implements typed SSE/presence operations over the existing session transport. M3c2's [process-owned runtime](milestones/M3c2-foreground-runtime.md) now connects authenticated foreground sessions and presents safe connection status/global announcements; it reuses the shared forced-logout clearing path. The bounded coordinator owns reconnects, a40-second watchdog, payload validation and a generation-scoped memory cursor/invalidation version. Actual-session checks fence late callbacks. Room/directory canonical-read consumers and presence UI remain M3c3; the room transcript explicitly still uses Refresh. Cursor/reduction transactions below describe the future cache-backed design, not current disk persistence. Event collectors must be generation-scoped and reconcile on entry; a buffered delivery hint never authorizes cross-account presentation.
 
 One connection per active authenticated app session, not one per screen. Process lifecycle starts/stops it; Compose screen lifecycle alone must not own it. Closing the app stops stream, presence and typing. No unrestricted permanent service or frequent background worker. On background transition send a best-effort presence heartbeat with `room_id:null`, then let the lease expire if the request cannot finish; never block backgrounding on it.
 

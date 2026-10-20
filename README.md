@@ -14,6 +14,8 @@ M3a adds a [native room directory](docs/milestones/M3a-room-directory.md), known
 
 ## Engineering documents
 
+M3c1's shared-session protocol foundation is merged. M3c2 adds foreground session-event connection status, forced-logout handling and native server announcements. Room transcript/directory reconciliation and visible presence/reentry remain M3c3; chat still explicitly uses Refresh. See the runtime evidence below for actual gates and remaining acceptance.
+
 - [Discovery report and consequential decisions](docs/discovery.md)
 - [Feature-parity matrix](docs/feature-parity.md)
 - [Proposed architecture](docs/architecture.md)
@@ -21,6 +23,7 @@ M3a adds a [native room directory](docs/milestones/M3a-room-directory.md), known
 - [Implementation milestones and acceptance gates](docs/implementation-plan.md)
 - [Sensitive-action protocol foundation](docs/milestones/M2b2a-protocol-foundation.md)
 - [SSE/presence protocol foundation and pending foreground integration](docs/milestones/M3c1-realtime-protocol.md)
+- [Foreground session events, announcements and remaining room-consumer work](docs/milestones/M3c2-foreground-runtime.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)

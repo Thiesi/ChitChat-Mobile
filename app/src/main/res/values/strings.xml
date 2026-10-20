@@ -136,4 +136,17 @@
     <string name="step_up_recovery_warning">This is an emergency fallback, not routine passkey verification. One unused recovery code is consumed immediately, even if the export later fails or is cancelled. Codes are finite. Continue only if you intend to spend one.</string>
     <string name="recovery_may_be_spent">The recovery request may have consumed that code. It was not repeated. Refresh security information before using another code.</string>
     <string name="step_up_retry_rejected">The server did not accept the action after verification. It will not be retried again. Start a new export only when ready to verify again.</string>
+    <string name="realtime_stopped">Session event connection paused. Room chat uses Refresh.</string>
+    <string name="realtime_connecting">Connecting session events. Room chat uses Refresh.</string>
+    <string name="realtime_live">Session events connected. Room chat uses Refresh.</string>
+    <string name="realtime_reconnecting">Reconnecting session events. Room chat uses Refresh.</string>
+    <string name="realtime_offline">Offline. Loaded room chat may be out of date.</string>
+    <string name="realtime_tls_error">Secure event connection failed. Check the server certificate; it was not bypassed.</string>
+    <string name="realtime_incompatible">The server event stream is incompatible. Room chat still uses Refresh.</string>
+    <string name="realtime_error">Session events stopped. Retry the connection or use Refresh for room chat.</string>
+    <string name="realtime_global_notice">Server announcement</string>
+    <string name="realtime_room_notice">Room announcement</string>
+    <string name="realtime_view_notice">Read announcement</string>
+    <string name="realtime_dismiss_notice">Dismiss announcement</string>
+    <string name="realtime_notice_title">Announcement</string>
 </resources>

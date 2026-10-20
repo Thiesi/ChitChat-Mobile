@@ -1,6 +1,6 @@
 # Current status and limitations
 
-As of M3b, 2026-10-20:
+As of M3c2 (room-consumer integration still pending), 2026-10-20:
 
 - M3a adds native room directory/detail/membership/creation ([evidence](milestones/M3a-room-directory.md)). M3b adds [native history/composition/read state](milestones/M3b-room-conversation.md) with explicit manual refresh, not realtime chat. SSE/presence/inactivity remain M3c. The bounded500-message transcript and drafts are memory-only; no room/message data is cached to disk. Advanced tools/formatting/media bytes remain M5. Fixture sends/read acknowledgments and membership/creation fixtures are not live mutation acceptance; a dedicated room and approval are needed before live sends or read changes.
 
@@ -15,7 +15,7 @@ M2a normalizes Unicode hostnames with OkHttp and rejects credentials/raw paths b
 - The effective installation-name override is not public JSON; native capabilities have no explicit discovery contract. The revision-review participant-notification policy flag disagrees with the documented/trigger-derived notification behavior; B5 requests clarification.
 - PHP cookies are session cookies with lifetime zero. Android encrypted restoration uses an explicit bounded client policy, never guaranteed server persistence. Guest credentials remain session-only and are not restored across a cold app start.
 - SSE is retention-limited and authorization-filtered; there is no explicit expired-cursor or snapshot/current-watermark response. Foreground reconciliation is required even when the connection resumes successfully.
-- M3c1 adds [typed shared-session SSE/presence operations](milestones/M3c1-realtime-protocol.md), not an active UI connection. Process lifecycle, reduction/cursor ownership, presence warnings/reentry and native realtime presentation still require the M3c2 consumer; room UI remains honestly manual-refresh until then.
+- M3c1 adds [typed shared-session SSE/presence operations](milestones/M3c1-realtime-protocol.md). M3c2 adds [foreground process ownership, session invalidation, connection status and announcements](milestones/M3c2-foreground-runtime.md). Room history/directory still use manual refresh: M3c3 must consume canonical invalidations, reconcile message windows and expose presence warnings/explicit Return to room. M3c2 does not acquire a production room lease or claim live chat acceptance. Its cursor is generation-scoped memory, not durable disk replay or a snapshot watermark.
 - History has older-ID pagination but no efficient around-message route. Deep links/search results may require many pages and a cancellable loading/unavailable path. Never claim instant navigation or silently substitute unrelated newest messages.
 - DM conversations are capped at 100 without pagination. DM read marks all incoming unread messages from the selected peer; precise only-rendered-ID acknowledgment is not available.
 - Send/upload endpoints have no idempotency key. Automatic retry after ambiguous network failure can duplicate a message; native UI must preserve an explicit delivery-unknown state.
