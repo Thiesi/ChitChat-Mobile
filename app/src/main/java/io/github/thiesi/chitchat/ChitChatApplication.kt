@@ -9,6 +9,8 @@ import io.github.thiesi.chitchat.core.account.AccountOperations
 import io.github.thiesi.chitchat.core.account.SessionAccountRepository
 import io.github.thiesi.chitchat.core.rooms.RoomOperations
 import io.github.thiesi.chitchat.core.rooms.SessionRoomRepository
+import io.github.thiesi.chitchat.core.conversation.ConversationOperations
+import io.github.thiesi.chitchat.core.conversation.SessionConversationRepository
 
 class ChitChatApplication : Application() {
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
@@ -16,4 +18,5 @@ class ChitChatApplication : Application() {
     val sessions: SessionController get() = sessionRepository
     val accounts: AccountOperations by lazy { SessionAccountRepository(sessionRepository) }
     val rooms: RoomOperations by lazy { SessionRoomRepository(sessionRepository) }
+    val conversations: ConversationOperations by lazy { SessionConversationRepository(sessionRepository) }
 }

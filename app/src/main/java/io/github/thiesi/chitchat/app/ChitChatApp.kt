@@ -58,6 +58,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.server.AddressError
 import io.github.thiesi.chitchat.core.server.AddressResult
@@ -69,6 +71,8 @@ import io.github.thiesi.chitchat.feature.account.AccountScreen
 import io.github.thiesi.chitchat.feature.account.AccountViewModel
 import io.github.thiesi.chitchat.feature.rooms.RoomsScreen
 import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
+import io.github.thiesi.chitchat.feature.conversation.ConversationScreen
+import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.network.FailureKind
 import androidx.lifecycle.Lifecycle
@@ -76,7 +80,8 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel, rooms: RoomsViewModel, onThemeChanged: (Boolean) -> Unit = {}) {
+fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel, rooms: RoomsViewModel,
+    conversations: ConversationViewModel, onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by auth.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.hasLoadedSettings, state.settings.server) {
@@ -107,11 +112,17 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 nav.popBackStack("home", false)
                 rooms.cancel()
             } else if (entry?.destination?.route != null && entry?.destination?.route != "rooms") rooms.cancel()
+            val conversation = entry?.destination?.route?.startsWith("conversation/") == true
+            if (conversation && session.phase != SessionPhase.AUTHENTICATED) {
+                nav.popBackStack("home", false)
+                conversations.cancel()
+            } else if (entry?.destination?.route != null && !conversation) conversations.cancel()
         }
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(stringResource(when (entry?.destination?.route) {
+                    title = { Text(stringResource(if (entry?.destination?.route?.startsWith("conversation/") == true)
+                        R.string.rooms_conversation else when (entry?.destination?.route) {
                         "settings" -> R.string.settings
                         "account" -> R.string.account
                         "rooms" -> R.string.rooms_title
@@ -191,7 +202,14 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             }
                         }
                         composable("rooms") {
-                            if (session.phase == SessionPhase.AUTHENTICATED) RoomsScreen(rooms, auth::refresh)
+                            if (session.phase == SessionPhase.AUTHENTICATED) RoomsScreen(rooms, auth::refresh) { id ->
+                                nav.navigate("conversation/$id") { launchSingleTop = true }
+                            }
+                        }
+                        composable("conversation/{roomId}", arguments = listOf(navArgument("roomId") { type = NavType.LongType })) { destination ->
+                            val id = destination.arguments?.getLong("roomId") ?: 0L
+                            if (session.phase == SessionPhase.AUTHENTICATED && id > 0)
+                                ConversationScreen(conversations, id, auth::refresh)
                         }
                     }
                 }
