@@ -162,7 +162,10 @@
     <string name="presence_entering">Entering room…</string>
     <string name="presence_active">Online in this room</string>
     <string name="presence_warning">Room presence will end soon due to inactivity.</string>
-    <string name="presence_remaining">About %1$d seconds remaining.</string>
+    <plurals name="presence_remaining">
+        <item quantity="one">About %1$d second remaining.</item>
+        <item quantity="other">About %1$d seconds remaining.</item>
+    </plurals>
     <string name="presence_enter">Enter room</string>
     <string name="presence_stay">Stay in room</string>
     <string name="presence_list_stale">The online list is updating or unavailable.</string>

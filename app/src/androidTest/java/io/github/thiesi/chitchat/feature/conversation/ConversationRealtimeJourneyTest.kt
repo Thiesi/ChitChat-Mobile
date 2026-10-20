@@ -6,16 +6,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.assertIsEnabled
-import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performScrollToIndex
-import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -102,6 +94,18 @@ class ConversationRealtimeJourneyTest {
         compose.runOnIdle { assertEquals(2, realtime.entries); assertEquals(0, api.sends) }
     }
 
+    @Test fun tallIncomingCanonicalMessageFollowsToMeasuredBottomBeforeReadAcknowledgment() {
+        content()
+        compose.onNodeWithText("Enter room").performScrollTo().performClick()
+        compose.runOnIdle { realtime.state.value = realtime.state.value.copy(presencePhase = PresencePhase.ACTIVE) }
+        compose.waitUntil(5_000) { api.lastRead == 3L }
+        compose.runOnIdle {
+            api.rows += message(4, (1..30).joinToString("\n") { "Tall incoming line $it" }); event()
+        }
+        compose.waitUntil(5_000) { api.lastRead == 4L }
+        compose.runOnIdle { assertTrue(model.state.value.atLatest); assertEquals(0, api.sends) }
+    }
+
     @Test fun warningStayIsExplicitAndStaleAggregateUsersCloseTheDialog() {
         realtime.state.value = realtime.state.value.copy(selectedRoomId = 42, presencePhase = PresencePhase.WARNING,
             presence = PresenceStatus(42, 110, 10, false, 60), presenceReceivedAtMillis = System.currentTimeMillis(),
@@ -145,7 +149,7 @@ class ConversationRealtimeJourneyTest {
         override val session = MutableStateFlow(SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED,
             user = SessionUser(7, "Viewer", listOf("member"), 1, false)))
         var rows = listOf(message(2, "Earlier"), message(3, "Newest"))
-        var sends = 0; var reads = 0; var windows = 0
+        var sends = 0; var reads = 0; var windows = 0; var lastRead = 0L
         override suspend fun context(roomId: Long) = ConversationContext(room, ChatPolicy(emptySet(), null, DisplayPreferences()))
         override suspend fun history(roomId: Long, beforeId: Long?, limit: Int): MessagePage {
             val page = rows.filter { beforeId == null || it.id < beforeId }.takeLast(limit)
@@ -155,7 +159,7 @@ class ConversationRealtimeJourneyTest {
             windows++; return super.window(roomId, lowerInclusive, upperInclusive)
         }
         override suspend fun pings(roomId: Long) = emptyList<RoomPing>()
-        override suspend fun read(roomId: Long, messageId: Long): Long { reads++; return messageId }
+        override suspend fun read(roomId: Long, messageId: Long): Long { reads++; lastRead = messageId; return messageId }
         override suspend fun send(roomId: Long, body: String): SendResult { sends++; error("Unexpected fixture send") }
     }
     private class Directory(override val session: MutableStateFlow<SessionState>) : RoomOperations {

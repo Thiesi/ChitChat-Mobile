@@ -1,6 +1,6 @@
 # Proposed Android architecture
 
-Status: M1/M2a/M2b1/M2b2/M3a/M3b and M3c1 are merged. M3c2 adds the [foreground session-event runtime](milestones/M3c2-foreground-runtime.md), status and announcements. Room/directory canonical consumers and presence UI remain M3c3; conversations still explicitly use manual refresh. Push and the fuller target design below remain planned where not explicitly implemented. The [decentralized push decision](push-architecture.md) is accepted; public identity/distribution and ordinary-DM alerts remain open. Backend source baseline and compatibility are recorded in [the contract](backend-compatibility.md).
+Current implementation: [M3c3b rooms/realtime/presence](milestones/M3c3b-room-realtime.md); live acceptance pending. Milestone-specific narratives below record earlier delivery baselines; cache/push/DM sections remain target design. Decentralized push is accepted; public release identity/distribution and ordinary-DM alerts remain open.
 
 ## Structure and dependencies
 

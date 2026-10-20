@@ -1,20 +1,12 @@
 package io.github.thiesi.chitchat.feature.conversation
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -59,7 +51,7 @@ internal fun RoomPresencePanel(state: RealtimeState?, eligible: Boolean, canEnte
             phase == PresencePhase.WARNING -> R.string.presence_warning
             else -> R.string.presence_inactive
         }), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-        if (eligible && phase == PresencePhase.WARNING) Text(stringResource(R.string.presence_remaining, remaining))
+        if (eligible && phase == PresencePhase.WARNING) Text(pluralStringResource(R.plurals.presence_remaining, remaining, remaining))
         if (eligible && phase == PresencePhase.WARNING) {
             TextButton(onClick = enter, enabled = canEnter) {
                 Text(stringResource(R.string.presence_stay))

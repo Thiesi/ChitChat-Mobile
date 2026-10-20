@@ -3,14 +3,15 @@ package io.github.thiesi.chitchat.feature.conversation
 import android.text.format.DateFormat
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -93,10 +94,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     }
     LaunchedEffect(state.scrollRequest) {
         if (state.scrollRequest > 0 && state.messages.isNotEmpty()) {
-            timeline.scrollToItem(state.messages.lastIndex + 1)
-            timeline.layoutInfo.visibleItemsInfo.lastOrNull()?.let { last ->
-                timeline.scrollBy((last.offset + last.size - timeline.layoutInfo.viewportEndOffset).coerceAtLeast(0).toFloat())
-            }
+            // A real end item lets LazyColumn measure/clamp the bottom, including a newest
+            // message taller than the viewport. Do not calculate overflow from old layoutInfo.
+            timeline.scrollToItem(state.messages.size + 1)
         }
     }
     LaunchedEffect(state.anchor) {
@@ -191,6 +191,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     } else MessageContent(message, state.context)
                 }
             }
+            item(key = "history_end") { Spacer(Modifier.height(1.dp)) }
         }
         Column(Modifier.fillMaxWidth().heightIn(max = composerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (!state.atLatest || !state.latestWindow) TextButton(onClick = model::latest, enabled = ready && !state.busy) {
