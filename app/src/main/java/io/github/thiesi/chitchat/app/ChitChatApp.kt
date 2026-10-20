@@ -118,12 +118,10 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         val nav = rememberNavController()
         val entry by nav.currentBackStackEntryAsState()
         val focus = LocalFocusManager.current
-        val keyboard = LocalSoftwareKeyboardController.current
         val openDirect: (Long?) -> Unit = { peer ->
             val actual = auth.state.value
             if (actual.directIdentity() == session.directIdentity()) directRoute(actual, peer)?.let { route ->
                 focus.clearFocus()
-                keyboard?.hide()
                 nav.navigate(route) { launchSingleTop = true }
             }
         }

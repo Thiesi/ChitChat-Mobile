@@ -9,8 +9,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
@@ -46,6 +50,8 @@ class DirectJourneyTest {
     private val api = NativeDirects()
     private val model = DirectThreadViewModel(api)
     @Volatile private var imeBottom = 0
+    private val keyboardHides = java.util.concurrent.atomic.AtomicInteger()
+    private val keyboardShows = java.util.concurrent.atomic.AtomicInteger()
     @Before fun verifyRequestedConfiguration() {
         // Match MainActivity's edge-to-edge/resize contract, not the default test host's pan.
         compose.activityRule.scenario.onActivity {
@@ -71,16 +77,35 @@ class DirectJourneyTest {
         compose.waitUntil(5_000) { runCatching { node.assertIsDisplayed() }.isSuccess }
         return node.assertIsDisplayed()
     }
+    private fun tapInput(tag: String): SemanticsNodeInteraction {
+        val node = displayed(tag)
+        val before = node.fetchSemanticsNode().boundsInWindow
+        node.performClick()
+        val requireIme = InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true"
+        // Text injection itself requests focus. Prove the one real tap focused/opened input FIRST.
+        try { compose.waitUntil(5_000) { (!requireIme || imeBottom > 0) &&
+            runCatching { node.assertIsFocused().assertIsDisplayed() }.isSuccess } }
+        catch (failure: androidx.compose.ui.test.ComposeTimeoutException) {
+            val input = node.fetchSemanticsNode()
+            throw AssertionError("Tap fixture: tag=$tag, IME=$imeBottom, focused=${input.config[SemanticsProperties.Focused]}, before=$before, after=${input.boundsInWindow}, hides=${keyboardHides.get()}", failure)
+        }
+        return node.assertIsFocused().assertIsDisplayed()
+    }
     private fun keyboardSend(): SemanticsNodeInteraction {
         val node = compose.onNodeWithTag("dm_send")
         val requireIme = InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true"
         // Android IME/window measure and draw run outside Compose's virtual-clock idling.
-        compose.waitUntil(5_000) { (!requireIme || imeBottom > 0) &&
-            runCatching { node.assertIsDisplayed().assertIsEnabled() }.isSuccess }
+        try { compose.waitUntil(5_000) { (!requireIme || imeBottom > 0) &&
+            runCatching { node.assertIsDisplayed().assertIsEnabled() }.isSuccess } }
+        catch (failure: androidx.compose.ui.test.ComposeTimeoutException) {
+            val input = compose.onNodeWithTag("dm_composer").fetchSemanticsNode()
+            val send = node.fetchSemanticsNode()
+            throw AssertionError("Composer fixture: IME=$imeBottom, focused=${input.config[SemanticsProperties.Focused]}, inputWindow=${input.boundsInWindow}, sendWindow=${send.boundsInWindow}, disabled=${send.config.contains(SemanticsProperties.Disabled)}, shows=${keyboardShows.get()}, hides=${keyboardHides.get()}", failure)
+        }
         return node.assertIsDisplayed().assertIsEnabled()
     }
     private fun send(body: String) {
-        displayed("dm_composer").performClick().performTextInput(body)
+        tapInput("dm_composer").performTextInput(body)
         val semantics = compose.onNodeWithTag("dm_composer").fetchSemanticsNode().config
         assertEquals(body, semantics[SemanticsProperties.EditableText].text)
         assertFalse(semantics.contains(SemanticsProperties.ContentDescription))
@@ -253,7 +278,14 @@ class DirectJourneyTest {
         compose.setContent {
             val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
             SideEffect { imeBottom = bottom }
-            Box(Modifier.size(320.dp, 640.dp)) { TestChitChatApp(settings, auth, directInbox = inbox, directThread = thread, realtime = connection) }
+            val keyboard = LocalSoftwareKeyboardController.current
+            val observed = remember(keyboard) { object : SoftwareKeyboardController {
+                override fun show() { keyboardShows.incrementAndGet(); keyboard?.show() }
+                override fun hide() { keyboardHides.incrementAndGet(); keyboard?.hide() }
+            } }
+            CompositionLocalProvider(LocalSoftwareKeyboardController provides observed) {
+                Box(Modifier.size(320.dp, 640.dp)) { TestChitChatApp(settings, auth, directInbox = inbox, directThread = thread, realtime = connection) }
+            }
         }
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Viewer")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
@@ -263,14 +295,24 @@ class DirectJourneyTest {
         compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.AUTHENTICATED }
         compose.runOnIdle { connection.state.value = RealtimeState(phase = RealtimePhase.LIVE, generation = sessions.state.value.generation) }
+        if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
+            compose.waitUntil(5_000) { imeBottom == 0 }
+        val beforeInbox = compose.runOnIdle { keyboardHides.get() }
         compose.onNodeWithText("Direct messages").performScrollTo().performClick()
         compose.waitUntil(5_000) { inbox.state.value.inbox != null && !inbox.state.value.busy }
+        compose.runOnIdle { assertEquals("Unfocused inbox navigation must not enqueue a keyboard hide", beforeInbox, keyboardHides.get()) }
         compose.onNodeWithTag("dm_inbox").performScrollToNode(hasText("3 unread"))
         compose.onNodeWithText("3 unread").assertIsDisplayed()
         compose.onNodeWithTag("dm_inbox").performScrollToNode(hasTestTag("dm_search_input"))
-        compose.onNodeWithTag("dm_search_input").performScrollTo().performClick().performTextInput("Pe")
-        if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
-            compose.waitUntil(5_000) { imeBottom > 0 && runCatching { compose.onNodeWithTag("dm_search_input").assertIsDisplayed() }.isSuccess }
+        compose.onNodeWithTag("dm_search_input").performScrollTo()
+        tapInput("dm_search_input").performTextInput("Pe")
+        if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
+            try { compose.waitUntil(5_000) { imeBottom > 0 && runCatching { compose.onNodeWithTag("dm_search_input").assertIsDisplayed() }.isSuccess } }
+            catch (failure: androidx.compose.ui.test.ComposeTimeoutException) {
+                val input = compose.onNodeWithTag("dm_search_input").fetchSemanticsNode()
+                throw AssertionError("Search fixture: IME=$imeBottom, focused=${input.config[SemanticsProperties.Focused]}, window=${input.boundsInWindow}, hides=${keyboardHides.get()}, busy=${inbox.state.value.busy}, queryReceived=${inbox.state.value.query == "Pe"}", failure)
+            }
+        }
         compose.onNodeWithTag("dm_search_input").performImeAction()
         compose.waitUntil(5_000) { inbox.state.value.searched }
         compose.onNodeWithTag("dm_inbox").performScrollToNode(hasTestTag("dm_person:8"))
@@ -281,7 +323,7 @@ class DirectJourneyTest {
         // Recipient navigation deliberately retires search focus/IME before editing a new scope.
         if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
             compose.waitUntil(5_000) { imeBottom == 0 }
-        displayed("dm_composer").performClick().performTextInput("Scoped draft fixture")
+        tapInput("dm_composer").performTextInput("Scoped draft fixture")
         keyboardSend()
         captureFixture("dm-app-draft-keyboard.png")
         compose.runOnIdle { connection.state.value = connection.state.value.copy(phase = RealtimePhase.ERROR, error = ApiFailure(FailureKind.NETWORK)) }
