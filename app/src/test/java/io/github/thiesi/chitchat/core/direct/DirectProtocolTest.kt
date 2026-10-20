@@ -236,6 +236,51 @@ class DirectProtocolTest {
         }
     }
 
+    @Test fun largeEscapedUnicodeDmPageAndQuotesFitTheActualHundredMessageContract() = runTest {
+        login(); context()
+        val body = "😀".repeat(4_000)
+        val quote = """{"kind":"direct","message_id":999,"available":true,"message":{"id":999,"sender":{"id":7,"username":"Viewer"},"body":${JsonPrimitive(body)},"deleted":false}}"""
+        val rows = (1_001L..1_100L).joinToString(",") { wire(it, body, reply = quote) }.replace("😀", "\\ud83d\\ude00")
+        val metadata = (1_001L..1_100L).joinToString(",") { mutation(it, body) }.replace("😀", "\\ud83d\\ude00")
+        assertTrue(rows.length > 9_000_000); page(rows, metadata)
+        val result = direct.history(8, limit = 100)
+        assertEquals(100, result.messages.size); assertEquals(body, result.messages.last().body)
+        assertEquals(body, result.messages.first().replyTo?.message?.body)
+    }
+
+    @Test fun largeEscapedUnicodeRoomPageAlsoUsesTheSharedBulkReadBound() = runTest {
+        login(); val body = "😀".repeat(1_000)
+        val rows = (1L..100L).joinToString(",") { id ->
+            """{"id":$id,"room_id":42,"sender_id":8,"username":"Peer","type":"text","body":${JsonPrimitive(body)},"deleted":false,"created_at":"2026-10-20T10:00:00Z"}"""
+        }.replace("😀", "\\ud83d\\ude00")
+        val metadata = (1L..100L).joinToString(",") { id ->
+            """{"id":$id,"type":"text","body":${JsonPrimitive(body)},"edited_at":null,"deleted":false,"deletion_kind":null,"mentions":[],"reactions":[]}"""
+        }.replace("😀", "\\ud83d\\ude00")
+        server.enqueue(json("""{"messages":[$rows]}""")); server.enqueue(json("""{"messages":[$metadata]}"""))
+        val result = api.roomHistory(42, null, 100)
+        assertEquals(100, result.messages.size); assertEquals(body, result.messages.last().body)
+    }
+
+    @Test fun oversizedBulkReadIsBoundedAndDoesNotInvalidateTheSharedSession() = runTest {
+        login(); context()
+        server.enqueue(json(" ".repeat(SessionHttp.BULK_MESSAGE_MAX_BYTES.toInt() + 1)))
+        assertEquals(FailureKind.TOO_LARGE, failure { direct.history(8) }.kind); take()
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertNotNull(sessions.state.value.privacy); assertNotNull(vault.saved)
+    }
+
+    @Test fun authenticationJsonStillHasTheOneMiBResponseBound() = runTest {
+        login()
+        server.enqueue(json(bootstrap().dropLast(1) + ",\"extra\":\"" + "a".repeat(1_048_576) + "\"}"))
+        assertEquals(FailureKind.INCOMPATIBLE, failure { api.bootstrap() }.kind); take()
+    }
+
+    @Test fun bulkErrorResponsesStillHaveTheOneMiBResponseBound() = runTest {
+        login(); context()
+        server.enqueue(json(" ".repeat(1_048_577), 403))
+        assertEquals(FailureKind.INCOMPATIBLE, failure { api.directHistory(8, null, 50, 7) }.kind); take()
+    }
+
     private suspend fun failure(action: suspend () -> Unit): ApiFailure {
         try { action(); error("Expected safe failure") } catch (failure: ApiFailure) { return failure }
     }
