@@ -96,6 +96,11 @@ jobs:
             gh pr diff ${{ env.PR_NUMBER }} --repo ${{ github.repository }}
             gh pr view ${{ env.PR_NUMBER }} --repo ${{ github.repository }} --comments
             No added flags, jq/template expressions, shell expansions or extra commands.
+            Trusted preflight measured ${{ steps.scope.outputs.diff_chars }} diff characters
+            and ${{ steps.scope.outputs.comment_chars }} comment characters (Unicode, not bytes).
+            A successful comments command may return empty when the trusted comment count is 0:
+            that means no comments, not an unreadable response. Still run both exact commands.
+            Empty output with a nonzero expected count, an error or a missing result is incomplete.
             Always perform a fresh review, including prior fixes, even if reviewed before.
             If either response is truncated or unreadable, report an incomplete review,
             never a no-findings verdict. All changed production/UI/test files need review.
