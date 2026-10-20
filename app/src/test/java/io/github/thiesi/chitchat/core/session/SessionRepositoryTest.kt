@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.core.session
 
+import io.github.thiesi.chitchat.core.network.ApiFailure
+
 import io.github.thiesi.chitchat.core.network.SessionHttp
 import io.github.thiesi.chitchat.core.server.AddressResult
 import io.github.thiesi.chitchat.core.server.ServerAddress
@@ -572,6 +574,50 @@ class SessionRepositoryTest {
         assertTrue(pending.await().exceptionOrNull() is kotlinx.coroutines.CancellationException)
         assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
         assertNull(vault.saved)
+    }
+
+    private val roomFixture = """{"id":42,"key":"general","name":"Fixture","info_line":"","visibility":"public","minimum_age":0,"inactivity_timeout_seconds":0,"created_by":7,"member_role":"member","invited":false,"guest_access":"none"}"""
+
+    @Test fun roomRepositorySharesCookieCsrfAndResourceErrorsDoNotLogOut() = runTest {
+        login()
+        val rooms = io.github.thiesi.chitchat.core.rooms.SessionRoomRepository(sessions)
+        server.enqueue(json("""{"rooms":[$roomFixture]}"""))
+        assertEquals(42L, rooms.list().single().id)
+        assertEquals("SITE=auth", server.takeRequest(5, TimeUnit.SECONDS)!!.headers["Cookie"])
+        server.enqueue(error("minimum_age_not_met", 403))
+        try { rooms.join(42); fail("Expected age restriction") } catch (failure: ApiFailure) { assertEquals("minimum_age_not_met", failure.code) }
+        assertEquals(b, server.takeRequest(5, TimeUnit.SECONDS)!!.headers["X-CSRF-Token"])
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertFalse(sessions.state.value.refreshRequired)
+        server.enqueue(error("unauthenticated", 401))
+        try { rooms.detail(42); fail("Expected invalidation") } catch (_: ApiFailure) { }
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+        assertNull(vault.saved)
+    }
+
+    @Test fun lateRoomListCannotRepopulateAfterLogout() = runTest {
+        login()
+        val rooms = io.github.thiesi.chitchat.core.rooms.SessionRoomRepository(sessions)
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Content-Type", "application/json")
+            .body("""{"rooms":[$roomFixture]}""").bodyDelay(400, TimeUnit.MILLISECONDS).build())
+        val pending = async { runCatching { rooms.list() } }
+        kotlinx.coroutines.yield()
+        assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut()
+        assertTrue(pending.await().exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
+        assertNull(vault.saved)
+    }
+
+    @Test fun roomCsrfFailureRequiresRefreshAndDoesNotReplayJoin() = runTest {
+        login()
+        val rooms = io.github.thiesi.chitchat.core.rooms.SessionRoomRepository(sessions)
+        server.enqueue(error("csrf_failed", 403))
+        try { rooms.join(42); fail("Expected CSRF refresh") } catch (_: ApiFailure) { }
+        val requests = server.requestCount
+        assertTrue(sessions.state.value.refreshRequired)
+        try { rooms.join(42); fail("Expected guarded retry") } catch (_: ApiFailure) { }
+        assertEquals(requests, server.requestCount)
     }
 
     private class MemoryVault : SessionVault {

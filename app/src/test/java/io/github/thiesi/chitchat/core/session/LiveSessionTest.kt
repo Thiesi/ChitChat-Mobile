@@ -36,6 +36,12 @@ class LiveSessionTest {
             assertEquals(userId, active.state.value.user?.id)
             active.refresh()
             assertEquals(SessionPhase.AUTHENTICATED, active.state.value.phase)
+            // Read-only M3a acceptance: no room memberships, reads, presence or messages are changed.
+            val rooms = io.github.thiesi.chitchat.core.rooms.SessionRoomRepository(active)
+            val directory = rooms.list()
+            assertEquals("Room IDs must be unique", directory.size, directory.map { it.id }.toSet().size)
+            assertTrue("Provide at least one visible room for directory/detail acceptance", directory.isNotEmpty())
+            assertEquals("Room detail must match the requested authorized ID", directory.first().id, rooms.detail(directory.first().id).id)
             val revoked = vault.value!!
             active.signOut()
             assertEquals(SessionPhase.SIGNED_OUT, active.state.value.phase)
