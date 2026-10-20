@@ -3,6 +3,7 @@ package io.github.thiesi.chitchat.feature.account
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -12,6 +13,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import io.github.thiesi.chitchat.feature.account.TestChitChatApp as ChitChatApp
 import io.github.thiesi.chitchat.app.SettingsViewModel
 import io.github.thiesi.chitchat.core.account.VerificationMethods
@@ -53,7 +55,10 @@ class AccountRecreationTest {
         compose.runOnUiThread { installContent(compose.activity) }
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
-        compose.onNodeWithText("Sign in").performScrollTo().performClick()
+        // Hosted diagnostics showed zero sign-in calls, not a failed export/recreation.
+        // Settle the password IME before measuring/tapping the moving scrollable button.
+        closeSoftKeyboard()
+        compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
         // Authentication state collection can finish after the click's idle boundary.
         // Wait for the destination affordance, not a timing-dependent immediate query.
         try {

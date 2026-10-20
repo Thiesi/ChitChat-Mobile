@@ -2,7 +2,7 @@
 
 As of M3c3b (live room acceptance pending), 2026-10-20:
 
-- [Issue22](https://github.com/Thiesi/ChitChat-Mobile/issues/22): hosted account fixture twice timed out waiting for the initial Account affordance, before export/recovery/recreation; unchanged rerun and local suites passed. Failure-only non-secret diagnostics preserve existing assertions/timeouts; root cause/product fix is not yet established.
+- [Issue22](https://github.com/Thiesi/ChitChat-Mobile/issues/22): repeated hosted Account-start timeouts captured zero sign-in calls while still anonymous/resumed/focused, before export/recreation. Setup now dismisses the password IME and asserts the same button is displayed/enabled before its tap; auth/security assertions and timeouts are unchanged. Original failures are preserved; stable focused/full hosted verification is required before calling this resolved. A separate local SystemUI ANR was preserved, not equated with the hosted failure.
 
 - M3c3b adds foreground room realtime/presence; [evidence](milestones/M3c3b-room-realtime.md) distinguishes fixtures from pending authorized live two-account acceptance. Drafts/content remain memory-only. Advanced tools/media remain M5.
 
