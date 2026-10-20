@@ -237,12 +237,13 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         }
         Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-            if (compact) {
+            run {
                 val label = stringResource(R.string.conversation_details)
-                val status = stringResource(R.string.conversation_details_attention)
+                val blocked = !ready || state.busy || !model.canSend()
+                val status = stringResource(if (blocked) R.string.conversation_send_unavailable_details else R.string.conversation_details_attention)
                 val attention = state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend ||
                     state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
-                    state.notice != null || !ready || !model.canSend()
+                    state.notice != null || blocked
                 BadgedBox(badge = { if (attention) Badge() }) {
                     IconButton(onClick = { detailsOpen = true }, modifier = Modifier.semantics {
                         contentDescription = label

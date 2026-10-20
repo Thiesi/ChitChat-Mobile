@@ -16,6 +16,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -26,6 +28,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.dp
 import io.github.thiesi.chitchat.core.conversation.ChatPolicy
 import io.github.thiesi.chitchat.core.conversation.ConversationContext
@@ -82,7 +86,11 @@ class ConversationJourneyTest {
     private fun send(body: String) {
         compose.onNodeWithTag("conversation_composer").assertIsDisplayed().performTextInput(body)
         compose.runOnIdle { assertTrue("Fixture input reached its VM", body == model.state.value.draft) }
-        compose.waitUntil(5_000) { imeBottom > 0 }
+        val semantics = compose.onNodeWithTag("conversation_composer").fetchSemanticsNode().config
+        assertEquals(body, semantics[SemanticsProperties.EditableText].text)
+        assertFalse(semantics.contains(SemanticsProperties.ContentDescription))
+        if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
+            compose.waitUntil(5_000) { imeBottom > 0 }
         // Send is pinned beside the field: no composer scroll that can race cursor bring-into-view.
         compose.onNodeWithTag("conversation_composer").assertIsDisplayed()
         compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsEnabled().performClick()
@@ -191,6 +199,37 @@ class ConversationJourneyTest {
         compose.onNodeWithText(label).performClick()
         compose.waitUntil(5_000) { fake.lastRead == 3L && model.state.value.readError == null }
         compose.runOnIdle { assertEquals(2, fake.readCalls) }
+    }
+
+    @Test fun compactTouchScrollingKeepsPinnedControlsResponsive() {
+        fake.messages = (1L..30L).map { message(it, "Scroll fixture $it") }
+        content(height = 220)
+        compose.waitUntil(5_000) { fake.lastRead == 30L }
+        compose.onNodeWithTag("conversation_timeline").performTouchInput { swipeDown() }
+        compose.waitUntil(5_000) { !model.state.value.atLatest }
+        compose.onNodeWithTag("conversation_composer").assertIsDisplayed()
+        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Room details").performClick()
+        compose.onNodeWithText("Room details").assertIsDisplayed()
+        compose.onNodeWithText("Close").performClick()
+        compose.runOnIdle { assertEquals(0, fake.sends); assertEquals(30L, fake.lastRead); assertEquals(1, fake.readCalls) }
+    }
+
+    @Test fun blockedSendDetailsStayReachableBesideInputWithoutHeaderScrolling() {
+        fake.sendFailure = ApiFailure(FailureKind.TIMEOUT)
+        content()
+        send("Unconfirmed fixture")
+        compose.waitUntil(5_000) { model.state.value.uncertainSend }
+        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithContentDescription("Room details").assertIsDisplayed().performClick()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        fun dialogText(id: Int) = compose.onNode(hasText(context.getString(id)) and hasAnyAncestor(isDialog()))
+        dialogText(io.github.thiesi.chitchat.R.string.conversation_uncertain).performScrollTo().assertIsDisplayed()
+        dialogText(io.github.thiesi.chitchat.R.string.conversation_refresh).performScrollTo().assertIsEnabled().performClick()
+        loaded()
+        compose.onNodeWithContentDescription("Room details").assertIsDisplayed().performClick()
+        dialogText(io.github.thiesi.chitchat.R.string.conversation_allow_resend).performScrollTo().assertIsDisplayed().assertIsEnabled()
+        compose.runOnIdle { assertEquals(1, fake.sends); assertEquals("Unconfirmed fixture", model.state.value.draft) }
     }
 
     @Test fun uncertainSendRequiresGetReconciliationAndExplicitDuplicateRiskChoice() {
