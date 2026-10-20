@@ -42,13 +42,5 @@ internal class SessionDirectRepository(private val sessions: SessionRepository) 
         privacy() // Missing/unsupported disclosure disables DMs, never substitutes an E2EE/privacy promise.
         return sessions.authorized(access) { operation(access) }
     }
-    private fun privacy(): MessagePrivacy {
-        val value = session.value.privacy ?: throw ApiFailure(FailureKind.INCOMPATIBLE)
-        val direct = value.direct
-        if (direct.endToEndEncrypted || direct.retentionDays < 0 || direct.retention.isBlank() ||
-            (direct.inspectionEnabled && direct.inspectionRole !in setOf("admin", "super_admin")) ||
-            (value.revisions.reviewEnabled && value.revisions.reviewRole !in setOf("admin", "super_admin")))
-            throw ApiFailure(FailureKind.INCOMPATIBLE)
-        return value
-    }
+    private fun privacy() = validatedDirectPrivacy(session.value.privacy)
 }
