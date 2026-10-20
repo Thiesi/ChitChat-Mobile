@@ -8,13 +8,11 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-**Native authentication, personal-data export and manually refreshed room conversations are implemented.** M2a supplies HTTPS/password/recovery, encrypted session restoration and local/server logout; M2b1 adds native registration/PoW and closing-account restoration. M2b2 adds shared password/emergency-recovery step-up and native JSON export through Android’s document picker. See [step-up/export checks and limits](docs/milestones/M2b-step-up-export.md), [registration/restoration](docs/milestones/M2b-registration-restoration.md), and [historical auth evidence](docs/milestones/M2a-session-auth.md). Live acceptance is still partial; realtime chat, DMs and push remain incomplete. The audited backend baseline is [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1).
-
-M3a adds a [native room directory](docs/milestones/M3a-room-directory.md), known-ID lookup, membership and permitted room creation. M3b adds [room history, composition and visible read state](docs/milestones/M3b-room-conversation.md), including older pages, `/me`, private `/ping`, ignored-message collapse and safe ambiguous-send handling. Refresh is manual; SSE/presence remain M3c, advanced message tools/files M5, and live chat acceptance is pending. Core chat and UnifiedPush over HTTPS port443 have existing APIs. Native passkeys and browser identity handoff require the [backend dependencies](docs/backend-dependencies.md); shared Web Push hardening and capability discovery remain tracked separately. Ordinary incoming-DM push is a separate, unapproved product proposal. The ChitChat backend checkout remains read-only.
+**Native authentication, export and foreground realtime room conversations are implemented.** M3c3b adds canonical directory/history updates and explicit presence/inactivity UI. Live chat acceptance is pending; DMs/push are unimplemented. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). Prior auth/export evidence is linked from the milestone plan.
 
 ## Engineering documents
 
-M3c1's shared-session protocol foundation is merged. M3c2 adds foreground session-event connection status, forced-logout handling and native server announcements. Room transcript/directory reconciliation and visible presence/reentry remain M3c3; chat still explicitly uses Refresh. See the runtime evidence below for actual gates and remaining acceptance.
+M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native announcements. M3c3a/b add bounded canonical history and native room/directory/presence consumers. An open event connection does not prove current history; stale/gap/retry states remain explicit. See actual checks and acceptance limits below.
 
 - [Discovery report and consequential decisions](docs/discovery.md)
 - [Feature-parity matrix](docs/feature-parity.md)
@@ -25,6 +23,7 @@ M3c1's shared-session protocol foundation is merged. M3c2 adds foreground sessio
 - [SSE/presence protocol foundation and pending foreground integration](docs/milestones/M3c1-realtime-protocol.md)
 - [Foreground session events, announcements and remaining room-consumer work](docs/milestones/M3c2-foreground-runtime.md)
 - [Bounded canonical-history prerequisite for the realtime room consumer](docs/milestones/M3c3a-canonical-history.md)
+- [Native realtime room/directory and presence consumer](docs/milestones/M3c3b-room-realtime.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)

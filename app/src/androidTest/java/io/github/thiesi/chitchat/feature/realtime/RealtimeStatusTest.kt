@@ -27,9 +27,9 @@ class RealtimeStatusTest {
     @Test fun connectionDoesNotPretendChatIsAutomaticallyCurrentAndOfflineIsExplicit() {
         val state = mutableStateOf(RealtimeState(phase = RealtimePhase.CONNECTING))
         compose.setContent { MaterialTheme { RealtimeStatus(state.value, {}, {}) } }
-        compose.onNodeWithText("Connecting session events. Room chat uses Refresh.").assertExists()
+        compose.onNodeWithText("Connecting session events.").assertExists()
         compose.runOnIdle { state.value = state.value.copy(phase = RealtimePhase.LIVE) }
-        compose.onNodeWithText("Session events connected. Room chat uses Refresh.").assertExists()
+        compose.onNodeWithText("Session events connected. History may still be synchronizing.").assertExists()
         compose.runOnIdle { state.value = state.value.copy(phase = RealtimePhase.OFFLINE) }
         compose.onNodeWithText("Offline. Loaded room chat may be out of date.").assertExists()
         compose.onNodeWithText("Try again").assertDoesNotExist()

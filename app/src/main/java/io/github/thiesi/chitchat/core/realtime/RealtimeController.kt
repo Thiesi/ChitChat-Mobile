@@ -20,6 +20,7 @@ data class RealtimeState(
     val selectedRoomId: Long? = null,
     val presencePhase: PresencePhase = PresencePhase.NONE,
     val presence: PresenceStatus? = null,
+    val presenceReceivedAtMillis: Long = 0,
     val users: List<PresenceUser> = emptyList(),
     val presenceStale: Boolean = true,
     val presenceError: ApiFailure? = null,

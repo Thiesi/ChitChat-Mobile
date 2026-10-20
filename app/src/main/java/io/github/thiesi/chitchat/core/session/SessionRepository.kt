@@ -319,8 +319,14 @@ class SessionRepository internal constructor(
     }
 
     /** A capability for one reauthorized runtime, not a second cookie/session manager. */
-    internal suspend fun openAccess(): SessionAccess = lock.withLock {
+    internal suspend fun openAccess(expected: SessionState = mutable.value): SessionAccess = lock.withLock {
         val current = mutable.value
+        // The default is captured before waiting for the vault/state lock. Never upgrade an
+        // operation queued for one identity into a replacement account/session capability.
+        if (current.server != expected.server || current.generation != expected.generation ||
+            current.phase != expected.phase || current.user?.id != expected.user?.id ||
+            current.user?.sessionVersion != expected.user?.sessionVersion)
+            throw CancellationException("Session changed before access")
         val active = runtime ?: throw ApiFailure(FailureKind.EXPIRED)
         if (current.phase != SessionPhase.AUTHENTICATED || current.user == null || current.busy ||
             current.refreshRequired || active.csrf == null) throw ApiFailure(FailureKind.EXPIRED)

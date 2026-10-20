@@ -80,6 +80,7 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
                 RoomSessionFeedback(session, now, onRefreshSession)
                 if (!state.detailOpen && state.draft == null) RoomFeedback(state)
                 if (state.stale && state.loaded) Text(stringResource(R.string.rooms_stale))
+                if (state.syncing) Text(stringResource(R.string.rooms_syncing))
                 if (state.busy) {
                     CircularProgressIndicator()
                     TextButton(onClick = model::cancelRequest) { Text(stringResource(R.string.cancel)) }
@@ -261,6 +262,7 @@ private fun RoomChoices(title: Int, choices: List<String>, selected: String, ena
 private fun RoomFeedback(state: RoomsUiState) {
     state.validation?.let { InlineError(roomErrorCode(it)) }
     state.error?.let { InlineError(roomError(it)) }
+    state.syncError?.let { InlineError(roomError(it)) }
     if (state.mutationUncertain) Text(stringResource(R.string.rooms_unconfirmed))
     state.notice?.let { Text(stringResource(when (it) { "created" -> R.string.rooms_created
         "joined" -> R.string.rooms_join_success; "left" -> R.string.rooms_leave_success

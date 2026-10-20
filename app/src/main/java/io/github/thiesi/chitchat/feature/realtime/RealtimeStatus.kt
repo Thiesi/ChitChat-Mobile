@@ -33,7 +33,7 @@ import java.time.format.FormatStyle
 
 /** A connection is not proof that room history is current or that a message was read. */
 @Composable
-fun RealtimeStatus(state: RealtimeState, retry: () -> Unit, dismiss: (Long) -> Unit) {
+fun RealtimeStatus(state: RealtimeState, retry: () -> Unit, dismiss: (Long) -> Unit, roomId: Long? = state.selectedRoomId) {
     val label = when (state.phase) {
         RealtimePhase.STOPPED -> R.string.realtime_stopped
         RealtimePhase.CONNECTING -> R.string.realtime_connecting
@@ -52,7 +52,7 @@ fun RealtimeStatus(state: RealtimeState, retry: () -> Unit, dismiss: (Long) -> U
                 style = MaterialTheme.typography.bodySmall)
             if (state.phase == RealtimePhase.ERROR) TextButton(onClick = retry) { Text(stringResource(R.string.retry)) }
         }
-        val notice = state.broadcasts.firstOrNull { it.roomId == null || it.roomId == state.selectedRoomId }
+        val notice = state.broadcasts.firstOrNull { it.roomId == null || it.roomId == roomId }
         if (notice != null) {
             var expanded by remember(state.generation, notice.id) { mutableStateOf(false) }
             Text(stringResource(if (notice.roomId == null) R.string.realtime_global_notice else R.string.realtime_room_notice),

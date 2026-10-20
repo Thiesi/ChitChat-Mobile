@@ -34,7 +34,7 @@ Each PR must record: implemented user behavior; actual backend version/capabilit
 
 ### M3c3 canonical room-consumer constraints
 
-M3c3a adds the [bounded canonical-history reader and HTTP fixtures](milestones/M3c3a-canonical-history.md); M3c3b integrates it into the actual room/directory/presence UI. This dependency split keeps each complete review within the126000-byte input gate. The reader alone does not replace the current manual-refresh disclosure, and its already-in-progress UI consumer continues autonomously after verification/review/merge.
+PR20's canonical reader now has the [M3c3b native consumer](milestones/M3c3b-room-realtime.md). M3 stays unchecked pending authorized live acceptance. Continue autonomously into M4; missing live-room permission does not block its independent work.
 
 Do not reuse the current `ConversationViewModel.request()/reload()` for automatic event reconciliation: they replace the newest50 window, discard busy invalidations, alter uncertain-send reconciliation and cancel read POSTs. Add generation/room-scoped pending/applied invalidation revisions, drain/coalesce after existing operations, and keep automatic GETs distinct from explicit unknown-delivery reconciliation. Never cancel/replay send/read POSTs to serve an event. Read callbacks need an independent identity/room/read sequence; viewport visibility remains the only read-eligibility authority. Consumer cancellation/recreation and failed reductions must retain the need for canonical reconciliation, not treat a buffered event as applied history.
 

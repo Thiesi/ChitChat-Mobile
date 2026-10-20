@@ -780,6 +780,25 @@ class SessionRepositoryTest {
         assertNull(sessions.state.value.chatPolicy); assertNull(vault.saved)
     }
 
+    @Test fun capabilityAcquisitionCannotUpgradeAnExpectedIdentityButAllowsOrdinaryTokenRefresh() = runTest {
+        login()
+        val original = sessions.state.value
+        server.enqueue(json(bootstrapBody(user, c)))
+        sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(c, sessions.openAccess(original).csrf)
+        server.enqueue(json(bootstrapBody(user.replace("\"session_version\":2", "\"session_version\":3"), b)))
+        sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS)
+        try { sessions.openAccess(original); fail("A queued identity must not gain the replacement session") }
+        catch (_: CancellationException) { }
+        assertEquals(3, sessions.openAccess().sessionVersion)
+        val prior = sessions.state.value
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut()
+        server.takeRequest(5, TimeUnit.SECONDS)
+        login()
+        try { sessions.openAccess(prior); fail("A new generation must not replace the requested capability") }
+        catch (_: CancellationException) { }
+    }
+
     private class MemoryVault : SessionVault {
         var saved: SavedSession? = null
         var failWrites = false

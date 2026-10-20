@@ -3,14 +3,15 @@ package io.github.thiesi.chitchat.feature.conversation
 import android.text.format.DateFormat
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -54,6 +55,7 @@ import io.github.thiesi.chitchat.core.conversation.RoomMessage
 import io.github.thiesi.chitchat.core.conversation.serverInstant
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
+import io.github.thiesi.chitchat.core.realtime.PresencePhase
 import io.github.thiesi.chitchat.core.ui.InlineError
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -74,6 +76,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
+    val connection = model.realtime?.state?.collectAsStateWithLifecycle()?.value
+    val presenceHere = connection?.takeIf { it.generation == session.generation && it.selectedRoomId == roomId }
+    val activePresence = model.realtime == null || presenceHere?.presencePhase in setOf(PresencePhase.ACTIVE, PresencePhase.WARNING)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var pingsOpen by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -89,10 +94,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     }
     LaunchedEffect(state.scrollRequest) {
         if (state.scrollRequest > 0 && state.messages.isNotEmpty()) {
-            timeline.scrollToItem(state.messages.lastIndex + 1)
-            timeline.layoutInfo.visibleItemsInfo.lastOrNull()?.let { last ->
-                timeline.scrollBy((last.offset + last.size - timeline.layoutInfo.viewportEndOffset).coerceAtLeast(0).toFloat())
-            }
+            // A real end item lets LazyColumn measure/clamp the bottom, including a newest
+            // message taller than the viewport. Do not calculate overflow from old layoutInfo.
+            timeline.scrollToItem(state.messages.size + 1)
         }
     }
     LaunchedEffect(state.anchor) {
@@ -101,7 +105,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
         }
     }
-    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, lifecycle) {
+    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, lifecycle,
+        connection?.presencePhase, connection?.selectedRoomId) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             snapshotFlow {
                 val visible = timeline.layoutInfo.visibleItemsInfo
@@ -122,7 +127,17 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Column(Modifier.fillMaxWidth().heightIn(max = headerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
             Text(state.context?.room?.name ?: stringResource(R.string.conversation_title), style = MaterialTheme.typography.titleLarge)
-            Text(stringResource(R.string.conversation_manual), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(if (model.realtime == null) R.string.conversation_manual else R.string.conversation_realtime),
+                style = MaterialTheme.typography.bodySmall)
+            if (model.realtime != null && state.loaded) RoomPresencePanel(
+                presenceHere,
+                state.context?.let(model::presenceEligible) == true,
+                canEnter = ready && !state.busy && !state.stale, enter = model::enterRoom)
+            if (state.syncing) Text(stringResource(R.string.conversation_syncing))
+            if (state.anchorUnavailable) Text(stringResource(R.string.conversation_anchor_unavailable))
+            if (state.newerAvailable) TextButton(onClick = model::latest, enabled = ready && !state.busy) {
+                Text(stringResource(R.string.conversation_jump_new))
+            }
             if (state.stale && state.loaded) Text(stringResource(R.string.conversation_stale))
             if (session.busy) Text(stringResource(R.string.checking_session))
             if (session.refreshRequired || session.storageWarning) {
@@ -132,6 +147,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             }
             if (now < session.retryAtMillis) Text(stringResource(R.string.rate_limited))
             state.error?.let { InlineError(conversationError(it)) }
+            state.syncError?.let {
+                InlineError(if (it.code == "history_range_unavailable") stringResource(R.string.conversation_range_unavailable)
+                    else conversationError(it))
+                TextButton(onClick = model::latest, enabled = ready && !state.busy) { Text(stringResource(R.string.conversation_latest)) }
+            }
             state.readError?.let {
                 Text(stringResource(R.string.conversation_read_failed))
                 TextButton(onClick = model::retryRead, enabled = ready && !state.busy && state.atLatest) { Text(stringResource(R.string.conversation_retry_read)) }
@@ -146,7 +166,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = model::refresh, enabled = ready && !state.busy, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.conversation_refresh)) }
                 TextButton(onClick = { pingsOpen = true }, enabled = state.loaded, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.conversation_pings)) }
-                if (state.busy) TextButton(onClick = model::cancelRequest, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cancel)) }
+                if (state.busy || state.syncing) TextButton(onClick = model::cancelRequest, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cancel)) }
             }
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("conversation_timeline"), state = timeline,
@@ -171,6 +191,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     } else MessageContent(message, state.context)
                 }
             }
+            item(key = "history_end") { Spacer(Modifier.height(1.dp)) }
         }
         Column(Modifier.fillMaxWidth().heightIn(max = composerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (!state.atLatest || !state.latestWindow) TextButton(onClick = model::latest, enabled = ready && !state.busy) {
@@ -188,6 +209,13 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                         context.mute!!.expiresAt?.let { displayTime(it, context) } ?: stringResource(R.string.conversation_indefinite)))
                     !context.room.isMember -> Text(stringResource(R.string.conversation_membership))
                     session.user?.guest == true && context.room.guestAccess != "write" -> Text(stringResource(R.string.conversation_guest_readonly))
+                }
+                if (model.realtime != null && model.presenceEligible(context) && !activePresence) {
+                    TextButton(onClick = model::enterRoom, enabled = ready && state.loaded && !state.busy && !state.stale &&
+                        presenceHere?.presencePhase != PresencePhase.CONNECTING) {
+                        Text(stringResource(if (presenceHere?.presencePhase == PresencePhase.CONNECTING)
+                            R.string.presence_entering else R.string.presence_enter))
+                    }
                 }
             }
             OutlinedTextField(value = state.draft, onValueChange = model::updateDraft, enabled = !state.sending,
