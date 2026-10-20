@@ -32,6 +32,8 @@ M3c separates the merged [shared-session SSE/presence protocol prerequisite](mil
 
 M4 is split: **M4a** shares session/policy access and actual DM wire contracts/enrichment. **M4b1** supplies the [bounded canonical reader/inbox-thread state engine](milestones/M4b1-direct-state.md); **M4b2** supplies native inbox/search/history/composition, privacy/blocking/badges, viewport/keyboard/navigation and foreground/event consumers. The combined working diff already reached123151 bytes before documentation, so these are separate complete-review inputs, not omitted parity. Only M4b2 changes in-app availability. **M4c** supplies typing/bilateral preferences, ignore management and durable notification-center/read navigation. Live two-account DM/read/block remains a separate authorized gate; continue autonomously after each review/merge cycle.
 
+M4b2 verification also exposed a [room composer correction](milestones/room-composer-send-target.md), independently built/reviewed before the dependent consumer: pin input/Send, preserve compact controls and modal-safe read/retry behavior. Integrate it into the DM branch, reuse the editing component and repeat that branch's complete gates; an earlier head's clean CI/review is not a substitute.
+
 Each PR must record: implemented user behavior; actual backend version/capabilities used; completed parity rows; known/unblocked dependencies; exact build/test commands and results; emulator/device/live-server evidence or what was unavailable; any migration/configuration steps. Keep [limitations](known-limitations.md) and [README](../README.md) current. Commit only owned files and finish with a clean or fully explained worktree.
 
 ### M3c3 canonical room-consumer constraints

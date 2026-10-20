@@ -1,0 +1,4 @@
+<resources>
+    <string name="conversation_details">Room details</string>
+    <string name="conversation_details_attention">Updates or actions need attention</string>
+</resources>

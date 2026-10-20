@@ -59,7 +59,7 @@ class ConversationRealtimeJourneyTest {
 
     @Test fun incomingHintUsesCanonicalHistoryAndPreservesTheUnsentComposer() {
         content()
-        compose.onNodeWithTag("conversation_composer").performScrollTo().performTextInput("Keep unsent draft")
+        compose.onNodeWithTag("conversation_composer").assertIsDisplayed().performTextInput("Keep unsent draft")
         compose.runOnIdle { api.rows += message(4, "Canonical incoming"); event() }
         compose.waitUntil(5_000) { model.state.value.messages.lastOrNull()?.id == 4L && !model.state.value.syncing }
         compose.onNodeWithTag("conversation_composer").assertTextContains("Keep unsent draft")
@@ -76,19 +76,19 @@ class ConversationRealtimeJourneyTest {
 
     @Test fun restoredRouteAndExpiredPresenceRequireExplicitAcknowledgedReentry() {
         content()
-        compose.onNodeWithTag("conversation_composer").performScrollTo().performTextInput("Retained draft")
-        compose.onNodeWithText("Send").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithTag("conversation_composer").assertIsDisplayed().performTextInput("Retained draft")
+        compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
         compose.runOnIdle { assertEquals(0, realtime.entries); assertEquals(0, api.reads) }
         compose.onNodeWithText("Enter room").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(1, realtime.entries); assertEquals(0, api.reads) }
-        compose.onNodeWithText("Send").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
         compose.runOnIdle { realtime.state.value = realtime.state.value.copy(presencePhase = PresencePhase.ACTIVE) }
-        compose.onNodeWithText("Send").performScrollTo().assertIsEnabled()
+        compose.onNodeWithText("Send").assertIsDisplayed().assertIsEnabled()
         closeSoftKeyboard()
         compose.onNodeWithTag("conversation_timeline").performScrollToIndex(2)
         compose.waitUntil(5_000) { api.reads == 1 }
         compose.runOnIdle { realtime.state.value = realtime.state.value.copy(presencePhase = PresencePhase.EXPIRED) }
-        compose.onNodeWithText("Send").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
         compose.onNodeWithTag("conversation_composer").assertTextContains("Retained draft")
         compose.onNodeWithText("Enter room").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(2, realtime.entries); assertEquals(0, api.sends) }
