@@ -59,6 +59,8 @@ import io.github.thiesi.chitchat.core.conversation.RoomMessage
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.PresencePhase
+import io.github.thiesi.chitchat.core.realtime.RealtimePhase
+import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import io.github.thiesi.chitchat.core.ui.InlineError
 import io.github.thiesi.chitchat.core.ui.MessageInput
 import io.github.thiesi.chitchat.core.ui.canAcknowledgeVisibleRead
@@ -235,7 +237,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val status = stringResource(if (blocked) R.string.conversation_send_unavailable_details else R.string.conversation_details_attention)
                 val attention = state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend ||
                     state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
-                    state.notice != null || blocked
+                    state.notice != null || blocked || connection?.takeIf { it.generation == session.generation }?.let {
+                        it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null || it.roomId == roomId }
+                    } == true
                 BadgedBox(badge = { if (attention) Badge() }) {
                     IconButton(onClick = { detailsOpen = true }, modifier = Modifier.semantics {
                         contentDescription = label
@@ -252,7 +256,13 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     }
     if (detailsOpen) AlertDialog(onDismissRequest = { detailsOpen = false },
         title = { Text(stringResource(R.string.conversation_details)) },
-        text = { Column(Modifier.verticalScroll(rememberScrollState())) { header { detailsOpen = false } } },
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+            connection?.takeIf { it.generation == session.generation }?.let {
+                val realtime = model.realtime
+                RealtimeStatus(it, realtime::retry, realtime::dismissBroadcast, roomId)
+            }
+            header { detailsOpen = false }
+        } },
         confirmButton = { TextButton(onClick = { detailsOpen = false }) { Text(stringResource(R.string.rooms_close)) } })
     }
     if (pingsOpen) AlertDialog(onDismissRequest = { pingsOpen = false },

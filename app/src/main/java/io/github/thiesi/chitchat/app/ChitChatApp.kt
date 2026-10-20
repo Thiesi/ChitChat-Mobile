@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.app
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -43,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -113,9 +117,13 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     MaterialTheme(colorScheme = colors) {
         val nav = rememberNavController()
         val entry by nav.currentBackStackEntryAsState()
+        val focus = LocalFocusManager.current
+        val keyboard = LocalSoftwareKeyboardController.current
         val openDirect: (Long?) -> Unit = { peer ->
             val actual = auth.state.value
             if (actual.directIdentity() == session.directIdentity()) directRoute(actual, peer)?.let { route ->
+                focus.clearFocus()
+                keyboard?.hide()
                 nav.navigate(route) { launchSingleTop = true }
             }
         }
@@ -148,9 +156,16 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 directInbox?.background(); directThread?.background()
             }
         }
+        val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+        BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+        // A toolbar can consume the entire keyboard-visible landscape viewport. Keep editing
+        // controls usable; system Back dismisses the IME and restores the ordinary navigation bar.
+        val conversationRoute = entry?.destination?.route?.let { it.startsWith("direct") || it.startsWith("conversation/") } == true
+        val compactConversation = conversationRoute && maxHeight < 400.dp
+        val compactKeyboard = imeVisible && maxHeight < 240.dp
         Scaffold(
             topBar = {
-                TopAppBar(
+                if (!compactKeyboard) TopAppBar(
                     title = { Text(stringResource(if (entry?.destination?.route?.startsWith("direct") == true) R.string.dm_title
                         else if (entry?.destination?.route?.startsWith("conversation/") == true)
                         R.string.rooms_conversation else when (entry?.destination?.route) {
@@ -174,10 +189,10 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             },
         ) { insets ->
             Column(
-                Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets).imePadding(),
+                Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (session.phase == SessionPhase.AUTHENTICATED && realtime != null && connection?.generation == session.generation) {
+                if (!compactConversation && session.phase == SessionPhase.AUTHENTICATED && realtime != null && connection?.generation == session.generation) {
                     RealtimeStatus(connection, realtime::retry, realtime::dismissBroadcast,
                         roomId = entry?.arguments?.getLong("roomId")?.takeIf { it > 0 })
                 }
@@ -265,6 +280,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                     }
                 }
             }
+        }
         }
     }
 }

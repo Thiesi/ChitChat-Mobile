@@ -1,14 +1,21 @@
 package io.github.thiesi.chitchat.feature.direct
 
+import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.platform.app.InstrumentationRegistry
@@ -19,44 +26,90 @@ import io.github.thiesi.chitchat.core.network.*
 import io.github.thiesi.chitchat.core.server.*
 import io.github.thiesi.chitchat.core.session.*
 import io.github.thiesi.chitchat.core.settings.*
+import io.github.thiesi.chitchat.core.realtime.*
 import io.github.thiesi.chitchat.feature.account.TestChitChatApp
 import io.github.thiesi.chitchat.feature.auth.AuthViewModel
 import io.github.thiesi.chitchat.feature.auth.TestSessions
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 
 /** Native UI with canonical fixture operations; HTTP/TLS is tested separately, no live DM claim. */
 class DirectJourneyTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val api = NativeDirects()
     private val model = DirectThreadViewModel(api)
+    @Volatile private var imeBottom = 0
+    @Before fun verifyRequestedConfiguration() {
+        // Match MainActivity's edge-to-edge/resize contract, not the default test host's pan.
+        compose.activityRule.scenario.onActivity {
+            it.enableEdgeToEdge()
+        }
+        val args = InstrumentationRegistry.getArguments()
+        val config = InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration
+        args.getString("expectedOrientation")?.let { assertEquals(it.toInt(), config.orientation) }
+        args.getString("expectedFontScale")?.let { assertEquals(it.toFloat(), config.fontScale, 0.01f) }
+    }
     @After fun stop() { compose.runOnIdle { model.background(); api.readGate?.complete(Unit) } }
     private fun content(ready: Boolean = true, loadFailure: Boolean = false, height: Int = 640) {
-        compose.setContent { MaterialTheme { Box(Modifier.size(320.dp, height.dp).imePadding()) { DirectThreadScreen(model, 8, {}) } } }
+        compose.setContent {
+            val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
+            SideEffect { imeBottom = bottom }
+            MaterialTheme { Box(Modifier.size(320.dp, height.dp).imePadding()) { DirectThreadScreen(model, 8, {}) } }
+        }
         compose.waitUntil(5_000) { if (loadFailure) model.state.value.error != null && !model.state.value.busy
             else model.state.value.loaded && (!ready || !model.state.value.busy) }
     }
+    private fun displayed(tag: String): SemanticsNodeInteraction {
+        val node = compose.onNodeWithTag(tag)
+        compose.waitUntil(5_000) { runCatching { node.assertIsDisplayed() }.isSuccess }
+        return node.assertIsDisplayed()
+    }
+    private fun keyboardSend(): SemanticsNodeInteraction {
+        val node = compose.onNodeWithTag("dm_send")
+        val requireIme = InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true"
+        // Android IME/window measure and draw run outside Compose's virtual-clock idling.
+        compose.waitUntil(5_000) { (!requireIme || imeBottom > 0) &&
+            runCatching { node.assertIsDisplayed().assertIsEnabled() }.isSuccess }
+        return node.assertIsDisplayed().assertIsEnabled()
+    }
     private fun send(body: String) {
-        compose.onNodeWithTag("dm_composer").performTextInput(body)
-        compose.onNodeWithTag("dm_send").assertIsDisplayed().assertIsEnabled().performClick()
+        displayed("dm_composer").performClick().performTextInput(body)
+        val semantics = compose.onNodeWithTag("dm_composer").fetchSemanticsNode().config
+        assertEquals(body, semantics[SemanticsProperties.EditableText].text)
+        assertFalse(semantics.contains(SemanticsProperties.ContentDescription))
+        val label = InstrumentationRegistry.getInstrumentation().targetContext.getString(io.github.thiesi.chitchat.R.string.dm_message)
+        assertTrue(semantics[SemanticsProperties.Text].any { it.text == label })
+        val action = keyboardSend()
+        captureFixture("dm-composer-before-send.png")
+        action.performClick()
+    }
+    private fun captureFixture(name: String) {
+        if (InstrumentationRegistry.getArguments().getString("captureDirectFixture") != "true") return
+        val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        val target = InstrumentationRegistry.getInstrumentation().targetContext
+        val output = java.io.File(target.getExternalFilesDir("screenshots") ?: target.cacheDir, name)
+        output.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
     }
     private fun details() {
-        val action = compose.onNode(hasClickAction() and (hasText("Conversation details") or hasContentDescription("Conversation details")))
-        if (runCatching { action.assertIsDisplayed() }.isFailure) action.performScrollTo()
+        val action = compose.onNodeWithContentDescription("Conversation details")
         action.assertIsDisplayed().performClick()
     }
-    private fun notice(text: String) {
-        val node = compose.onNodeWithText(text)
+    private fun dialogNode(matcher: SemanticsMatcher): SemanticsNodeInteraction {
+        val node = compose.onNode(matcher and hasAnyAncestor(isDialog()))
         if (runCatching { node.assertExists() }.isFailure) details()
-        node.performScrollTo().assertIsDisplayed()
+        return node.performScrollTo().assertIsDisplayed()
     }
+    private fun notice(text: String) = dialogNode(hasText(text))
 
-    @Test fun privacyIsNativeAndMultilineSendWorksWithTheKeyboardOpen() {
+    @Test fun privacyIsNativeAndMultilineSendUsesThePinnedAction() {
         content()
         details()
         compose.onNodeWithText("Editing or deleting", substring = true).performScrollTo().assertIsDisplayed()
@@ -81,11 +134,9 @@ class DirectJourneyTest {
         compose.runOnIdle { model.invalidate() }
         compose.waitUntil(5_000) { !model.state.value.busy && !model.state.value.stale }
         compose.onNodeWithText("Allow another send despite duplicate risk").assertDoesNotExist()
-        notice("Check latest history")
-        compose.onNodeWithText("Check latest history").performClick()
+        notice("Check latest history").performClick()
         compose.waitUntil(5_000) { model.state.value.checkedUnknown }
-        notice("Allow another send despite duplicate risk")
-        compose.onNodeWithText("Allow another send despite duplicate risk").performClick()
+        notice("Allow another send despite duplicate risk").performClick()
         compose.runOnIdle { assertEquals(1, api.sends); api.sendFailure = null }
         compose.onNodeWithTag("dm_send").assertIsEnabled().performClick()
         compose.waitUntil(5_000) { api.sends == 2 && !model.state.value.busy }
@@ -111,8 +162,7 @@ class DirectJourneyTest {
         compose.onNodeWithTag("dm_confirm_block").performClick()
         compose.waitUntil(5_000) { api.blocks == 2 && !model.state.value.busy }
         compose.runOnIdle { assertFalse(model.state.value.context!!.relationship.messagingAvailable) }
-        if (!compose.onNodeWithText("Messaging is unavailable", substring = true).isDisplayed()) details()
-        compose.onNodeWithText("Messaging is unavailable", substring = true).performScrollTo().assertIsDisplayed()
+        dialogNode(hasText("Messaging is unavailable", substring = true))
     }
 
     @Test fun wholePeerReadRaceKeepsLocalAttentionWhenTheUserScrollsAway() {
@@ -126,8 +176,7 @@ class DirectJourneyTest {
             assertEquals(1, api.reads); assertTrue(model.state.value.messages.all { it.readAt != null })
             assertTrue(model.attention.value[8]?.ids?.contains(81) == true)
         }
-        if (!compose.onNodeWithTag("dm_local_attention").isDisplayed()) details()
-        compose.onNodeWithTag("dm_local_attention").performScrollTo().assertIsDisplayed()
+        dialogNode(hasTestTag("dm_local_attention"))
     }
 
     @Test fun compositionRestorationUsesOnlyVmDraftAndLogoutClearsPrivateState() {
@@ -179,34 +228,74 @@ class DirectJourneyTest {
         compose.onNodeWithTag("dm_send").assertIsEnabled()
     }
 
+    @Test fun compactReadRetryReconcilesAndWaitsForUnobscuredReadProof() {
+        api.rows = listOf(row(18, read = null)); api.readFailure = ApiFailure(FailureKind.NETWORK)
+        content(ready = false, height = 220)
+        compose.waitUntil(5_000) { model.state.value.readError != null }
+        details()
+        compose.onNodeWithText("Refresh and retry read confirmation").performScrollTo().assertIsEnabled()
+        compose.runOnIdle { assertEquals(1, api.reads); api.readFailure = null }
+        compose.onNodeWithText("Refresh and retry read confirmation").performClick()
+        compose.waitUntil(5_000) { api.reads == 2 && !model.state.value.busy && model.state.value.readError == null }
+        compose.runOnIdle { assertTrue(model.state.value.messages.all { it.readAt != null }) }
+    }
+
     @Test fun nativeInboxSearchBackNavigationAndAccountSwitchKeepTheirOriginalScope() {
         val sessions = TestSessions(); val auth = AuthViewModel(sessions)
-        val direct = NativeDirects(sessions.state); val inbox = DirectInboxViewModel(direct); val thread = DirectThreadViewModel(direct)
+        val direct = NativeDirects(sessions.state); val connection = Connection()
+        val inbox = DirectInboxViewModel(direct, connection); val thread = DirectThreadViewModel(direct, connection)
         direct.rows = (16L..18L).map { row(it, read = null) }
         val settings = SettingsViewModel(object : SettingsStore {
             override val settings = MutableStateFlow(AppSettings(server = (ServerAddress.parse("chat.example.test") as AddressResult.Valid).address))
             override suspend fun saveServer(server: ServerAddress?) { settings.value = settings.value.copy(server = server) }
             override suspend fun saveTheme(theme: ThemePreference) { settings.value = settings.value.copy(theme = theme) }
         })
-        compose.setContent { Box(Modifier.size(320.dp, 640.dp)) { TestChitChatApp(settings, auth, directInbox = inbox, directThread = thread) } }
+        compose.setContent {
+            val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
+            SideEffect { imeBottom = bottom }
+            Box(Modifier.size(320.dp, 640.dp)) { TestChitChatApp(settings, auth, directInbox = inbox, directThread = thread, realtime = connection) }
+        }
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Viewer")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         closeSoftKeyboard()
-        compose.onNodeWithText("Sign in").assertIsDisplayed().assertIsEnabled().performClick()
+        if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
+            compose.waitUntil(5_000) { imeBottom == 0 }
+        compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.AUTHENTICATED }
+        compose.runOnIdle { connection.state.value = RealtimeState(phase = RealtimePhase.LIVE, generation = sessions.state.value.generation) }
         compose.onNodeWithText("Direct messages").performScrollTo().performClick()
         compose.waitUntil(5_000) { inbox.state.value.inbox != null && !inbox.state.value.busy }
         compose.onNodeWithTag("dm_inbox").performScrollToNode(hasText("3 unread"))
         compose.onNodeWithText("3 unread").assertIsDisplayed()
         compose.onNodeWithTag("dm_inbox").performScrollToNode(hasTestTag("dm_search_input"))
-        compose.onNodeWithTag("dm_search_input").performScrollTo().performTextInput("Pe")
+        compose.onNodeWithTag("dm_search_input").performScrollTo().performClick().performTextInput("Pe")
+        if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
+            compose.waitUntil(5_000) { imeBottom > 0 && runCatching { compose.onNodeWithTag("dm_search_input").assertIsDisplayed() }.isSuccess }
         compose.onNodeWithTag("dm_search_input").performImeAction()
         compose.waitUntil(5_000) { inbox.state.value.searched }
         compose.onNodeWithTag("dm_inbox").performScrollToNode(hasTestTag("dm_person:8"))
         compose.onNodeWithTag("dm_person:8").performClick()
         compose.waitUntil(5_000) { thread.state.value.loaded && !thread.state.value.busy }
-        compose.onNodeWithTag("dm_composer").performTextInput("Scoped draft fixture")
-        compose.onNodeWithText("Back").performClick()
+        compose.runOnIdle { connection.state.value = connection.state.value.copy(broadcasts = listOf(BroadcastNotice(9, null,
+                "Native announcement fixture", java.time.Instant.parse("2026-10-20T12:00:00Z")))) }
+        // Recipient navigation deliberately retires search focus/IME before editing a new scope.
+        if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
+            compose.waitUntil(5_000) { imeBottom == 0 }
+        displayed("dm_composer").performClick().performTextInput("Scoped draft fixture")
+        keyboardSend()
+        captureFixture("dm-app-draft-keyboard.png")
+        compose.runOnIdle { connection.state.value = connection.state.value.copy(phase = RealtimePhase.ERROR, error = ApiFailure(FailureKind.NETWORK)) }
+        details()
+        notice("Native announcement fixture")
+        notice(InstrumentationRegistry.getInstrumentation().targetContext.getString(io.github.thiesi.chitchat.R.string.retry)).performClick()
+        compose.runOnIdle { assertEquals(1, connection.retries)
+            connection.state.value = connection.state.value.copy(phase = RealtimePhase.LIVE, error = null, reconcileVersion = 1) }
+        compose.waitUntil(5_000) { !thread.state.value.busy && !thread.state.value.stale }
+        notice(InstrumentationRegistry.getInstrumentation().targetContext.getString(io.github.thiesi.chitchat.R.string.realtime_dismiss_notice)).performClick()
+        compose.runOnIdle { assertTrue(connection.state.value.broadcasts.isEmpty()) }
+        compose.onNodeWithText("Close").performClick()
+        closeSoftKeyboard()
+        compose.onNodeWithText("Back").assertIsDisplayed().performClick()
         compose.onNodeWithTag("dm_inbox").assertIsDisplayed()
         compose.waitUntil(5_000) { !inbox.state.value.busy && inbox.state.value.inbox != null }
         compose.onNodeWithText("3 unread").assertDoesNotExist()
@@ -222,6 +311,17 @@ class DirectJourneyTest {
         compose.runOnIdle { assertEquals(readsBeforeSwitch, direct.histories); assertTrue(thread.drafts.value.isEmpty()); thread.background(); inbox.background() }
     }
 
+    private class Connection : RealtimeController {
+        override val state = MutableStateFlow(RealtimeState())
+        override val events = MutableSharedFlow<RealtimeEvent>()
+        var retries = 0
+        override fun selectRoom(roomId: Long?, eligible: Boolean, interacted: Boolean) = Unit
+        override fun activity(roomId: Long) = Unit
+        override fun reenter(roomId: Long) = Unit
+        override fun retry() { retries++ }
+        override fun dismissBroadcast(id: Long) { state.value = state.value.copy(broadcasts = state.value.broadcasts.filterNot { it.id == id }) }
+    }
+
     private class NativeDirects(override val session: StateFlow<SessionState> = MutableStateFlow(SessionState(generation = 1,
         phase = SessionPhase.AUTHENTICATED, user = SessionUser(7, "Viewer", listOf("member"), 1, false)))) : DirectOperations {
         val privacy = MessagePrivacy(DirectPrivacy(false, false, "admin", "for up to 30 days", 30),
@@ -230,6 +330,7 @@ class DirectJourneyTest {
         @Volatile var sends = 0; @Volatile var reads = 0; @Volatile var blocks = 0; @Volatile var histories = 0
         var sendFailure: ApiFailure? = null; var available = true; var blocked = false; var readGate: CompletableDeferred<Unit>? = null
         var contextFailure: ApiFailure? = null
+        var readFailure: ApiFailure? = null
         override suspend fun context(peerId: Long): DirectContext {
             contextFailure?.let { throw it }
             return DirectContext(MessagePerson(peerId, "Peer"), DirectRelationship(blocked, !blocked && available), privacy, DisplayPreferences(), null)
@@ -250,7 +351,7 @@ class DirectJourneyTest {
             sends++; sendFailure?.let { throw it }; rows += row(99, body, read = null, outgoing = true); return 99
         }
         override suspend fun read(peerId: Long): Int {
-            reads++; readGate?.await()
+            reads++; readFailure?.let { throw it }; readGate?.await()
             val count = rows.count { !it.outgoing && it.readAt == null }
             rows = rows.map { row(it.id, it.body.orEmpty(), read = if (it.outgoing) it.readAt else "2026-10-20T10:01:00Z",
                 outgoing = it.outgoing, deleted = it.deleted, attachment = it.attachment) }

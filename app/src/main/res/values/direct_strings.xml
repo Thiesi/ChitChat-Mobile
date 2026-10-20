@@ -29,6 +29,7 @@
     <string name="dm_privacy_short">Not end-to-end encrypted. Retention: %1$s.</string>
     <string name="dm_privacy">Privacy and retention</string>
     <string name="dm_details">Conversation details</string>
+    <string name="dm_inbox_details">Messaging details</string>
     <string name="dm_details_attention">Updates or actions need attention</string>
     <string name="dm_close">Close</string>
     <string name="dm_inspection">Canonical DM inspection is enabled for %1$s.</string>

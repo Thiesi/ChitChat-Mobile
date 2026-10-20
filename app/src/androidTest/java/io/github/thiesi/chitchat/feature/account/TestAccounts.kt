@@ -19,6 +19,7 @@ import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.feature.auth.AuthViewModel
+import io.github.thiesi.chitchat.core.realtime.RealtimeController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.StateFlow
@@ -64,9 +65,10 @@ internal class TestAccounts(override val session: StateFlow<SessionState>) : Acc
 @Composable
 internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel? = null,
     roomModel: RoomsViewModel? = null, conversationModel: ConversationViewModel? = null,
-    directInbox: DirectInboxViewModel? = null, directThread: DirectThreadViewModel? = null) {
+    directInbox: DirectInboxViewModel? = null, directThread: DirectThreadViewModel? = null,
+    realtime: RealtimeController? = null) {
     val accountModel = account ?: remember(auth) { AccountViewModel(TestAccounts(auth.state)) }
     val rooms = roomModel ?: remember(auth) { RoomsViewModel(EmptyRoomOperations(auth.state)) }
     val conversations = conversationModel ?: remember(auth) { ConversationViewModel(EmptyConversationOperations(auth.state)) }
-    ChitChatApp(settings, auth, accountModel, rooms, conversations, directInbox = directInbox, directThread = directThread)
+    ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox, directThread = directThread)
 }
