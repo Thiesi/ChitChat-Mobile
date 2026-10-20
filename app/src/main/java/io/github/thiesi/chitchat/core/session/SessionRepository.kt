@@ -11,6 +11,7 @@ import io.github.thiesi.chitchat.core.network.SignInProvider
 import io.github.thiesi.chitchat.core.server.ServerAddress
 import io.github.thiesi.chitchat.core.conversation.ChatPolicy
 import io.github.thiesi.chitchat.core.conversation.DisplayPreferences
+import io.github.thiesi.chitchat.core.direct.MessagePrivacy
 import java.io.IOException
 import java.time.Clock
 import kotlinx.coroutines.CancellationException
@@ -19,6 +20,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -50,6 +53,7 @@ data class SessionState(
     val accountRestored: Boolean = false,
     val registrationMayHaveSucceeded: Boolean = false,
     val chatPolicy: ChatPolicy? = null,
+    val privacy: MessagePrivacy? = null,
 ) {
     val canChangeServer get() = phase !in setOf(SessionPhase.AUTHENTICATED, SessionPhase.PENDING_MFA, SessionPhase.GUEST) && !storageWarning && !busy
 }
@@ -275,6 +279,7 @@ class SessionRepository internal constructor(
                     chatPolicy = if (reply.user == null || reply.ignoredUserIds == null) null else
                         ChatPolicy(reply.ignoredUserIds.toSet(), reply.mutedEverywhere, reply.preferences ?: DisplayPreferences()),
                     registrationMayHaveSucceeded = if (reply.user != null) false else mutable.value.registrationMayHaveSucceeded,
+                    privacy = reply.privacy.takeIf { reply.user != null },
                 )
                 persist(active, reply.user)
             }
@@ -286,14 +291,14 @@ class SessionRepository internal constructor(
         active.csrf = reply.csrfToken
         if (reply.mfaRequired) {
             mutable.value = mutable.value.copy(phase = SessionPhase.PENDING_MFA, user = null, busy = true,
-                error = null, recoveryCodesRemaining = null, chatPolicy = null)
+                error = null, recoveryCodesRemaining = null, chatPolicy = null, privacy = null)
             persist(active, null)
         } else {
             active.signedInAt = clock.millis()
             active.expectedUserId = reply.user!!.id
             mutable.value = mutable.value.copy(phase = SessionPhase.AUTHENTICATED, user = reply.user,
                 busy = true, error = null, recoveryCodesRemaining = reply.recoveryCodesRemaining,
-                chatPolicy = null,
+                chatPolicy = null, privacy = null,
                 accountRestored = reply.restored, registrationMayHaveSucceeded = false)
             persist(active, reply.user)
         }
@@ -338,6 +343,18 @@ class SessionRepository internal constructor(
         if (clock.millis() < current.retryAtMillis) throw ApiFailure(FailureKind.HTTP, 429,
             retryAfterSeconds = (current.retryAtMillis - clock.millis() + 999) / 1000)
         SessionAccess(current.generation, current.user.id, current.user.sessionVersion, active.api, active.csrf!!)
+    }
+
+    /** Fresh policy/CSRF through ordinary bootstrap, still bound to the caller's original identity. */
+    internal suspend fun refreshedAccess(): SessionAccess {
+        val original = openAccess()
+        refresh()
+        val ready = withTimeoutOrNull(30_000) { state.first {
+            !it.busy || it.generation != original.generation || it.user?.id != original.userId ||
+                it.user.sessionVersion != original.sessionVersion
+        } } ?: throw ApiFailure(FailureKind.TIMEOUT)
+        ensureCurrent(original)
+        return openAccess(ready)
     }
 
     internal fun ensureCurrent(access: SessionAccess) {

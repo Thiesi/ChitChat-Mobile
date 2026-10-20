@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-**Native authentication, export and foreground realtime room conversations are implemented.** M3c3b adds canonical directory/history updates and explicit presence/inactivity UI. Live chat acceptance is pending; DMs/push are unimplemented. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). Prior auth/export evidence is linked from the milestone plan.
+**Native authentication, export and foreground realtime room conversations are implemented.** M3c3b adds canonical directory/history updates and explicit presence/inactivity UI. M4a adds the tested shared-session DM protocol; native DM screens and push are not implemented yet. Live chat acceptance is pending. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). Prior auth/export evidence is linked from the milestone plan.
 
 ## Engineering documents
 
@@ -24,6 +24,7 @@ M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native 
 - [Foreground session events, announcements and remaining room-consumer work](docs/milestones/M3c2-foreground-runtime.md)
 - [Bounded canonical-history prerequisite for the realtime room consumer](docs/milestones/M3c3a-canonical-history.md)
 - [Native realtime room/directory and presence consumer](docs/milestones/M3c3b-room-realtime.md)
+- [Direct-message protocol prerequisite and remaining native UI work](docs/milestones/M4a-direct-protocol.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)
