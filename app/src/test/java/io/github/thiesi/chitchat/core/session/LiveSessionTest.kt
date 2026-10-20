@@ -42,6 +42,16 @@ class LiveSessionTest {
             assertEquals("Room IDs must be unique", directory.size, directory.map { it.id }.toSet().size)
             assertTrue("Provide at least one visible room for directory/detail acceptance", directory.isNotEmpty())
             assertEquals("Room detail must match the requested authorized ID", directory.first().id, rooms.detail(directory.first().id).id)
+            // Read-only M3b contracts: no read acknowledgment, send, presence or membership mutation.
+            val conversations = io.github.thiesi.chitchat.core.conversation.SessionConversationRepository(active)
+            val roomId = directory.first().id
+            assertEquals(roomId, conversations.context(roomId).room.id)
+            val page = conversations.history(roomId)
+            assertTrue("Authorized history must remain in the requested room", page.messages.all { it.roomId == roomId })
+            assertTrue("History IDs must be ascending and unique", page.messages.zipWithNext().all { (a, b) -> a.id < b.id })
+            assertTrue("Ping history must remain private to this account", conversations.pings(roomId).all {
+                it.roomId == roomId && userId in setOf(it.sender.id, it.target.id)
+            })
             val revoked = vault.value!!
             active.signOut()
             assertEquals(SessionPhase.SIGNED_OUT, active.state.value.phase)

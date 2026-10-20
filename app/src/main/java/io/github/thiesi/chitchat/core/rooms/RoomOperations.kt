@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.core.rooms
 
 import io.github.thiesi.chitchat.core.network.SessionUser
+import io.github.thiesi.chitchat.core.conversation.RoomMute
 import io.github.thiesi.chitchat.core.session.SessionState
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.SerialName
@@ -22,6 +23,7 @@ class RoomInfo(
     @SerialName("guest_access") val guestAccess: String,
     @SerialName("unread_count") val unreadCount: Int = 0,
     @SerialName("last_read_message_id") val lastReadMessageId: Long? = null,
+    val muted: RoomMute? = null,
 ) {
     val isMember get() = memberRole != null
 }

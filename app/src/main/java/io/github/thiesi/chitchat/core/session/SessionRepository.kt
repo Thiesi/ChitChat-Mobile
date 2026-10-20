@@ -9,6 +9,8 @@ import io.github.thiesi.chitchat.core.network.SessionReply
 import io.github.thiesi.chitchat.core.network.SessionUser
 import io.github.thiesi.chitchat.core.network.SignInProvider
 import io.github.thiesi.chitchat.core.server.ServerAddress
+import io.github.thiesi.chitchat.core.conversation.ChatPolicy
+import io.github.thiesi.chitchat.core.conversation.DisplayPreferences
 import java.io.IOException
 import java.time.Clock
 import kotlinx.coroutines.CancellationException
@@ -47,6 +49,7 @@ data class SessionState(
     val registration: RegistrationPreparation = RegistrationPreparation.IDLE,
     val accountRestored: Boolean = false,
     val registrationMayHaveSucceeded: Boolean = false,
+    val chatPolicy: ChatPolicy? = null,
 ) {
     val canChangeServer get() = phase !in setOf(SessionPhase.AUTHENTICATED, SessionPhase.PENDING_MFA, SessionPhase.GUEST) && !storageWarning && !busy
 }
@@ -269,6 +272,8 @@ class SessionRepository internal constructor(
                     phase = when { reply.user == null -> SessionPhase.ANONYMOUS; reply.user.guest -> SessionPhase.GUEST; else -> SessionPhase.AUTHENTICATED },
                     user = reply.user,
                     public = reply.publicSession(), busy = true, error = null, refreshRequired = false,
+                    chatPolicy = if (reply.user == null || reply.ignoredUserIds == null) null else
+                        ChatPolicy(reply.ignoredUserIds.toSet(), reply.mutedEverywhere, reply.preferences ?: DisplayPreferences()),
                     registrationMayHaveSucceeded = if (reply.user != null) false else mutable.value.registrationMayHaveSucceeded,
                 )
                 persist(active, reply.user)
@@ -281,13 +286,14 @@ class SessionRepository internal constructor(
         active.csrf = reply.csrfToken
         if (reply.mfaRequired) {
             mutable.value = mutable.value.copy(phase = SessionPhase.PENDING_MFA, user = null, busy = true,
-                error = null, recoveryCodesRemaining = null)
+                error = null, recoveryCodesRemaining = null, chatPolicy = null)
             persist(active, null)
         } else {
             active.signedInAt = clock.millis()
             active.expectedUserId = reply.user!!.id
             mutable.value = mutable.value.copy(phase = SessionPhase.AUTHENTICATED, user = reply.user,
                 busy = true, error = null, recoveryCodesRemaining = reply.recoveryCodesRemaining,
+                chatPolicy = null,
                 accountRestored = reply.restored, registrationMayHaveSucceeded = false)
             persist(active, reply.user)
         }

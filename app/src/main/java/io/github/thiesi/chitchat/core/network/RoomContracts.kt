@@ -17,5 +17,6 @@ internal fun requireValidRoom(room: RoomInfo, expectedId: Long? = null) {
         room.guestAccess !in setOf("none", "read", "write") ||
         room.minimumAge < 0 || room.inactivityTimeoutSeconds < 0 ||
         room.memberRole !in setOf(null, "member", "moderator", "owner") || room.unreadCount < 0 ||
-        (room.lastReadMessageId != null && room.lastReadMessageId <= 0)) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        (room.lastReadMessageId != null && room.lastReadMessageId < 0)) throw ApiFailure(FailureKind.INCOMPATIBLE)
+    room.muted?.let { requireValidMute(it, room.id) }
 }

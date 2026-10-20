@@ -647,6 +647,63 @@ class SessionRepositoryTest {
         assertNull(vault.saved)
     }
 
+    @Test fun conversationContextRefreshesPolicyAndUsesListReadMuteMetadataWithRotatedCsrf() = runTest {
+        login()
+        val conversations = io.github.thiesi.chitchat.core.conversation.SessionConversationRepository(sessions)
+        val globalMute = """{"id":1,"scope":"everywhere","room_id":null,"expires_at":null,"reason":"Private moderation reason"}"""
+        val policy = bootstrapBody(user, c).dropLast(1) + """, "ignored_user_ids":[8],"muted_everywhere":$globalMute,"preferences":{"date_locale":"de-DE","hour_cycle":"h23"}}"""
+        server.enqueue(json(policy))
+        server.enqueue(json("""{"rooms":[${roomFixture.dropLast(1)},"last_read_message_id":0,"unread_count":2}]}"""))
+        val context = conversations.context(42)
+        assertEquals(setOf(8L), context.policy.ignoredUserIds); assertEquals("de-DE", context.policy.display.dateLocale)
+        assertEquals(0L, context.room.lastReadMessageId); assertEquals(2, context.room.unreadCount)
+        assertEquals("Private moderation reason", context.mute?.reason)
+        assertEquals("/api/v1/session.php", server.takeRequest(5, TimeUnit.SECONDS)!!.url.encodedPath)
+        assertEquals("SITE=auth", server.takeRequest(5, TimeUnit.SECONDS)!!.headers["Cookie"])
+        server.enqueue(json("""{"last_read_message_id":80}"""))
+        assertEquals(80L, conversations.read(42, 80))
+        assertEquals(c, server.takeRequest(5, TimeUnit.SECONDS)!!.headers["X-CSRF-Token"])
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut()
+        assertNull(sessions.state.value.chatPolicy)
+    }
+
+    @Test fun conversationResourceDenialStaysLocalButUnauthorizedReadClearsPrivateState() = runTest {
+        login()
+        val conversations = io.github.thiesi.chitchat.core.conversation.SessionConversationRepository(sessions)
+        server.enqueue(error("room_forbidden", 403))
+        try { conversations.history(42); fail("Expected private-room denial") } catch (failure: ApiFailure) { assertEquals(403, failure.status) }
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        server.enqueue(error("unauthenticated", 401))
+        try { conversations.read(42, 80); fail("Expected invalidation") } catch (_: ApiFailure) { }
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+        assertNull(sessions.state.value.chatPolicy); assertNull(vault.saved)
+    }
+
+    @Test fun conversationSendCsrfFailureNeedsExplicitRefreshWithoutReplay() = runTest {
+        login()
+        val conversations = io.github.thiesi.chitchat.core.conversation.SessionConversationRepository(sessions)
+        server.enqueue(error("csrf_failed", 403))
+        try { conversations.send(42, "Private fixture"); fail("Expected refresh") } catch (_: ApiFailure) { }
+        val count = server.requestCount
+        assertTrue(sessions.state.value.refreshRequired)
+        try { conversations.send(42, "Private fixture"); fail("Expected guarded send") } catch (_: ApiFailure) { }
+        assertEquals(count, server.requestCount)
+    }
+
+    @Test fun delayedConversationPolicyCannotRepopulateAfterLogout() = runTest {
+        login()
+        val conversations = io.github.thiesi.chitchat.core.conversation.SessionConversationRepository(sessions)
+        val policy = bootstrapBody(user, c).dropLast(1) + """, "ignored_user_ids":[8]}"""
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Content-Type", "application/json")
+            .body(policy).bodyDelay(400, TimeUnit.MILLISECONDS).build())
+        val pending = async { runCatching { conversations.context(42) } }
+        kotlinx.coroutines.yield()
+        assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut()
+        assertTrue(pending.await().exceptionOrNull() is kotlinx.coroutines.CancellationException)
+        assertNull(sessions.state.value.chatPolicy); assertNull(vault.saved)
+    }
+
     private class MemoryVault : SessionVault {
         var saved: SavedSession? = null
         var failWrites = false
