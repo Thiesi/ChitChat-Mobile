@@ -12,6 +12,8 @@ import io.github.thiesi.chitchat.core.direct.*
 import io.github.thiesi.chitchat.core.realtime.PresenceStatus
 import io.github.thiesi.chitchat.core.realtime.PresenceUser
 import io.github.thiesi.chitchat.core.typing.TypingTarget
+import io.github.thiesi.chitchat.core.notifications.NotificationPage
+import io.github.thiesi.chitchat.core.notifications.NotificationReadResult
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.time.ZonedDateTime
@@ -117,6 +119,21 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         }
         return decode<TypingSignalReply>(request("typing.php", body, csrf).require200()).signalled
     }
+
+    suspend fun notifications(beforeId: Long?, limit: Int): NotificationPage {
+        if (beforeId != null && beforeId <= 0 || limit !in 1..100)
+            throw ApiFailure(FailureKind.HTTP, 400, "validation_error")
+        val path = "account/notifications/list.php?limit=$limit" + (beforeId?.let { "&before_id=$it" } ?: "")
+        return decode<NotificationListReply>(request(path).require200()).page(beforeId, limit)
+    }
+    suspend fun readNotifications(ids: List<Long>, csrf: String): NotificationReadResult {
+        if (ids.size > 100 || ids.any { it <= 0 }) throw ApiFailure(FailureKind.HTTP, 400, "validation_error")
+        return decode<NotificationReadReply>(request("account/notifications/read.php",
+            apiJson.encodeToString(NotificationReadIds(ids)), csrf).require200()).result(ids.distinct().size)
+    }
+    suspend fun readAllNotifications(csrf: String): NotificationReadResult =
+        decode<NotificationReadReply>(request("account/notifications/read.php",
+            apiJson.encodeToString(NotificationReadAll(true)), csrf).require200()).result()
 
     suspend fun verificationMethods(): VerificationMethods {
         val mfa = decode<MfaStatusReply>(request("account/mfa/status.php").require200()).mfa
