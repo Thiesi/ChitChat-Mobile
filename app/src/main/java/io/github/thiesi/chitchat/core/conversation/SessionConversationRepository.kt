@@ -30,6 +30,15 @@ internal class SessionConversationRepository(private val sessions: SessionReposi
         val access = sessions.openAccess()
         return sessions.authorized(access) { roomHistory(roomId, beforeId, limit) }
     }
+    override suspend fun window(roomId: Long, lowerInclusive: Long, upperInclusive: Long?): WindowSnapshot {
+        val access = sessions.openAccess()
+        return sessions.authorized(access) {
+            readCanonicalRoomWindow(roomId, lowerInclusive, upperInclusive) { before, limit ->
+                sessions.ensureCurrent(access)
+                roomHistory(roomId, before, limit).also { sessions.ensureCurrent(access) }
+            }
+        }
+    }
     override suspend fun pings(roomId: Long): List<RoomPing> {
         val access = sessions.openAccess()
         return sessions.authorized(access) { roomPings(roomId, access.userId) }
