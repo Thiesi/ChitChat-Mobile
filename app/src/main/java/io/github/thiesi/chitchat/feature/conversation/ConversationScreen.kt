@@ -138,7 +138,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
     val compact = maxHeight < 240.dp
     val headerLimit = maxHeight * 0.3f
-    val composerLimit = (maxHeight * 0.45f).coerceAtLeast(56.dp)
+    val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
     val header: @Composable (() -> Unit) -> Unit = { close ->
             Text(state.context?.room?.name ?: stringResource(R.string.conversation_title), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(if (model.realtime == null) R.string.conversation_manual else R.string.conversation_realtime),

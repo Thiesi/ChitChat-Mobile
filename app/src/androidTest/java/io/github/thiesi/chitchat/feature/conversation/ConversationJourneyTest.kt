@@ -89,11 +89,23 @@ class ConversationJourneyTest {
         val semantics = compose.onNodeWithTag("conversation_composer").fetchSemanticsNode().config
         assertEquals(body, semantics[SemanticsProperties.EditableText].text)
         assertFalse(semantics.contains(SemanticsProperties.ContentDescription))
+        val label = InstrumentationRegistry.getInstrumentation().targetContext.getString(io.github.thiesi.chitchat.R.string.conversation_message)
+        assertTrue(semantics[SemanticsProperties.Text].any { it.text == label })
         if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
             compose.waitUntil(5_000) { imeBottom > 0 }
         // Send is pinned beside the field: no composer scroll that can race cursor bring-into-view.
         compose.onNodeWithTag("conversation_composer").assertIsDisplayed()
-        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsEnabled().performClick()
+        val action = compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsEnabled()
+        captureFixture("room-composer-before-send.png")
+        action.performClick()
+    }
+    private fun captureFixture(name: String) {
+        if (InstrumentationRegistry.getArguments().getString("captureRoomFixture") != "true") return
+        val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        val target = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = java.io.File(target.getExternalFilesDir("screenshots") ?: target.cacheDir, name)
+        file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
     }
     private fun timelineText(text: String) {
         compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasText(text))
@@ -163,13 +175,7 @@ class ConversationJourneyTest {
         val beforeLatest = model.state.value.scrollRequest
         val latestLabel = InstrumentationRegistry.getInstrumentation().targetContext.getString(io.github.thiesi.chitchat.R.string.conversation_latest)
         val latestAction = compose.onNodeWithText(latestLabel).performScrollTo().assertIsDisplayed().assertIsEnabled()
-        if (InstrumentationRegistry.getArguments().getString("captureRoomFixture") == "true") {
-            val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-            val target = InstrumentationRegistry.getInstrumentation().targetContext
-            val file = java.io.File(target.getExternalFilesDir("screenshots") ?: target.cacheDir, "room-latest-before.png")
-            file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
-            bitmap.recycle()
-        }
+        captureFixture("room-latest-before.png")
         latestAction.performClick()
         try { compose.waitUntil(5_000) { model.state.value.scrollRequest > beforeLatest && !model.state.value.busy } }
         catch (failure: androidx.compose.ui.test.ComposeTimeoutException) {

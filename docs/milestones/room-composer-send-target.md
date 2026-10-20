@@ -10,7 +10,11 @@ Initial PR30 review found three worthwhile improvements: remove an editable fiel
 
 Read proof requires RESUMED lifecycle, window focus, unobscured live edge and a visible newest-row bottom, not an entire tall-row fit. Details/private-ping overlays cannot acknowledge content behind them. Explicit retry controls use latest-window availability, not the temporarily false obscured `atLatest` proof; closing the dialog and the ordinary viewport gate still determine whether a POST is eligible. No uncertain-read hot loop or synthetic acknowledgment.
 
+The next review correctly caught that placeholder-only naming disappears with a nonempty draft. The field now uses Material's persistent label slot and merges that label alongside EditableText, without a content-description override or an invented hint API. Native send assertions verify the label and exact multiline draft together. The compact composer reserves64dp for the floating label. The revised focused18 and actual-landscape/font150% six-case runs passed; an independently installed fake tall-send case also passed and its keyboard-visible screenshot was inspected (`.tooling/room-composer-persistent-label-landscape.png`). Manual TalkBack is still unperformed.
+
 ## Verification
+
+The persistent-label revision passed the six-task gate in5m30s (130 tasks:20 executed/110 up-to-date): JVM336/native71, zero failures/errors/skips, debug/test-APK, lint (no issues) and R8 release. Strict software-IME readiness was enabled. Reports remain in the owned build pending archival; the previous revision's passes below are historical, not a substitute for this gate. Hosted checks and completed/fresh reviews of this final revision are still required.
 
 After review fixes, the six-task gate passed in5m7s (130 tasks:30 executed/2 cached/98 up-to-date): JVM336, native71, debug/test-APK, lint and R8 release; zero failures/errors/skips. It explicitly set `expectSoftKeyboard=true`; report: ignored `.tooling/room-composer-post-review-71-native-pass`. The revised focused18 cases also passed in1m27s. Actual touch-scroll/control responsiveness passed independently in portrait and asserted-landscape/font150%; reports: `room-composer-portrait-touch-pass` and `room-composer-landscape-touch-pass`. Hosted/fresh-review gates remain pending for the revised head.
 
