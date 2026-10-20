@@ -7,6 +7,7 @@ import io.github.thiesi.chitchat.core.account.VerificationMethods
 import io.github.thiesi.chitchat.core.rooms.CreateRoom
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
 import io.github.thiesi.chitchat.core.rooms.validateRoomCreation
+import io.github.thiesi.chitchat.core.conversation.*
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.time.ZonedDateTime
@@ -67,6 +68,9 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         val reply = decode<SessionReply>(raw)
         requireValidCsrf(reply.csrfToken)
         reply.user?.let(::requireValidUser)
+        reply.ignoredUserIds?.let { incompatibleUnless(it.all { id -> id > 0 } && it.distinct().size == it.size) }
+        reply.mutedEverywhere?.let { requireValidMute(it, null) }
+        incompatibleUnless(reply.preferences?.hourCycle in setOf(null, "h12", "h23"))
         return reply
     }
 
@@ -162,6 +166,56 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
             requireValidRoom(it)
             if (it.memberRole != "owner" || it.createdBy != userId) throw ApiFailure(FailureKind.INCOMPATIBLE)
         }
+    }
+
+    suspend fun roomHistory(roomId: Long, beforeId: Long?, limit: Int): MessagePage {
+        require(roomId > 0 && (beforeId == null || beforeId > 0) && limit in 1..100)
+        val path = "rooms/messages.php?room_id=$roomId&limit=$limit" + (beforeId?.let { "&before_id=$it" } ?: "")
+        val messages = decode<MessagesReply>(request(path).require200()).messages
+        incompatibleUnless(messages.size <= limit && messages.zipWithNext().all { (a, b) -> a.id < b.id })
+        messages.forEach { requireValidMessage(it, roomId); incompatibleUnless(beforeId == null || it.id < beforeId) }
+        if (messages.isEmpty()) return MessagePage(emptyList(), null, false)
+        // Current bodies/edit/deletion metadata, including retention races, not a cached text match.
+        val ids = messages.map { it.id }.toSet()
+        val metadata = decode<MutationsReply>(request("rooms/message-mutations.php?room_id=$roomId&message_ids=${ids.joinToString(",")}").require200()).messages
+        incompatibleUnless(metadata.map { it.id }.distinct().size == metadata.size && metadata.all { it.id in ids })
+        val byId = metadata.associateBy { it.id }
+        return MessagePage(messages.mapNotNull { message -> byId[message.id]?.let { applyMutation(message, it) } },
+            messages.first().id, messages.size == limit)
+    }
+
+    suspend fun roomPings(roomId: Long, viewerId: Long): List<RoomPing> {
+        require(roomId > 0)
+        val pings = decode<PingsReply>(request("rooms/pings.php?room_id=$roomId").require200()).pings
+        incompatibleUnless(pings.size <= 100 && pings.zipWithNext().all { (a, b) -> a.id < b.id })
+        pings.forEach { requireValidPing(it, roomId, viewerId) }
+        return pings
+    }
+
+    suspend fun sendRoomMessage(roomId: Long, body: String, csrf: String, viewerId: Long): SendResult {
+        require(roomId > 0)
+        validateMessageBody(body)?.let { throw ApiFailure(FailureKind.HTTP, 400, it) }
+        val raw = request("rooms/send.php", apiJson.encodeToString(SendRequest(roomId, body)), csrf)
+        incompatibleUnless(raw.status == 201)
+        val reply = decode<SendReply>(raw)
+        incompatibleUnless((reply.message == null) != (reply.ping == null))
+        val isPing = body.phpTrim().let { it == "/ping" || it.startsWith("/ping ") }
+        return if (reply.message != null) {
+            requireValidMessage(reply.message, roomId)
+            incompatibleUnless(!isPing && reply.message.senderId == viewerId && !reply.message.deleted)
+            SendResult.Message(reply.message)
+        } else {
+            val ping = checkNotNull(reply.ping)
+            requireValidPing(ping, roomId, viewerId)
+            incompatibleUnless(isPing && ping.sender.id == viewerId)
+            SendResult.Ping(ping)
+        }
+    }
+
+    suspend fun readRoom(roomId: Long, messageId: Long, csrf: String): Long {
+        require(roomId > 0 && messageId > 0)
+        return decode<ReadReply>(request("rooms/read.php", apiJson.encodeToString(ReadRequest(roomId, messageId)), csrf).require200())
+            .messageId.also { incompatibleUnless(it >= 0) }
     }
 
     private suspend fun auth(path: String, body: String, csrf: String, successStatus: Int = 200, allowPending: Boolean = true): AuthReply {
