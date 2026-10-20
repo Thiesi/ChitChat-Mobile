@@ -36,6 +36,9 @@ class DirectStateTest {
         assertTrue(thread.state.value.messages.all { it.readAt != null })
         assertEquals(setOf(19L), thread.attention.value[8]?.ids)
         assertTrue(thread.attention.value[8]?.additionalMayBeRead == true)
+        val stableAttention = thread.attention.value
+        thread.viewport(DirectAnchor(18, 1), setOf(18), null, false)
+        assertSame(stableAttention, thread.attention.value) // Scrolling pixels do not emit unchanged attention/UI state.
         thread.viewport(DirectAnchor(19, 0), setOf(19), 19, true); runCurrent()
         assertTrue(thread.attention.value[8]?.ids.isNullOrEmpty()); assertEquals(1, api.reads)
         thread.acknowledgeAdditionalRead(); assertNull(thread.attention.value[8])
@@ -151,6 +154,17 @@ class DirectStateTest {
         assertEquals(18L, thread.state.value.fixedUpper)
         thread.latest(); runCurrent(); assertEquals(1450L, thread.state.value.messages.last().id)
         assertNull(thread.state.value.fixedUpper)
+    }
+
+    @Test fun newOwnMessageFromAnotherDeviceOffersJumpWithoutForcingAnAwayViewport() = runTest(dispatcher) {
+        open(); thread.viewport(DirectAnchor(18, 9), emptySet(), null, false)
+        val scroll = thread.state.value.scrollRequest
+        api.rows += row(19, outgoing = true); thread.invalidate(); runCurrent()
+        assertTrue(thread.state.value.newerAvailable); assertEquals(scroll, thread.state.value.scrollRequest)
+        assertTrue(thread.attention.value[8]?.ids.isNullOrEmpty()) // Own arrival is not an incoming unread count.
+        thread.invalidate(); runCurrent(); assertTrue(thread.state.value.newerAvailable)
+        thread.viewport(DirectAnchor(19, 0), emptySet(), 19, true); runCurrent()
+        assertFalse(thread.state.value.newerAvailable); assertEquals(0, api.sends)
     }
 
     @Test fun readFailureDoesNotHotRetryAndExplicitRetryReconcilesBeforeAnotherPost() = runTest(dispatcher) {

@@ -25,6 +25,7 @@ M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native 
 - [Bounded canonical-history prerequisite for the realtime room consumer](docs/milestones/M3c3a-canonical-history.md)
 - [Native realtime room/directory and presence consumer](docs/milestones/M3c3b-room-realtime.md)
 - [Direct-message protocol prerequisite and remaining native UI work](docs/milestones/M4a-direct-protocol.md)
+- [Bounded direct-message state prerequisite; native consumer follows](docs/milestones/M4b1-direct-state.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)

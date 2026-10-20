@@ -1,10 +1,11 @@
 # Current status and limitations
 
-As of M4a protocol prerequisite (native DM screens/live chat acceptance pending), 2026-10-20:
+As of M4b1 state prerequisite (native DM screens/live chat acceptance pending), 2026-10-20:
 
 - [Issue22](https://github.com/Thiesi/ChitChat-Mobile/issues/22) resolved in PR23: hosted Account-start diagnostics captured zero sign-in calls before export/recreation. Setup now dismisses the password IME and asserts the original button displayed/enabled before tapping, without changing auth assertions/timeouts. Focused9/9, full local66/66, final-head PR and merged-main native CI passed. Original failures and a separate local SystemUI ANR remain preserved; no production authentication fix or exact hosted IME-mechanics claim. Private-ping issue16 remains separate.
 
 - M4a implements shared-session DM HTTP/policy/enrichment with JVM and Android TLS fixtures, not native inbox/conversation UI, local unseen-attention reducers, typing, notification center or live DM acceptance. Existing in-app availability remains unchanged. Missing/unsupported privacy disables DMs without guessing or invalidating room access; no fixture is a production fallback. See [evidence/remaining work](milestones/M4a-direct-protocol.md).
+- M4b1 adds the canonical reader/inbox/thread state and bounded local-attention reducer, not its native viewport or screens. M4b2 must consume those states and expose draft capacity/discard, read-race warnings, consent and errors. Local attention is non-durable and cannot repair whole-peer/cross-device unread state. See [state evidence](milestones/M4b1-direct-state.md); no native/live DM completeness claim.
 - [Issue24](https://github.com/Thiesi/ChitChat-Mobile/issues/24): the first M4a full native run passed66/67, with an existing tall-send/read combined predicate timing out. A focused run passed without changing behavior; this is not a fix. Failure-only fixture state/count/bounds diagnostics now distinguish possible outcomes without logging content. Product cause remains unproved; full final-head local/hosted gates are still required. Issue16's private-ping predicate is separate.
 
 - M3c3b adds foreground room realtime/presence; [evidence](milestones/M3c3b-room-realtime.md) distinguishes fixtures from pending authorized live two-account acceptance. Drafts/content remain memory-only. Advanced tools/media remain M5.
