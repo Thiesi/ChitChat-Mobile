@@ -281,6 +281,46 @@ class DirectProtocolTest {
         assertEquals(FailureKind.INCOMPATIBLE, failure { api.directHistory(8, null, 50, 7) }.kind); take()
     }
 
+    @Test fun cancelledPolicyBootstrapReleasesBusyAndRequiresFreshCsrfBeforeFurtherAccess() = runTest {
+        login()
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body(bootstrap()).bodyDelay(500, TimeUnit.MILLISECONDS).build())
+        val pending = async { direct.context(8) }
+        withContext(Dispatchers.IO) { take() }
+        assertTrue(sessions.state.value.busy)
+        pending.cancelAndJoin()
+        assertFalse(sessions.state.value.busy)
+        assertTrue(sessions.state.value.refreshRequired)
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        val count = server.requestCount
+        failure { direct.history(8) }; assertEquals(count, server.requestCount)
+        server.enqueue(json(bootstrap())); sessions.refresh(); take()
+        assertFalse(sessions.state.value.busy); assertFalse(sessions.state.value.refreshRequired)
+        server.enqueue(json("""{"messages":[]}""")); assertTrue(direct.history(8).messages.isEmpty())
+        assertEquals("SITE=auth", take().headers["Cookie"])
+    }
+
+    @Test fun cancelledInitialBootstrapCanBeRevalidatedInsteadOfStayingConnecting() = runTest {
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body(bootstrap(user = "null")).bodyDelay(500, TimeUnit.MILLISECONDS).build())
+        val pending = async { sessions.connect((ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address) }
+        withContext(Dispatchers.IO) { take() }; pending.cancelAndJoin()
+        assertFalse(sessions.state.value.busy); assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+        server.enqueue(json(bootstrap(user = "null"))); sessions.refresh(); take()
+        assertEquals(SessionPhase.ANONYMOUS, sessions.state.value.phase); assertFalse(sessions.state.value.refreshRequired)
+    }
+
+    @Test fun cancelledOldBootstrapCannotChangeTheSignedOutGeneration() = runTest {
+        login()
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body(bootstrap()).bodyDelay(500, TimeUnit.MILLISECONDS).build())
+        val pending = async { direct.context(8) }; withContext(Dispatchers.IO) { take() }
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut()
+        pending.cancelAndJoin()
+        assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase); assertFalse(sessions.state.value.busy)
+        assertFalse(sessions.state.value.refreshRequired); assertNull(sessions.state.value.privacy); assertNull(vault.saved)
+    }
+
     private suspend fun failure(action: suspend () -> Unit): ApiFailure {
         try { action(); error("Expected safe failure") } catch (failure: ApiFailure) { return failure }
     }
