@@ -59,6 +59,24 @@ class ConversationJourneyTest {
         compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasText(text))
         compose.onNodeWithText(text).assertIsDisplayed()
     }
+    /** Failure-only fixture diagnostics: counts/state/bounds, never content or credentials. */
+    private fun sentOutcome(readExpected: Boolean = false) {
+        try {
+            compose.waitUntil(5_000) { fake.sends == 1 && !model.state.value.busy && (!readExpected || fake.lastRead == 4L) }
+        } catch (failure: androidx.compose.ui.test.ComposeTimeoutException) {
+            var safe = "state unavailable"
+            runCatching { compose.runOnIdle {
+                val state = model.state.value
+                safe = "sends=${fake.sends}, busy=${state.busy}, sending=${state.sending}, loaded=${state.loaded}, " +
+                    "stale=${state.stale}, latestWindow=${state.latestWindow}, atLatest=${state.atLatest}, " +
+                    "lastRead=${fake.lastRead}, readCursor=${state.readCursor}, readError=${state.readError?.kind}, " +
+                    "sendError=${state.error?.kind}, uncertain=${state.uncertainSend}, scroll=${state.scrollRequest}"
+            } }
+            val newest = runCatching { compose.onNodeWithTag("message:4").fetchSemanticsNode().boundsInRoot.toString() }.getOrDefault("absent")
+            val timeline = runCatching { compose.onNodeWithTag("conversation_timeline").fetchSemanticsNode().boundsInRoot.toString() }.getOrDefault("absent")
+            throw AssertionError("Fixture send outcome: $safe; newestBounds=$newest; timelineBounds=$timeline", failure)
+        }
+    }
 
     @Test fun multilineSendUsesExplicitActionAndAcknowledgedMessageClearsDraft() {
         content()
@@ -67,7 +85,7 @@ class ConversationJourneyTest {
         var readAtLiveEdge = false
         fake.onRead = { id -> if (id == 4L) readAtLiveEdge = model.state.value.atLatest }
         send(body)
-        compose.waitUntil(5_000) { fake.sends == 1 && !model.state.value.busy && fake.lastRead == 4L }
+        sentOutcome(readExpected = true)
         compose.runOnIdle {
             assertEquals("", model.state.value.draft); assertEquals(1, fake.sends)
             assertEquals(4L, fake.lastRead); assertTrue(readAtLiveEdge)
@@ -157,7 +175,7 @@ class ConversationJourneyTest {
     @Test fun privatePingNeverAppearsAsRoomMessage() {
         fake.pingResult = true
         content(); send("/ping Bob Private ping fixture")
-        compose.waitUntil(5_000) { fake.sends == 1 && !model.state.value.busy }
+        sentOutcome()
         compose.onNodeWithText("Private ping fixture").assertDoesNotExist()
         compose.onNodeWithText("Private pings").performScrollTo().performClick()
         compose.onNodeWithText("Private ping fixture").performScrollTo().assertIsDisplayed()
