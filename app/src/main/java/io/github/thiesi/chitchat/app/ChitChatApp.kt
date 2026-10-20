@@ -67,6 +67,8 @@ import io.github.thiesi.chitchat.feature.auth.AuthViewModel
 import io.github.thiesi.chitchat.feature.auth.AuthScreen
 import io.github.thiesi.chitchat.feature.account.AccountScreen
 import io.github.thiesi.chitchat.feature.account.AccountViewModel
+import io.github.thiesi.chitchat.feature.rooms.RoomsScreen
+import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.network.FailureKind
 import androidx.lifecycle.Lifecycle
@@ -74,7 +76,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel, onThemeChanged: (Boolean) -> Unit = {}) {
+fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel, rooms: RoomsViewModel, onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by auth.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.hasLoadedSettings, state.settings.server) {
@@ -101,6 +103,10 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 nav.popBackStack("home", false)
                 account.cancel()
             } else if (entry?.destination?.route != null && entry?.destination?.route != "account") account.cancel()
+            if (entry?.destination?.route == "rooms" && session.phase != SessionPhase.AUTHENTICATED) {
+                nav.popBackStack("home", false)
+                rooms.cancel()
+            } else if (entry?.destination?.route != null && entry?.destination?.route != "rooms") rooms.cancel()
         }
         Scaffold(
             topBar = {
@@ -108,6 +114,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                     title = { Text(stringResource(when (entry?.destination?.route) {
                         "settings" -> R.string.settings
                         "account" -> R.string.account
+                        "rooms" -> R.string.rooms_title
                         else -> R.string.app_name
                     })) },
                     navigationIcon = {
@@ -156,6 +163,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                             Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.headlineLarge)
                                             Text(state.settings.server!!.value, style = MaterialTheme.typography.titleMedium)
                                             AuthScreen(session, auth)
+                                            if (session.phase == SessionPhase.AUTHENTICATED) Button(onClick = {
+                                                nav.navigate("rooms") { launchSingleTop = true }
+                                            }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.rooms_title)) }
                                             Button(onClick = { nav.navigate("server") }, enabled = session.canChangeServer) {
                                                 Text(stringResource(R.string.change_server))
                                             }
@@ -179,6 +189,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             if (session.phase == SessionPhase.AUTHENTICATED) ScreenContent {
                                 AccountScreen(account, session, auth::refresh)
                             }
+                        }
+                        composable("rooms") {
+                            if (session.phase == SessionPhase.AUTHENTICATED) RoomsScreen(rooms, auth::refresh)
                         }
                     }
                 }

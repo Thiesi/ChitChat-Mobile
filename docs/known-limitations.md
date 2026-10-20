@@ -1,6 +1,8 @@
 # Current status and limitations
 
-As of M2b2, 2026-10-20:
+As of M3a, 2026-10-20:
+
+- M3a adds native room directory/detail/membership/creation ([evidence](milestones/M3a-room-directory.md)), not actual conversations. Room metadata refreshes on entry/resume/manual refresh; SSE-driven permission/list changes, history, composition, read acknowledgment and active presence are M3b/c. No room/message data is cached to disk. Membership and creation fixtures are not live mutation acceptance; read-only live directory/detail checks are tracked separately.
 
 M2a normalizes Unicode hostnames with OkHttp and rejects credentials/raw paths before normalization. Private/loopback HTTPS origins are intentional for self-hosting, with mandatory valid TLS verification. Repository/Keystore recreation tests do not establish Android process-death acceptance. Platform dark-startup flash/account-palette synchronization remain later polish.
 
