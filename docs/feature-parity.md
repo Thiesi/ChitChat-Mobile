@@ -4,6 +4,8 @@ Baseline: [ChitChat v3.2.1, commit 4f53ff4](https://github.com/Thiesi/ChitChat/t
 
 Classification: **Existing** = existing backend contract, **Android** = client-only/system adaptation, **Dependency** = missing server support, **Special** = needs platform treatment, **Excluded** = browser/operator-only function with justification. Milestones are defined in [the plan](implementation-plan.md). Links below refer to the pinned backend snapshot.
 
+Native keyboard/navigation verification also covers one-tap input focus and actual IME before semantic text injection; see [DM search readiness](milestones/dm-search-keyboard-navigation.md) for the merged-main failure, correction and gate boundaries.
+
 | Browser feature / behavior | Feasibility and Android treatment | Evidence | Milestone / dependency |
 |---|---|---|---|
 | Self-hosted server selection | Implemented M2a: HTTPS/IDN normalization, local settings and actual session bootstrap; success is shown only after valid server JSON. Sign out/cancel MFA before switching; origin/generation isolation retires old callbacks | [session](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/api/v1/session.php), [health](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/health.php) | M2a; see evidence |

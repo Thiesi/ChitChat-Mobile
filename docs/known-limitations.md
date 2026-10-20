@@ -2,6 +2,8 @@
 
 As of M4b2 native DM consumer (live chat acceptance pending), 2026-10-20:
 
+- [Issue31](https://github.com/Thiesi/ChitChat-Mobile/issues/31) records a merged-main80/81 native result: recipient search's real-IME/visibility predicate timed out after login/inbox entry. The [navigation/readiness correction](milestones/dm-search-keyboard-navigation.md) removes a deterministic redundant hide and proves tap focus/IME before injection. Exact hosted timing is not inferred from a later pass; merged-main verification is required before closing.
+
 M4b2 now supplies native inbox/search/thread/composition/privacy/blocking. Typing/ignore/notification center (M4c), tools/media/search (M5), push (M6) and live DM acceptance remain pending. Inbox/drafts cap at100; memory-only local attention cannot repair whole-peer/cross-device unread state. See [current consumer evidence](milestones/M4b2-native-direct-messages.md). Earlier slice records below describe their original limits, not missing M4b2 screens.
 
 - [Issue22](https://github.com/Thiesi/ChitChat-Mobile/issues/22) resolved in PR23: hosted Account-start diagnostics captured zero sign-in calls before export/recreation. Setup now dismisses the password IME and asserts the original button displayed/enabled before tapping, without changing auth assertions/timeouts. Focused9/9, full local66/66, final-head PR and merged-main native CI passed. Original failures and a separate local SystemUI ANR remain preserved; no production authentication fix or exact hosted IME-mechanics claim. Private-ping issue16 remains separate.
