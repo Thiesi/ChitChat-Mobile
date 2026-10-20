@@ -284,6 +284,20 @@ class SessionRepository internal constructor(
                 persist(active, reply.user)
             }
         } catch (failure: ApiFailure) { failed(active, failure) }
+        catch (cancelled: CancellationException) {
+            withContext(NonCancellable) { lock.withLock {
+                if (runtime === active) {
+                    val current = mutable.value
+                    // Headers/cookies may already have arrived. Rebootstrap before using CSRF,
+                    // but never leave navigation cancellation holding the whole session busy.
+                    active.csrf = null
+                    mutable.value = current.copy(busy = false, refreshRequired = true,
+                        phase = if (current.phase == SessionPhase.CONNECTING) SessionPhase.INVALIDATED else current.phase,
+                        error = if (current.phase == SessionPhase.CONNECTING) current.error ?: ApiFailure(FailureKind.NETWORK) else current.error)
+                }
+            } }
+            throw cancelled
+        }
     }
 
     private suspend fun authenticated(active: Runtime, reply: AuthReply) = lock.withLock {
