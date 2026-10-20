@@ -66,22 +66,29 @@ import io.github.thiesi.chitchat.core.ui.MessageInput
 import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.typing.hasTypingContent
 import io.github.thiesi.chitchat.feature.realtime.TypingStatus
+import io.github.thiesi.chitchat.feature.account.IgnorePersonViewModel
+import io.github.thiesi.chitchat.feature.account.IgnorePersonDialog
 import io.github.thiesi.chitchat.core.ui.canAcknowledgeVisibleRead
 import io.github.thiesi.chitchat.core.ui.isReadEdgeVisible
 import kotlinx.coroutines.delay
 
 @Composable
-fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit) {
+fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
+    ignores: IgnorePersonViewModel? = null) {
     val session by model.session.collectAsStateWithLifecycle()
     key(roomId, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
-        ConversationContent(model, roomId, onRefreshSession)
+        ConversationContent(model, roomId, onRefreshSession, ignores)
     }
 }
 
 @Composable
-private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit) {
+private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
+    ignores: IgnorePersonViewModel?) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
+    val ignoreState = ignores?.state?.collectAsStateWithLifecycle()?.value
+    val personDialog = ignoreState?.target?.let { it.roomId == roomId && it.matches(session) } == true
+    val ignoredIds = session.chatPolicy?.ignoredUserIds ?: state.context?.policy?.ignoredUserIds.orEmpty()
     val activity = LocalActivity.current
     val connection = model.realtime?.state?.collectAsStateWithLifecycle()?.value
     val presenceHere = connection?.takeIf { it.generation == session.generation && it.selectedRoomId == roomId }
@@ -95,7 +102,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val timeline = rememberLazyListState()
     LaunchedEffect(roomId) { model.open(roomId) }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground() }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) model.background() }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) {
+        model.background(); ignores?.leaveRoom(session, roomId)
+    } }
     LaunchedEffect(session.retryAtMillis, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             do { now = System.currentTimeMillis(); if (now < session.retryAtMillis) delay(1000) }
@@ -115,7 +124,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
         }
     }
-    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, detailsOpen, lifecycle,
+    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, detailsOpen, personDialog, lifecycle,
         connection?.presencePhase, connection?.selectedRoomId, lifecycleState) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             snapshotFlow {
@@ -126,7 +135,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val last = visible.firstOrNull { it.key == "message:$newest" }
                 val edgeVisible = last != null && isReadEdgeVisible(last.offset, last.size,
                     timeline.layoutInfo.viewportStartOffset, timeline.layoutInfo.viewportEndOffset)
-                val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused, !pingsOpen && !detailsOpen)
+                val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused, !pingsOpen && !detailsOpen && !personDialog)
                 Triple(anchor, if (edgeVisible && readable) newest else null, !timeline.canScrollForward && readable)
             }.collect { (anchor, newest, edge) -> model.viewport(anchor, newest, edge) }
         }
@@ -224,7 +233,20 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     if (state.unreadDividerId == message.id) {
                         HorizontalDivider(); Text(stringResource(R.string.conversation_unread), style = MaterialTheme.typography.labelMedium)
                     }
-                    val ignored = message.senderId in (state.context?.policy?.ignoredUserIds ?: emptySet())
+                    val ignored = message.senderId in ignoredIds
+                    if (!ignored || ignores != null) {
+                        val sender = message.username ?: stringResource(R.string.conversation_unknown_user)
+                        val author = stringResource(R.string.conversation_author_time, sender, displayTime(message.createdAt, state.context))
+                        if (ignores != null && message.senderId != null && message.senderId != session.user?.id &&
+                            session.user?.guest == false) {
+                            val label = stringResource(R.string.ignore_author_actions, author)
+                            TextButton(onClick = { ignores.open(session, roomId, message.senderId, message.username) },
+                                enabled = !state.busy && !session.busy,
+                                modifier = Modifier.testTag("room_author:${message.id}").semantics { contentDescription = label }) {
+                                Text(author, style = MaterialTheme.typography.labelMedium)
+                            }
+                        } else Text(author, style = MaterialTheme.typography.labelMedium)
+                    }
                     if (ignored && message.id !in state.revealed) TextButton(onClick = { model.reveal(message.id) }) {
                         Text(stringResource(R.string.conversation_ignored))
                     } else MessageContent(message, state.context)
@@ -233,7 +255,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             item(key = "history_end") { Spacer(Modifier.height(1.dp)) }
         }
         TypingStatus(model.typing, session, TypingTarget.Room(roomId),
-            viewing = state.loaded && !state.stale && state.context != null && !pingsOpen && !detailsOpen,
+            viewing = state.loaded && !state.stale && state.context != null && !pingsOpen && !detailsOpen && !personDialog,
             publishing = ready && !state.busy && model.canSend())
         Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
@@ -276,19 +298,20 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         title = { Text(stringResource(R.string.conversation_pings)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.conversation_pings_private))
-            if (state.pings.isEmpty()) Text(stringResource(R.string.conversation_no_pings))
-            state.pings.forEach { ping ->
+            val visiblePings = state.pings.filterNot { it.sender.id in ignoredIds }
+            if (visiblePings.isEmpty()) Text(stringResource(R.string.conversation_no_pings))
+            visiblePings.forEach { ping ->
                 Text(stringResource(R.string.conversation_ping_people, ping.sender.username ?: stringResource(R.string.conversation_unknown_user),
                     ping.target.username ?: stringResource(R.string.conversation_unknown_user)))
                 Text(ping.message); Text(displayTime(ping.createdAt, state.context), style = MaterialTheme.typography.labelSmall)
             }
         } }, confirmButton = { TextButton(onClick = { pingsOpen = false }) { Text(stringResource(R.string.rooms_close)) } })
+    if (ignores != null && ignoreState != null) IgnorePersonDialog(ignores, ignoreState, session, roomId, now, onRefreshSession)
 }
 
 @Composable
 private fun MessageContent(message: RoomMessage, context: ConversationContext?) {
     val sender = message.username ?: stringResource(R.string.conversation_unknown_user)
-    Text(stringResource(R.string.conversation_author_time, sender, displayTime(message.createdAt, context)), style = MaterialTheme.typography.labelMedium)
     when {
         message.deleted -> Text(stringResource(R.string.conversation_deleted), style = MaterialTheme.typography.bodyMedium)
         else -> {

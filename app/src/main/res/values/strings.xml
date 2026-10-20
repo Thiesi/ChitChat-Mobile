@@ -13,7 +13,7 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="saved_server">Your server</string>
-    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations, and typing indicators. Account includes typing privacy. Notifications are not available yet.</string>
+    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations, and typing indicators. Room author actions include private ignore controls. Account includes typing privacy. Notifications are not available yet.</string>
     <string name="change_server">Change server</string>
     <string name="forget_server">Forget server</string>
     <string name="forget_title">Forget this server?</string>
@@ -43,7 +43,7 @@
     <string name="use_recovery_code">Use recovery code</string>
     <string name="cancel_sign_in">Cancel sign-in</string>
     <string name="signed_in_as">Signed in as %1$s</string>
-    <string name="auth_preview_limit">Open Rooms or Direct messages to read and send messages and see typing indicators. Account includes typing privacy. Notifications arrive later.</string>
+    <string name="auth_preview_limit">Open Rooms or Direct messages to read and send messages and see typing indicators. Room author actions include private ignore controls. Account includes typing privacy. Notifications arrive later.</string>
     <string name="session_retention">Your session is encrypted on this device. Sign in again after seven inactive days or thirty days from sign-in. Your server may expire it earlier.</string>
     <string name="recovery_remaining">Unused recovery codes remaining: %1$d</string>
     <string name="session_not_available">Session not available</string>
@@ -185,6 +185,17 @@
     <string name="typing_enable">Turn on typing sharing</string>
     <string name="typing_saving">Saving typing preference…</string>
     <string name="typing_unconfirmed">The change was not confirmed and will not be retried automatically. Refresh before trying again.</string>
+    <string name="ignore_author_actions">Room actions for %1$s</string>
+    <string name="ignore_scope">A private choice across rooms on this server. Their room messages collapse and their room mentions and pings stop notifying you. They are not told. Direct messages are unaffected; blocking is separate.</string>
+    <string name="ignore_confirmed">Ignoring in rooms</string>
+    <string name="ignore_not_ignored">Not ignoring in rooms</string>
+    <string name="ignore_unknown">The ignore list is not confirmed. Refresh it before making a change.</string>
+    <string name="ignore_start">Ignore in rooms</string>
+    <string name="ignore_stop">Stop ignoring in rooms</string>
+    <string name="ignore_saving">Updating room ignore preference…</string>
+    <string name="ignore_unconfirmed">The change was not confirmed. It will not be retried automatically. Refresh the session to check the server before trying again.</string>
+    <string name="ignore_cancel_warning">Cancelling may leave the change applied on the server. Refresh before another attempt.</string>
+    <string name="ignore_person_unavailable">This account is no longer available. Refresh the session to check your ignore list.</string>
     <string name="typing_one">%1$s is typing…</string>
     <string name="typing_two">%1$s and %2$s are typing…</string>
     <string name="typing_several">Several people are typing…</string>

@@ -73,7 +73,18 @@ class ConversationViewModel(private val operations: ConversationOperations,
         if (current.identity() != identity) {
             retire(); identity = current.identity(); dividerEstablished = false
             mutable.value = ConversationUiState()
-        } else drainSync()
+        } else {
+            val value = mutable.value
+            val context = value.context
+            val policy = current.chatPolicy
+            if (context != null && policy != null && context.policy.ignoredUserIds != policy.ignoredUserIds) {
+                mutable.value = value.copy(context = ConversationContext(context.room, policy), revealed = emptySet(),
+                    pings = value.pings.filterNot { it.sender.id in policy.ignoredUserIds })
+                // Queue canonical pings/unread/window reconciliation; never cancel or replay a write.
+                invalidate()
+            }
+            drainSync()
+        }
     } } }
 
     fun open(roomId: Long, interacted: Boolean = false) {
@@ -193,7 +204,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
                         mayHaveOlder = existing.mayHaveOlder || combined.size > 500)
                 } else reload(current, forceLatest = true)
                 is SendResult.Ping -> mutable.value = mutable.value.copy(pings = (mutable.value.pings + result.ping)
-                    .distinctBy { it.id }.filterNot { it.sender.id in value.context!!.policy.ignoredUserIds }.sortedBy { it.id }.takeLast(100))
+                    .distinctBy { it.id }.filterNot { it.sender.id in currentPolicy(value.context!!).policy.ignoredUserIds }.sortedBy { it.id }.takeLast(100))
             }
         }
     }
@@ -250,12 +261,13 @@ class ConversationViewModel(private val operations: ConversationOperations,
     private suspend fun reload(current: () -> Unit, forceLatest: Boolean = false) {
         val revision = requestedSync
         val roomId = checkNotNull(mutable.value.roomId)
-        val context = operations.context(roomId)
+        val snapshotContext = operations.context(roomId)
         current()
         val page = operations.history(roomId)
         current()
         val pings = operations.pings(roomId)
         current()
+        val context = currentPolicy(snapshotContext)
         val value = mutable.value
         val automatic = forceLatest || !value.loaded || value.atLatest
         val anchor = viewport?.takeIf { saved -> page.messages.any { it.id == saved.id } }
@@ -327,7 +339,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
     private suspend fun synchronizeWindow(original: ConversationUiState, attempt: Long, current: () -> Unit) {
         current()
         val roomId = checkNotNull(original.roomId)
-        val context = operations.context(roomId)
+        val snapshotContext = operations.context(roomId)
         current()
         val lower = original.olderCursor ?: original.messages.firstOrNull()?.id ?: 1L
         val upper = original.messages.lastOrNull()?.id
@@ -355,6 +367,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         // The helper's captured lower cursor cannot describe an unvisited gap, even at live edge.
         if (!snapshot.coveredLowerBoundary || (snapshot.messages.size > 500 && !following))
             throw ApiFailure(FailureKind.HTTP, code = "history_range_unavailable")
+        val context = currentPolicy(snapshotContext)
         val messages = snapshot.messages.takeLast(500)
         val previous = mutable.value
         val savedAnchor = viewport ?: previous.anchor
@@ -419,6 +432,10 @@ class ConversationViewModel(private val operations: ConversationOperations,
             uncertainSend = uncertain, reconciledAfterUncertain = false)
         dividerEstablished = false
     }
+    /** A delayed history GET must not restore policy captured before an acknowledged local change. */
+    private fun currentPolicy(context: ConversationContext) = session.value.chatPolicy
+        ?.let { ConversationContext(context.room, it) } ?: context
+
     private fun retire() {
         sequence++; readSequence++; job?.cancel(); readJob?.cancel(); readJob = null; syncJob?.cancel(); syncJob = null
         postInFlight = false; viewport = null; visibleNewest = null; attemptedRead = 0
