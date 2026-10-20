@@ -27,6 +27,12 @@ internal class SessionDirectRepository(private val sessions: SessionRepository) 
     }
     override suspend fun search(prefix: String, limit: Int) = using { directUsers(prefix, limit, it.userId) }
     override suspend fun history(peerId: Long, beforeId: Long?, limit: Int) = using { directHistory(peerId, beforeId, limit, it.userId) }
+    override suspend fun window(peerId: Long, lower: Long, upper: Long?) = using { access ->
+        readCanonicalDirectWindow(peerId, access.userId, lower, upper) { before, limit ->
+            sessions.ensureCurrent(access)
+            directHistory(peerId, before, limit, access.userId).also { sessions.ensureCurrent(access) }
+        }
+    }
     override suspend fun send(peerId: Long, body: String, replyId: Long?) = using { directSend(peerId, body, replyId, it.csrf, it.userId) }
     override suspend fun read(peerId: Long) = using { directRead(peerId, it.csrf, it.userId) }
     override suspend fun setBlocked(peerId: Long, blocked: Boolean) = using { directBlock(peerId, blocked, it.csrf, it.userId) }

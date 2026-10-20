@@ -55,6 +55,10 @@ interface DirectOperations {
     suspend fun context(peerId: Long): DirectContext
     suspend fun search(prefix: String, limit: Int = 20): List<MessagePerson>
     suspend fun history(peerId: Long, beforeId: Long? = null, limit: Int = 50): DirectPage
+    suspend fun window(peerId: Long, lower: Long, upper: Long? = null): DirectWindow =
+        readCanonicalDirectWindow(peerId, checkNotNull(session.value.user).id, lower, upper) { before, limit ->
+            history(peerId, before, limit)
+        }
     /** Confirmed POST ID only: a later enrichment GET failure must not turn a known send into unknown delivery. */
     suspend fun send(peerId: Long, body: String, replyId: Long? = null): Long
     /** Existing whole-peer acknowledgment, NOT a rendered through-ID cursor. Caller must refetch afterward. */
