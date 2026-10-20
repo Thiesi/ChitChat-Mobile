@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-**Native authentication, export and foreground room/direct conversations are implemented.** M4b2 adds the native DM inbox, recipient search, privacy-aware conversation/composer, blocking and read-race attention. M4c1/2 add account-wide typing privacy and foreground member typing signals/indicators. Ignore management, notification center, push and remaining parity are still pending. Live chat/typing acceptance is not established. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). Exact verification boundaries are linked from the milestone plan.
+**Native authentication, export and foreground room/direct conversations are implemented.** M4b2 adds the native DM inbox, recipient search, privacy-aware conversation/composer, blocking and read-race attention. M4c1/2 add typing privacy and foreground member typing; M4c3b adds private room-ignore controls and policy reconciliation. Notification center, push and remaining parity are still pending. Live chat/typing/ignore acceptance is not established. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). Exact verification boundaries are linked from the milestone plan.
 
 ## Engineering documents
 
@@ -30,7 +30,8 @@ M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native 
 - [Native direct-message consumer and verification](docs/milestones/M4b2-native-direct-messages.md)
 - [Account-wide typing privacy and remaining signal work](docs/milestones/M4c1-typing-privacy.md)
 - [Foreground native typing and verification](docs/milestones/M4c2-foreground-typing.md)
-- [Room-ignore protocol prerequisite; native controls pending](docs/milestones/M4c3a-ignore-protocol.md)
+- [Room-ignore protocol prerequisite](docs/milestones/M4c3a-ignore-protocol.md)
+- [Native room-ignore controls and verification](docs/milestones/M4c3b-native-ignore.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)

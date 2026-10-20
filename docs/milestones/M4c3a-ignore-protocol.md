@@ -1,6 +1,6 @@
 # M4c3a: room-ignore protocol prerequisite
 
-This buildable prerequisite adds the existing ignore mutation to shared HTTP/session policy. It deliberately does **not** expose incomplete native controls. Ignore management remains pending M4c3b; current room collapse/reveal, hidden pings and room-only typing filters still consume the confirmed policy. Direct-message blocking remains separate.
+This historical buildable prerequisite adds the existing ignore mutation to shared HTTP/session policy. It deliberately did **not** expose incomplete native controls: the later [M4c3b consumer](M4c3b-native-ignore.md) supplies them. Room collapse/reveal, hidden pings and room-only typing filters consume confirmed policy. Direct-message blocking remains separate.
 
 ## Verified existing contract
 
@@ -20,11 +20,15 @@ A runtime `policyChanging` gate now serializes both typing preference and ignore
 
 ## Native consumer follow-up (M4c3b)
 
+The later [native consumer](M4c3b-native-ignore.md) implements the following requirements; its verification remains separate from this historical protocol-only slice.
+
 Provide accessible room-author and collapsed-row actions with private/room-only disclosure and confirmed Ignore/Stop ignoring controls. Keep dialogs/callbacks scoped, expose unknown/loading/error/reconcile states, and suppress read/typing proof behind dialogs. Do not require a long-press or manual numeric-ID entry. Preserve names/state only in scoped VM memory, not saved state or logs.
 
 Session policy publication alone is insufficient: room transcripts hold `context.policy` snapshots. Update canonical room contexts/reveals and private pings immediately; prevent a delayed history/context request restoring older ignore policy. Reconcile pings after unignore and refresh room unread counts without cancelling/replaying a message/membership write. Test unchanged DM/block semantics, stale account/dialog callbacks, actual landscape/font150% and real keyboard behavior. No native consumer is declared functional until these end-to-end client fixtures pass.
 
 ## Verification
+
+Delivered in [PR35](https://github.com/Thiesi/ChitChat-Mobile/pull/35), squash `18e157ba2742e6754d6dfa38d880b4fd50657bf6`, reviewed head `9aecd3f7f6813950a48d315ef550496f423c22c2`; identical tree `3c1b903e21fa070fc7dd1596bfe3ea7f6900a0d6`. Actual clean reviews39459895342 and requested39460101411 delivered complete diff/comments with scoped runtime audits. Android39459895244 attempt1 failed SDK system-image ZIP installation before any emulator/test; its bounded failed-job-only attempt2 passed build/all87 native on the unchanged head. Separate merged-main39461842080 also passed build/all87 native. The original infrastructure failure was not counted as a test pass. Owned prerequisite worktree/branches were cleaned with build artifacts preserved; dependent UI work was retained and hash-verified across squash-base rebase.
 
 Initial `:app:assembleDebug :app:testDebugUnitTest --tests '*SessionHttpTest' --tests '*SessionRepositoryTest'` passed1m41s. Added reverse-bootstrap/failure regressions then passed the full `:app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true` gate6m38s:380 JVM/87 API36 native, zero failures/errors/skips, actual debug/release-shrinker/testAPK and lint success. XML totals were checked independently and native reports preserved in ignored `.tooling/m4c3a-final-380-87-pass`. The dedicated emulator retained CI-aligned disabled system animations; no UI source changed or new native ignore journey is claimed. Actual current-head Claude review and CI remain delivery gates.
 

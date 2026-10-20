@@ -52,7 +52,7 @@ Only `/me` and `/ping` are server commands. `/dm`, `/topic`, `/shrug`, `/help` a
 
 ## Room-ignore mutation prerequisite
 
-[M4c3a](milestones/M4c3a-ignore-protocol.md) uses existing `POST users/ignore.php` with `{user_id,ignored}` and current session CSRF. Its complete `ignored_user_ids` result replaces confirmed IDs while preserving other policy. Unknown policy is not empty; original session scope, a shared runtime policy-write/bootstrap gate and non-cancellable fenced cleanup prevent stale replies. Failed/cancelled changes require explicit session GET, not POST replay. This is room presentation/attention, not DM blocking; native management/canonical consumer reconciliation remains M4c3b.
+[M4c3a](milestones/M4c3a-ignore-protocol.md) uses existing `POST users/ignore.php` with `{user_id,ignored}` and current session CSRF. Its complete `ignored_user_ids` result replaces confirmed IDs while preserving other policy. Unknown policy is not empty; original session scope, a shared runtime policy-write/bootstrap gate and non-cancellable fenced cleanup prevent stale replies. Failed/cancelled changes require explicit session GET, not POST replay. [M4c3b](milestones/M4c3b-native-ignore.md) adds native member controls and canonical reconciliation without a new route/event. This remains room presentation/attention, not DM blocking; native guest/live acceptance is separate.
 
 ## Account-wide typing preference
 

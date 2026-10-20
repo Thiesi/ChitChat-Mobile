@@ -9,6 +9,8 @@ import io.github.thiesi.chitchat.core.account.AccountOperations
 import io.github.thiesi.chitchat.core.account.SessionAccountRepository
 import io.github.thiesi.chitchat.core.account.TypingPreferenceOperations
 import io.github.thiesi.chitchat.core.account.SessionTypingPreferences
+import io.github.thiesi.chitchat.core.account.IgnoreOperations
+import io.github.thiesi.chitchat.core.account.SessionIgnoreRepository
 import io.github.thiesi.chitchat.core.rooms.RoomOperations
 import io.github.thiesi.chitchat.core.rooms.SessionRoomRepository
 import io.github.thiesi.chitchat.core.conversation.ConversationOperations
@@ -33,6 +35,7 @@ class ChitChatApplication : Application() {
     val sessions: SessionController get() = sessionRepository
     val accounts: AccountOperations by lazy { SessionAccountRepository(sessionRepository) }
     val typingPreferences: TypingPreferenceOperations by lazy { SessionTypingPreferences(sessionRepository) }
+    val ignores: IgnoreOperations by lazy { SessionIgnoreRepository(sessionRepository) }
     val rooms: RoomOperations by lazy { SessionRoomRepository(sessionRepository) }
     val conversations: ConversationOperations by lazy { SessionConversationRepository(sessionRepository) }
     val directMessages: DirectOperations by lazy { SessionDirectRepository(sessionRepository) }

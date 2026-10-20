@@ -66,7 +66,7 @@ Multiline input uses explicit send by default; respect IME insets, focus restora
 
 Each screen specifies loading, empty, content, stale/offline, retryable error, and authorization-lost states. Guest expiry, muted/read-only rooms, generic DM unavailability, lockdown, and rate limiting need understandable explanations. Preserve typed drafts on transient failure. Never make a toast the only record of a failed send or an account operation.
 
-[M4c3a](milestones/M4c3a-ignore-protocol.md) reuses that session transport through an original-session ignore capability. A runtime policy-write gate serializes ignore and typing preferences against bootstrap independently of the UI busy flag. Publish complete authoritative IDs, preserve last-confirmed policy on uncertain outcomes and require explicit GET reconciliation; native controls/context reconciliation remain the separate M4c3b consumer.
+[M4c3a](milestones/M4c3a-ignore-protocol.md) reuses that session transport through an original-session ignore capability. A runtime policy-write gate serializes ignore and typing preferences against bootstrap independently of the UI busy flag. Publish complete authoritative IDs, preserve last-confirmed policy on uncertain outcomes and require explicit GET reconciliation. [M4c3b](milestones/M4c3b-native-ignore.md) supplies an independent scoped dialog VM/native author actions, immediate room policy and post-await policy overlay, coalesced canonical ping/window refresh and modal read/typing fences. Directory entry re-reads unread counts; no fabricated local counter or DM block is introduced.
 
 ## Network and session security
 

@@ -74,6 +74,7 @@ import io.github.thiesi.chitchat.feature.auth.AuthScreen
 import io.github.thiesi.chitchat.feature.account.AccountScreen
 import io.github.thiesi.chitchat.feature.account.AccountViewModel
 import io.github.thiesi.chitchat.feature.account.TypingPreferenceViewModel
+import io.github.thiesi.chitchat.feature.account.IgnorePersonViewModel
 import io.github.thiesi.chitchat.feature.account.TypingPreferenceCard
 import io.github.thiesi.chitchat.feature.rooms.RoomsScreen
 import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
@@ -96,7 +97,8 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel, rooms: RoomsViewModel,
     conversations: ConversationViewModel, realtime: RealtimeController? = null,
     directInbox: DirectInboxViewModel? = null, directThread: DirectThreadViewModel? = null,
-    typingPreferences: TypingPreferenceViewModel? = null, onThemeChanged: (Boolean) -> Unit = {}) {
+    typingPreferences: TypingPreferenceViewModel? = null, ignores: IgnorePersonViewModel? = null,
+    onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by auth.state.collectAsStateWithLifecycle()
     val connection = realtime?.state?.collectAsStateWithLifecycle()?.value
@@ -142,6 +144,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 rooms.cancel()
             } else if (entry?.destination?.route != null && entry?.destination?.route != "rooms") rooms.cancel()
             val conversation = entry?.destination?.route?.startsWith("conversation/") == true
+            if (entry?.destination?.route != null && (!conversation || session.phase != SessionPhase.AUTHENTICATED))
+                ignores?.cancel()
             if (conversation && session.phase != SessionPhase.AUTHENTICATED) {
                 nav.popBackStack("home", false)
                 conversations.cancel()
@@ -266,7 +270,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         composable("conversation/{roomId}", arguments = listOf(navArgument("roomId") { type = NavType.LongType })) { destination ->
                             val id = destination.arguments?.getLong("roomId") ?: 0L
                             if (session.phase == SessionPhase.AUTHENTICATED && id > 0)
-                                ConversationScreen(conversations, id, auth::refresh)
+                                ConversationScreen(conversations, id, auth::refresh, ignores)
                         }
                         composable(DIRECT_INBOX_ROUTE, arguments = directArguments()) { destination ->
                             val args = destination.arguments
