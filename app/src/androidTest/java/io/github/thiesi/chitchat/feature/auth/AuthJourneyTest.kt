@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -28,6 +29,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import io.github.thiesi.chitchat.core.conversation.*
+import io.github.thiesi.chitchat.core.rooms.*
+import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
+import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
 
 class AuthJourneyTest {
     @get:Rule val compose = createComposeRule()
@@ -65,6 +70,50 @@ class AuthJourneyTest {
         assertEquals(io.github.thiesi.chitchat.core.session.SessionPhase.SIGNED_OUT, sessions.state.value.phase)
         compose.onNodeWithText("Back to sign-in").performClick()
         compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun roomConversationNavigationAndLogoutClearMessagesAndDraft() {
+        val room = RoomInfo(42, "fixture", "Fixture Lounge", "", "public", 0, 0, 7, "member", false, "none")
+        val roomOperations = object : RoomOperations {
+            override val session = sessions.state
+            override suspend fun list() = listOf(room)
+            override suspend fun detail(roomId: Long) = room
+            override suspend fun join(roomId: Long): RoomInfo = error("Unconfigured fixture")
+            override suspend fun leave(roomId: Long) { error("Unconfigured fixture") }
+            override suspend fun create(input: CreateRoom): RoomInfo = error("Unconfigured fixture")
+        }
+        val conversationOperations = object : ConversationOperations {
+            override val session = sessions.state
+            override suspend fun context(roomId: Long) = ConversationContext(room, ChatPolicy(emptySet(), null, DisplayPreferences()))
+            override suspend fun history(roomId: Long, beforeId: Long?, limit: Int) = MessagePage(listOf(
+                RoomMessage(80, 42, 8, "Bob", "text", "Navigation private fixture", false, "2026-07-17T08:00:00Z")), 80, false)
+            override suspend fun pings(roomId: Long) = emptyList<RoomPing>()
+            override suspend fun send(roomId: Long, body: String): SendResult = error("Unconfigured fixture")
+            override suspend fun read(roomId: Long, messageId: Long) = messageId
+        }
+        val roomModel = RoomsViewModel(roomOperations)
+        val conversationModel = ConversationViewModel(conversationOperations)
+        compose.setContent { Box(Modifier.size(320.dp, 480.dp)) {
+            ChitChatApp(settings, auth, roomModel = roomModel, conversationModel = conversationModel)
+        } }
+        enterCredentials()
+        compose.waitUntil(5_000) {
+            sessions.state.value.phase == io.github.thiesi.chitchat.core.session.SessionPhase.AUTHENTICATED && !sessions.state.value.busy
+        }
+        compose.onNodeWithText("Rooms").performScrollTo().performClick()
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Fixture Lounge").assertIsDisplayed() }.isSuccess }
+        compose.onNodeWithText("Fixture Lounge").performClick()
+        compose.onNodeWithText("Open conversation").performScrollTo().performClick()
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Navigation private fixture").assertIsDisplayed() }.isSuccess }
+        compose.onNodeWithTag("conversation_composer").performTextInput("Private unsent draft")
+        compose.runOnIdle { auth.signOut() }
+        compose.onNodeWithText("Back to sign-in").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Navigation private fixture").assertDoesNotExist()
+        compose.onNodeWithText("Back").assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals("", conversationModel.state.value.draft)
+            assertEquals(emptyList<RoomMessage>(), conversationModel.state.value.messages)
+        }
     }
 
     @Test fun failedLoginClearsPasswordPreservesUsernameAndAllowsCorrection() {

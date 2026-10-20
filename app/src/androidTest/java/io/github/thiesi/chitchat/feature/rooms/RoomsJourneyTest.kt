@@ -42,7 +42,7 @@ class RoomsJourneyTest {
     private val model = RoomsViewModel(fake)
     @After fun tearDown() { model.cancel(); fake.gate?.complete(Unit) }
     private fun content(onRefresh: () -> Unit = {}) {
-        compose.setContent { MaterialTheme { Box(Modifier.size(320.dp, 480.dp)) { RoomsScreen(model, onRefresh) } } }
+        compose.setContent { MaterialTheme { Box(Modifier.size(320.dp, 480.dp)) { RoomsScreen(model, onRefresh, {}) } } }
         compose.waitUntil(5_000) { model.state.value.loaded && !model.state.value.busy }
     }
     private fun detail() {
@@ -139,7 +139,7 @@ class RoomsJourneyTest {
     @Test fun restoredCompositionUsesVmDraftButLogoutScrubsIt() {
         fake.session.value = fake.session.value.copy(user = SessionUser(7, "Alice", listOf("admin"), 1, false))
         val restoration = StateRestorationTester(compose)
-        restoration.setContent { MaterialTheme { Box(Modifier.size(320.dp, 480.dp)) { RoomsScreen(model, {}) } } }
+        restoration.setContent { MaterialTheme { Box(Modifier.size(320.dp, 480.dp)) { RoomsScreen(model, {}, {}) } } }
         compose.waitUntil(5_000) { model.state.value.loaded && !model.state.value.busy }
         compose.onNodeWithText("Create room").performScrollTo().performClick()
         compose.onNodeWithText("Room name").performScrollTo().performTextInput("Account-scoped draft")

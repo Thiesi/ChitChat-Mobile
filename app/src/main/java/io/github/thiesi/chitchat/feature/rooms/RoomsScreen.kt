@@ -53,7 +53,7 @@ import io.github.thiesi.chitchat.core.ui.InlineError
 import kotlinx.coroutines.delay
 
 @Composable
-fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit) {
+fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom: (Long) -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
@@ -130,7 +130,9 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit) {
         text = { Text(stringResource(R.string.rooms_leave_warning)) },
         confirmButton = { TextButton(onClick = model::leave, enabled = canMutate) { Text(stringResource(R.string.rooms_leave)) } },
         dismissButton = { TextButton(onClick = { model.confirmLeave(false) }) { Text(stringResource(R.string.cancel)) } })
-    else if (state.detailOpen) RoomDetailDialog(state, model, canMutate) {
+    else if (state.detailOpen) RoomDetailDialog(state, model, canMutate,
+        session.user?.roles?.any { it in setOf("super_admin", "admin", "chat_admin", "global_moderator") } == true,
+        onOpenRoom) {
         RoomSessionFeedback(session, now, onRefreshSession)
     }
 }
@@ -149,7 +151,7 @@ private fun RoomSessionFeedback(session: SessionState, now: Long, onRefresh: () 
 
 @Composable
 private fun RoomDetailDialog(state: RoomsUiState, model: RoomsViewModel, canMutate: Boolean,
-    sessionFeedback: @Composable () -> Unit) {
+    canReadPrivate: Boolean, onOpenRoom: (Long) -> Unit, sessionFeedback: @Composable () -> Unit) {
     val room = state.selected
     AlertDialog(onDismissRequest = model::closeDetail,
         title = { Text(room?.name ?: stringResource(R.string.rooms_details)) },
@@ -162,6 +164,10 @@ private fun RoomDetailDialog(state: RoomsUiState, model: RoomsViewModel, canMuta
             }
             if (room != null) {
                 RoomMetadata(room)
+                Button(onClick = { model.closeDetail(); onOpenRoom(room.id) }, enabled = !state.busy &&
+                    (room.visibility != "private" || room.isMember || canReadPrivate)) {
+                    Text(stringResource(R.string.rooms_open_conversation))
+                }
                 Text(stringResource(R.string.rooms_presence_disclosure))
                 if (room.visibility == "private" && !room.isMember) Text(stringResource(R.string.rooms_private_invitation))
                 if (room.memberRole == "owner") Text(stringResource(R.string.rooms_owner_immutable))
