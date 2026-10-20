@@ -9,6 +9,8 @@ import io.github.thiesi.chitchat.core.direct.*
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
+import io.github.thiesi.chitchat.core.typing.TypingController
+import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -35,7 +37,8 @@ data class DirectThreadState(val peerId: Long? = null, val context: DirectContex
 
 /** One serialized operation per thread: hints queue behind writes, never cancel/replay a POST. */
 class DirectThreadViewModel(private val operations: DirectOperations,
-    val realtime: RealtimeController? = null) : ViewModel() {
+    val realtime: RealtimeController? = null,
+    val typing: TypingController? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(DirectThreadState())
     val state = mutable.asStateFlow()
@@ -288,11 +291,13 @@ class DirectThreadViewModel(private val operations: DirectOperations,
     fun send() {
         if (!canSend()) return
         val body = mutable.value.draft
+        val typingSession = session.value
         validateDirectBody(body)?.let { mutable.value = mutable.value.copy(validation = it); return }
         mutable.value = mutable.value.copy(sending = true, confirmedSendId = null)
         start { peer ->
             write = Write.SEND
             val confirmed = checked { operations.send(peer, body) }
+            typing?.sent(typingSession, TypingTarget.Direct(peer))
             write = null
             mutable.value = mutable.value.copy(draft = "", sending = false, uncertainSend = false,
                 checkedUnknown = false, confirmedSendId = confirmed)
@@ -323,8 +328,9 @@ class DirectThreadViewModel(private val operations: DirectOperations,
     private fun ApiFailure.ambiguous() = kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.TLS,
         FailureKind.REDIRECT, FailureKind.INCOMPATIBLE, FailureKind.TOO_LARGE) || (status ?: 0) >= 500
     companion object {
-        fun factory(operations: DirectOperations, realtime: RealtimeController? = null): ViewModelProvider.Factory = viewModelFactory {
-            initializer { DirectThreadViewModel(operations, realtime) }
+        fun factory(operations: DirectOperations, realtime: RealtimeController? = null,
+            typing: TypingController? = null): ViewModelProvider.Factory = viewModelFactory {
+            initializer { DirectThreadViewModel(operations, realtime, typing) }
         }
     }
 }

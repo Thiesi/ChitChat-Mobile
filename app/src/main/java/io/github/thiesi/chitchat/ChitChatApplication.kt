@@ -15,6 +15,9 @@ import io.github.thiesi.chitchat.core.conversation.ConversationOperations
 import io.github.thiesi.chitchat.core.conversation.SessionConversationRepository
 import io.github.thiesi.chitchat.core.direct.DirectOperations
 import io.github.thiesi.chitchat.core.direct.SessionDirectRepository
+import io.github.thiesi.chitchat.core.typing.TypingController
+import io.github.thiesi.chitchat.core.typing.TypingCoordinator
+import io.github.thiesi.chitchat.core.typing.SessionTypingRepository
 import androidx.lifecycle.ProcessLifecycleOwner
 import io.github.thiesi.chitchat.core.realtime.AndroidRealtimeRuntime
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
@@ -38,11 +41,15 @@ class ChitChatApplication : Application() {
         RealtimeCoordinator(SessionRealtimeRepository(sessionRepository), sessions, processScope)
     }
     val realtime: RealtimeController get() = realtimeCoordinator
+    private val typingCoordinator by lazy { TypingCoordinator(SessionTypingRepository(sessionRepository), realtime,
+        processScope) }
+    val typing: TypingController get() = typingCoordinator
     private lateinit var realtimeRuntime: AndroidRealtimeRuntime
 
     override fun onCreate() {
         super.onCreate()
         realtimeRuntime = AndroidRealtimeRuntime(this, ProcessLifecycleOwner.get().lifecycle,
-            realtimeCoordinator::setForeground, realtimeCoordinator::setNetworkAvailable)
+            { foreground -> realtimeCoordinator.setForeground(foreground); typingCoordinator.setForeground(foreground) },
+            realtimeCoordinator::setNetworkAvailable)
     }
 }

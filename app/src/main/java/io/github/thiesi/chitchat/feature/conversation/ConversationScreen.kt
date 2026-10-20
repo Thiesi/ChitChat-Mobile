@@ -63,6 +63,9 @@ import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import io.github.thiesi.chitchat.core.ui.InlineError
 import io.github.thiesi.chitchat.core.ui.MessageInput
+import io.github.thiesi.chitchat.core.typing.TypingTarget
+import io.github.thiesi.chitchat.core.typing.hasTypingContent
+import io.github.thiesi.chitchat.feature.realtime.TypingStatus
 import io.github.thiesi.chitchat.core.ui.canAcknowledgeVisibleRead
 import io.github.thiesi.chitchat.core.ui.isReadEdgeVisible
 import kotlinx.coroutines.delay
@@ -229,6 +232,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             }
             item(key = "history_end") { Spacer(Modifier.height(1.dp)) }
         }
+        TypingStatus(model.typing, session, TypingTarget.Room(roomId),
+            viewing = state.loaded && !state.stale && state.context != null && !pingsOpen && !detailsOpen,
+            publishing = ready && !state.busy && model.canSend())
         Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
             run {
@@ -247,7 +253,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     }) { Text("\u22ee") }
                 }
             }
-            MessageInput(state.draft, model::updateDraft, !state.sending,
+            MessageInput(state.draft, { value -> model.updateDraft(value)
+                model.typing?.input(session, TypingTarget.Room(roomId), hasTypingContent(value)) }, !state.sending,
                 stringResource(R.string.conversation_message), compact,
                 Modifier.weight(1f).testTag("conversation_composer"))
             Button(onClick = model::send, enabled = ready && !state.busy && model.canSend() && state.draft.isNotBlank(),

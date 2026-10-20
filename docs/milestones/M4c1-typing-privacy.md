@@ -1,6 +1,6 @@
 # M4c1: account-wide typing privacy
 
-This slice adds a native Account control for the existing bilateral typing preference. It does not yet publish typing signals or display other people's indicators. Ignore management, notification center and background push remain separate slices. No backend modification, new endpoint, relay or live-server mutation is involved.
+This slice added a native Account control for the existing bilateral typing preference, without signal consumers at that point. [M4c2](M4c2-foreground-typing.md) adds those consumers; verification below records the original M4c1 boundary. Ignore management, notification center and background push remain separate slices. No backend modification, new endpoint, relay or live-server mutation is involved.
 
 ## Verified contract
 

@@ -2,10 +2,15 @@ package io.github.thiesi.chitchat.feature.conversation
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
@@ -32,6 +37,7 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import io.github.thiesi.chitchat.testing.tapNativeInput
 
 class ConversationRealtimeJourneyTest {
     @get:Rule val compose = createComposeRule()
@@ -40,9 +46,12 @@ class ConversationRealtimeJourneyTest {
     private val model = ConversationViewModel(api, realtime)
     private val directory = Directory(api.session)
     private val rooms = RoomsViewModel(directory, realtime)
-    @After fun stop() { model.cancel(); rooms.cancel() }
+    @Volatile private var imeBottom = 0
+    @After fun stop() { closeSoftKeyboard(); model.cancel(); rooms.cancel() }
     private fun content() {
         compose.setContent { MaterialTheme {
+            val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
+            SideEffect { imeBottom = bottom }
             RealtimeConsumers(realtime, api.session.collectAsState().value, rooms, model)
             Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(model, 42, {}) }
         } }
@@ -58,16 +67,27 @@ class ConversationRealtimeJourneyTest {
     }
     private fun enterRoom() {
         val before = realtime.entries
-        compose.onNodeWithContentDescription("Room details").assertIsDisplayed().performClick()
+        val details = compose.onNodeWithContentDescription("Room details").assertIsDisplayed()
+        val bounds = details.fetchSemanticsNode().boundsInWindow
+        details.performClick()
         val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
-        compose.onNode(hasText(context.getString(io.github.thiesi.chitchat.R.string.presence_enter)) and hasAnyAncestor(isDialog()))
-            .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        try {
+            compose.onNode(hasText(context.getString(io.github.thiesi.chitchat.R.string.presence_enter)) and hasAnyAncestor(isDialog()))
+                .performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        } catch (failure: AssertionError) {
+            val input = compose.onNodeWithTag("conversation_composer").fetchSemanticsNode()
+            throw AssertionError("Reentry fixture: IME=$imeBottom, focused=${input.config[SemanticsProperties.Focused]}, detailsBefore=$bounds, detailsAfter=${details.fetchSemanticsNode().boundsInWindow}, dialogs=${compose.onAllNodes(isDialog()).fetchSemanticsNodes().size}, phase=${realtime.state.value.presencePhase}, entries=${realtime.entries}, loaded=${model.state.value.loaded}, busy=${model.state.value.busy}, stale=${model.state.value.stale}", failure)
+        }
         compose.waitUntil(5_000) { realtime.entries == before + 1 }
+    }
+
+    private fun enterDraft(value: String) {
+        compose.tapNativeInput("conversation_composer", { imeBottom }).performTextInput(value)
     }
 
     @Test fun incomingHintUsesCanonicalHistoryAndPreservesTheUnsentComposer() {
         content()
-        compose.onNodeWithTag("conversation_composer").assertIsDisplayed().performTextInput("Keep unsent draft")
+        enterDraft("Keep unsent draft")
         compose.runOnIdle { api.rows += message(4, "Canonical incoming"); event() }
         compose.waitUntil(5_000) { model.state.value.messages.lastOrNull()?.id == 4L && !model.state.value.syncing }
         compose.onNodeWithTag("conversation_composer").assertTextContains("Keep unsent draft")
@@ -84,7 +104,7 @@ class ConversationRealtimeJourneyTest {
 
     @Test fun restoredRouteAndExpiredPresenceRequireExplicitAcknowledgedReentry() {
         content()
-        compose.onNodeWithTag("conversation_composer").assertIsDisplayed().performTextInput("Retained draft")
+        enterDraft("Retained draft")
         compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
         compose.runOnIdle { assertEquals(0, realtime.entries); assertEquals(0, api.reads) }
         enterRoom()

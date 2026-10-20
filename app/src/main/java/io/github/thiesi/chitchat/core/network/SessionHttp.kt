@@ -11,6 +11,7 @@ import io.github.thiesi.chitchat.core.conversation.*
 import io.github.thiesi.chitchat.core.direct.*
 import io.github.thiesi.chitchat.core.realtime.PresenceStatus
 import io.github.thiesi.chitchat.core.realtime.PresenceUser
+import io.github.thiesi.chitchat.core.typing.TypingTarget
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.time.ZonedDateTime
@@ -100,6 +101,14 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
     suspend fun setTypingPreference(shared: Boolean, csrf: String): Boolean =
         decode<TypingPreferenceReply>(request("account/typing.php",
             apiJson.encodeToString(TypingPreferenceRequest(shared)), csrf).require200()).shared
+
+    suspend fun typingSignal(target: TypingTarget, csrf: String): Boolean {
+        val body = when (target) {
+            is TypingTarget.Room -> apiJson.encodeToString(RoomTypingRequest(target.id))
+            is TypingTarget.Direct -> apiJson.encodeToString(DirectTypingRequest(target.peer))
+        }
+        return decode<TypingSignalReply>(request("typing.php", body, csrf).require200()).signalled
+    }
 
     suspend fun verificationMethods(): VerificationMethods {
         val mfa = decode<MfaStatusReply>(request("account/mfa/status.php").require200()).mfa

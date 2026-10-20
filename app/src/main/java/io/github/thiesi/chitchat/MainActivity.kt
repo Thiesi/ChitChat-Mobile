@@ -32,11 +32,12 @@ class MainActivity : ComponentActivity() {
             val rooms: RoomsViewModel = viewModel(factory = RoomsViewModel.factory((application as ChitChatApplication).rooms,
                 (application as ChitChatApplication).realtime))
             val conversations: ConversationViewModel = viewModel(factory = ConversationViewModel.factory((application as ChitChatApplication).conversations,
-                (application as ChitChatApplication).realtime))
+                (application as ChitChatApplication).realtime, (application as ChitChatApplication).typing))
             val directInbox: DirectInboxViewModel = viewModel(factory = DirectInboxViewModel.factory(
                 (application as ChitChatApplication).directMessages, (application as ChitChatApplication).realtime))
             val directThread: DirectThreadViewModel = viewModel(factory = DirectThreadViewModel.factory(
-                (application as ChitChatApplication).directMessages, (application as ChitChatApplication).realtime))
+                (application as ChitChatApplication).directMessages, (application as ChitChatApplication).realtime,
+                (application as ChitChatApplication).typing))
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, onThemeChanged = { dark ->
                 enableEdgeToEdge(

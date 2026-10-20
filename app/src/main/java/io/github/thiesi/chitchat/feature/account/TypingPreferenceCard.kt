@@ -56,7 +56,7 @@ fun TypingPreferenceCard(model: TypingPreferenceViewModel, session: SessionState
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.typing_preference_title), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.typing_preference_scope))
-            Text(stringResource(R.string.typing_native_pending))
+            Text(stringResource(R.string.typing_native_scope))
             val shared = session.shareTyping
             if (shared != null) Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 .toggleable(value = shared, enabled = enabled, role = Role.Switch,

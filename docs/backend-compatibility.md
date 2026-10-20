@@ -52,7 +52,9 @@ Only `/me` and `/ping` are server commands. `/dm`, `/topic`, `/shrug`, `/help` a
 
 ## Account-wide typing preference
 
-M4c1 consumes top-level optional `session.php.share_typing` and existing `POST account/typing.php` with current session CSRF and a JSON Boolean. Its HTTP200 Boolean is authoritative, not the requested value. Missing/null bootstrap values stay unknown; quoted Boolean strings are incompatible. Failed/cancelled changes need explicit session GET reconciliation, never POST replay. The setting is bilateral across rooms/DMs and all devices, not a notification toggle. Native signal publication/display remains M4c2; no new backend capability or live acceptance is implied. See [contract and tests](milestones/M4c1-typing-privacy.md).
+M4c1 consumes top-level optional `session.php.share_typing` and existing `POST account/typing.php` with current session CSRF and a JSON Boolean. Its HTTP200 Boolean is authoritative, not the requested value. Missing/null bootstrap values stay unknown; quoted Boolean strings are incompatible. Failed/cancelled changes need explicit session GET reconciliation, never POST replay. The setting is bilateral across rooms/DMs and all devices, not a notification toggle. See [preference contract/tests](milestones/M4c1-typing-privacy.md).
+
+[M4c2](milestones/M4c2-foreground-typing.md) consumes existing `POST typing.php` with exactly one room/recipient ID and strict Boolean `signalled`, plus the existing `typing` event. False is normal suppression. No message text, stop endpoint, new stream or server timestamp field is added. Local monotonic receipt metadata bounds queued display; server8s expiry/browser6.5s display and4s attempts remain compatible. Original session scope and current privacy/permission rules gate foreground member consumers. Guest/native-live acceptance remains separate; no new backend capability is assumed.
 
 ## SSE, presence, and state recovery
 

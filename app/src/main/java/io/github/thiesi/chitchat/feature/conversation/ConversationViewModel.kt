@@ -15,6 +15,8 @@ import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.PresencePhase
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
+import io.github.thiesi.chitchat.core.typing.TypingController
+import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
@@ -45,7 +47,8 @@ data class ConversationUiState(
 ) { override fun toString() = "ConversationUiState" }
 
 class ConversationViewModel(private val operations: ConversationOperations,
-    val realtime: RealtimeController? = null) : ViewModel() {
+    val realtime: RealtimeController? = null,
+    val typing: TypingController? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(ConversationUiState())
     val state = mutable.asStateFlow()
@@ -172,10 +175,12 @@ class ConversationViewModel(private val operations: ConversationOperations,
         val invalid = validateMessageBody(value.draft)
         if (invalid != null) { mutable.value = value.copy(validation = invalid); return }
         val body = value.draft
+        val typingSession = session.value
         request(sending = true) { current ->
             postInFlight = true
             val result = operations.send(checkNotNull(value.roomId), body)
             current(); postInFlight = false
+            typing?.sent(typingSession, TypingTarget.Room(checkNotNull(value.roomId)))
             realtime?.activity(checkNotNull(value.roomId)) // Only an acknowledged, current send/ping.
             mutable.value = mutable.value.copy(draft = "", notice = if (result is SendResult.Ping) "ping_sent" else "sent")
             when (result) {
@@ -435,8 +440,9 @@ class ConversationViewModel(private val operations: ConversationOperations,
     private fun ApiFailure.ambiguous() = kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.TLS,
         FailureKind.REDIRECT, FailureKind.INCOMPATIBLE, FailureKind.TOO_LARGE) || (status ?: 0) >= 500
     companion object {
-        fun factory(operations: ConversationOperations, realtime: RealtimeController? = null): ViewModelProvider.Factory = viewModelFactory {
-            initializer { ConversationViewModel(operations, realtime) }
+        fun factory(operations: ConversationOperations, realtime: RealtimeController? = null,
+            typing: TypingController? = null): ViewModelProvider.Factory = viewModelFactory {
+            initializer { ConversationViewModel(operations, realtime, typing) }
         }
     }
 }

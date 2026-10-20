@@ -21,6 +21,7 @@ class RealtimeEvent internal constructor(
     val payload: JsonObject,
     val createdAt: Instant,
     internal val invalidBeforeSessionVersion: Int? = null,
+    internal val receivedAtMillis: Long = System.nanoTime() / 1_000_000, // Local receipt metadata, not a server field.
 ) {
     val known: Boolean get() = type in KNOWN_TYPES
 

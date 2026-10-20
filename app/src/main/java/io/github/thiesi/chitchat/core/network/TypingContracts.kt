@@ -19,6 +19,15 @@ internal class TypingPreferenceRequest(@SerialName("share_typing") val shared: B
 internal class TypingPreferenceReply(@SerialName("share_typing")
     @Serializable(with = StrictTypingBoolean::class) val shared: Boolean)
 
+@Serializable
+internal class RoomTypingRequest(@SerialName("room_id") val roomId: Long)
+
+@Serializable
+internal class DirectTypingRequest(@SerialName("recipient_user_id") val recipient: Long)
+
+@Serializable
+internal class TypingSignalReply(@Serializable(with = StrictTypingBoolean::class) val signalled: Boolean)
+
 /** Privacy consent must be a JSON Boolean, never a coerced string. */
 internal object StrictTypingBoolean : KSerializer<Boolean> {
     override val descriptor = PrimitiveSerialDescriptor("TypingBoolean", PrimitiveKind.BOOLEAN)

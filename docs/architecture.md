@@ -40,7 +40,7 @@ Pin stable compatible versions and Gradle wrapper checksum in M1 after validatin
 
 This follows Android's [architecture recommendations](https://developer.android.com/topic/architecture/recommendations): UI state flows from repositories through ViewModels, and user actions flow back through explicit methods. [Offline read guidance](https://developer.android.com/topic/architecture/data-layer/offline-first) supports a local source of truth without requiring unsafe automatic offline writes.
 
-M4c1 keeps the account-wide typing preference in the existing session state/HTTP layer. A small `TypingPreferenceOperations` capability binds writes to original identity; its ViewModel/card are independent of export/step-up state. Confirmed/unknown consent is explicit, preference POST cannot race bootstrap, and cancellation never replays a write. See [typing privacy](milestones/M4c1-typing-privacy.md). Actual typing signal production/expiry/display remains a separate slice.
+M4c1 keeps the account-wide typing preference in the existing session state/HTTP layer. A small `TypingPreferenceOperations` capability binds writes to original identity; its ViewModel/card are independent of export/step-up state. Confirmed/unknown consent is explicit, preference POST cannot race bootstrap, and cancellation never replays a write. See [typing privacy](milestones/M4c1-typing-privacy.md). [M4c2](milestones/M4c2-foreground-typing.md) adds a main-confined process typing coordinator consuming the existing stream, not a second connection. Native room/DM screens select a scoped foreground target; input passes only an eligibility Boolean. Local monotonic receipt expiry and explicit rendered account identity prevent stale/replayed hints.
 
 ## UI, navigation, and accessibility
 

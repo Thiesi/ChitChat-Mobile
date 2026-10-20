@@ -12,6 +12,10 @@ For the agent validation environment, the JDK, SDK, Gradle cache and emulator we
 
 ## Local checks
 
+Use the same Android user home for **all** app/test APK build invocations. In the agent environment this is ignored `.tooling/android-user-home` (`ANDROID_USER_HOME`, with `ANDROID_AVD_HOME` under its `avd/`); fresh shells must set it again along with JDK/SDK/Gradle paths. Mixing a test APK built with the default user home and an app APK built with the repository-local home can produce different debug certificates. Verify/rebuild both together; never weaken Android's instrumentation signature check or copy/delete signing keys to bypass it. Test-runner launch rejection is not a UI-test result.
+
+CI already disables system animations. For comparable deterministic UI tests, use a **dedicated** emulator/device and disable window, transition and animator scales in Developer options, as [Android's Espresso setup guidance](https://developer.android.com/training/testing/espresso/setup) recommends. With an explicitly selected test serial, the equivalent commands are `adb -s SERIAL shell settings put global window_animation_scale 0`, `transition_animation_scale 0`, and `animator_duration_scale 0` (repeat the full command for each key). Record/restore previous values before separate animated/manual acceptance; do not change another user's device. This is test setup, not an application behavior change. Issue31 remains open for an intermittent animation-enabled suite-only IME failure; report such results separately, preserve failures and keep original tap/focus/IME assertions and timeouts.
+
 From the repository root with JDK/SDK configured:
 
 ```powershell
