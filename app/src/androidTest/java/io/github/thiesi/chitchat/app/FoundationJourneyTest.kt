@@ -80,7 +80,7 @@ class FoundationJourneyTest {
         compose.onNodeWithText("Try again").assertIsDisplayed().performClick()
         compose.onNodeWithText("Settings").assertIsDisplayed()
         compose.onNodeWithText("Save server").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("This development build supports sign-in and foreground room conversations. Direct messages and notifications are not available yet.")
+        compose.onNodeWithText("This development build supports sign-in and foreground room and direct conversations. Typing and notifications are not available yet.")
             .performScrollTo().assertIsDisplayed()
     }
 

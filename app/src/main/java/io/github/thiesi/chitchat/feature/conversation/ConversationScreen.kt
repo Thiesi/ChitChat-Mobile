@@ -1,6 +1,5 @@
 package io.github.thiesi.chitchat.feature.conversation
 
-import android.text.format.DateFormat
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -36,8 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -48,19 +46,17 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.repeatOnLifecycle
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.conversation.ConversationContext
 import io.github.thiesi.chitchat.core.conversation.RoomMessage
-import io.github.thiesi.chitchat.core.conversation.serverInstant
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.PresencePhase
 import io.github.thiesi.chitchat.core.ui.InlineError
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
-import java.util.Locale
+import io.github.thiesi.chitchat.core.ui.canAcknowledgeVisibleRead
+import io.github.thiesi.chitchat.core.ui.isReadEdgeVisible
 import kotlinx.coroutines.delay
 
 @Composable
@@ -80,6 +76,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val presenceHere = connection?.takeIf { it.generation == session.generation && it.selectedRoomId == roomId }
     val activePresence = model.realtime == null || presenceHere?.presencePhase in setOf(PresencePhase.ACTIVE, PresencePhase.WARNING)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val lifecycleState by lifecycle.currentStateAsState()
+    val window = LocalWindowInfo.current
     var pingsOpen by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val timeline = rememberLazyListState()
@@ -106,7 +104,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         }
     }
     LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, lifecycle,
-        connection?.presencePhase, connection?.selectedRoomId) {
+        connection?.presencePhase, connection?.selectedRoomId, lifecycleState) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             snapshotFlow {
                 val visible = timeline.layoutInfo.visibleItemsInfo
@@ -114,9 +112,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val anchor = first?.let { TimelineAnchor((it.key as String).substringAfter(':').toLong(), -it.offset) }
                 val newest = state.messages.lastOrNull()?.id
                 val last = visible.firstOrNull { it.key == "message:$newest" }
-                val fullyVisible = last != null && last.offset < timeline.layoutInfo.viewportEndOffset &&
-                    last.offset + last.size <= timeline.layoutInfo.viewportEndOffset
-                Triple(anchor, if (fullyVisible && !pingsOpen) newest else null, !timeline.canScrollForward && !pingsOpen)
+                val edgeVisible = last != null && isReadEdgeVisible(last.offset, last.size,
+                    timeline.layoutInfo.viewportStartOffset, timeline.layoutInfo.viewportEndOffset)
+                val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused, !pingsOpen)
+                Triple(anchor, if (edgeVisible && readable) newest else null, !timeline.canScrollForward && readable)
             }.collect { (anchor, newest, edge) -> model.viewport(anchor, newest, edge) }
         }
     }
@@ -262,15 +261,8 @@ private fun MessageContent(message: RoomMessage, context: ConversationContext?) 
 }
 
 @Composable
-private fun displayTime(value: String, context: ConversationContext?): String {
-    val instant = serverInstant(value) ?: return stringResource(R.string.conversation_time_unknown)
-    val preferences = context?.policy?.display
-    val deviceLocale = LocalConfiguration.current.locales[0]
-    val locale = preferences?.dateLocale?.let(Locale::forLanguageTag) ?: deviceLocale
-    val twentyFour = when (preferences?.hourCycle) { "h23" -> true; "h12" -> false; else -> DateFormat.is24HourFormat(LocalContext.current) }
-    return DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT).withLocale(locale).format(instant.atZone(ZoneId.systemDefault())) + " " +
-        DateTimeFormatter.ofPattern(if (twentyFour) "HH:mm" else "h:mm a", locale).format(instant.atZone(ZoneId.systemDefault()))
-}
+private fun displayTime(value: String, context: ConversationContext?) =
+    io.github.thiesi.chitchat.core.ui.messageTime(value, context?.policy?.display)
 
 @Composable
 private fun conversationError(error: ApiFailure) = stringResource(when {

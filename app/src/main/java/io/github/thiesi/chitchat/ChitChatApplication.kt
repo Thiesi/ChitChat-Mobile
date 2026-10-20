@@ -11,6 +11,8 @@ import io.github.thiesi.chitchat.core.rooms.RoomOperations
 import io.github.thiesi.chitchat.core.rooms.SessionRoomRepository
 import io.github.thiesi.chitchat.core.conversation.ConversationOperations
 import io.github.thiesi.chitchat.core.conversation.SessionConversationRepository
+import io.github.thiesi.chitchat.core.direct.DirectOperations
+import io.github.thiesi.chitchat.core.direct.SessionDirectRepository
 import androidx.lifecycle.ProcessLifecycleOwner
 import io.github.thiesi.chitchat.core.realtime.AndroidRealtimeRuntime
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
@@ -27,6 +29,7 @@ class ChitChatApplication : Application() {
     val accounts: AccountOperations by lazy { SessionAccountRepository(sessionRepository) }
     val rooms: RoomOperations by lazy { SessionRoomRepository(sessionRepository) }
     val conversations: ConversationOperations by lazy { SessionConversationRepository(sessionRepository) }
+    val directMessages: DirectOperations by lazy { SessionDirectRepository(sessionRepository) }
     private val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val realtimeCoordinator by lazy {
         RealtimeCoordinator(SessionRealtimeRepository(sessionRepository), sessions, processScope)

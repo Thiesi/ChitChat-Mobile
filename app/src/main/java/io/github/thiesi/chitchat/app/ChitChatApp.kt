@@ -73,6 +73,11 @@ import io.github.thiesi.chitchat.feature.rooms.RoomsScreen
 import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
 import io.github.thiesi.chitchat.feature.conversation.ConversationScreen
 import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
+import io.github.thiesi.chitchat.feature.direct.DirectInboxViewModel
+import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
+import io.github.thiesi.chitchat.feature.direct.DirectInboxScreen
+import io.github.thiesi.chitchat.feature.direct.DirectThreadScreen
+import io.github.thiesi.chitchat.feature.direct.directIdentity
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
@@ -83,11 +88,13 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel, rooms: RoomsViewModel,
-    conversations: ConversationViewModel, realtime: RealtimeController? = null, onThemeChanged: (Boolean) -> Unit = {}) {
+    conversations: ConversationViewModel, realtime: RealtimeController? = null,
+    directInbox: DirectInboxViewModel? = null, directThread: DirectThreadViewModel? = null,
+    onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by auth.state.collectAsStateWithLifecycle()
     val connection = realtime?.state?.collectAsStateWithLifecycle()?.value
-    RealtimeConsumers(realtime, session, rooms, conversations)
+    RealtimeConsumers(realtime, session, rooms, conversations, directInbox, directThread)
     LaunchedEffect(state.hasLoadedSettings, state.settings.server) {
         if (state.hasLoadedSettings) auth.selectServer(state.settings.server)
     }
@@ -106,8 +113,15 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     MaterialTheme(colorScheme = colors) {
         val nav = rememberNavController()
         val entry by nav.currentBackStackEntryAsState()
+        val openDirect: (Long?) -> Unit = { peer ->
+            val actual = auth.state.value
+            if (actual.directIdentity() == session.directIdentity()) directRoute(actual, peer)?.let { route ->
+                nav.navigate(route) { launchSingleTop = true }
+            }
+        }
         val atHome = entry?.destination?.route.let { it == null || it == "home" }
-        LaunchedEffect(entry?.destination?.route, session.phase, session.generation) {
+        LaunchedEffect(entry?.destination?.route, session.phase, session.server, session.generation,
+            session.user?.id, session.user?.sessionVersion) {
             if (entry?.destination?.route == "account" && session.phase != SessionPhase.AUTHENTICATED) {
                 nav.popBackStack("home", false)
                 account.cancel()
@@ -121,11 +135,24 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 nav.popBackStack("home", false)
                 conversations.cancel()
             } else if (entry?.destination?.route != null && !conversation) conversations.cancel()
+            val direct = entry?.destination?.route?.startsWith("direct") == true
+            val args = entry?.arguments
+            val sameScope = args != null && matchesDirectScope(session, args.getLong("generation", -1),
+                args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server"))
+            val peer = args?.getLong("peerId", -1) ?: -1
+            val validPeer = entry?.destination?.route?.startsWith("direct/") != true || peer > 0 && peer != session.user?.id
+            if (direct && (!sameScope || !validPeer || directInbox == null || directThread == null)) {
+                nav.popBackStack("home", false)
+                directInbox?.background(); directThread?.background()
+            } else if (entry?.destination?.route != null && !direct) {
+                directInbox?.background(); directThread?.background()
+            }
         }
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(stringResource(if (entry?.destination?.route?.startsWith("conversation/") == true)
+                    title = { Text(stringResource(if (entry?.destination?.route?.startsWith("direct") == true) R.string.dm_title
+                        else if (entry?.destination?.route?.startsWith("conversation/") == true)
                         R.string.rooms_conversation else when (entry?.destination?.route) {
                         "settings" -> R.string.settings
                         "account" -> R.string.account
@@ -185,6 +212,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                             if (session.phase == SessionPhase.AUTHENTICATED) Button(onClick = {
                                                 nav.navigate("rooms") { launchSingleTop = true }
                                             }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.rooms_title)) }
+                                            if (session.phase == SessionPhase.AUTHENTICATED && directInbox != null && directThread != null)
+                                                Button(onClick = { openDirect(null) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.dm_title)) }
                                             Button(onClick = { nav.navigate("server") }, enabled = session.canChangeServer) {
                                                 Text(stringResource(R.string.change_server))
                                             }
@@ -219,6 +248,19 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             val id = destination.arguments?.getLong("roomId") ?: 0L
                             if (session.phase == SessionPhase.AUTHENTICATED && id > 0)
                                 ConversationScreen(conversations, id, auth::refresh)
+                        }
+                        composable(DIRECT_INBOX_ROUTE, arguments = directArguments()) { destination ->
+                            val args = destination.arguments
+                            if (directInbox != null && directThread != null && args != null && matchesDirectScope(session,
+                                args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
+                                DirectInboxScreen(directInbox, directThread, auth::refresh) { openDirect(it) }
+                        }
+                        composable(DIRECT_THREAD_ROUTE, arguments = directArguments(thread = true)) { destination ->
+                            val args = destination.arguments
+                            val peer = args?.getLong("peerId", -1) ?: -1
+                            if (directThread != null && args != null && peer > 0 && peer != session.user?.id && matchesDirectScope(session,
+                                args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
+                                DirectThreadScreen(directThread, peer, auth::refresh)
                         }
                     }
                 }
