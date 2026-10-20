@@ -92,6 +92,40 @@ class ConversationViewModelTest {
         assertEquals(2, fake.reads); assertNull(model.state.value.readError)
     }
 
+    @Test fun readCsrfFailurePreservesPrivateHistoryAndRetriesOnlyExplicitlyAfterSessionRefresh() = runTest(dispatcher) {
+        fake.visibility = "private"; fake.pingList = listOf(ping(500)); open()
+        model.updateDraft("Private unsent fixture")
+        val context = model.state.value.context
+        fake.readFailure = ApiFailure(FailureKind.HTTP, 403, "csrf_failed")
+        model.viewport(null, 3, true); advanceUntilIdle()
+        assertTrue(fake.session.value.refreshRequired)
+        assertSame(context, model.state.value.context); assertTrue(model.state.value.loaded)
+        assertEquals(listOf(2L, 3L), model.state.value.messages.map { it.id })
+        assertEquals(500L, model.state.value.pings.single().id)
+        assertEquals("Private unsent fixture", model.state.value.draft)
+        assertEquals("csrf_failed", model.state.value.readError?.code); assertNull(model.state.value.error)
+        model.viewport(null, 3, true); advanceUntilIdle(); assertEquals(1, fake.reads)
+        fake.readFailure = null
+        fake.session.value = fake.session.value.copy(busy = true); runCurrent()
+        fake.session.value = fake.session.value.copy(busy = false, refreshRequired = false); advanceUntilIdle()
+        assertEquals(1, fake.reads)
+        model.retryRead(); advanceUntilIdle()
+        assertEquals(2, fake.reads); assertEquals(3L, model.state.value.readCursor)
+        assertNull(model.state.value.readError); assertEquals("Private unsent fixture", model.state.value.draft)
+    }
+
+    @Test fun genuineReadPermissionLossStillClearsRoomContent() = runTest(dispatcher) {
+        fake.visibility = "private"; fake.pingList = listOf(ping(500))
+        for (status in listOf(403, 404)) {
+            fake.readFailure = null; open()
+            fake.readFailure = ApiFailure(FailureKind.HTTP, status, "room_forbidden")
+            model.viewport(null, 3, true); advanceUntilIdle()
+            assertNull(model.state.value.context); assertTrue(model.state.value.messages.isEmpty())
+            assertTrue(model.state.value.pings.isEmpty()); assertFalse(model.state.value.loaded)
+            assertEquals(status, model.state.value.error?.status)
+        }
+    }
+
     @Test fun boundedOldWindowPrunesNewestAndSendReloadsRatherThanStitching() = runTest(dispatcher) {
         fake.latest = (101L..600).map(::message); fake.older = (1L..100).map(::message)
         open(); model.older(); advanceUntilIdle()
@@ -227,8 +261,9 @@ class ConversationViewModelTest {
         var sends = 0; var reads = 0; var lastRead = 0L; var readResult: Long? = null; var lastBody = ""
         val before = mutableListOf<Long?>()
         var ignored = emptySet<Long>(); var mute: RoomMute? = null; var role: String? = "member"; var guestAccess = "none"
+        var visibility = "public"
         var pingList = emptyList<RoomPing>()
-        override suspend fun context(roomId: Long) = ConversationContext(RoomInfo(roomId, "lounge", "Lounge", "", "public", 0, 0, 7,
+        override suspend fun context(roomId: Long) = ConversationContext(RoomInfo(roomId, "lounge", "Lounge", "", visibility, 0, 0, 7,
             role, false, guestAccess, 2, 1, mute), ChatPolicy(ignored, null, DisplayPreferences()))
         override suspend fun history(roomId: Long, beforeId: Long?, limit: Int): MessagePage {
             before += beforeId; historyFailure?.let { throw it }
@@ -244,7 +279,10 @@ class ConversationViewModelTest {
             return result
         }
         override suspend fun read(roomId: Long, messageId: Long): Long {
-            reads++; lastRead = messageId; readFailure?.let { throw it }; return readResult ?: messageId
+            reads++; lastRead = messageId; readFailure?.let {
+                if (it.code == "csrf_failed") session.value = session.value.copy(refreshRequired = true)
+                throw it
+            }; return readResult ?: messageId
         }
     }
     companion object {

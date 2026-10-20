@@ -165,7 +165,7 @@ class ConversationViewModel(private val operations: ConversationOperations) : Vi
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: ApiFailure) {
                 if (isCurrent(expected, attempt, roomId) && readAttempt == readSequence) {
-                    if (failure.status in setOf(403, 404)) clearUnauthorized(failure)
+                    if (failure.status in setOf(403, 404) && failure.code != "csrf_failed") clearUnauthorized(failure)
                     else mutable.value = mutable.value.copy(readError = failure)
                 }
             }
