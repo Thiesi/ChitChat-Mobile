@@ -54,6 +54,8 @@ class AuthJourneyTest {
 
     @Test fun authenticatedRoomsNavigationReturnsToTheExistingAccountHome() {
         content(); enterCredentials()
+        compose.onNodeWithText("Open Rooms to read and send messages. Direct messages arrive in a later milestone.")
+            .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Rooms").performScrollTo().performClick()
         compose.onNodeWithText("No rooms are available to this account.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Back").performClick()
