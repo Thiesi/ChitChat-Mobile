@@ -4,6 +4,7 @@ import io.github.thiesi.chitchat.core.conversation.*
 import io.github.thiesi.chitchat.core.direct.*
 import io.github.thiesi.chitchat.core.network.*
 import io.github.thiesi.chitchat.core.session.*
+import io.github.thiesi.chitchat.core.targets.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.*
@@ -24,6 +25,80 @@ class DirectStateTest {
         Dispatchers.resetMain()
     }
     private fun TestScope.open() { thread.open(8); thread.foreground(); runCurrent(); assertTrue(thread.state.value.loaded) }
+
+    private suspend fun target(id: Long = 18, peer: Long = 8): TargetSnapshot.DirectMessage {
+        api.session.value = api.session.value.copy(privacy = api.privacy,
+            chatPolicy = ChatPolicy(emptySet(), null, DisplayPreferences()))
+        return TargetSnapshot.DirectMessage(TargetRequest(api.session.value, MessageTarget.DirectMessage(peer, id)),
+            api.context(peer), api.history(peer, beforeTarget(id)))
+    }
+    @Test fun replyAdoptionPreservesTheDraftAndCannotReadNewerIncomingMessages() = runTest(dispatcher) {
+        open(); thread.updateDraft("Keep DM reply draft"); assertTrue(thread.adoptTarget(target()))
+        assertEquals("Keep DM reply draft", thread.state.value.draft)
+        assertEquals(18L, thread.state.value.fixedUpper); assertEquals(18L, thread.state.value.highlightedMessageId)
+        assertEquals(18L, thread.state.value.anchor?.id); assertFalse(thread.state.value.latestWindow)
+        thread.viewport(DirectAnchor(18, 0), setOf(18), 18, true); runCurrent(); assertEquals(0, api.reads)
+        api.rows = listOf(row(80)); thread.invalidate(); runCurrent(); thread.refresh(); runCurrent()
+        assertTrue(thread.state.value.messages.isEmpty()); assertEquals(18L, thread.state.value.fixedUpper)
+        assertNull(thread.state.value.highlightedMessageId); assertTrue(thread.state.value.anchorLost)
+        thread.background(); thread.foreground(); runCurrent(); assertTrue(thread.state.value.messages.isEmpty())
+        thread.latest(); runCurrent(); assertEquals(80L, thread.state.value.messages.single().id)
+        assertNull(thread.state.value.fixedUpper); assertNull(thread.state.value.highlightedMessageId)
+    }
+    @Test fun adoptionCannotCancelAnActiveWriteOrSupplyUnknownSendConsent() = runTest(dispatcher) {
+        open(); val snapshot = target(); thread.updateDraft("Unknown DM reply")
+        api.gate = CompletableDeferred(); api.gated = "send"; thread.send(); runCurrent()
+        assertFalse(thread.adoptTarget(snapshot)); assertEquals(1, api.sends)
+        api.sendFailure = ApiFailure(FailureKind.TIMEOUT); api.gate!!.complete(Unit); runCurrent()
+        assertTrue(thread.adoptTarget(snapshot)); assertTrue(thread.state.value.uncertainSend)
+        assertFalse(thread.state.value.checkedUnknown); assertEquals("Unknown DM reply", thread.state.value.draft)
+        thread.allowDuplicateRisk(); assertTrue(thread.state.value.uncertainSend); assertEquals(1, api.sends)
+    }
+    @Test fun wrongPeerMissingTargetBackgroundAndOriginalAccountGuardsFailClosed() = runTest(dispatcher) {
+        open(); val snapshot = target(); assertFalse(thread.adoptTarget(target(18, 9)))
+        assertFalse(thread.adoptTarget(target(99))); thread.background(); assertFalse(thread.adoptTarget(snapshot))
+        thread.foreground(); runCurrent(); val original = api.session.value
+        api.session.value = api.session.value.copy(generation = 2)
+        assertFalse(thread.adoptTarget(snapshot)); thread.open(9, original)
+        assertEquals(8L, thread.state.value.peerId); runCurrent(); assertNull(thread.state.value.peerId)
+    }
+    @Test fun adoptionRebindsMuteAndRoomIgnoreNeverBlocksADirectTarget() = runTest(dispatcher) {
+        open(); val snapshot = target(); val mute = RoomMute(3, "everywhere", null, null, "Fixture mute")
+        api.session.value = api.session.value.copy(chatPolicy = ChatPolicy(setOf(8), mute, DisplayPreferences()))
+        assertTrue(thread.adoptTarget(snapshot)); assertSame(mute, thread.state.value.context?.mutedEverywhere)
+        assertEquals(18L, thread.state.value.messages.single().id); assertFalse(thread.canSend())
+    }
+    @Test fun explicitCurrentEntryCanReplaceTheOldScopeBeforeTheCollectorRuns() = runTest(dispatcher) {
+        open(); val old = target(); thread.updateDraft("Old generation draft")
+        val replacement = api.session.value.copy(generation = 2); api.session.value = replacement
+        thread.open(8, replacement); runCurrent()
+        assertTrue(thread.belongsTo(replacement)); assertFalse(thread.belongsTo(old.request.original))
+        assertEquals("", thread.state.value.draft); assertTrue(thread.drafts.value.isEmpty())
+        assertFalse(thread.adoptTarget(old)); assertEquals(8L, thread.state.value.peerId)
+    }
+    @Test fun oldRenderedInputSendAndBlockCannotActOnTheSuccessorPeerOrAccount() = runTest(dispatcher) {
+        open(); val original = api.session.value
+        thread.open(9); runCurrent(); thread.updateDraft("Current peer draft")
+        assertFalse(thread.updateDraft(original, 8, "Queued old input"))
+        thread.send(original, 8); thread.setBlocked(original, 8, true); runCurrent()
+        assertEquals("Current peer draft", thread.state.value.draft); assertEquals(0, api.sends); assertEquals(0, api.blocks)
+        api.session.value = api.session.value.copy(generation = 2)
+        assertFalse(thread.updateDraft(original, 9, "Old account input"))
+        thread.send(original, 9); thread.setBlocked(original, 9, true)
+        assertEquals(0, api.sends); assertEquals(0, api.blocks); runCurrent(); assertTrue(thread.drafts.value.isEmpty())
+    }
+    @Test fun confirmedTargetAccessLossRetiresContentButKeepsAnInterruptedSendUnknown() = runTest(dispatcher) {
+        open(); val snapshot = target(); val denied = ApiFailure(FailureKind.HTTP, 403, "forbidden")
+        thread.targetDenied(target(18, 9).request, denied)
+        thread.targetDenied(snapshot.request, ApiFailure(FailureKind.HTTP, 403, "csrf_failed"))
+        assertTrue(thread.state.value.messages.isNotEmpty())
+        thread.updateDraft("Draft survives peer access loss"); api.gate = CompletableDeferred(); api.gated = "send"
+        thread.send(); runCurrent(); thread.targetDenied(snapshot.request, denied); runCurrent()
+        assertTrue(thread.state.value.messages.isEmpty()); assertNull(thread.state.value.context)
+        assertTrue(thread.state.value.uncertainSend); assertFalse(thread.state.value.checkedUnknown)
+        assertEquals("Draft survives peer access loss", thread.state.value.draft); assertEquals(1, api.sends)
+        api.gate!!.complete(Unit); runCurrent(); assertTrue(thread.state.value.messages.isEmpty()); assertEquals(1, api.sends)
+    }
 
     @Test fun wholePeerReadRefetchesAndKeepsUnrenderedRacingArrivalSeparateFromServerUnread() = runTest(dispatcher) {
         open()

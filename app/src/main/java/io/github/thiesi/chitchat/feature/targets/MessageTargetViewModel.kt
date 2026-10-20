@@ -63,17 +63,26 @@ class MessageTargetViewModel(private val operations: MessageTargetOperations) : 
     }
     /** Bind action to this exact result/request; callers must still fence scope/policy on adoption. */
     fun consume(request: TargetRequest): TargetSnapshot? {
+        var result: TargetSnapshot? = null
+        adopt(request) { result = it; true }
+        return result
+    }
+    /** Main-confined handoff. A busy/rejecting consumer must not lose the original selection. */
+    fun adopt(request: TargetRequest, accept: (TargetSnapshot) -> Boolean): Boolean {
         val value = mutable.value
         val current = session.value
-        val snapshot = value.result ?: return null
+        val snapshot = value.result ?: return false
         if (!selected(request) || value.loading || value.stale || snapshot.request !== request ||
-            !snapshot.matches(current) || current.busy || current.refreshRequired || current.storageWarning) return null
+            !snapshot.matches(current) || current.busy || current.refreshRequired || current.storageWarning) return false
         val result = snapshot.withCurrentPolicy(current)
         if (result == null) {
-            mutable.value = value.copy(result = null, stale = true, error = ApiFailure(FailureKind.INCOMPATIBLE)); return null
+            mutable.value = value.copy(result = null, stale = true, error = ApiFailure(FailureKind.INCOMPATIBLE)); return false
         }
-        if (!result.available) { mutable.value = value.copy(result = result); return null }
-        retire(); pending = false; mutable.value = MessageTargetState(); return result
+        if (!result.available) { mutable.value = value.copy(result = result); return false }
+        if (!accept(result)) return false
+        // A consumer may replace/cancel its selection. Never clear its successor's work.
+        if (selected(request)) { retire(); pending = false; mutable.value = MessageTargetState() }
+        return true
     }
     private fun selected(request: TargetRequest) = mutable.value.request === request && request.matches(session.value)
     private fun current(attempt: Long, request: TargetRequest) = sequence == attempt && selected(request)

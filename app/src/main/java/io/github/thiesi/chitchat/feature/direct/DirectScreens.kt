@@ -131,6 +131,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
 @Composable
 fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSession: () -> Unit) {
     val session by model.session.collectAsStateWithLifecycle()
+    val displayedSession = session
     val connection = model.realtime?.state?.collectAsStateWithLifecycle()?.value?.takeIf { it.generation == session.generation }
     key(peer, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
         val state by model.state.collectAsStateWithLifecycle()
@@ -139,7 +140,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
         val ready = sessionReady(session, now)
         val timeline = rememberLazyListState()
         var blockConfirm by remember { mutableStateOf(false) }
-        LaunchedEffect(peer) { model.open(peer) }
+        LaunchedEffect(peer) { model.open(peer, displayedSession) }
         DirectLifecycle(model::foreground, model::background, model::invalidate)
         LaunchedEffect(state.scrollRequest) {
             if (state.scrollRequest > 0 && state.messages.isNotEmpty()) timeline.scrollToItem(state.messages.size + 1)
@@ -223,10 +224,11 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             }
                         }
                     }
-                    MessageInput(state.draft, { value -> model.updateDraft(value)
-                        model.typing?.input(session, TypingTarget.Direct(peer), hasTypingContent(value)) }, !state.sending && model.canEditDraft(),
+                    MessageInput(state.draft, { value ->
+                        if (model.updateDraft(displayedSession, peer, value))
+                            model.typing?.input(displayedSession, TypingTarget.Direct(peer), hasTypingContent(value)) }, !state.sending && model.canEditDraft(),
                         stringResource(R.string.dm_message), compact, Modifier.weight(1f).testTag("dm_composer"))
-                    Button(onClick = model::send, enabled = ready && model.canSend(), modifier = Modifier.testTag("dm_send")) { Text(stringResource(R.string.dm_send)) }
+                    Button(onClick = { model.send(displayedSession, peer) }, enabled = ready && model.canSend(), modifier = Modifier.testTag("dm_send")) { Text(stringResource(R.string.dm_send)) }
                 }
             }
         }
@@ -234,7 +236,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             val blocked = state.context!!.relationship.blockedByMe
             AlertDialog(onDismissRequest = { blockConfirm = false }, title = { Text(stringResource(if (blocked) R.string.dm_unblock else R.string.dm_block)) },
                 text = { Text(stringResource(R.string.dm_block_help)) },
-                confirmButton = { TextButton(onClick = { blockConfirm = false; model.setBlocked(!blocked) }, Modifier.testTag("dm_confirm_block")) { Text(stringResource(if (blocked) R.string.dm_unblock else R.string.dm_block)) } },
+                confirmButton = { TextButton(onClick = { blockConfirm = false; model.setBlocked(displayedSession, peer, !blocked) }, Modifier.testTag("dm_confirm_block")) { Text(stringResource(if (blocked) R.string.dm_unblock else R.string.dm_block)) } },
                 dismissButton = { TextButton(onClick = { blockConfirm = false }) { Text(stringResource(R.string.cancel)) } })
         }
     }

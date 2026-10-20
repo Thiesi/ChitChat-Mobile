@@ -8,6 +8,7 @@ import io.github.thiesi.chitchat.core.realtime.*
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
+import io.github.thiesi.chitchat.core.targets.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.*
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -29,6 +30,89 @@ class ConversationRealtimeTest {
         Dispatchers.resetMain()
     }
     private fun TestScope.open() { model.foreground(); model.open(42, interacted = true); runCurrent() }
+
+    private suspend fun target(id: Long = 2, room: Long = 42): TargetSnapshot.RoomMessage {
+        val context = api.context(room)
+        api.session.value = api.session.value.copy(chatPolicy = context.policy)
+        return TargetSnapshot.RoomMessage(TargetRequest(api.session.value, MessageTarget.RoomMessage(room, id)),
+            context, api.history(room, beforeTarget(id)), api.pings(room))
+    }
+
+    @Test fun exactReplyAdoptionPreservesDraftAndNeverGrantsLatestReadProof() = runTest(dispatcher) {
+        open(); model.updateDraft("Keep reply-navigation draft"); val snapshot = target()
+        assertTrue(model.adoptTarget(snapshot))
+        val value = model.state.value
+        assertEquals(2L, value.fixedUpper); assertEquals(2L, value.highlightedMessageId)
+        assertEquals(2L, value.anchor?.id); assertFalse(value.latestWindow); assertFalse(value.atLatest)
+        assertEquals("Keep reply-navigation draft", value.draft); assertEquals(1L, value.readCursor)
+        model.viewport(TimelineAnchor(2, 0), 2, true); runCurrent()
+        assertEquals(0, api.reads); assertEquals(0, api.sends)
+    }
+    @Test fun targetRangeRemainsBoundedAfterEveryRowDisappearsAcrossHintResumeAndRefresh() = runTest(dispatcher) {
+        open(); assertTrue(model.adoptTarget(target()))
+        api.rows = listOf(message(80), message(81)); model.invalidate(); runCurrent()
+        assertTrue(model.state.value.messages.isEmpty()); assertEquals(2L, model.state.value.fixedUpper)
+        assertFalse(model.state.value.latestWindow); assertNull(model.state.value.highlightedMessageId)
+        assertTrue(model.state.value.anchorUnavailable)
+        model.invalidate(); runCurrent(); model.background(); model.foreground(); runCurrent(); model.refresh(); runCurrent()
+        assertTrue(api.windows.all { it.upper == 2L }); assertTrue(model.state.value.messages.isEmpty())
+        assertEquals(2L, model.state.value.fixedUpper); assertEquals(0, api.reads)
+        model.latest(); runCurrent(); assertEquals(listOf(80L, 81L), model.state.value.messages.map { it.id })
+        assertTrue(model.state.value.latestWindow); assertNull(model.state.value.fixedUpper)
+    }
+    @Test fun targetAdoptionCannotCancelAReadPostOrGrantUnknownSendConsent() = runTest(dispatcher) {
+        open(); val snapshot = target()
+        api.readGate = CompletableDeferred(); model.viewport(TimelineAnchor(3, 0), 3, true); runCurrent()
+        assertFalse(model.adoptTarget(snapshot)); assertEquals(0, api.cancelledReads)
+        api.readGate!!.complete(Unit); runCurrent()
+        model.updateDraft("Keep uncertain reply draft"); api.sendFailure = ApiFailure(FailureKind.TIMEOUT)
+        model.send(); runCurrent(); assertTrue(model.state.value.uncertainSend)
+        assertTrue(model.adoptTarget(snapshot)); assertTrue(model.state.value.uncertainSend)
+        assertFalse(model.state.value.reconciledAfterUncertain); assertEquals("Keep uncertain reply draft", model.state.value.draft)
+        model.acknowledgeDuplicateRisk(); assertTrue(model.state.value.uncertainSend); assertEquals(1, api.sends)
+    }
+    @Test fun staleWrongRoomUnavailableAndBackgroundSnapshotsCannotReplaceThePane() = runTest(dispatcher) {
+        open(); val snapshot = target(); assertFalse(model.adoptTarget(target(2, 43)))
+        assertFalse(model.adoptTarget(target(99))); assertEquals(42L, model.state.value.roomId)
+        model.background(); assertFalse(model.adoptTarget(snapshot)); model.foreground(); runCurrent()
+        api.session.value = api.session.value.copy(generation = 2)
+        assertFalse(model.adoptTarget(snapshot)); runCurrent(); assertTrue(model.state.value.messages.isEmpty())
+    }
+    @Test fun alreadyConfirmedReadCursorStillPublishesIdleForAWaitingTarget() = runTest(dispatcher) {
+        open(); val snapshot = target(); api.readResult = 1; api.readGate = CompletableDeferred()
+        model.viewport(TimelineAnchor(3, 0), 3, true); runCurrent()
+        assertTrue(model.state.value.reading); assertFalse(model.canAdoptTarget(snapshot))
+        api.readGate!!.complete(Unit); runCurrent()
+        assertFalse(model.state.value.reading); assertEquals(1L, model.state.value.readCursor)
+        assertTrue(model.canAdoptTarget(snapshot)); assertTrue(model.adoptTarget(snapshot)); assertEquals(1, api.reads)
+    }
+    @Test fun currentRoomPolicyWinsAtAdoptionAndDoesNotRevealIgnoredTargets() = runTest(dispatcher) {
+        open(); val snapshot = target()
+        api.session.value = api.session.value.copy(chatPolicy = ChatPolicy(setOf(8), null, DisplayPreferences()))
+        assertTrue(model.adoptTarget(snapshot)); assertEquals(setOf(8L), model.state.value.context?.policy?.ignoredUserIds)
+        assertTrue(model.state.value.revealed.isEmpty()); assertTrue(model.state.value.pings.isEmpty())
+    }
+    @Test fun oldRenderedSendCannotTransmitANewRoomOrAccountsRetainedDraft() = runTest(dispatcher) {
+        open(); val original = api.session.value
+        model.open(43, interacted = true); runCurrent(); model.updateDraft("Current room draft")
+        model.send(original, 42); runCurrent(); assertEquals(0, api.sends)
+        assertEquals("Current room draft", model.state.value.draft)
+        api.session.value = api.session.value.copy(generation = 2)
+        model.send(original, 43); assertEquals(0, api.sends)
+        runCurrent(); assertTrue(model.drafts.value.isEmpty())
+    }
+    @Test fun targetPermissionLossClearsOnlyItsCurrentRoomContentAndKeepsTheDraft() = runTest(dispatcher) {
+        open(); val snapshot = target(); model.updateDraft("Draft survives access loss")
+        val denied = ApiFailure(FailureKind.HTTP, 403, "room_forbidden")
+        model.targetDenied(target(20, 43).request, denied)
+        model.targetDenied(snapshot.request, ApiFailure(FailureKind.HTTP, 403, "csrf_failed"))
+        assertTrue(model.state.value.messages.isNotEmpty())
+        model.targetDenied(snapshot.request, denied)
+        assertTrue(model.state.value.messages.isEmpty()); assertNull(model.state.value.context)
+        assertFalse(model.state.value.loaded); assertEquals("Draft survives access loss", model.state.value.draft)
+        assertEquals("Draft survives access loss", model.drafts.value[42]?.body)
+        assertEquals(0, api.reads); assertEquals(0, api.sends)
+    }
 
     @Test fun automaticSyncDoesNotCancelReplayOrLoseAnActiveReadPost() = runTest(dispatcher) {
         open(); api.readGate = CompletableDeferred()
@@ -210,6 +294,7 @@ class ConversationRealtimeTest {
         var firstRaw: Long? = null
         val windows = mutableListOf<WindowCall>()
         var sends = 0; var reads = 0; var cancelledReads = 0
+        var readResult: Long? = null
         var sendGate: CompletableDeferred<Unit>? = null; var readGate: CompletableDeferred<Unit>? = null
         var windowGate: CompletableDeferred<Unit>? = null
         var sendFailure: ApiFailure? = null; var readFailure: ApiFailure? = null; var windowFailure: ApiFailure? = null
@@ -239,7 +324,7 @@ class ConversationRealtimeTest {
         }
         override suspend fun read(roomId: Long, messageId: Long): Long {
             reads++
-            try { readGate?.await(); readFailure?.let { throw it }; return messageId }
+            try { readGate?.await(); readFailure?.let { throw it }; return readResult ?: messageId }
             catch (cancelled: CancellationException) { cancelledReads++; throw cancelled }
         }
     }

@@ -12,6 +12,11 @@ import io.github.thiesi.chitchat.core.realtime.RealtimeController
 import io.github.thiesi.chitchat.core.typing.TypingController
 import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
+import io.github.thiesi.chitchat.core.session.SessionState
+import io.github.thiesi.chitchat.core.targets.MessageTarget
+import io.github.thiesi.chitchat.core.targets.TargetSnapshot
+import io.github.thiesi.chitchat.core.targets.TargetRequest
+import io.github.thiesi.chitchat.core.targets.withCurrentPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -28,6 +33,7 @@ data class DirectThreadState(val peerId: Long? = null, val context: DirectContex
     val messages: List<DirectMessage> = emptyList(), val draft: String = "", val loaded: Boolean = false,
     val busy: Boolean = false, val sending: Boolean = false, val stale: Boolean = true,
     val olderCursor: Long? = null, val mayHaveOlder: Boolean = false, val latestWindow: Boolean = true, val fixedUpper: Long? = null,
+    val highlightedMessageId: Long? = null,
     val atLatest: Boolean = false, val scrollRequest: Long = 0, val anchor: DirectAnchor? = null,
     val newerAvailable: Boolean = false, val anchorLost: Boolean = false, val incompleteRange: Boolean = false,
     val error: ApiFailure? = null, val readError: ApiFailure? = null, val validation: String? = null,
@@ -67,8 +73,13 @@ class DirectThreadViewModel(private val operations: DirectOperations,
         } else drain()
     } } }
 
-    fun open(peer: Long) {
-        if (!currentIdentity() || peer <= 0 || peer == identity?.user) return
+    fun open(peer: Long, expected: SessionState = session.value) {
+        val owner = expected.directIdentity() ?: return
+        if (owner != session.value.directIdentity() || peer <= 0 || peer == owner.user) return
+        if (owner != identity) {
+            retire(); identity = owner; mutable.value = DirectThreadState()
+            savedDrafts.value = emptyMap(); localAttention.value = emptyMap(); seen = emptySet()
+        }
         if (mutable.value.peerId != peer) {
             val foreground = active
             background(); active = foreground; seen = emptySet(); attemptedRead = 0
@@ -110,6 +121,49 @@ class DirectThreadViewModel(private val operations: DirectOperations,
     }
     fun refresh() { start { peer -> reload(peer, latest = mutable.value.uncertainSend, consent = true) } }
     fun latest() { start { peer -> reload(peer, latest = true, consent = true) } }
+
+    /** Same-peer reply adoption; it is neither a whole-peer read nor an unknown-send history check. */
+    fun canAdoptTarget(snapshot: TargetSnapshot.DirectMessage): Boolean = active && ready() &&
+        snapshot.matches(session.value) && snapshot.available && snapshot.context.peer.id == mutable.value.peerId &&
+        !mutable.value.busy && write == null
+
+    fun belongsTo(expected: SessionState) = expected.directIdentity() != null && expected.directIdentity() == identity &&
+        currentIdentity()
+
+    private fun selected(expected: SessionState, peer: Long?) = belongsTo(expected) && peer != null &&
+        mutable.value.peerId == peer
+
+    fun targetDenied(request: TargetRequest, error: ApiFailure) {
+        val target = request.target as? MessageTarget.DirectMessage ?: return
+        if (!request.matches(session.value) || !selected(request.original, target.peerId) ||
+            error.status !in setOf(403, 404) || error.code == "csrf_failed") return
+        val old = mutable.value; val pending = write
+        retire()
+        mutable.value = old.copy(context = null, messages = emptyList(), loaded = false, stale = true,
+            busy = false, sending = false, atLatest = false, anchor = null, fixedUpper = null, highlightedMessageId = null,
+            olderCursor = null, mayHaveOlder = false, error = error, checkedUnknown = false,
+            uncertainSend = old.uncertainSend || pending == Write.SEND,
+            uncertainRead = old.uncertainRead || pending == Write.READ,
+            uncertainBlock = old.uncertainBlock || pending == Write.BLOCK)
+        rememberDraft()
+    }
+
+    fun adoptTarget(snapshot: TargetSnapshot.DirectMessage): Boolean {
+        val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.DirectMessage ?: return false
+        if (!canAdoptTarget(fresh)) return false
+        val target = fresh.request.target as? MessageTarget.DirectMessage ?: return false
+        val value = mutable.value
+        sequence++; job?.cancel(); job = null // No active write: preserve queued invalidation counters.
+        viewport = DirectAnchor(target.id, 0, ++anchorRevision); visibleNewest = null; attemptedRead = 0
+        mutable.value = value.copy(context = fresh.context, messages = fresh.page.messages, loaded = true,
+            stale = false, latestWindow = false, fixedUpper = target.id, highlightedMessageId = target.id,
+            olderCursor = fresh.page.olderCursor, mayHaveOlder = fresh.page.mayHaveOlder,
+            atLatest = false, anchor = viewport, anchorLost = false, newerAvailable = true, incompleteRange = false,
+            checkedUnknown = false, error = value.error.takeIf { value.uncertainSend || value.uncertainBlock }, validation = null)
+        seen = seen.intersect(fresh.page.messages.map { it.id }.toSet())
+        rememberDraft(); drain()
+        return true
+    }
 
     private fun start(operation: suspend (Long) -> Unit) {
         val peer = mutable.value.peerId ?: return
@@ -182,14 +236,16 @@ class DirectThreadViewModel(private val operations: DirectOperations,
             survivor?.let { DirectAnchor(it.id, captured.offset.takeIf { _ -> it.id == captured.id } ?: 0, ++anchorRevision) }
         }
         val scroll = latest || !old.loaded || old.atLatest && live
+        val targetLost = old.highlightedMessageId != null && rows.none { it.id == old.highlightedMessageId }
         mutable.value = mutable.value.copy(context = context, messages = rows, loaded = true, stale = false,
             olderCursor = if (trimmed) rows.firstOrNull()?.id else window.olderCursor,
             mayHaveOlder = trimmed || window.mayHaveOlder, latestWindow = live,
             fixedUpper = if (live) null else upper,
+            highlightedMessageId = old.highlightedMessageId.takeUnless { latest || targetLost },
             newerAvailable = !live || !scroll && (old.newerAvailable ||
                 previous != null && rows.lastOrNull()?.id?.let { it > previous } == true),
             incompleteRange = false, error = null,
-            anchorLost = viewport != null && anchor?.id != viewport?.id,
+            anchorLost = !live && old.anchorLost || viewport != null && anchor?.id != viewport?.id || targetLost,
             anchor = if (scroll) null else anchor,
             scrollRequest = mutable.value.scrollRequest + if (scroll) 1 else 0,
             checkedUnknown = mutable.value.checkedUnknown || consent && mutable.value.uncertainSend,
@@ -204,10 +260,13 @@ class DirectThreadViewModel(private val operations: DirectOperations,
             val existing = mutable.value
             val all = (page.messages + existing.messages).distinctBy { it.id }.sortedBy { it.id }
             val rows = all.take(500)
+            val targetLost = existing.highlightedMessageId != null && rows.none { it.id == existing.highlightedMessageId }
             mutable.value = existing.copy(messages = rows, olderCursor = page.olderCursor, mayHaveOlder = page.mayHaveOlder,
                 latestWindow = existing.latestWindow && all.size <= 500, newerAvailable = existing.newerAvailable || all.size > 500,
                 fixedUpper = if (existing.latestWindow && all.size <= 500) null else
                     if (all.size > 500) rows.lastOrNull()?.id else existing.fixedUpper ?: rows.lastOrNull()?.id,
+                highlightedMessageId = existing.highlightedMessageId.takeUnless { targetLost },
+                anchorLost = existing.anchorLost || targetLost,
                 atLatest = false, anchor = viewport?.copy(revision = ++anchorRevision))
         }
     }
@@ -267,10 +326,13 @@ class DirectThreadViewModel(private val operations: DirectOperations,
 
     fun canEditDraft() = mutable.value.peerId in savedDrafts.value || savedDrafts.value.size < 100
     fun updateDraft(value: String) {
-        if (mutable.value.sending || !currentIdentity()) return
-        if (!canEditDraft() && value.isNotEmpty()) { mutable.value = mutable.value.copy(draftLimit = true); return }
+        updateDraft(session.value, mutable.value.peerId, value)
+    }
+    fun updateDraft(expected: SessionState, peer: Long?, value: String): Boolean {
+        if (!selected(expected, peer) || mutable.value.sending) return false
+        if (!canEditDraft() && value.isNotEmpty()) { mutable.value = mutable.value.copy(draftLimit = true); return false }
         mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false)
-        rememberDraft()
+        rememberDraft(); return true
     }
     fun discardSavedDraft(peer: Long) {
         if (!currentIdentity() || mutable.value.sending) return
@@ -288,6 +350,7 @@ class DirectThreadViewModel(private val operations: DirectOperations,
     fun canSend() = active && ready() && mutable.value.let { !it.busy && !it.stale && it.loaded &&
         !it.uncertainSend && !it.uncertainBlock && it.context?.relationship?.messagingAvailable == true &&
         it.context.mutedEverywhere == null }
+    fun send(expected: SessionState, peer: Long?) { if (selected(expected, peer)) send() }
     fun send() {
         if (!canSend()) return
         val body = mutable.value.draft
@@ -310,6 +373,9 @@ class DirectThreadViewModel(private val operations: DirectOperations,
             mutable.value = mutable.value.copy(uncertainSend = false, checkedUnknown = false)
             rememberDraft()
         }
+    }
+    fun setBlocked(expected: SessionState, peer: Long?, blocked: Boolean) {
+        if (selected(expected, peer)) setBlocked(blocked)
     }
     fun setBlocked(blocked: Boolean) {
         if (mutable.value.context == null || mutable.value.uncertainBlock) return

@@ -54,6 +54,21 @@ class MessageTargetViewModelTest {
         assertNotNull(model.state.value.result); assertFalse(model.state.value.result!!.available)
         assertNull(model.state.value.error); assertFalse(model.state.value.stale); assertNull(model.consume(request))
     }
+    @Test fun rejectingConsumerKeepsTheSelectionUntilItCanAdoptExactlyOnce() = runTest(dispatcher) {
+        model.foreground(); val request = load(); runCurrent()
+        var calls = 0
+        assertFalse(model.adopt(request) { calls++; false })
+        assertSame(request, model.state.value.request); assertNotNull(model.state.value.result)
+        assertTrue(model.adopt(request) { calls++; true }); assertEquals(2, calls)
+        assertFalse(model.adopt(request) { calls++; true }); assertEquals(2, calls)
+    }
+    @Test fun acceptedConsumerCannotClearASelectionItReplacedDuringHandoff() = runTest(dispatcher) {
+        model.foreground(); val request = load(); runCurrent()
+        var successor: TargetRequest? = null
+        assertTrue(model.adopt(request) { successor = load(b); true })
+        runCurrent(); assertSame(successor, model.state.value.request)
+        assertSame(successor, model.state.value.result?.request)
+    }
     @Test fun staleCloseAndRetryCannotRetireOrReloadTheSuccessor() = runTest(dispatcher) {
         model.foreground(); val old = load(); runCurrent(); val next = load(b); runCurrent()
         model.cancel(old); model.retry(old); runCurrent()

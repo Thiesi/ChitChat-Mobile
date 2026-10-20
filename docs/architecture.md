@@ -1,5 +1,7 @@
 # Proposed Android architecture
 
+[M4c4b2a](milestones/M4c4b2a-target-adoption-state.md) hardens historical empty-range bounds and original rendered callback scopes, and provides rejectable same-pane target-adoption/denial state. Native quote/notification consumers remain separate; no new transport, cache or background worker is introduced.
+
 Current implementation includes native room/DM consumers, foreground realtime/typing, member room-ignore and memory-only draft recovery. [M4c4b1](milestones/M4c4b1-message-target-state.md) adds shared exact-target lookup/state; native target/notification consumers and live chat acceptance remain pending. Milestone-specific narratives below record earlier delivery baselines; cache/push sections are target design. Decentralized push is accepted; public release identity/distribution and ordinary-DM alerts remain open.
 
 ## Structure and dependencies
