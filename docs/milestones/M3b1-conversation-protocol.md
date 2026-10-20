@@ -1,6 +1,6 @@
 # M3b1: room conversation protocol prerequisite
 
-This buildable prerequisite supplies the existing HTTP contracts for the dependent native conversation screen. It introduces no alternate authentication, guessed endpoint, realtime connection, persistent content cache or push implementation. The complete protocol and UI diffs are reviewed separately within the Claude input budget.
+This buildable prerequisite supplies the existing HTTP contracts and tested presentation state for the dependent native conversation screen. It introduces no alternate authentication, guessed endpoint, realtime connection, persistent content cache or push implementation. Protocol/ViewModel and native-screen diffs are reviewed separately within the Claude input budget.
 
 ## Verified server contracts
 
@@ -19,8 +19,10 @@ The audited backend remains v3.2.1, commit `4f53ff497f5572072fddad42d8ac3979e9cd
 
 History validates requested room, ascending unique IDs, exclusive boundary and exact enrichment membership. Send validates status, envelope kind, room and actor. PDO timestamps such as `2026-07-17 08:00:00+00` and RFC3339 ping timestamps are parsed without guessing a missing timezone. Read responses accept the actual server's zero/already-advanced values. No backend modification or issue is necessary for these supported routes.
 
+`ConversationViewModel` is included with its19 unit regressions as the presentation-state prerequisite; native Compose rendering/navigation and eight new device journeys follow separately. It owns bounded history/pings, scoped draft/anchors, explicit uncertain-send reconciliation/consent, foreground-visible read acknowledgment and request/account fences. It neither opens a realtime connection nor starts presence. The screen, not a history fetch, must report actual visibility before read acknowledgment.
+
 ## Verification boundary
 
-The isolated prerequisite build, fixture counts and lint/release results will be recorded here after execution. The native consumer's tests are separate evidence, not an isolated protocol result. Normal/hosted tests use fixtures and exclude the opt-in live suite. No `.env.integration` is copied to a worktree.
+The combined native-consumer tree passed debug build,184 fixture units (zero failures/errors/skips), clean lint and test-APK assembly. Its opt-in live test passed fresh context/history/mutation/ping GETs plus the prior auth/directory checks, with no room mutations. The isolated prerequisite build and lint/release results will be recorded here after execution; the consumer tree is not substituted for that isolated result. Normal/hosted tests use fixtures and exclude the opt-in live suite. No `.env.integration` is copied to a worktree.
 
 This prerequisite does not establish live message delivery, native UI acceptance, foreground SSE/presence, guest visitation, signed release or complete M3 parity. Message-send/read tests against a live account require explicit approval and a dedicated room; no ordinary-room mutation is authorized by merely configuring credentials.
