@@ -1,8 +1,6 @@
 package io.github.thiesi.chitchat.core.network
 
-import io.github.thiesi.chitchat.core.rooms.CreateRoom
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
-import io.github.thiesi.chitchat.core.rooms.validateRoomCreation
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -12,9 +10,12 @@ import kotlinx.serialization.Serializable
 @Serializable internal class RoomLeftReply(val status: String)
 
 internal fun requireValidRoom(room: RoomInfo, expectedId: Long? = null) {
-    val problem = validateRoomCreation(CreateRoom(room.key, room.name, room.infoLine, room.visibility,
-        room.minimumAge, room.inactivityTimeoutSeconds, room.guestAccess))
-    if (problem != null || room.id <= 0 || (expectedId != null && room.id != expectedId) || room.createdBy <= 0 ||
-        room.memberRole !in setOf(null, "member", "moderator", "owner") || room.unreadCount !in 0..100 ||
+    // Displayed metadata is not a new creation request. Imported/existing strings need not
+    // satisfy today's input limits; authorization and effective policy remain server-owned.
+    if (room.id <= 0 || (expectedId != null && room.id != expectedId) || room.createdBy <= 0 ||
+        room.visibility !in setOf("public", "unlisted", "private") ||
+        room.guestAccess !in setOf("none", "read", "write") ||
+        room.minimumAge < 0 || room.inactivityTimeoutSeconds < 0 ||
+        room.memberRole !in setOf(null, "member", "moderator", "owner") || room.unreadCount < 0 ||
         (room.lastReadMessageId != null && room.lastReadMessageId <= 0)) throw ApiFailure(FailureKind.INCOMPATIBLE)
 }

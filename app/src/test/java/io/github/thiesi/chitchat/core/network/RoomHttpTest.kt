@@ -51,6 +51,22 @@ class RoomHttpTest {
         assertNull(request.headers["X-CSRF-Token"])
     }
 
+    @Test fun existingMetadataDoesNotUseNewRoomInputLimits() = runTest {
+        val existing = room().replace("\"key\":\"general\"", "\"key\":\"xy\"")
+            .replace("\"name\":\"General\"", "\"name\":\"${"n".repeat(121)}\"")
+            .replace("\"info_line\":\"Fixture\"", "\"info_line\":\"${"i".repeat(256)}\"")
+        server.enqueue(json("""{"rooms":[$existing,${room(id = 43)}]}"""))
+        val rooms = api.rooms()
+        assertEquals(2, rooms.size); assertEquals("xy", rooms[0].key)
+        assertEquals(121, rooms[0].name.length); assertEquals(256, rooms[0].infoLine.length)
+        server.enqueue(json("""{"room":$existing}"""))
+        assertEquals("xy", api.room(42).key)
+        assertEquals("invalid_room_key", failure {
+            api.createRoom(CreateRoom("xy", "General", "", "public", 0, 0, "none"), csrf, 7)
+        }.code)
+        assertEquals(2, server.requestCount)
+    }
+
     @Test fun membershipPostsUseExistingCsrfAndRequireDocumentedSuccess() = runTest {
         server.enqueue(json("""{"room":${room("\"member\"")}}"""))
         assertTrue(api.joinRoom(42, csrf).isMember)
@@ -101,8 +117,13 @@ class RoomHttpTest {
     }
 
     @Test fun metadataSchemaFailsClosedWithoutReplayingMutations() = runTest {
-        for (body in listOf(room(id = 0), room(id = 43), room().replace("\"member_role\":null,", ""),
-            room().replace("\"visibility\":\"public\"", "\"visibility\":\"future\""))) {
+        val invalidRooms = listOf(room(id = 0), room(id = 43), room().replace("\"member_role\":null,", ""),
+            room().replace("\"visibility\":\"public\"", "\"visibility\":\"future\""),
+            room().replace("\"guest_access\":\"none\"", "\"guest_access\":\"future\""),
+            room().replace("\"minimum_age\":0", "\"minimum_age\":-1"),
+            room().replace("\"inactivity_timeout_seconds\":0", "\"inactivity_timeout_seconds\":-1"),
+            room().dropLast(1) + """, "unread_count":-1}""")
+        for (body in invalidRooms) {
             server.enqueue(json("""{"room":$body}"""))
             assertEquals(FailureKind.INCOMPATIBLE, failure { api.room(42) }.kind)
         }
@@ -112,7 +133,7 @@ class RoomHttpTest {
         assertEquals(FailureKind.INCOMPATIBLE, failure { api.joinRoom(42, csrf) }.kind)
         server.enqueue(json("""{"status":"ok"}"""))
         assertEquals(FailureKind.INCOMPATIBLE, failure { api.leaveRoom(42, csrf) }.kind)
-        assertEquals(7, server.requestCount)
+        assertEquals(invalidRooms.size + 3, server.requestCount)
     }
 
     @Test fun authorizationAndRateErrorsRemainExplicitAndNeverRetryThePost() = runTest {
