@@ -92,7 +92,7 @@ class RealtimeCoordinator(
                     if (!write.cleanup && current(write)) {
                         if (result.expired) expiredRoom = write.room
                         else if (write.interacted && result.roomId == write.room) expiredRoom = null
-                        mutable.value = mutable.value.copy(presence = result, presenceError = null,
+                        mutable.value = mutable.value.copy(presence = result, presenceReceivedAtMillis = clock.millis(), presenceError = null,
                             presencePhase = when { result.expired -> PresencePhase.EXPIRED
                                 result.warningSeconds != null -> PresencePhase.WARNING
                                 result.roomId != null -> PresencePhase.ACTIVE else -> PresencePhase.NONE })

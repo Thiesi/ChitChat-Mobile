@@ -13,15 +13,20 @@ import io.github.thiesi.chitchat.core.conversation.SendResult
 import io.github.thiesi.chitchat.core.conversation.validateMessageBody
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
+import io.github.thiesi.chitchat.core.realtime.PresencePhase
+import io.github.thiesi.chitchat.core.realtime.RealtimeController
+import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withTimeout
 
 data class TimelineAnchor(val id: Long, val offset: Int, val revision: Long = 0)
 data class ConversationUiState(
@@ -35,9 +40,12 @@ data class ConversationUiState(
     val error: ApiFailure? = null, val readError: ApiFailure? = null, val validation: String? = null,
     val uncertainSend: Boolean = false, val reconciledAfterUncertain: Boolean = false,
     val revealed: Set<Long> = emptySet(), val notice: String? = null,
+    val syncing: Boolean = false, val syncError: ApiFailure? = null,
+    val newerAvailable: Boolean = false, val anchorUnavailable: Boolean = false,
 ) { override fun toString() = "ConversationUiState" }
 
-class ConversationViewModel(private val operations: ConversationOperations) : ViewModel() {
+class ConversationViewModel(private val operations: ConversationOperations,
+    val realtime: RealtimeController? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(ConversationUiState())
     val state = mutable.asStateFlow()
@@ -52,30 +60,43 @@ class ConversationViewModel(private val operations: ConversationOperations) : Vi
     private var visibleNewest: Long? = null
     private var attemptedRead = 0L
     private var dividerEstablished = false
+    private var syncJob: Job? = null
+    private var requestedSync = 0L
+    private var attemptedSync = 0L
+    private var appliedSync = 0L
+    private var deliberateSelection = false
 
     init { viewModelScope.launch { session.collect { current ->
         if (current.identity() != identity) {
             retire(); identity = current.identity(); dividerEstablished = false
             mutable.value = ConversationUiState()
-        }
+        } else drainSync()
     } } }
 
-    fun open(roomId: Long) {
+    fun open(roomId: Long, interacted: Boolean = false) {
         if (roomId <= 0 || session.value.identity() == null) return
         if (mutable.value.roomId != roomId) {
             retire(); dividerEstablished = false
+            realtime?.selectRoom(null, false)
             mutable.value = ConversationUiState(roomId = roomId)
         }
+        if (interacted) deliberateSelection = true
         if (!mutable.value.loaded && !mutable.value.busy) refresh()
+        else if (interacted) invalidate()
     }
 
-    fun foreground() { foreground = true; if (mutable.value.roomId != null && !mutable.value.busy) refresh() }
+    fun foreground() {
+        foreground = true
+        if (mutable.value.loaded && realtime != null) invalidate()
+        else if (mutable.value.roomId != null && !mutable.value.busy) refresh()
+    }
     fun background() {
         foreground = false
+        val anchor = viewport
         cancelRequest()
-        mutable.value = mutable.value.copy(revealed = emptySet(), atLatest = false)
+        mutable.value = mutable.value.copy(revealed = emptySet(), atLatest = false, anchor = anchor)
     }
-    fun cancel() = background()
+    fun cancel() { background(); realtime?.selectRoom(null, false) }
 
     fun cancelRequest() {
         val uncertain = mutable.value.uncertainSend || postInFlight
@@ -88,6 +109,42 @@ class ConversationViewModel(private val operations: ConversationOperations) : Vi
     fun reveal(id: Long) { mutable.value = mutable.value.copy(revealed = mutable.value.revealed + id) }
     fun refresh() { request { current -> reload(current) } }
     fun latest() { request { current -> reload(current, forceLatest = true) } }
+
+    /** Invalidation is queued while a user operation runs; it never cancels or replays a POST. */
+    fun invalidate() {
+        if (realtime == null || mutable.value.roomId == null || session.value.identity() == null || session.value.identity() != identity) return
+        requestedSync++
+        drainSync()
+    }
+
+    fun connectionLost() { if (mutable.value.loaded) mutable.value = mutable.value.copy(stale = true) }
+
+    fun enterRoom() {
+        val value = mutable.value
+        val context = value.context ?: return
+        if (value.loaded && !value.stale && !value.busy && ready(session.value) && presenceEligible(context))
+            realtime?.selectRoom(checkNotNull(value.roomId), true, interacted = true)
+    }
+
+    fun presenceEligible(context: ConversationContext) = context.room.isMember ||
+        session.value.user?.roles?.any { it in setOf("super_admin", "admin", "chat_admin", "global_moderator") } == true
+
+    private fun selectPresence() {
+        val value = mutable.value
+        val context = value.context ?: return
+        val controller = realtime ?: return
+        if (!presenceEligible(context)) controller.selectRoom(null, false)
+        else if (deliberateSelection) controller.selectRoom(value.roomId, true, interacted = true)
+        else if (controller.state.value.selectedRoomId == value.roomId) controller.selectRoom(value.roomId, true)
+        // Restoring a route alone must not acquire a new lease or reset inactivity.
+        deliberateSelection = false
+    }
+
+    private fun activePresence(): Boolean {
+        val connection = realtime?.state?.value ?: return true
+        return connection.generation == session.value.generation && connection.selectedRoomId == mutable.value.roomId &&
+            connection.presencePhase in setOf(PresencePhase.ACTIVE, PresencePhase.WARNING)
+    }
 
     fun older() {
         val before = mutable.value.olderCursor ?: return
@@ -119,12 +176,16 @@ class ConversationViewModel(private val operations: ConversationOperations) : Vi
             postInFlight = true
             val result = operations.send(checkNotNull(value.roomId), body)
             current(); postInFlight = false
+            realtime?.activity(checkNotNull(value.roomId)) // Only an acknowledged, current send/ping.
             mutable.value = mutable.value.copy(draft = "", notice = if (result is SendResult.Ping) "ping_sent" else "sent")
             when (result) {
                 is SendResult.Message -> if (value.latestWindow) {
-                    val messages = (mutable.value.messages + result.message).distinctBy { it.id }.sortedBy { it.id }.takeLast(500)
+                    val existing = mutable.value
+                    val combined = (existing.messages + result.message).distinctBy { it.id }.sortedBy { it.id }
+                    val messages = combined.takeLast(500)
                     mutable.value = mutable.value.copy(messages = messages, scrollRequest = mutable.value.scrollRequest + 1,
-                        olderCursor = messages.firstOrNull()?.id, mayHaveOlder = value.mayHaveOlder || messages.size == 500)
+                        olderCursor = if (combined.size > 500) messages.firstOrNull()?.id else existing.olderCursor,
+                        mayHaveOlder = existing.mayHaveOlder || combined.size > 500)
                 } else reload(current, forceLatest = true)
                 is SendResult.Ping -> mutable.value = mutable.value.copy(pings = (mutable.value.pings + result.ping)
                     .distinctBy { it.id }.filterNot { it.sender.id in value.context!!.policy.ignoredUserIds }.sortedBy { it.id }.takeLast(100))
@@ -136,7 +197,7 @@ class ConversationViewModel(private val operations: ConversationOperations) : Vi
         val value = mutable.value
         val current = session.value
         val context = value.context ?: return false
-        return ready(current) && !value.stale && !value.uncertainSend && context.room.isMember &&
+        return ready(current) && !value.stale && !value.uncertainSend && activePresence() && context.room.isMember &&
             (!current.user!!.guest || context.room.guestAccess == "write") && context.mute == null
     }
 
@@ -148,25 +209,28 @@ class ConversationViewModel(private val operations: ConversationOperations) : Vi
         val edge = atEdge && value.latestWindow
         if (edge != value.atLatest) mutable.value = value.copy(atLatest = edge)
         val newest = value.messages.lastOrNull()?.id ?: return
-        if (!foreground || !edge || newestVisibleId != newest || value.busy || value.stale ||
+        if (!foreground || !edge || newestVisibleId != newest || value.busy || value.stale || !activePresence() || readJob?.isActive == true ||
             value.context?.room?.isMember != true || newest <= maxOf(value.readCursor, attemptedRead) || !ready(session.value)) return
         val expected = identity ?: return
-        val attempt = sequence
         val roomId = value.roomId ?: return
         attemptedRead = newest
-        readJob?.cancel()
         val readAttempt = ++readSequence
         readJob = viewModelScope.launch {
             try {
+                if (!isReadCurrent(expected, readAttempt, roomId)) return@launch
                 val cursor = operations.read(roomId, newest)
-                ensureCurrent(expected, attempt, roomId)
-                if (readAttempt != readSequence) return@launch
+                if (!isReadCurrent(expected, readAttempt, roomId)) return@launch
                 mutable.value = mutable.value.copy(readCursor = maxOf(mutable.value.readCursor, cursor), readError = null)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: ApiFailure) {
-                if (isCurrent(expected, attempt, roomId) && readAttempt == readSequence) {
+                if (isReadCurrent(expected, readAttempt, roomId)) {
                     if (failure.status in setOf(403, 404) && failure.code != "csrf_failed") clearUnauthorized(failure)
                     else mutable.value = mutable.value.copy(readError = failure)
+                }
+            } finally {
+                if (isReadCurrent(expected, readAttempt, roomId)) {
+                    readJob = null
+                    viewport(viewport, visibleNewest, mutable.value.atLatest)
                 }
             }
         }
@@ -179,6 +243,7 @@ class ConversationViewModel(private val operations: ConversationOperations) : Vi
     }
 
     private suspend fun reload(current: () -> Unit, forceLatest: Boolean = false) {
+        val revision = requestedSync
         val roomId = checkNotNull(mutable.value.roomId)
         val context = operations.context(roomId)
         current()
@@ -201,17 +266,116 @@ class ConversationViewModel(private val operations: ConversationOperations) : Vi
             scrollRequest = value.scrollRequest + if (automatic || reset) 1 else 0,
             anchor = if (!automatic && !reset) anchor?.copy(revision = sequence) else null, unreadDividerId = divider,
             readCursor = maxOf(value.readCursor, context.room.lastReadMessageId ?: 0), readError = null,
-            reconciledAfterUncertain = value.uncertainSend, notice = if (reset) "latest_reset" else value.notice)
+            reconciledAfterUncertain = value.uncertainSend, notice = if (reset) "latest_reset" else value.notice,
+            syncError = null, newerAvailable = false, anchorUnavailable = false)
+        appliedSync = maxOf(appliedSync, revision); attemptedSync = maxOf(attemptedSync, revision)
+        selectPresence()
+    }
+
+    private fun stopSync() {
+        if (syncJob?.isActive == true) {
+            sequence++ // Fence a cancelled GET before a user operation can publish.
+            attemptedSync = appliedSync
+            syncJob?.cancel()
+        }
+        syncJob = null
+        mutable.value = mutable.value.copy(syncing = false)
+    }
+
+    private fun drainSync() {
+        val original = mutable.value
+        val expected = session.value.identity() ?: return
+        val roomId = original.roomId ?: return
+        if (realtime == null || realtime.state.value.phase == RealtimePhase.OFFLINE || expected != identity ||
+            !foreground || !original.loaded || original.busy || original.syncing ||
+            requestedSync <= attemptedSync || !ready(session.value)) return
+        val revision = requestedSync
+        attemptedSync = revision
+        val attempt = ++sequence
+        mutable.value = original.copy(syncing = true)
+        syncJob = viewModelScope.launch {
+            try {
+                withTimeout(60_000) {
+                    synchronizeWindow(original, attempt) { ensureCurrent(expected, attempt, roomId) }
+                }
+                appliedSync = revision
+            } catch (_: TimeoutCancellationException) {
+                if (isCurrent(expected, attempt, roomId)) mutable.value = mutable.value.copy(
+                    stale = true, syncError = ApiFailure(FailureKind.TIMEOUT))
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: ApiFailure) {
+                if (isCurrent(expected, attempt, roomId)) {
+                    if (failure.status in setOf(403, 404) && failure.code != "csrf_failed") clearUnauthorized(failure)
+                    else mutable.value = mutable.value.copy(stale = true, syncError = failure)
+                }
+            } finally {
+                if (isCurrent(expected, attempt, roomId)) {
+                    syncJob = null
+                    mutable.value = mutable.value.copy(syncing = false)
+                    // Failed revisions wait for a new hint/foreground/manual retry, not a tight loop.
+                    drainSync()
+                }
+            }
+        }
+    }
+
+    private suspend fun synchronizeWindow(original: ConversationUiState, attempt: Long, current: () -> Unit) {
+        current()
+        val roomId = checkNotNull(original.roomId)
+        val context = operations.context(roomId)
+        current()
+        val lower = original.olderCursor ?: original.messages.firstOrNull()?.id ?: 1L
+        val upper = original.messages.lastOrNull()?.id
+        var latest = original.latestWindow
+        var snapshot = operations.window(roomId, lower, if (latest) null else upper)
+        current()
+        var attention = upper != null && snapshot.messages.any { it.id > upper }
+        if (!latest && upper != null) {
+            // limit=1 makes its RAW oldest cursor the newest raw ID, even if enrichment omits it.
+            val probe = operations.history(roomId, limit = 1)
+            current()
+            attention = maxOf(probe.olderCursor ?: 0, probe.messages.lastOrNull()?.id ?: 0) > upper
+        }
+        val pings = operations.pings(roomId)
+        current()
+        // Use the CURRENT viewport: the user may have scrolled away while the GETs were running.
+        if (latest && upper != null && !mutable.value.atLatest &&
+            (!snapshot.coveredLowerBoundary || snapshot.messages.size > 500)) {
+            attention = true
+            snapshot = operations.window(roomId, lower, upper)
+            current()
+            latest = false
+        }
+        val following = latest && mutable.value.atLatest
+        // The helper's captured lower cursor cannot describe an unvisited gap, even at live edge.
+        if (!snapshot.coveredLowerBoundary || (snapshot.messages.size > 500 && !following))
+            throw ApiFailure(FailureKind.HTTP, code = "history_range_unavailable")
+        val messages = snapshot.messages.takeLast(500)
+        val previous = mutable.value
+        val savedAnchor = viewport ?: previous.anchor
+        val anchorLost = !following && savedAnchor != null && messages.none { it.id == savedAnchor.id }
+        val anchor = if (following || savedAnchor == null) null else {
+            val survivor = messages.firstOrNull { it.id >= savedAnchor.id } ?: messages.lastOrNull()
+            survivor?.let { TimelineAnchor(it.id, if (anchorLost) 0 else savedAnchor.offset, attempt) }
+        }
+        mutable.value = previous.copy(context = context, messages = messages,
+            pings = pings.filterNot { it.sender.id in context.policy.ignoredUserIds }.sortedBy { it.id }.takeLast(100),
+            stale = false, syncError = null, latestWindow = latest,
+            olderCursor = if (snapshot.messages.size > 500) messages.firstOrNull()?.id else snapshot.olderCursor,
+            mayHaveOlder = snapshot.mayHaveOlder || snapshot.messages.size > 500,
+            scrollRequest = previous.scrollRequest + if (following) 1 else 0, anchor = anchor,
+            newerAvailable = attention && !following, anchorUnavailable = previous.anchorUnavailable || anchorLost,
+            readCursor = maxOf(previous.readCursor, context.room.lastReadMessageId ?: 0))
+        selectPresence()
     }
 
     private fun request(sending: Boolean = false, action: suspend (() -> Unit) -> Unit) {
         val roomId = mutable.value.roomId ?: return
         val expected = session.value.identity() ?: return
-        if (mutable.value.busy) return
+        if (mutable.value.busy || expected != identity) return
+        stopSync()
         val attempt = ++sequence
         identity = expected
-        readJob?.cancel()
-        readSequence++
         mutable.value = mutable.value.copy(busy = true, sending = sending, error = null, validation = null, notice = null)
         job = viewModelScope.launch {
             try {
@@ -224,7 +388,9 @@ class ConversationViewModel(private val operations: ConversationOperations) : Vi
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: ApiFailure) {
                 if (isCurrent(expected, attempt, roomId)) {
-                    if (failure.status in setOf(403, 404) && (!postInFlight || failure.code in setOf("room_forbidden", "room_not_found"))) clearUnauthorized(failure)
+                    if (failure.status in setOf(403, 404) && failure.code != "csrf_failed" &&
+                        (!postInFlight || failure.code in setOf("room_forbidden", "room_not_found")))
+                        clearUnauthorized(failure, unknownWrite = false) // A definitive rejection of this request.
                     else mutable.value = mutable.value.copy(error = failure, stale = true,
                         uncertainSend = mutable.value.uncertainSend || (postInFlight && failure.ambiguous()),
                         reconciledAfterUncertain = false)
@@ -232,18 +398,31 @@ class ConversationViewModel(private val operations: ConversationOperations) : Vi
             } finally {
                 if (isCurrent(expected, attempt, roomId)) {
                     postInFlight = false; mutable.value = mutable.value.copy(busy = false, sending = false)
+                    drainSync()
                 }
             }
         }
     }
 
-    private fun clearUnauthorized(error: ApiFailure) {
+    private fun clearUnauthorized(error: ApiFailure, unknownWrite: Boolean = postInFlight) {
+        val uncertain = mutable.value.uncertainSend || unknownWrite
+        retire()
+        realtime?.selectRoom(null, false)
         mutable.value = mutable.value.copy(context = null, messages = emptyList(), pings = emptyList(),
-            loaded = false, stale = true, error = error, revealed = emptySet(), unreadDividerId = null)
+            loaded = false, stale = true, busy = false, sending = false, error = error, revealed = emptySet(),
+            unreadDividerId = null, olderCursor = null, mayHaveOlder = false, anchor = null, readCursor = 0,
+            uncertainSend = uncertain, reconciledAfterUncertain = false)
         dividerEstablished = false
     }
-    private fun retire() { sequence++; readSequence++; job?.cancel(); readJob?.cancel(); postInFlight = false; viewport = null; visibleNewest = null; attemptedRead = 0 }
-    private fun ready(value: SessionState) = value.identity() != null && !value.busy && !value.refreshRequired &&
+    private fun retire() {
+        sequence++; readSequence++; job?.cancel(); readJob?.cancel(); readJob = null; syncJob?.cancel(); syncJob = null
+        postInFlight = false; viewport = null; visibleNewest = null; attemptedRead = 0
+        requestedSync = 0; attemptedSync = 0; appliedSync = 0; deliberateSelection = false
+        mutable.value = mutable.value.copy(syncing = false)
+    }
+    private fun isReadCurrent(expected: Identity, attempt: Long, roomId: Long) = readSequence == attempt &&
+        session.value.identity() == expected && mutable.value.roomId == roomId
+    private fun ready(value: SessionState) = value.identity() != null && value.identity() == identity && !value.busy && !value.refreshRequired &&
         !value.storageWarning && value.retryAtMillis <= System.currentTimeMillis()
     private fun ensureCurrent(expected: Identity, attempt: Long, roomId: Long) {
         if (!isCurrent(expected, attempt, roomId)) throw CancellationException("Conversation changed")
@@ -256,8 +435,8 @@ class ConversationViewModel(private val operations: ConversationOperations) : Vi
     private fun ApiFailure.ambiguous() = kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.TLS,
         FailureKind.REDIRECT, FailureKind.INCOMPATIBLE, FailureKind.TOO_LARGE) || (status ?: 0) >= 500
     companion object {
-        fun factory(operations: ConversationOperations): ViewModelProvider.Factory = viewModelFactory {
-            initializer { ConversationViewModel(operations) }
+        fun factory(operations: ConversationOperations, realtime: RealtimeController? = null): ViewModelProvider.Factory = viewModelFactory {
+            initializer { ConversationViewModel(operations, realtime) }
         }
     }
 }

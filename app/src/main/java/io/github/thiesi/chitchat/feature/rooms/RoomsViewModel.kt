@@ -7,6 +7,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
+import io.github.thiesi.chitchat.core.realtime.RealtimeController
+import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.core.rooms.CreateRoom
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
 import io.github.thiesi.chitchat.core.rooms.RoomOperations
@@ -43,9 +45,11 @@ data class RoomsUiState(
     val draft: RoomDraft? = null, val error: ApiFailure? = null,
     val validation: String? = null, val mutationUncertain: Boolean = false,
     val notice: String? = null,
+    val syncing: Boolean = false,
+    val syncError: ApiFailure? = null,
 )
 
-class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
+class RoomsViewModel(private val operations: RoomOperations, private val realtime: RealtimeController? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(RoomsUiState())
     val state = mutable.asStateFlow()
@@ -54,6 +58,8 @@ class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
     private var job: Job? = null
     private var mutationInFlight = false
     private var foreground = false
+    private var pendingSync = 0L
+    private var attemptedSync = 0L
 
     init {
         viewModelScope.launch {
@@ -63,12 +69,27 @@ class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
                     identity = current.identity()
                     mutable.value = RoomsUiState()
                     if (foreground && identity != null) refresh()
-                }
+                } else drainSync()
             }
         }
     }
 
-    fun foreground() { foreground = true; refresh() }
+    fun foreground() { foreground = true; if (realtime != null && mutable.value.loaded) invalidate() else refresh() }
+
+    fun invalidate() {
+        if (session.value.identity() == null || session.value.identity() != identity) return
+        pendingSync++
+        drainSync()
+    }
+
+    fun connectionLost() { if (mutable.value.loaded) mutable.value = mutable.value.copy(stale = true) }
+
+    private fun drainSync() {
+        if (!foreground || mutable.value.busy || mutable.value.syncing || pendingSync <= attemptedSync ||
+            session.value.busy || realtime?.state?.value?.phase == RealtimePhase.OFFLINE) return
+        attemptedSync = pendingSync
+        start(false, automatic = true) { current -> reconcile(current, automatic = true) }
+    }
 
     fun background() {
         foreground = false
@@ -78,7 +99,7 @@ class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
     fun cancelRequest() {
         val uncertain = mutationInFlight || mutable.value.mutationUncertain
         retire()
-        mutable.value = mutable.value.copy(busy = false, stale = true, leaveConfirmation = false,
+        mutable.value = mutable.value.copy(busy = false, syncing = false, stale = true, leaveConfirmation = false,
             mutationUncertain = uncertain, notice = if (uncertain) "unconfirmed" else "cancelled")
     }
 
@@ -184,7 +205,8 @@ class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
             !mutable.value.stale && !mutable.value.mutationUncertain
     }
 
-    private suspend fun reconcile(current: () -> Unit) {
+    private suspend fun reconcile(current: () -> Unit, automatic: Boolean = false) {
+        val revision = pendingSync
         var rooms = operations.list()
         current()
         val selectedId = mutable.value.selected?.id
@@ -200,15 +222,24 @@ class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
         }
         current()
         mutable.value = mutable.value.copy(rooms = rooms, loaded = true, stale = false, selected = selected,
-            detailOpen = mutable.value.detailOpen && selected != null, mutationUncertain = false)
+            detailOpen = mutable.value.detailOpen && selected != null,
+            mutationUncertain = automatic && mutable.value.mutationUncertain, syncError = null)
+        attemptedSync = maxOf(attemptedSync, revision)
     }
 
-    private fun start(mutation: Boolean, action: suspend (() -> Unit) -> Unit) {
+    private fun start(mutation: Boolean, automatic: Boolean = false, action: suspend (() -> Unit) -> Unit) {
         if (mutable.value.busy) return
         val expected = session.value.identity() ?: return
-        identity = expected
+        if (expected != identity) return
+        if (mutable.value.syncing) {
+            if (automatic) return
+            sequence++; job?.cancel(); attemptedSync = 0 // A user action can cancel a GET, never a POST.
+        }
         val attempt = ++sequence
-        mutable.value = mutable.value.copy(busy = true, error = null, validation = null, notice = null)
+        mutable.value = mutable.value.copy(busy = !automatic, syncing = automatic,
+            error = if (automatic) mutable.value.error else null,
+            validation = if (automatic) mutable.value.validation else null,
+            notice = if (automatic) mutable.value.notice else null)
         mutationInFlight = false
         job = viewModelScope.launch {
             try {
@@ -225,10 +256,16 @@ class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
                     mutationUncertain = mutable.value.mutationUncertain || mutationInFlight)
                 throw cancelled
             } catch (failure: ApiFailure) {
-                if (attempt == sequence && session.value.identity() == expected) mutable.value = mutable.value.copy(error = failure, stale = true,
-                    mutationUncertain = mutable.value.mutationUncertain || (mutationInFlight && failure.isAmbiguous()))
+                if (attempt == sequence && session.value.identity() == expected) {
+                    mutable.value = if (automatic) mutable.value.copy(syncError = failure, stale = true)
+                    else mutable.value.copy(error = failure, stale = true,
+                        mutationUncertain = mutable.value.mutationUncertain || (mutationInFlight && failure.isAmbiguous()))
+                }
             } finally {
-                if (attempt == sequence) { mutationInFlight = false; mutable.value = mutable.value.copy(busy = false) }
+                if (attempt == sequence) {
+                    mutationInFlight = false; mutable.value = mutable.value.copy(busy = false, syncing = false)
+                    drainSync()
+                }
             }
         }
     }
@@ -237,7 +274,7 @@ class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
         if (attempt != sequence || session.value.identity() != expected) throw CancellationException("Session changed")
     }
 
-    private fun retire() { sequence++; job?.cancel(); job = null; mutationInFlight = false }
+    private fun retire() { sequence++; job?.cancel(); job = null; mutationInFlight = false; pendingSync = 0; attemptedSync = 0 }
 
     private data class Identity(val server: String?, val generation: Long, val id: Long, val version: Int)
     private fun SessionState.identity(): Identity? = user?.takeIf { phase == SessionPhase.AUTHENTICATED }
@@ -246,8 +283,8 @@ class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
         FailureKind.TLS, FailureKind.REDIRECT, FailureKind.INCOMPATIBLE, FailureKind.TOO_LARGE) || (status ?: 0) >= 500
 
     companion object {
-        fun factory(operations: RoomOperations): ViewModelProvider.Factory = viewModelFactory {
-            initializer { RoomsViewModel(operations) }
+        fun factory(operations: RoomOperations, realtime: RealtimeController? = null): ViewModelProvider.Factory = viewModelFactory {
+            initializer { RoomsViewModel(operations, realtime) }
         }
     }
 }

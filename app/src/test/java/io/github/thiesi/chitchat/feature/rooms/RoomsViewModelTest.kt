@@ -226,6 +226,50 @@ class RoomsViewModelTest {
         }
     }
 
+    @Test fun realtimeHintsWaitForMembershipPostAndItsCanonicalReconciliation() = runTest(dispatcher) {
+        model.foreground(); runCurrent(); select()
+        val waiting = CompletableDeferred<Unit>(); fake.gate = waiting
+        model.join(); runCurrent(); repeat(3) { model.invalidate() }; runCurrent()
+        assertEquals(1, fake.joins); assertEquals(1, fake.lists)
+        fake.gate = null; waiting.complete(Unit); runCurrent()
+        assertEquals(1, fake.joins); assertEquals(2, fake.lists)
+        assertEquals("member", model.state.value.selected?.memberRole); assertFalse(model.state.value.stale)
+    }
+
+    @Test fun automaticReadCannotClearUnknownMembershipOrGrantAnotherPost() = runTest(dispatcher) {
+        model.foreground(); runCurrent(); select(); fake.failure = ApiFailure(FailureKind.NETWORK)
+        model.join(); runCurrent(); fake.failure = null
+        model.invalidate(); runCurrent()
+        assertTrue(model.state.value.mutationUncertain); assertFalse(model.state.value.stale)
+        model.join(); runCurrent(); assertEquals(1, fake.joins)
+        model.refresh(); runCurrent(); assertFalse(model.state.value.mutationUncertain)
+    }
+
+    @Test fun hintsDuringAutomaticGetDrainOnceWithoutCancellingTheFirstRead() = runTest(dispatcher) {
+        model.foreground(); runCurrent(); val waiting = CompletableDeferred<Unit>(); fake.gate = waiting
+        model.invalidate(); runCurrent(); assertTrue(model.state.value.syncing); assertFalse(model.state.value.busy)
+        repeat(3) { model.invalidate() }; runCurrent(); assertEquals(2, fake.lists)
+        fake.gate = null; waiting.complete(Unit); runCurrent()
+        assertEquals(3, fake.lists); assertFalse(model.state.value.syncing)
+    }
+
+    @Test fun automaticFailureWaitsForNewHintInsteadOfHotRetrying() = runTest(dispatcher) {
+        model.foreground(); runCurrent(); fake.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited")
+        model.invalidate(); advanceUntilIdle()
+        assertEquals(2, fake.lists); assertTrue(model.state.value.stale)
+        assertEquals(429, model.state.value.syncError?.status); assertNull(model.state.value.error)
+        fake.failure = null; model.invalidate(); runCurrent()
+        assertEquals(3, fake.lists); assertFalse(model.state.value.stale)
+        assertNull(model.state.value.syncError)
+    }
+
+    @Test fun actualAccountSwitchBeforeObserverRejectsOldSelectionMembershipIntent() = runTest(dispatcher) {
+        load(); select()
+        fake.session.value = fake.session.value.copy(generation = 2, user = SessionUser(8, "Bob", listOf("member"), 1, false))
+        model.join(); model.invalidate(); runCurrent()
+        assertEquals(0, fake.joins); assertTrue(model.state.value.rooms.isEmpty())
+    }
+
     private class Rooms : RoomOperations {
         override val session = MutableStateFlow(SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED, user = user()))
         var room = room(); var extra: RoomInfo? = null

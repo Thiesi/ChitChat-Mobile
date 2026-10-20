@@ -87,6 +87,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     val state by model.state.collectAsStateWithLifecycle()
     val session by auth.state.collectAsStateWithLifecycle()
     val connection = realtime?.state?.collectAsStateWithLifecycle()?.value
+    RealtimeConsumers(realtime, session, rooms, conversations)
     LaunchedEffect(state.hasLoadedSettings, state.settings.server) {
         if (state.hasLoadedSettings) auth.selectServer(state.settings.server)
     }
@@ -150,7 +151,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (session.phase == SessionPhase.AUTHENTICATED && realtime != null && connection?.generation == session.generation) {
-                    RealtimeStatus(connection, realtime::retry, realtime::dismissBroadcast)
+                    RealtimeStatus(connection, realtime::retry, realtime::dismissBroadcast,
+                        roomId = entry?.arguments?.getLong("roomId")?.takeIf { it > 0 })
                 }
                 if (state.loading) {
                     CircularProgressIndicator()
@@ -209,6 +211,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         }
                         composable("rooms") {
                             if (session.phase == SessionPhase.AUTHENTICATED) RoomsScreen(rooms, auth::refresh) { id ->
+                                conversations.open(id, interacted = true)
                                 nav.navigate("conversation/$id") { launchSingleTop = true }
                             }
                         }

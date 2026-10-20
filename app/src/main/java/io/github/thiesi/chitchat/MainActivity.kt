@@ -24,8 +24,10 @@ class MainActivity : ComponentActivity() {
             )
             val auth: AuthViewModel = viewModel(factory = AuthViewModel.factory((application as ChitChatApplication).sessions))
             val account: AccountViewModel = viewModel(factory = AccountViewModel.factory((application as ChitChatApplication).accounts))
-            val rooms: RoomsViewModel = viewModel(factory = RoomsViewModel.factory((application as ChitChatApplication).rooms))
-            val conversations: ConversationViewModel = viewModel(factory = ConversationViewModel.factory((application as ChitChatApplication).conversations))
+            val rooms: RoomsViewModel = viewModel(factory = RoomsViewModel.factory((application as ChitChatApplication).rooms,
+                (application as ChitChatApplication).realtime))
+            val conversations: ConversationViewModel = viewModel(factory = ConversationViewModel.factory((application as ChitChatApplication).conversations,
+                (application as ChitChatApplication).realtime))
             ChitChatApp(model, auth, account, rooms, conversations,
                 realtime = (application as ChitChatApplication).realtime, onThemeChanged = { dark ->
                 enableEdgeToEdge(

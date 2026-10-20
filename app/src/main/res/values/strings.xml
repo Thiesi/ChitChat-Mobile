@@ -13,7 +13,7 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="saved_server">Your server</string>
-    <string name="preview_limit">This development build supports sign-in and manually refreshed room conversations. Direct messages and notifications are not available yet.</string>
+    <string name="preview_limit">This development build supports sign-in and foreground room conversations. Direct messages and notifications are not available yet.</string>
     <string name="change_server">Change server</string>
     <string name="forget_server">Forget server</string>
     <string name="forget_title">Forget this server?</string>
@@ -136,10 +136,10 @@
     <string name="step_up_recovery_warning">This is an emergency fallback, not routine passkey verification. One unused recovery code is consumed immediately, even if the export later fails or is cancelled. Codes are finite. Continue only if you intend to spend one.</string>
     <string name="recovery_may_be_spent">The recovery request may have consumed that code. It was not repeated. Refresh security information before using another code.</string>
     <string name="step_up_retry_rejected">The server did not accept the action after verification. It will not be retried again. Start a new export only when ready to verify again.</string>
-    <string name="realtime_stopped">Session event connection paused. Room chat uses Refresh.</string>
-    <string name="realtime_connecting">Connecting session events. Room chat uses Refresh.</string>
-    <string name="realtime_live">Session events connected. Room chat uses Refresh.</string>
-    <string name="realtime_reconnecting">Reconnecting session events. Room chat uses Refresh.</string>
+    <string name="realtime_stopped">Session events paused. Refresh checks room history.</string>
+    <string name="realtime_connecting">Connecting session events.</string>
+    <string name="realtime_live">Session events connected. History may still be synchronizing.</string>
+    <string name="realtime_reconnecting">Reconnecting session events.</string>
     <string name="realtime_offline">Offline. Loaded room chat may be out of date.</string>
     <string name="realtime_tls_error">Secure event connection failed. Check the server certificate; it was not bypassed.</string>
     <string name="realtime_incompatible">The server event stream is incompatible. Room chat still uses Refresh.</string>
@@ -149,4 +149,28 @@
     <string name="realtime_view_notice">Read announcement</string>
     <string name="realtime_dismiss_notice">Dismiss announcement</string>
     <string name="realtime_notice_title">Announcement</string>
+    <string name="conversation_realtime">Updates while the app is active. Refresh reconciles with the server.</string>
+    <string name="conversation_syncing">Updating conversation…</string>
+    <string name="rooms_syncing">Updating rooms…</string>
+    <string name="conversation_anchor_unavailable">Your previous position was removed from retained history. Showing the nearest available message.</string>
+    <string name="conversation_jump_new">New messages available — jump to latest</string>
+    <string name="conversation_range_unavailable">This history range could not be synchronized within the app’s bounded window. Your position and draft were kept. Refresh to retry or jump to the latest messages.</string>
+    <string name="presence_reading_only">Reading without active room presence.</string>
+    <string name="presence_inactive">Room activity is paused. Enter the room to appear online and send messages.</string>
+    <string name="presence_expired">Active room presence ended due to inactivity. Your draft and loaded history were kept.</string>
+    <string name="presence_failed">Active room presence is unavailable. Refresh permissions or enter the room again.</string>
+    <string name="presence_entering">Entering room…</string>
+    <string name="presence_active">Online in this room</string>
+    <string name="presence_warning">Room presence will end soon due to inactivity.</string>
+    <string name="presence_remaining">About %1$d seconds remaining.</string>
+    <string name="presence_enter">Enter room</string>
+    <string name="presence_stay">Stay in room</string>
+    <string name="presence_list_stale">The online list is updating or unavailable.</string>
+    <string name="presence_people_title">People online in this room</string>
+    <string name="presence_nobody">No active people were returned.</string>
+    <string name="presence_guest">%1$s · guest</string>
+    <plurals name="presence_people">
+        <item quantity="one">%1$d person online</item>
+        <item quantity="other">%1$d people online</item>
+    </plurals>
 </resources>
