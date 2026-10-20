@@ -126,8 +126,11 @@ class SessionRepository internal constructor(
         bootstrap(active)
     }
 
-    override suspend fun refresh() {
+    override suspend fun refresh() = refreshFor(null)
+
+    private suspend fun refreshFor(expected: SessionAccess?) {
         val active = lock.withLock {
+            expected?.let(::ensureCurrent) // Check inside the runtime-selection lock, not before waiting for it.
             val active = runtime ?: return@withLock null
             if (mutable.value.busy || active.bootstrapActive || active.policyChanging || mutable.value.phase == SessionPhase.CONNECTING ||
                 mutable.value.phase == SessionPhase.PENDING_MFA) return@withLock null
@@ -369,9 +372,9 @@ class SessionRepository internal constructor(
     }
 
     /** Fresh policy/CSRF through ordinary bootstrap, still bound to the caller's original identity. */
-    internal suspend fun refreshedAccess(): SessionAccess {
-        val original = openAccess()
-        refresh()
+    internal suspend fun refreshedAccess(expected: SessionState = mutable.value): SessionAccess {
+        val original = openAccess(expected)
+        refreshFor(original)
         val ready = withTimeoutOrNull(30_000) { state.first {
             !it.busy || it.generation != original.generation || it.user?.id != original.userId ||
                 it.user.sessionVersion != original.sessionVersion
