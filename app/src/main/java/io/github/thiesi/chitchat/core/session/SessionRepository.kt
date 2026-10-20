@@ -54,6 +54,7 @@ data class SessionState(
     val registrationMayHaveSucceeded: Boolean = false,
     val chatPolicy: ChatPolicy? = null,
     val privacy: MessagePrivacy? = null,
+    val shareTyping: Boolean? = null,
 ) {
     val canChangeServer get() = phase !in setOf(SessionPhase.AUTHENTICATED, SessionPhase.PENDING_MFA, SessionPhase.GUEST) && !storageWarning && !busy
 }
@@ -128,7 +129,7 @@ class SessionRepository internal constructor(
     override suspend fun refresh() {
         val active = lock.withLock {
             val active = runtime ?: return@withLock null
-            if (mutable.value.busy || mutable.value.phase == SessionPhase.CONNECTING ||
+            if (mutable.value.busy || active.bootstrapActive || active.typingChanging || mutable.value.phase == SessionPhase.CONNECTING ||
                 mutable.value.phase == SessionPhase.PENDING_MFA) return@withLock null
             if (active.expectedUserId != null && !active.withinLifetime(clock.millis())) {
                 invalidate(active, ApiFailure(FailureKind.EXPIRED))
@@ -263,6 +264,10 @@ class SessionRepository internal constructor(
 
     private suspend fun bootstrap(active: Runtime) {
         try {
+            val current = lock.withLock {
+                if (runtime !== active) false else { active.bootstrapActive = true; true }
+            }
+            if (!current) return
             val reply = active.api.bootstrap()
             lock.withLock {
                 if (runtime !== active) return@withLock
@@ -280,7 +285,9 @@ class SessionRepository internal constructor(
                         ChatPolicy(reply.ignoredUserIds.toSet(), reply.mutedEverywhere, reply.preferences ?: DisplayPreferences()),
                     registrationMayHaveSucceeded = if (reply.user != null) false else mutable.value.registrationMayHaveSucceeded,
                     privacy = reply.privacy.takeIf { reply.user != null },
+                    shareTyping = reply.shareTyping.takeIf { reply.user != null },
                 )
+                active.bootstrapActive = false
                 persist(active, reply.user)
             }
         } catch (failure: ApiFailure) { failed(active, failure) }
@@ -291,7 +298,9 @@ class SessionRepository internal constructor(
                     // Headers/cookies may already have arrived. Rebootstrap before using CSRF,
                     // but never leave navigation cancellation holding the whole session busy.
                     active.csrf = null
+                    active.bootstrapActive = false
                     mutable.value = current.copy(busy = false, refreshRequired = true,
+                        shareTyping = null,
                         phase = if (current.phase == SessionPhase.CONNECTING) SessionPhase.INVALIDATED else current.phase,
                         error = if (current.phase == SessionPhase.CONNECTING) current.error ?: ApiFailure(FailureKind.NETWORK) else current.error)
                 }
@@ -305,14 +314,14 @@ class SessionRepository internal constructor(
         active.csrf = reply.csrfToken
         if (reply.mfaRequired) {
             mutable.value = mutable.value.copy(phase = SessionPhase.PENDING_MFA, user = null, busy = true,
-                error = null, recoveryCodesRemaining = null, chatPolicy = null, privacy = null)
+                error = null, recoveryCodesRemaining = null, chatPolicy = null, privacy = null, shareTyping = null)
             persist(active, null)
         } else {
             active.signedInAt = clock.millis()
             active.expectedUserId = reply.user!!.id
             mutable.value = mutable.value.copy(phase = SessionPhase.AUTHENTICATED, user = reply.user,
                 busy = true, error = null, recoveryCodesRemaining = reply.recoveryCodesRemaining,
-                chatPolicy = null, privacy = null,
+                chatPolicy = null, privacy = null, shareTyping = null,
                 accountRestored = reply.restored, registrationMayHaveSucceeded = false)
             persist(active, reply.user)
         }
@@ -347,7 +356,7 @@ class SessionRepository internal constructor(
             current.user?.sessionVersion != expected.user?.sessionVersion)
             throw CancellationException("Session changed before access")
         val active = runtime ?: throw ApiFailure(FailureKind.EXPIRED)
-        if (current.phase != SessionPhase.AUTHENTICATED || current.user == null || current.busy ||
+        if (current.phase != SessionPhase.AUTHENTICATED || current.user == null || current.busy || active.bootstrapActive || active.typingChanging ||
             current.refreshRequired || active.csrf == null) throw ApiFailure(FailureKind.EXPIRED)
         if (!active.withinLifetime(clock.millis())) {
             invalidate(active, ApiFailure(FailureKind.EXPIRED))
@@ -376,6 +385,39 @@ class SessionRepository internal constructor(
         if (current.generation != access.generation || current.phase != SessionPhase.AUTHENTICATED ||
             current.user?.id != access.userId || current.user.sessionVersion != access.sessionVersion ||
             current.refreshRequired || current.storageWarning) throw CancellationException("Session is no longer current")
+    }
+
+    /** One explicit preference POST, serialized against bootstrap without holding a network lock. */
+    internal suspend fun setTypingPreference(shared: Boolean, expected: SessionState = mutable.value): Boolean {
+        val access = openAccess(expected)
+        val active = lock.withLock {
+            ensureCurrent(access)
+            val active = runtime ?: throw CancellationException("Session retired")
+            if (mutable.value.busy || active.bootstrapActive || active.typingChanging)
+                throw ApiFailure(FailureKind.EXPIRED)
+            active.typingChanging = true
+            mutable.value = mutable.value.copy(busy = true, shareTyping = null)
+            active
+        }
+        var confirmed: Boolean? = null
+        var interrupted = false
+        try {
+            val result = authorized(access) { setTypingPreference(shared, access.csrf) }
+            confirmed = result
+            return result
+        } catch (cancelled: CancellationException) {
+            interrupted = true
+            throw cancelled
+        } finally {
+            withContext(NonCancellable) { lock.withLock {
+                if (runtime === active) {
+                    active.typingChanging = false
+                    if (interrupted) active.csrf = null
+                    mutable.value = mutable.value.copy(busy = false, shareTyping = confirmed,
+                        refreshRequired = mutable.value.refreshRequired || interrupted)
+                }
+            } }
+        }
     }
 
     internal suspend fun recoveryConsumed(access: SessionAccess, remaining: Int) = lock.withLock {
@@ -423,7 +465,13 @@ class SessionRepository internal constructor(
         }
     }
 
-    private suspend fun failed(active: Runtime, failure: ApiFailure) = lock.withLock { failLocked(active, failure) }
+    private suspend fun failed(active: Runtime, failure: ApiFailure) = lock.withLock {
+        if (runtime === active) {
+            active.bootstrapActive = false
+            failLocked(active, failure)
+            if (runtime === active) mutable.value = mutable.value.copy(shareTyping = null)
+        }
+    }
 
     private suspend fun failLocked(active: Runtime, failure: ApiFailure) {
         if (runtime !== active) return
@@ -492,6 +540,8 @@ class SessionRepository internal constructor(
         var signedInAt: Long? = null
         var lastValidatedAt: Long? = null
         var expectedUserId: Long? = null
+        var bootstrapActive = false
+        var typingChanging = false
         var preparation = 0L
         var proof: RegistrationProof? = null
         var proofIssuedAt = 0L

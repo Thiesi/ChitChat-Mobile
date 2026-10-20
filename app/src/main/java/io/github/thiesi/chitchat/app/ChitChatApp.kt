@@ -73,6 +73,8 @@ import io.github.thiesi.chitchat.feature.auth.AuthViewModel
 import io.github.thiesi.chitchat.feature.auth.AuthScreen
 import io.github.thiesi.chitchat.feature.account.AccountScreen
 import io.github.thiesi.chitchat.feature.account.AccountViewModel
+import io.github.thiesi.chitchat.feature.account.TypingPreferenceViewModel
+import io.github.thiesi.chitchat.feature.account.TypingPreferenceCard
 import io.github.thiesi.chitchat.feature.rooms.RoomsScreen
 import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
 import io.github.thiesi.chitchat.feature.conversation.ConversationScreen
@@ -94,7 +96,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel, rooms: RoomsViewModel,
     conversations: ConversationViewModel, realtime: RealtimeController? = null,
     directInbox: DirectInboxViewModel? = null, directThread: DirectThreadViewModel? = null,
-    onThemeChanged: (Boolean) -> Unit = {}) {
+    typingPreferences: TypingPreferenceViewModel? = null, onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by auth.state.collectAsStateWithLifecycle()
     val connection = realtime?.state?.collectAsStateWithLifecycle()?.value
@@ -131,7 +133,10 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             if (entry?.destination?.route == "account" && session.phase != SessionPhase.AUTHENTICATED) {
                 nav.popBackStack("home", false)
                 account.cancel()
-            } else if (entry?.destination?.route != null && entry?.destination?.route != "account") account.cancel()
+                typingPreferences?.cancel()
+            } else if (entry?.destination?.route != null && entry?.destination?.route != "account") {
+                account.cancel(); typingPreferences?.cancel()
+            }
             if (entry?.destination?.route == "rooms" && session.phase != SessionPhase.AUTHENTICATED) {
                 nav.popBackStack("home", false)
                 rooms.cancel()
@@ -249,6 +254,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         composable("account") {
                             if (session.phase == SessionPhase.AUTHENTICATED) ScreenContent {
                                 AccountScreen(account, session, auth::refresh)
+                                typingPreferences?.let { TypingPreferenceCard(it, session, auth::refresh) }
                             }
                         }
                         composable("rooms") {

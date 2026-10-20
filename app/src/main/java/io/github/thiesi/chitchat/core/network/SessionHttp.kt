@@ -97,6 +97,10 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
     suspend fun recovery(code: String, csrf: String): AuthReply =
         auth("mfa/login-recovery.php", apiJson.encodeToString(RecoveryRequest(code)), csrf, allowPending = false)
 
+    suspend fun setTypingPreference(shared: Boolean, csrf: String): Boolean =
+        decode<TypingPreferenceReply>(request("account/typing.php",
+            apiJson.encodeToString(TypingPreferenceRequest(shared)), csrf).require200()).shared
+
     suspend fun verificationMethods(): VerificationMethods {
         val mfa = decode<MfaStatusReply>(request("account/mfa/status.php").require200()).mfa
         if (mfa.remaining !in 0..100) throw ApiFailure(FailureKind.INCOMPATIBLE)

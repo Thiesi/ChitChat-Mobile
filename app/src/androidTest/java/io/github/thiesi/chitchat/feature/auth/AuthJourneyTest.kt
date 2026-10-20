@@ -18,6 +18,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import androidx.test.platform.app.InstrumentationRegistry
+import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.feature.account.TestChitChatApp as ChitChatApp
 import io.github.thiesi.chitchat.app.SettingsViewModel
 import io.github.thiesi.chitchat.core.server.AddressResult
@@ -54,7 +56,7 @@ class AuthJourneyTest {
 
     @Test fun authenticatedRoomsNavigationReturnsToTheExistingAccountHome() {
         content(); enterCredentials()
-        compose.onNodeWithText("Open Rooms or Direct messages to read and send messages. Typing and notifications arrive in a later milestone.")
+        compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.auth_preview_limit))
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Rooms").performScrollTo().performClick()
         compose.onNodeWithText("No rooms are available to this account.").performScrollTo().assertIsDisplayed()
