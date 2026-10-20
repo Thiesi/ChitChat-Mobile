@@ -104,7 +104,12 @@ class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
         if (mutable.value.busy || id <= 0) return
         mutable.value = mutable.value.copy(selected = null, detailOpen = true, validation = null, error = null)
         start(false) { current ->
-            val room = operations.detail(id)
+            val room = try { operations.detail(id) }
+            catch (failure: ApiFailure) {
+                current()
+                if (failure.status in setOf(403, 404)) mutable.value = mutable.value.copy(rooms = mutable.value.rooms.filterNot { it.id == id })
+                throw failure
+            }
             current()
             mutable.value = mutable.value.copy(selected = room)
         }
@@ -180,15 +185,17 @@ class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
     }
 
     private suspend fun reconcile(current: () -> Unit) {
-        val rooms = operations.list()
+        var rooms = operations.list()
         current()
         val selectedId = mutable.value.selected?.id
         var selected = mutable.value.selected
         if (mutable.value.detailOpen && selectedId != null) {
             try { selected = operations.detail(selectedId) }
             catch (failure: ApiFailure) {
+                current()
                 if (failure.status !in setOf(403, 404)) throw failure
                 selected = null
+                rooms = rooms.filterNot { it.id == selectedId }
             }
         }
         current()
@@ -218,7 +225,7 @@ class RoomsViewModel(private val operations: RoomOperations) : ViewModel() {
                     mutationUncertain = mutable.value.mutationUncertain || mutationInFlight)
                 throw cancelled
             } catch (failure: ApiFailure) {
-                if (attempt == sequence) mutable.value = mutable.value.copy(error = failure, stale = true,
+                if (attempt == sequence && session.value.identity() == expected) mutable.value = mutable.value.copy(error = failure, stale = true,
                     mutationUncertain = mutable.value.mutationUncertain || (mutationInFlight && failure.isAmbiguous()))
             } finally {
                 if (attempt == sequence) { mutationInFlight = false; mutable.value = mutable.value.copy(busy = false) }

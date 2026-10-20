@@ -116,6 +116,7 @@ class RoomsViewModelTest {
             model.join(); advanceUntilIdle()
             assertEquals(code, model.state.value.error?.code)
             assertFalse(model.state.value.mutationUncertain)
+            assertEquals(42L, model.state.value.rooms.single().id)
             fake.failure = null; model.refresh(); advanceUntilIdle()
         }
         assertEquals(3, fake.joins)
@@ -179,17 +180,66 @@ class RoomsViewModelTest {
         assertEquals(0, fake.details)
     }
 
+    @Test fun selectingUnavailableRoomScrubsOnlyItsMetadata() = runTest(dispatcher) {
+        fake.room = room(visibility = "private")
+        fake.extra = room(id = 43)
+        for (status in listOf(403, 404)) {
+            fake.detailFailure = null; load()
+            fake.detailFailure = ApiFailure(FailureKind.HTTP, status, "room_forbidden")
+            select()
+            assertEquals(listOf(43L), model.state.value.rooms.map { it.id })
+            assertEquals(status, model.state.value.error?.status); assertNull(model.state.value.selected)
+            assertEquals(SessionPhase.AUTHENTICATED, fake.session.value.phase)
+        }
+    }
+
+    @Test fun listDetailPermissionRaceCannotReinsertDeniedMetadata() = runTest(dispatcher) {
+        fake.room = room(visibility = "private")
+        fake.extra = room(id = 43)
+        for (status in listOf(403, 404)) {
+            fake.detailFailure = null; load(); select()
+            fake.detailFailure = ApiFailure(FailureKind.HTTP, status, "room_not_found")
+            model.refresh(); advanceUntilIdle()
+            assertEquals(listOf(43L), model.state.value.rooms.map { it.id })
+            assertNull(model.state.value.selected); assertFalse(model.state.value.detailOpen)
+            assertFalse(model.state.value.stale)
+        }
+    }
+
+    @Test fun lateDeniedDetailCannotScrubReplacementSessionOrCancelledRequest() = runTest(dispatcher) {
+        fake.room = room(visibility = "private")
+        for (accountChange in listOf(false, true)) {
+            fake.detailFailure = null; fake.gate = null; load()
+            val waiting = CompletableDeferred<Unit>()
+            fake.gate = waiting
+            model.select(42); runCurrent()
+            model.cancelRequest()
+            if (accountChange) {
+                fake.session.value = fake.session.value.copy(generation = 2, user = SessionUser(8, "Bob", listOf("member"), 1, false))
+                runCurrent()
+            }
+            fake.gate = null; model.refresh(); runCurrent()
+            fake.detailFailure = ApiFailure(FailureKind.HTTP, 403, "room_forbidden")
+            waiting.complete(Unit); advanceUntilIdle()
+            assertEquals(listOf(42L), model.state.value.rooms.map { it.id })
+            assertNull(model.state.value.error)
+        }
+    }
+
     private class Rooms : RoomOperations {
         override val session = MutableStateFlow(SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED, user = user()))
-        var room = room(); var lists = 0; var details = 0; var joins = 0; var leaves = 0; var creates = 0
+        var room = room(); var extra: RoomInfo? = null
+        var lists = 0; var details = 0; var joins = 0; var leaves = 0; var creates = 0
         var gate: CompletableDeferred<Unit>? = null
         var failure: ApiFailure? = null
         var created: CreateRoom? = null
         var missingDetail = false
+        var detailFailure: ApiFailure? = null
         private suspend fun request() { gate?.let { withContext(NonCancellable) { it.await() } }; failure?.let { throw it } }
-        override suspend fun list(): List<RoomInfo> { lists++; request(); return listOf(room) }
+        override suspend fun list(): List<RoomInfo> { lists++; request(); return listOfNotNull(room, extra) }
         override suspend fun detail(roomId: Long): RoomInfo {
-            details++; request(); if (missingDetail) throw ApiFailure(FailureKind.HTTP, 404, "room_not_found"); return room
+            details++; request(); detailFailure?.let { throw it }
+            if (missingDetail) throw ApiFailure(FailureKind.HTTP, 404, "room_not_found"); return room
         }
         override suspend fun join(roomId: Long): RoomInfo { joins++; request(); room = room("member"); return room }
         override suspend fun leave(roomId: Long) { leaves++; request(); room = room() }
@@ -198,6 +248,7 @@ class RoomsViewModelTest {
 
     companion object {
         private fun user(roles: List<String> = listOf("member"), guest: Boolean = false) = SessionUser(7, "Alice", roles, 1, guest)
-        private fun room(role: String? = null) = RoomInfo(42, "lounge", "Lounge", "Information", "public", 0, 0, 7, role, false, "none")
+        private fun room(role: String? = null, id: Long = 42, visibility: String = "public") =
+            RoomInfo(id, "lounge", "Lounge", "Information", visibility, 0, 0, 7, role, false, "none")
     }
 }
