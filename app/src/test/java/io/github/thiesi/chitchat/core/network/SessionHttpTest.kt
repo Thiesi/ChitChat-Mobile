@@ -36,6 +36,35 @@ class SessionHttpTest {
     private fun anonymous(csrf: String = token) = """{"csrf_token":"$csrf","user":null,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false},"future_field":true}"""
     private fun user() = """{"id":7,"username":"Alice","roles":["member"],"session_version":2,"guest":false}"""
 
+    @Test fun ignoreUsesExistingBooleanPostAndAuthoritativeCompleteList() = runTest {
+        for (ignored in listOf(true, false)) {
+            server.enqueue(response("""{"ignored_user_ids":[9,10]}"""))
+            assertEquals(setOf(9L, 10L), api.setIgnored(8, ignored, token))
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertEquals("/api/v1/users/ignore.php", request.url.encodedPath)
+            assertEquals(token, request.headers["X-CSRF-Token"])
+            assertEquals("""{"user_id":8,"ignored":$ignored}""", request.body!!.utf8())
+        }
+        for (body in listOf("{}", """{"ignored_user_ids":null}""", """{"ignored_user_ids":[0]}""",
+            """{"ignored_user_ids":[8,8]}""")) {
+            server.enqueue(response(body))
+            try { api.setIgnored(8, true, token); fail("Invalid list is not confirmed policy") }
+            catch (failure: ApiFailure) { assertEquals(FailureKind.INCOMPATIBLE, failure.kind) }
+        }
+    }
+
+    @Test fun ignoreErrorsKeepStatusAndNeverReplayThePost() = runTest {
+        for ((status, code) in listOf(400 to "validation_error", 404 to "user_not_found",
+            403 to "csrf_failed", 429 to "rate_limited")) {
+            server.enqueue(response("""{"error":{"code":"$code","message":"Fixture"}}""", status))
+            val before = server.requestCount
+            try { api.setIgnored(8, true, token); fail("Expected server refusal") }
+            catch (failure: ApiFailure) { assertEquals(status, failure.status); assertEquals(code, failure.code) }
+            assertEquals(before + 1, server.requestCount)
+        }
+    }
+
     @Test fun typingPreferenceUsesExistingBooleanPostAndRequiresExplicitBooleanReply() = runTest {
         server.enqueue(response("""{"share_typing":false}"""))
         assertFalse(api.setTypingPreference(true, token)) // Server result, not requested optimism.

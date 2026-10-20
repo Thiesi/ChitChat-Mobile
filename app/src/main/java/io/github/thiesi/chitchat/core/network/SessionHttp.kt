@@ -102,6 +102,14 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         decode<TypingPreferenceReply>(request("account/typing.php",
             apiJson.encodeToString(TypingPreferenceRequest(shared)), csrf).require200()).shared
 
+    suspend fun setIgnored(userId: Long, ignored: Boolean, csrf: String): Set<Long> {
+        incompatibleUnless(userId > 0)
+        val ids = decode<IgnoreReply>(request("users/ignore.php",
+            apiJson.encodeToString(IgnoreRequest(userId, ignored)), csrf).require200()).ignoredUserIds
+        incompatibleUnless(ids.all { it > 0 } && ids.distinct().size == ids.size)
+        return ids.toSet()
+    }
+
     suspend fun typingSignal(target: TypingTarget, csrf: String): Boolean {
         val body = when (target) {
             is TypingTarget.Room -> apiJson.encodeToString(RoomTypingRequest(target.id))

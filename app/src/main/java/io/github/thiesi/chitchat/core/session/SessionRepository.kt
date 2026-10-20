@@ -129,7 +129,7 @@ class SessionRepository internal constructor(
     override suspend fun refresh() {
         val active = lock.withLock {
             val active = runtime ?: return@withLock null
-            if (mutable.value.busy || active.bootstrapActive || active.typingChanging || mutable.value.phase == SessionPhase.CONNECTING ||
+            if (mutable.value.busy || active.bootstrapActive || active.policyChanging || mutable.value.phase == SessionPhase.CONNECTING ||
                 mutable.value.phase == SessionPhase.PENDING_MFA) return@withLock null
             if (active.expectedUserId != null && !active.withinLifetime(clock.millis())) {
                 invalidate(active, ApiFailure(FailureKind.EXPIRED))
@@ -356,7 +356,7 @@ class SessionRepository internal constructor(
             current.user?.sessionVersion != expected.user?.sessionVersion)
             throw CancellationException("Session changed before access")
         val active = runtime ?: throw ApiFailure(FailureKind.EXPIRED)
-        if (current.phase != SessionPhase.AUTHENTICATED || current.user == null || current.busy || active.bootstrapActive || active.typingChanging ||
+        if (current.phase != SessionPhase.AUTHENTICATED || current.user == null || current.busy || active.bootstrapActive || active.policyChanging ||
             current.refreshRequired || active.csrf == null) throw ApiFailure(FailureKind.EXPIRED)
         if (!active.withinLifetime(clock.millis())) {
             invalidate(active, ApiFailure(FailureKind.EXPIRED))
@@ -393,9 +393,9 @@ class SessionRepository internal constructor(
         val active = lock.withLock {
             ensureCurrent(access)
             val active = runtime ?: throw CancellationException("Session retired")
-            if (mutable.value.busy || active.bootstrapActive || active.typingChanging)
+            if (mutable.value.busy || active.bootstrapActive || active.policyChanging)
                 throw ApiFailure(FailureKind.EXPIRED)
-            active.typingChanging = true
+            active.policyChanging = true
             mutable.value = mutable.value.copy(busy = true, shareTyping = null)
             active
         }
@@ -411,10 +411,47 @@ class SessionRepository internal constructor(
         } finally {
             withContext(NonCancellable) { lock.withLock {
                 if (runtime === active) {
-                    active.typingChanging = false
+                    active.policyChanging = false
                     if (interrupted) active.csrf = null
                     mutable.value = mutable.value.copy(busy = false, shareTyping = confirmed,
                         refreshRequired = mutable.value.refreshRequired || interrupted)
+                }
+            } }
+        }
+    }
+
+    /** Apply the returned complete list, not a local toggle; never race bootstrap or replay a POST. */
+    internal suspend fun setIgnored(userId: Long, ignored: Boolean, expected: SessionState): Set<Long> {
+        val access = openAccess(expected)
+        if (userId <= 0 || userId == access.userId) throw ApiFailure(FailureKind.HTTP, 400, "validation_error")
+        val active = lock.withLock {
+            ensureCurrent(access)
+            val active = runtime ?: throw CancellationException("Session retired")
+            if (mutable.value.busy || active.bootstrapActive || active.policyChanging || mutable.value.chatPolicy == null)
+                throw ApiFailure(FailureKind.EXPIRED)
+            active.policyChanging = true
+            mutable.value = mutable.value.copy(busy = true)
+            active
+        }
+        var confirmed: Set<Long>? = null
+        var interrupted = false
+        try {
+            val result = authorized(access) { setIgnored(userId, ignored, access.csrf) }
+            confirmed = result
+            return result
+        } catch (cancelled: CancellationException) {
+            interrupted = true
+            throw cancelled
+        } finally {
+            withContext(NonCancellable) { lock.withLock {
+                if (runtime === active) {
+                    active.policyChanging = false
+                    if (interrupted) active.csrf = null
+                    val policy = mutable.value.chatPolicy
+                    mutable.value = mutable.value.copy(busy = false,
+                        chatPolicy = if (confirmed != null && policy != null)
+                            ChatPolicy(confirmed, policy.mutedEverywhere, policy.display) else policy,
+                        refreshRequired = mutable.value.refreshRequired || confirmed == null)
                 }
             } }
         }
@@ -541,7 +578,7 @@ class SessionRepository internal constructor(
         var lastValidatedAt: Long? = null
         var expectedUserId: Long? = null
         var bootstrapActive = false
-        var typingChanging = false
+        var policyChanging = false
         var preparation = 0L
         var proof: RegistrationProof? = null
         var proofIssuedAt = 0L

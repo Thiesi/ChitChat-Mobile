@@ -20,6 +20,10 @@ One process-owned main-confined coordinator consumes the existing SSE flow; it o
 
 Validate actor/name/room before cursor acknowledgement. A local monotonic receipt timestamp on `RealtimeEvent` is client metadata, not an assumed server response field; it expires queued hints without requiring synchronized server/device wall clocks. Duplicate IDs do not renew expiry, message arrivals remove their sender, and at most100 transient names are kept. No names or typing state go to disk/saved state/logs. Rendered state also carries explicit account scope, so the UI rejects stale source emissions even if their numeric room/peer matches a replacement account.
 
+## Delivery
+
+[PR34](https://github.com/Thiesi/ChitChat-Mobile/pull/34) merged as `6e25decd1d6f572b9b4f0deec347b0e2a5a9a04b`; its tree `9fa33aec49d6f29c02b5d31f7e946779566e5e0c` matches reviewed head `1df667ab42218d759395444a86acc6675ce983d9`. Actual clean reviews39456705862 and deliberately requested39456932670 delivered the full122695-character diff and complete comments with scoped runtime audits. Exact-head Android39456705802 and separate merged-main39457644549 passed build and all87 native cases. Owned clean worktree/branch and superseded owned stash were removed; build artifacts remain recoverable locally. Issue31 stays open; the evidence below records earlier failures, not a claim that their cause was proved.
+
 ## Actual evidence and remaining gates
 
 Protocol/coordinator, HTTP/session lifecycle and UI fixtures cover suppression/throttle, expiry, deduplication, stale callbacks/replaying subscribers, message clearing, bilateral consent, foreground selection and account isolation. Native keyboard cases prove room/DM labels alongside displayed/enabled Send and opt-out clearing; an independent UI case rejects stale account/unknown consent. Fixtures are in `androidTest`, not production behavior or a live backend claim. Two invalid test imports initially failed instrumented compilation and were corrected, not counted as a pass.
