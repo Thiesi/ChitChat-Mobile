@@ -3,8 +3,10 @@ package io.github.thiesi.chitchat.feature.account
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -54,8 +56,19 @@ class AccountRecreationTest {
         compose.onNodeWithText("Sign in").performScrollTo().performClick()
         // Authentication state collection can finish after the click's idle boundary.
         // Wait for the destination affordance, not a timing-dependent immediate query.
-        compose.waitUntil(5_000) {
-            runCatching { compose.onNodeWithText("Account").assertIsDisplayed() }.isSuccess
+        try {
+            compose.waitUntil(5_000) {
+                runCatching { compose.onNodeWithText("Account").assertIsDisplayed() }.isSuccess
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            val bounds = runCatching { compose.onAllNodesWithText("Account").fetchSemanticsNodes(false).map { it.boundsInRoot } }.getOrNull()
+            val context = compose.runOnIdle {
+                "Account start: logins=${sessions.logins}, phase=${sessions.state.value.phase}, " +
+                    "generation=${sessions.state.value.generation}, busy=${sessions.state.value.busy}, " +
+                    "settingsReady=${settings.state.value.hasLoadedSettings}, lifecycle=${compose.activity.lifecycle.currentState}, " +
+                    "windowFocus=${compose.activity.hasWindowFocus()}, accountBounds=$bounds"
+            }
+            throw AssertionError(context, timeout) // No passwords, codes, bodies or full UI tree in diagnostics.
         }
         compose.onNodeWithText("Account").performClick()
         compose.runOnIdle {

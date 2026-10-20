@@ -2,6 +2,8 @@
 
 As of M3c3b (live room acceptance pending), 2026-10-20:
 
+- [Issue22](https://github.com/Thiesi/ChitChat-Mobile/issues/22): hosted account fixture twice timed out waiting for the initial Account affordance, before export/recovery/recreation; unchanged rerun and local suites passed. Failure-only non-secret diagnostics preserve existing assertions/timeouts; root cause/product fix is not yet established.
+
 - M3c3b adds foreground room realtime/presence; [evidence](milestones/M3c3b-room-realtime.md) distinguishes fixtures from pending authorized live two-account acceptance. Drafts/content remain memory-only. Advanced tools/media remain M5.
 
 M2a normalizes Unicode hostnames with OkHttp and rejects credentials/raw paths before normalization. Private/loopback HTTPS origins are intentional for self-hosting, with mandatory valid TLS verification. Repository/Keystore recreation tests do not establish Android process-death acceptance. Platform dark-startup flash/account-palette synchronization remain later polish.
