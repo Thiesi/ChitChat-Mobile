@@ -37,6 +37,7 @@ import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import io.github.thiesi.chitchat.feature.realtime.NativeTypingHarness
 import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
 import io.github.thiesi.chitchat.testing.tapNativeInput
+import io.github.thiesi.chitchat.testing.NativeChatFixtures
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -50,7 +51,7 @@ import org.junit.Test
 class NotificationRoutingJourneyTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val sessions = TestSessions()
-    private val api = NotificationRoutingFixtures(sessions)
+    private val api = NativeChatFixtures(sessions)
     private val store = ViewModelStore()
     private val typing = NativeTypingHarness(sessions.state)
     private val auth = AuthViewModel(sessions).also { store.put("auth", it) }

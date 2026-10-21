@@ -13,7 +13,7 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="saved_server">Your server</string>
-    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations, typing, and the notification list with explicit read controls and supported native destinations. Background push is not yet available. Room author actions include private ignore controls; Account includes typing privacy. Guest registration links remain unavailable.</string>
+    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations with replies and explicit Copy, typing, and the notification list with explicit read controls and supported native destinations. Background push is not yet available. Room author actions include private ignore controls; Account includes typing privacy. Guest registration links remain unavailable.</string>
     <string name="change_server">Change server</string>
     <string name="forget_server">Forget server</string>
     <string name="forget_title">Forget this server?</string>
@@ -256,4 +256,20 @@
     <string name="ping_target_unavailable">The requested private ping is not available here. Only the latest 100 private pings can be searched; it may also have expired or been hidden by your ignore preferences.</string>
     <string name="ping_target_open">Open private ping</string>
     <string name="ping_target_missing_title">Requested ping unavailable</string>
+    <string name="message_actions">Message actions</string>
+    <string name="message_actions_unavailable">This message changed or is no longer available in this view. Close this menu and select it again.</string>
+    <string name="message_reply_action">Reply</string>
+    <string name="message_copy_action">Copy message</string>
+    <string name="message_reply_disabled">Reply is unavailable while messaging is disabled or saved drafts are full.</string>
+    <string name="message_copied">Message copied</string>
+    <string name="message_copy_failed">Could not copy the message</string>
+    <string name="composer_reply_options">Reply options</string>
+    <string name="composer_reply_remove">Remove reply</string>
+    <string name="composer_reply_author">Replying to %1$s</string>
+    <string name="composer_reply_id">Replying to message %1$d</string>
+    <string name="composer_reply_not_visible">The original is not visible in this view. You can open it or remove this reply.</string>
+    <string name="composer_reply_ignored">The original is hidden by your ignore settings.</string>
+    <string name="composer_reply_invalid">The original is no longer available for this reply. Refresh before retrying. Choose another message or remove the reply; your text is kept.</string>
+    <string name="composer_reply_ping_title">Private ping, not a reply</string>
+    <string name="composer_reply_ping_ignored">Private pings do not quote messages. This selection will be cleared after the ping is sent.</string>
 </resources>

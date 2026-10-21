@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -38,8 +39,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -58,6 +62,9 @@ import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.repeatOnLifecycle
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.conversation.ConversationContext
+import io.github.thiesi.chitchat.core.conversation.ComposerReply
+import io.github.thiesi.chitchat.core.conversation.isPrivatePingCommand
+import io.github.thiesi.chitchat.core.conversation.phpTrim
 import io.github.thiesi.chitchat.core.conversation.RoomMessage
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
@@ -66,6 +73,13 @@ import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import io.github.thiesi.chitchat.core.ui.InlineError
 import io.github.thiesi.chitchat.core.ui.MessageInput
+import io.github.thiesi.chitchat.core.ui.MessageSendButton
+import io.github.thiesi.chitchat.core.ui.MessageActions
+import io.github.thiesi.chitchat.core.ui.MessageActionSelection
+import io.github.thiesi.chitchat.core.ui.ComposerReplyControl
+import io.github.thiesi.chitchat.core.ui.ComposerReplyOptions
+import io.github.thiesi.chitchat.core.ui.copyMessage
+import io.github.thiesi.chitchat.core.ui.messageExcerpt
 import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.typing.hasTypingContent
 import io.github.thiesi.chitchat.feature.realtime.TypingStatus
@@ -114,6 +128,54 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     var pingsOpen by remember { mutableStateOf(false) }
     val pingsVisible = pingsOpen || state.pingSelection != null
     var detailsOpen by remember { mutableStateOf(false) }
+    var actions by remember { mutableStateOf<MessageActionSelection?>(null) }
+    var replyOptions by remember { mutableStateOf<ComposerReply?>(null) }
+    var focusReply by remember { mutableStateOf<ComposerReply?>(null) }
+    val composerFocus = remember { FocusRequester() }
+    val androidContext = LocalContext.current
+    val composerDialog = actions != null || replyOptions != null
+    fun interactive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !obscured &&
+        !pingsOpen && model.state.value.pingSelection == null && !detailsOpen &&
+        ignores?.state?.value?.target == null && !model.state.value.draftsOpen
+    fun openActions(message: RoomMessage) {
+        if (interactive() && actions == null && replyOptions == null && model.canUseMessage(displayedSession, roomId, message)) {
+            focus.clearFocus(); actions = MessageActionSelection(message.id)
+        }
+    }
+    val selectedReply = state.composerReply
+    val replyIsPing = selectedReply != null && isPrivatePingCommand(state.draft)
+    val original = selectedReply?.let { choice -> state.messages.firstOrNull { it.id == choice.messageId } }
+    val replyHidden = original?.let { it.senderId in ignoredIds && it.id !in state.revealed } == true
+    val replyTitle = if (replyIsPing) stringResource(R.string.composer_reply_ping_title)
+        else if (original != null && !original.deleted && !replyHidden)
+        stringResource(R.string.composer_reply_author, original.username ?: stringResource(R.string.conversation_unknown_user))
+        else stringResource(R.string.composer_reply_id, selectedReply?.messageId ?: 0)
+    val replyPreview = when {
+        replyIsPing -> stringResource(R.string.composer_reply_ping_ignored)
+        replyHidden -> stringResource(R.string.composer_reply_ignored)
+        original?.deleted == true -> stringResource(R.string.conversation_deleted)
+        original == null -> stringResource(R.string.composer_reply_not_visible)
+        else -> messageExcerpt(original.body.orEmpty())
+    }
+    fun showReplyOptions(choice: ComposerReply) {
+        if (interactive() && actions == null && replyOptions == null && model.state.value.composerReply === choice) {
+            focus.clearFocus(); replyOptions = choice
+        }
+    }
+    LaunchedEffect(state.composerReply, obscured, lifecycleState) {
+        if (replyOptions != null && replyOptions !== state.composerReply) replyOptions = null
+        if (obscured || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            actions = null; replyOptions = null; focusReply = null
+        }
+    }
+    LaunchedEffect(focusReply, window.isWindowFocused, lifecycleState, obscured) {
+        val pending = focusReply
+        if (pending != null && window.isWindowFocused) {
+            focusReply = null
+            if (interactive() && actions == null && replyOptions == null && model.state.value.composerReply === pending && model.canSend())
+                composerFocus.requestFocus()
+        }
+    }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val timeline = rememberLazyListState()
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground() }
@@ -139,7 +201,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
         }
     }
-    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsVisible, detailsOpen, personDialog, state.draftsOpen, obscured, lifecycle,
+    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsVisible, detailsOpen, personDialog, state.draftsOpen, composerDialog, obscured, lifecycle,
         connection?.presencePhase, connection?.selectedRoomId, lifecycleState) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             snapshotFlow {
@@ -151,7 +213,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val edgeVisible = last != null && isReadEdgeVisible(last.offset, last.size,
                     timeline.layoutInfo.viewportStartOffset, timeline.layoutInfo.viewportEndOffset)
                 val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused,
-                    !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !obscured)
+                    !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured)
                 Triple(anchor, if (edgeVisible && readable) newest else null, !timeline.canScrollForward && readable)
             }.collect { (anchor, newest, edge) -> model.viewport(anchor, newest, edge) }
         }
@@ -159,6 +221,13 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val ready = !session.busy && !session.refreshRequired && !session.storageWarning && now >= session.retryAtMillis
     BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
     val compact = maxHeight < 240.dp
+    val replyInline = compact
+    val replyControl: @Composable (Boolean) -> Unit = { inline -> selectedReply?.let { choice ->
+        ComposerReplyControl(inline, replyTitle, replyPreview, !state.sending && !obscured,
+            onOptions = { showReplyOptions(choice) }, onCancel = {
+                if (interactive() && actions == null && replyOptions == null) model.cancelReply(displayedSession, roomId, choice)
+            }, warning = replyIsPing)
+    } }
     val headerLimit = maxHeight * 0.3f
     val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
     val header: @Composable (() -> Unit) -> Unit = { close ->
@@ -251,13 +320,13 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             }
             items(state.messages, key = { "message:${it.id}" }) { message ->
                 val highlighted = state.highlightedMessageId == message.id
+                val ignored = message.senderId in ignoredIds
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("message:${message.id}")
                     .then(if (highlighted) Modifier.semantics { selected = true } else Modifier)) {
                     if (highlighted) RequestedMessageMarker(message.id)
                     if (state.unreadDividerId == message.id) {
                         HorizontalDivider(); Text(stringResource(R.string.conversation_unread), style = MaterialTheme.typography.labelMedium)
                     }
-                    val ignored = message.senderId in ignoredIds
                     if (!ignored || ignores != null) {
                         val sender = message.username ?: stringResource(R.string.conversation_unknown_user)
                         val author = stringResource(R.string.conversation_author_time, sender, displayTime(message.createdAt, state.context))
@@ -274,19 +343,20 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     if (ignored && message.id !in state.revealed) TextButton(onClick = { model.reveal(message.id) }) {
                         Text(stringResource(R.string.conversation_ignored))
                     } else MessageContent(message, state.context, targets?.let { coordinator -> { id ->
-                        if (isCurrentEntry()) {
+                        if (interactive() && actions == null && replyOptions == null) {
                             focus.clearFocus()
                             coordinator.load(displayedSession, MessageTarget.RoomMessage(roomId, id))
                         }
                         Unit
-                    } })
+                    } }, onActions = { openActions(message) })
                 }
             }
             item(key = "history_end") { Spacer(Modifier.height(1.dp)) }
         }
         TypingStatus(model.typing, session, TypingTarget.Room(roomId),
-            viewing = state.loaded && !state.stale && state.context != null && !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !obscured,
-            publishing = ready && !state.busy && !obscured && model.canSend())
+            viewing = state.loaded && !state.stale && state.context != null && !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured,
+            publishing = ready && !state.busy && !composerDialog && !obscured && model.canSend())
+        if (!replyInline) replyControl(false)
         Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
             run {
@@ -305,15 +375,48 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     }) { Text("\u22ee") }
                 }
             }
+            if (replyInline) replyControl(true)
             MessageInput(state.draft, { value ->
-                if (isCurrentEntry() && model.updateDraft(displayedSession, roomId, value) && model.state.value.pingSelection == null)
+                if (interactive() && actions == null && replyOptions == null && model.updateDraft(displayedSession, roomId, value) && model.state.value.pingSelection == null)
                     model.typing?.input(displayedSession, TypingTarget.Room(roomId), hasTypingContent(value)) },
-                !state.sending && model.canEditDraft(),
+                !state.sending && model.canEditDraft() && !composerDialog && !obscured,
                 stringResource(R.string.conversation_message), compact,
-                Modifier.weight(1f).testTag("conversation_composer"))
-            Button(onClick = { if (isCurrentEntry()) model.send(displayedSession, roomId) }, enabled = ready && !state.busy && model.canSend() && state.draft.isNotBlank(),
-                modifier = Modifier.testTag("conversation_send")) { Text(stringResource(if (state.sending) R.string.conversation_sending else R.string.conversation_send)) }
+                Modifier.weight(1f).focusRequester(composerFocus).testTag("conversation_composer"))
+            MessageSendButton(stringResource(if (state.sending) R.string.conversation_sending else R.string.conversation_send),
+                onClick = { if (interactive() && actions == null && replyOptions == null) model.send(displayedSession, roomId) },
+                enabled = ready && !state.busy && !composerDialog && !obscured && model.canSend() && state.draft.phpTrim().isNotEmpty(),
+                sending = state.sending, modifier = Modifier.testTag("conversation_send"))
         }
+    }
+    actions?.let { request ->
+        val message = state.messages.firstOrNull { it.id == request.messageId }
+        val available = message != null && model.canUseMessage(displayedSession, roomId, message)
+        MessageActions(available, message?.let { model.canReplyTo(displayedSession, roomId, it) } == true,
+            !message?.body.isNullOrEmpty(), onReply = {
+                if (actions === request && interactive() && message != null && model.replyTo(displayedSession, roomId, message)) {
+                    actions = null; focusReply = model.state.value.composerReply
+                }
+            }, onCopy = {
+                if (actions === request && interactive() && message != null && model.canUseMessage(displayedSession, roomId, message)) {
+                    message.body?.takeIf { it.isNotEmpty() }?.let { copyMessage(androidContext, it) }
+                    actions = null
+                }
+            }, onDismiss = { if (actions === request) actions = null })
+    }
+    replyOptions?.let { choice ->
+        val current = state.composerReply === choice
+        ComposerReplyOptions(if (current) replyTitle else stringResource(R.string.composer_reply_id, choice.messageId),
+            if (current) replyPreview else stringResource(R.string.composer_reply_not_visible), current && !state.sending,
+            onOpenOriginal = targets?.takeIf { current && ready && !state.busy }?.let { coordinator -> {
+                if (replyOptions === choice && interactive() && model.state.value.composerReply === choice) {
+                    replyOptions = null; focus.clearFocus()
+                    coordinator.load(displayedSession, MessageTarget.RoomMessage(roomId, choice.messageId))
+                }
+            } }, onCancel = {
+                if (replyOptions === choice && interactive() && model.state.value.composerReply === choice) {
+                    model.cancelReply(displayedSession, roomId, choice); replyOptions = null
+                }
+            }, onDismiss = { if (replyOptions === choice) replyOptions = null })
     }
     if (detailsOpen) AlertDialog(onDismissRequest = { detailsOpen = false },
         title = { Text(stringResource(R.string.conversation_details)) },
@@ -368,8 +471,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
 }
 
 @Composable
-private fun MessageContent(message: RoomMessage, context: ConversationContext?, onOpenReply: ((Long) -> Unit)? = null) {
+private fun MessageContent(message: RoomMessage, context: ConversationContext?, onOpenReply: ((Long) -> Unit)? = null,
+    onActions: (() -> Unit)? = null) {
     val sender = message.username ?: stringResource(R.string.conversation_unknown_user)
+    val actionsLabel = stringResource(R.string.message_actions)
     when {
         message.deleted -> Text(stringResource(R.string.conversation_deleted), style = MaterialTheme.typography.bodyMedium)
         else -> {
@@ -379,14 +484,18 @@ private fun MessageContent(message: RoomMessage, context: ConversationContext?, 
                     !reply.available || original == null -> stringResource(R.string.conversation_reply_unavailable)
                     original.deleted -> stringResource(R.string.conversation_deleted)
                     else -> stringResource(R.string.conversation_reply, original.sender?.username ?: stringResource(R.string.conversation_unknown_user),
-                        original.body.orEmpty().take(160))
+                        messageExcerpt(original.body.orEmpty()))
                 }
                 ReplyPreview(text, onOpenReply?.takeIf { reply.available && original != null }?.let { open -> { open(reply.messageId) } },
                     Modifier.testTag("room_reply:${message.id}")) }
-            if (message.type == "emote") Text(stringResource(R.string.conversation_emote, sender, message.body.orEmpty()))
-            else message.body?.let { Text(it) }
-            message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }
-            if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
+            Column(Modifier.fillMaxWidth().then(if (onActions != null) Modifier.heightIn(min = 48.dp)
+                .combinedClickable(onClickLabel = actionsLabel, onLongClickLabel = actionsLabel,
+                    onClick = onActions, onLongClick = onActions) else Modifier)) {
+                if (message.type == "emote") Text(stringResource(R.string.conversation_emote, sender, message.body.orEmpty()))
+                else message.body?.let { Text(it) }
+                message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }
+                if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
     if (message.reactions.isNotEmpty()) Text(message.reactions.joinToString("  ") { "${it.emoji} ${it.users.size}" })
@@ -398,6 +507,7 @@ private fun displayTime(value: String, context: ConversationContext?) =
 
 @Composable
 private fun conversationError(error: ApiFailure) = stringResource(when {
+    error.code == "invalid_reply_target" -> R.string.composer_reply_invalid
     error.code == "ping_target_not_found" -> R.string.conversation_ping_target
     error.code == "cannot_ping_self" -> R.string.conversation_ping_self
     error.code == "guest_not_allowed" -> R.string.conversation_guest_ping

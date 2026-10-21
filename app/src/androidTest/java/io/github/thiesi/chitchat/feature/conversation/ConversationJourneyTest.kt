@@ -267,18 +267,18 @@ class ConversationJourneyTest {
         fake.sendFailure = ApiFailure(FailureKind.TIMEOUT)
         content(); send("Possibly sent fixture")
         compose.waitUntil(5_000) { model.state.value.uncertainSend }
-        compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsNotEnabled()
         compose.onNodeWithContentDescription("Room details").assertIsDisplayed().performClick()
         compose.onNodeWithText("Allow another send despite duplicate risk").assertDoesNotExist()
         compose.runOnIdle { fake.sendFailure = null }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         fun detailsText(id: Int) = compose.onNode(hasText(context.getString(id)) and hasAnyAncestor(isDialog()))
         detailsText(io.github.thiesi.chitchat.R.string.conversation_refresh).performScrollTo().assertIsDisplayed().performClick(); loaded()
-        compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsNotEnabled()
         compose.onNodeWithContentDescription("Room details").assertIsDisplayed().performClick()
         detailsText(io.github.thiesi.chitchat.R.string.conversation_allow_resend).performScrollTo().assertIsDisplayed().performClick()
         compose.runOnIdle { assertEquals(1, fake.sends); assertEquals("Possibly sent fixture", model.state.value.draft) }
-        compose.onNodeWithText("Send").assertIsDisplayed().assertIsEnabled().performClick()
+        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsEnabled().performClick()
         compose.waitUntil(5_000) { fake.sends == 2 && !model.state.value.busy }
     }
 
@@ -317,7 +317,7 @@ class ConversationJourneyTest {
         content()
         compose.onNodeWithText("Posting muted: Fixture moderation reason", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("conversation_composer").assertIsDisplayed().performTextInput("Blocked fixture")
-        compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsNotEnabled()
         compose.runOnIdle { assertEquals(0, fake.sends) }
     }
 

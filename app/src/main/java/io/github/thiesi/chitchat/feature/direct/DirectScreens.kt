@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.direct
 
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -8,12 +9,14 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalFocusManager
@@ -33,6 +36,8 @@ import androidx.lifecycle.compose.*
 import androidx.lifecycle.repeatOnLifecycle
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.direct.*
+import io.github.thiesi.chitchat.core.conversation.ComposerReply
+import io.github.thiesi.chitchat.core.conversation.phpTrim
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.session.SessionState
@@ -41,6 +46,13 @@ import io.github.thiesi.chitchat.core.ui.messageTime
 import io.github.thiesi.chitchat.core.ui.canAcknowledgeVisibleRead
 import io.github.thiesi.chitchat.core.ui.isReadEdgeVisible
 import io.github.thiesi.chitchat.core.ui.MessageInput
+import io.github.thiesi.chitchat.core.ui.MessageSendButton
+import io.github.thiesi.chitchat.core.ui.MessageActions
+import io.github.thiesi.chitchat.core.ui.MessageActionSelection
+import io.github.thiesi.chitchat.core.ui.ComposerReplyControl
+import io.github.thiesi.chitchat.core.ui.ComposerReplyOptions
+import io.github.thiesi.chitchat.core.ui.copyMessage
+import io.github.thiesi.chitchat.core.ui.messageExcerpt
 import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.typing.hasTypingContent
 import io.github.thiesi.chitchat.feature.realtime.TypingStatus
@@ -67,6 +79,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
         val focus = LocalFocusManager.current
         val submit = { model.search(); if (!model.state.value.invalidQuery) focus.clearFocus() }
         var discard by remember { mutableStateOf<Long?>(null) }
+        var detailsOpen by remember { mutableStateOf(false) }
         DirectLifecycle(model::foreground, model::background, model::invalidate)
         val list = rememberLazyListState()
         LazyColumn(Modifier.fillMaxSize().testTag("dm_inbox"), list, contentPadding = PaddingValues(16.dp),
@@ -81,6 +94,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
                 if (state.stale) Text(stringResource(R.string.dm_stale))
                 state.error?.let { InlineError(directError(it)) }
                 DirectPrivacyNotice(state.inbox?.privacy, R.string.dm_inbox_details,
+                    expanded = detailsOpen, onExpandedChange = { detailsOpen = it },
                     needsAttention = connection?.let { it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null } } == true) {
                     if (connection != null) RealtimeStatus(connection, thread.realtime::retry, thread.realtime::dismissBroadcast, roomId = null)
                 }
@@ -105,6 +119,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
                 Column {
                     TextButton(onClick = { onSelect(draft.peer) }, enabled = ready) { Text(draft.name ?: stringResource(R.string.dm_draft_peer, draft.peer)) }
                     if (draft.uncertain) Text(stringResource(R.string.dm_unknown))
+                    draft.composerReply?.let { Text(stringResource(R.string.composer_reply_id, it.messageId)) }
                     TextButton(onClick = { discard = draft.peer }) { Text(stringResource(R.string.dm_discard_draft)) }
                 }
             }
@@ -150,6 +165,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             val ready = sessionReady(session, now)
             val timeline = rememberLazyListState()
             var blockConfirm by remember { mutableStateOf(false) }
+            var detailsOpen by remember { mutableStateOf(false) }
             LaunchedEffect(state.scrollRequest) {
                 if (state.scrollRequest > 0 && state.messages.isNotEmpty()) timeline.scrollToItem(state.messages.size + 1)
             }
@@ -160,11 +176,54 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             val lifecycleState by lifecycle.currentStateAsState()
             val window = LocalWindowInfo.current
-            LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, obscured, lifecycle, lifecycleState) {
+            var actions by remember { mutableStateOf<MessageActionSelection?>(null) }
+            var replyOptions by remember { mutableStateOf<ComposerReply?>(null) }
+            var focusReply by remember { mutableStateOf<ComposerReply?>(null) }
+            val composerFocus = remember { FocusRequester() }
+            val androidContext = LocalContext.current
+            val composerDialog = actions != null || replyOptions != null
+            fun interactive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+                !obscured && !blockConfirm && !detailsOpen
+            fun openActions(message: DirectMessage) {
+                if (interactive() && actions == null && replyOptions == null && model.canUseMessage(displayedSession, peer, message)) {
+                    focus.clearFocus(); actions = MessageActionSelection(message.id)
+                }
+            }
+            val selectedReply = state.composerReply
+            val original = selectedReply?.let { choice -> state.messages.firstOrNull { it.id == choice.messageId } }
+            val replyTitle = if (original != null && !original.deleted)
+                stringResource(R.string.composer_reply_author, original.sender.username ?: stringResource(R.string.conversation_unknown_user))
+                else stringResource(R.string.composer_reply_id, selectedReply?.messageId ?: 0)
+            val replyPreview = when {
+                original?.deleted == true -> stringResource(R.string.conversation_deleted)
+                original == null -> stringResource(R.string.composer_reply_not_visible)
+                else -> messageExcerpt(original.body.orEmpty())
+            }
+            fun showReplyOptions(choice: ComposerReply) {
+                if (interactive() && actions == null && replyOptions == null && model.state.value.composerReply === choice) {
+                    focus.clearFocus(); replyOptions = choice
+                }
+            }
+            LaunchedEffect(state.composerReply, obscured, lifecycleState) {
+                if (replyOptions != null && replyOptions !== state.composerReply) replyOptions = null
+                if (obscured || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                    actions = null; replyOptions = null; focusReply = null; detailsOpen = false; blockConfirm = false
+                }
+            }
+            LaunchedEffect(focusReply, window.isWindowFocused, lifecycleState, obscured) {
+                val pending = focusReply
+                if (pending != null && window.isWindowFocused) {
+                    focusReply = null
+                    if (interactive() && actions == null && replyOptions == null && model.state.value.composerReply === pending && model.canSend())
+                        composerFocus.requestFocus()
+                }
+            }
+            LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, obscured, composerDialog, detailsOpen, blockConfirm, lifecycle, lifecycleState) {
                 lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                     snapshotFlow {
                         val info = timeline.layoutInfo
-                        val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused, !obscured)
+                        val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused,
+                            !obscured && !composerDialog && !detailsOpen && !blockConfirm)
                         val visible = info.visibleItemsInfo.filter { it.offset < info.viewportEndOffset && it.offset + it.size > info.viewportStartOffset }
                         val first = visible.firstOrNull { (it.key as? String)?.startsWith("direct:") == true }
                         val anchor = first?.let { DirectAnchor((it.key as String).substringAfter(':').toLong(), -it.offset) }
@@ -180,6 +239,13 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             }
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val compact = maxHeight < 240.dp
+                val replyInline = compact
+                val replyControl: @Composable (Boolean) -> Unit = { inline -> selectedReply?.let { choice ->
+                    ComposerReplyControl(inline, replyTitle, replyPreview, !state.sending && !obscured,
+                        onOptions = { showReplyOptions(choice) }, onCancel = {
+                            if (interactive() && actions == null && replyOptions == null) model.cancelReply(displayedSession, peer, choice)
+                        })
+                } }
                 val headerLimit = maxHeight * 0.3f
                 val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -208,24 +274,26 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 if (highlighted) RequestedMessageMarker(message.id)
                                 if (message.id == state.unreadDividerId) Text(stringResource(R.string.dm_new_divider), style = MaterialTheme.typography.labelMedium)
                                 DirectMessageRow(message, state.context, targets?.let { coordinator -> { id ->
-                                    if (isCurrentEntry()) {
+                                    if (interactive() && actions == null && replyOptions == null) {
                                         focus.clearFocus()
                                         coordinator.load(displayedSession, MessageTarget.DirectMessage(peer, id))
                                     }
                                     Unit
-                                } })
+                                } }, onActions = { openActions(message) })
                             }
                         }
                         item("end") { Spacer(Modifier.height(1.dp)) }
                     }
                     TypingStatus(model.typing, session, TypingTarget.Direct(peer),
-                        viewing = state.loaded && !state.stale && !blockConfirm && !obscured && state.context?.relationship?.messagingAvailable == true,
-                        publishing = ready && !obscured && model.canSend())
+                        viewing = state.loaded && !state.stale && !blockConfirm && !detailsOpen && !composerDialog && !obscured && state.context?.relationship?.messagingAvailable == true,
+                        publishing = ready && !composerDialog && !detailsOpen && !blockConfirm && !obscured && model.canSend())
+                    if (!replyInline) replyControl(false)
                     Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 12.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                         run {
                             val context = state.context
                             DirectPrivacyNotice(context?.privacy, R.string.dm_details, compact = true,
+                                expanded = detailsOpen, onExpandedChange = { detailsOpen = it },
                                 needsAttention = state.stale || state.error != null || state.validation != null || state.newerAvailable ||
                                     state.uncertainSend || state.uncertainRead || state.readError != null || state.uncertainBlock ||
                                     attention[peer] != null || state.draftLimit || !model.canEditDraft() ||
@@ -241,13 +309,48 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 }
                             }
                         }
+                        if (replyInline) replyControl(true)
                         MessageInput(state.draft, { value ->
-                            if (isCurrentEntry() && model.updateDraft(displayedSession, peer, value))
-                                model.typing?.input(displayedSession, TypingTarget.Direct(peer), hasTypingContent(value)) }, !state.sending && model.canEditDraft(),
-                            stringResource(R.string.dm_message), compact, Modifier.weight(1f).testTag("dm_composer"))
-                        Button(onClick = { if (isCurrentEntry()) model.send(displayedSession, peer) }, enabled = ready && model.canSend(), modifier = Modifier.testTag("dm_send")) { Text(stringResource(R.string.dm_send)) }
+                            if (interactive() && actions == null && replyOptions == null && model.updateDraft(displayedSession, peer, value))
+                                model.typing?.input(displayedSession, TypingTarget.Direct(peer), hasTypingContent(value)) },
+                            !state.sending && model.canEditDraft() && !composerDialog && !obscured,
+                            stringResource(R.string.dm_message), compact, Modifier.weight(1f).focusRequester(composerFocus).testTag("dm_composer"))
+                        MessageSendButton(stringResource(if (state.sending) R.string.conversation_sending else R.string.dm_send),
+                            onClick = { if (interactive() && actions == null && replyOptions == null) model.send(displayedSession, peer) },
+                            enabled = ready && !composerDialog && !detailsOpen && !blockConfirm && !obscured && model.canSend() && state.draft.phpTrim().isNotEmpty(),
+                            sending = state.sending, modifier = Modifier.testTag("dm_send"))
                     }
                 }
+            }
+            actions?.let { request ->
+                val message = state.messages.firstOrNull { it.id == request.messageId }
+                val available = message != null && model.canUseMessage(displayedSession, peer, message)
+                MessageActions(available, message?.let { model.canReplyTo(displayedSession, peer, it) } == true,
+                    !message?.body.isNullOrEmpty(), onReply = {
+                        if (actions === request && interactive() && message != null && model.replyTo(displayedSession, peer, message)) {
+                            actions = null; focusReply = model.state.value.composerReply
+                        }
+                    }, onCopy = {
+                        if (actions === request && interactive() && message != null && model.canUseMessage(displayedSession, peer, message)) {
+                            message.body?.takeIf { it.isNotEmpty() }?.let { copyMessage(androidContext, it) }
+                            actions = null
+                        }
+                    }, onDismiss = { if (actions === request) actions = null })
+            }
+            replyOptions?.let { choice ->
+                val current = state.composerReply === choice
+                ComposerReplyOptions(if (current) replyTitle else stringResource(R.string.composer_reply_id, choice.messageId),
+                    if (current) replyPreview else stringResource(R.string.composer_reply_not_visible), current && !state.sending,
+                    onOpenOriginal = targets?.takeIf { current && ready && !state.busy }?.let { coordinator -> {
+                        if (replyOptions === choice && interactive() && model.state.value.composerReply === choice) {
+                            replyOptions = null; focus.clearFocus()
+                            coordinator.load(displayedSession, MessageTarget.DirectMessage(peer, choice.messageId))
+                        }
+                    } }, onCancel = {
+                        if (replyOptions === choice && interactive() && model.state.value.composerReply === choice) {
+                            model.cancelReply(displayedSession, peer, choice); replyOptions = null
+                        }
+                    }, onDismiss = { if (replyOptions === choice) replyOptions = null })
             }
             if (blockConfirm && state.context != null) {
                 val blocked = state.context!!.relationship.blockedByMe
@@ -295,7 +398,9 @@ private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadStat
 }
 
 @Composable
-private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, onOpenReply: ((Long) -> Unit)? = null) {
+private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, onOpenReply: ((Long) -> Unit)? = null,
+    onActions: (() -> Unit)? = null) {
+    val actionsLabel = stringResource(R.string.message_actions)
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (message.outgoing) Alignment.End else Alignment.Start) {
     val tint = if (message.outgoing) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
     Surface(Modifier.widthIn(max = 560.dp), shape = MaterialTheme.shapes.medium,
@@ -309,14 +414,18 @@ private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, on
                 val text = when {
                     !reply.available || original == null -> stringResource(R.string.conversation_reply_unavailable)
                     original.deleted -> stringResource(R.string.conversation_deleted)
-                    else -> stringResource(R.string.conversation_reply, original.sender.username.orEmpty(), original.body.take(160))
+                    else -> stringResource(R.string.conversation_reply, original.sender.username.orEmpty(), messageExcerpt(original.body))
                 }
                 ReplyPreview(text, onOpenReply?.takeIf { reply.available && reply.message != null }?.let { open -> { open(reply.messageId) } },
                     Modifier.testTag("direct_reply:${message.id}"))
             }
-            SelectionContainer { message.body?.let { Text(it) } }
-            message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }
-            if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
+            Column(Modifier.then(if (onActions != null) Modifier.heightIn(min = 48.dp)
+                .combinedClickable(onClickLabel = actionsLabel, onLongClickLabel = actionsLabel,
+                    onClick = onActions, onLongClick = onActions) else Modifier)) {
+                message.body?.let { Text(it) }
+                message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }
+                if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
+            }
         }
         if (message.reactions.isNotEmpty()) Text(message.reactions.joinToString("  ") { "${it.emoji} ${it.users.size}" })
         if (message.outgoing) Text(stringResource(if (message.readAt == null) R.string.dm_sent else R.string.dm_read), style = MaterialTheme.typography.labelSmall)
@@ -328,23 +437,23 @@ private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, on
 @Composable
 private fun DirectPrivacyNotice(privacy: MessagePrivacy?, title: Int = R.string.dm_privacy, compact: Boolean = false,
     needsAttention: Boolean = false,
+    expanded: Boolean, onExpandedChange: (Boolean) -> Unit,
     actions: @Composable (() -> Unit) -> Unit = {}) {
-    var expanded by remember { mutableStateOf(false) }
     if (!compact) privacy?.let { Text(stringResource(R.string.dm_privacy_short, it.direct.retention), style = MaterialTheme.typography.bodySmall) }
     val label = stringResource(title)
     val status = stringResource(R.string.dm_details_attention)
     BadgedBox(badge = { if (needsAttention) Badge() }) {
-        if (!compact) TextButton(onClick = { expanded = true }, modifier = Modifier.semantics {
+        if (!compact) TextButton(onClick = { onExpandedChange(true) }, modifier = Modifier.semantics {
             if (needsAttention) stateDescription = status
         }) { Text(label) }
         else {
-            IconButton(onClick = { expanded = true }, modifier = Modifier.semantics {
+            IconButton(onClick = { onExpandedChange(true) }, modifier = Modifier.semantics {
                 contentDescription = label
                 if (needsAttention) stateDescription = status
             }) { Text("\u22ee") }
         }
     }
-    if (expanded) AlertDialog(onDismissRequest = { expanded = false }, title = { Text(stringResource(title)) }, text = {
+    if (expanded) AlertDialog(onDismissRequest = { onExpandedChange(false) }, title = { Text(stringResource(title)) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             privacy?.let { privacy ->
                 Text(stringResource(R.string.dm_privacy_short, privacy.direct.retention))
@@ -361,9 +470,9 @@ private fun DirectPrivacyNotice(privacy: MessagePrivacy?, title: Int = R.string.
             }
             Text(stringResource(R.string.dm_read_policy))
             Text(stringResource(R.string.dm_no_push))
-            actions { expanded = false }
+            actions { onExpandedChange(false) }
         }
-    }, confirmButton = { TextButton(onClick = { expanded = false }) { Text(stringResource(R.string.dm_close)) } })
+    }, confirmButton = { TextButton(onClick = { onExpandedChange(false) }) { Text(stringResource(R.string.dm_close)) } })
 }
 
 @Composable
@@ -406,6 +515,7 @@ private fun SessionNotice(session: SessionState, now: Long, refresh: () -> Unit)
 
 @Composable
 private fun directError(error: ApiFailure) = stringResource(when {
+    error.code == "invalid_reply_target" -> R.string.composer_reply_invalid
     error.code == "direct_message_unavailable" -> R.string.dm_unavailable
     error.status == 404 -> R.string.dm_peer_missing
     error.code == "csrf_failed" || error.kind == FailureKind.STORAGE -> R.string.session_refresh_needed

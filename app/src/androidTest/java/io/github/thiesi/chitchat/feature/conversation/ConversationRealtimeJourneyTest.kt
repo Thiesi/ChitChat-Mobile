@@ -105,18 +105,18 @@ class ConversationRealtimeJourneyTest {
     @Test fun restoredRouteAndExpiredPresenceRequireExplicitAcknowledgedReentry() {
         content()
         enterDraft("Retained draft")
-        compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsNotEnabled()
         compose.runOnIdle { assertEquals(0, realtime.entries); assertEquals(0, api.reads) }
         enterRoom()
         compose.runOnIdle { assertEquals(1, realtime.entries); assertEquals(0, api.reads) }
-        compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsNotEnabled()
         compose.runOnIdle { realtime.state.value = realtime.state.value.copy(presencePhase = PresencePhase.ACTIVE) }
-        compose.onNodeWithText("Send").assertIsDisplayed().assertIsEnabled()
+        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsEnabled()
         closeSoftKeyboard()
         compose.onNodeWithTag("conversation_timeline").performScrollToIndex(2)
         compose.waitUntil(5_000) { api.reads == 1 }
         compose.runOnIdle { realtime.state.value = realtime.state.value.copy(presencePhase = PresencePhase.EXPIRED) }
-        compose.onNodeWithText("Send").assertIsDisplayed().assertIsNotEnabled()
+        compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsNotEnabled()
         compose.onNodeWithTag("conversation_composer").assertTextContains("Retained draft")
         enterRoom()
         compose.runOnIdle { assertEquals(2, realtime.entries); assertEquals(0, api.sends) }

@@ -39,6 +39,7 @@ fun RoomDraftsDialog(model: ConversationViewModel, session: SessionState, onOpen
                         Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
                     if (draft.uncertain) Text(stringResource(R.string.room_draft_unknown))
                     Text(draft.body.take(100), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    draft.composerReply?.let { Text(stringResource(R.string.composer_reply_id, it.messageId)) }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = {
                             if (draft.matches(original) && draft.matches(model.session.value)) {
