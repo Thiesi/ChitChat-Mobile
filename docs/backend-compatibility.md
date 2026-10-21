@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M4c4c1](milestones/M4c4c1-notification-state.md) consumes the existing notification page/read contracts through scoped presentation state and bounded canonical GET reconciliation. Counts remain independent of loaded rows; View message and Mark as read stay separate. Its bounds/coverage/confirmed-read overlay are local state, not server fields or timestamps. No new endpoint, SSE event, authorization mechanism or backend checkout change is introduced; native center/general-link consumption remains pending.
+
 Verified source baseline: **v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf0d1`**. This is a source audit, not a claim of tested installation compatibility. Source links pin the baseline; proposed APIs appear only in [backend issues](backend-dependencies.md).
 
 ## HTTP bootstrap, cookies, authentication

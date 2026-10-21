@@ -14,6 +14,11 @@ import kotlinx.serialization.Serializable
 @Serializable internal class NotificationReadReply(val updated: Int, @SerialName("unread_count") val unreadCount: Int)
 
 internal fun NotificationListReply.page(before: Long?, limit: Int): NotificationPage {
+    requireNotificationRows(notifications, unreadCount, before, limit)
+    return NotificationPage(notifications, unreadCount, notifications.lastOrNull()?.id, notifications.size == limit)
+}
+
+internal fun requireNotificationRows(notifications: List<AccountNotification>, unreadCount: Int, before: Long?, limit: Int) {
     incompatibleUnless(unreadCount >= 0 && notifications.size <= limit &&
         notifications.zipWithNext().all { (a, b) -> a.id > b.id })
     notifications.forEach { item ->
@@ -21,7 +26,6 @@ internal fun NotificationListReply.page(before: Long?, limit: Int): Notification
             item.title.isNotBlank() && serverInstant(item.createdAt) != null &&
             item.read == (item.readAt != null) && (item.readAt == null || serverInstant(item.readAt) != null))
     }
-    return NotificationPage(notifications, unreadCount, notifications.lastOrNull()?.id, notifications.size == limit)
 }
 internal fun NotificationReadReply.result(maxUpdated: Int? = null): NotificationReadResult {
     incompatibleUnless(updated >= 0 && unreadCount >= 0 && (maxUpdated == null || updated <= maxUpdated))
