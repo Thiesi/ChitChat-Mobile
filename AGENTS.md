@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- Keyboard/device journeys use test-only `performNativeTap` for consistent OS-routed input/modal taps; Compose `performClick` dispatches MotionEvents directly to a root View and remains a component-level action, not equivalent system routing. See `docs/milestones/system-native-taps.md`. Preserve all existing focus/display/strict-IME assertions and5-second deadlines. Default-display instrumentation only; no focus/show/clock/readiness workaround or tap replay. Failed injection stays failed; cancellation only retires a possibly held pointer. Routing evidence is not a production keyboard fix or permission to close issue31/merge PR49's old red head.
+
 - M5b1 author edit/delete reuses original-session capabilities/canonical rows; see `docs/milestones/M5b1-author-mutation-protocol.md`. Edits are literal PHP-trimmed Unicode text, never room-send commands. Both services commit before response metadata: exceptions/cancellation require explicit GET reconciliation before a fresh choice, never replay. Room `authorActions` is transient enrichment, unknown unless both actual flags exist; check author/current scope too. Native controls/state remain separate.
 
 - This repository owns the native Kotlin/Jetpack Compose client only. Never edit, commit, fetch into, or otherwise mutate the sibling `Thiesi/ChitChat` checkout. Backend issues are permitted; backend patches are not.
