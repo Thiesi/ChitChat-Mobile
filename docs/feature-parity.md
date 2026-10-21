@@ -6,6 +6,8 @@ Classification: **Existing** = existing backend contract, **Android** = client-o
 
 Native keyboard/navigation verification also covers one-tap input focus and actual IME before semantic text injection; see [DM search readiness](milestones/dm-search-keyboard-navigation.md) for the merged-main failure, correction and gate boundaries.
 
+[Additional IME diagnostics](milestones/native-ime-diagnostics.md) follows the later merged-main112/113 failure. This is test observability, not a completed keyboard correction or another user feature; issue31 and remaining target/push parity stay open.
+
 | Browser feature / behavior | Feasibility and Android treatment | Evidence | Milestone / dependency |
 |---|---|---|---|
 | Room-switch composition and draft recovery | Android: retain text and delivery-unknown guards per room in scoped VM memory;100 slots, no eviction, explicit Open/Discard manager from directory and details. Automatic entry never grants resend consent. Account change/process death clears drafts; no durable offline cache | Existing room history/send contracts; no server change | [Client recovery and exact verification](milestones/room-draft-retention.md) |

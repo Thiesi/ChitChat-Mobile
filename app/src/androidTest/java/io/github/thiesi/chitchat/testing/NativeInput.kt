@@ -13,6 +13,7 @@ internal fun ComposeTestRule.tapNativeInput(tag: String, imeBottom: () -> Int,
     val before = node.fetchSemanticsNode()
     val beforeBounds = before.boundsInWindow
     val beforeFocused = before.config[SemanticsProperties.Focused]
+    val beforeWindow = nativeInputWindow()
     node.performClick()
     val requireIme = InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true"
     try {
@@ -21,7 +22,8 @@ internal fun ComposeTestRule.tapNativeInput(tag: String, imeBottom: () -> Int,
     } catch (failure: ComposeTimeoutException) {
         val current = node.fetchSemanticsNode()
         val extra = runCatching(failureMetadata).getOrDefault("extra diagnostics unavailable")
-        throw AssertionError("Tap fixture: tag=$tag, IME=${imeBottom()}, focusedBefore=$beforeFocused, focused=${current.config[SemanticsProperties.Focused]}, before=$beforeBounds, after=${current.boundsInWindow}, $extra", failure)
+        val afterWindow = nativeInputWindow()
+        throw AssertionError("Tap fixture: tag=$tag, IME=${imeBottom()}, focusedBefore=$beforeFocused, focused=${current.config[SemanticsProperties.Focused]}, before=$beforeBounds, after=${current.boundsInWindow}, beforeWindow=$beforeWindow, afterWindow=$afterWindow, $extra", failure)
     }
     return node.assertIsFocused().assertIsDisplayed()
 }
