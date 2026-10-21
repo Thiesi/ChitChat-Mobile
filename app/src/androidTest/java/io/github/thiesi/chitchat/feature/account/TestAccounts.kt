@@ -11,6 +11,7 @@ import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
 import io.github.thiesi.chitchat.feature.direct.DirectInboxViewModel
 import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
+import io.github.thiesi.chitchat.feature.notifications.NotificationCenterViewModel
 import io.github.thiesi.chitchat.core.account.AccountAccess
 import io.github.thiesi.chitchat.core.account.AccountOperations
 import io.github.thiesi.chitchat.core.account.PersonalExport
@@ -67,10 +68,11 @@ internal class TestAccounts(override val session: StateFlow<SessionState>) : Acc
 internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel, account: AccountViewModel? = null,
     roomModel: RoomsViewModel? = null, conversationModel: ConversationViewModel? = null,
     directInbox: DirectInboxViewModel? = null, directThread: DirectThreadViewModel? = null,
-    realtime: RealtimeController? = null, messageTargets: MessageTargetViewModel? = null) {
+    realtime: RealtimeController? = null, messageTargets: MessageTargetViewModel? = null,
+    notifications: NotificationCenterViewModel? = null) {
     val accountModel = account ?: remember(auth) { AccountViewModel(TestAccounts(auth.state)) }
     val rooms = roomModel ?: remember(auth) { RoomsViewModel(EmptyRoomOperations(auth.state)) }
     val conversations = conversationModel ?: remember(auth) { ConversationViewModel(EmptyConversationOperations(auth.state)) }
     ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox,
-        directThread = directThread, messageTargets = messageTargets)
+        directThread = directThread, messageTargets = messageTargets, notifications = notifications)
 }

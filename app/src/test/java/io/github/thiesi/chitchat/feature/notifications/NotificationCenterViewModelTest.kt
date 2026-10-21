@@ -132,7 +132,9 @@ class NotificationCenterViewModelTest {
         model.invalidate(); runCurrent()
         api.rows = listOf(notice(9001)); val gate = api.getGate; api.getGate = null
         api.session.value = api.session.value.copy(generation = 2, user = SessionUser(9, "New viewer", listOf("member"), 1, false))
-        runCurrent(); assertEquals(9001L, model.state.value.notifications.single().id)
+        runCurrent(); assertTrue(model.state.value.notifications.isEmpty()); assertEquals(1, api.pages.last().limit)
+        model.show(api.session.value, center = true); runCurrent()
+        assertEquals(9001L, model.state.value.notifications.single().id)
         gate!!.complete(Unit); runCurrent(); assertEquals(9001L, model.state.value.notifications.single().id)
     }
     @Test fun permissionLossClearsPrivateContentButCsrfAndNetworkFailuresDoNotPretendRevocation() = runTest(dispatcher) {
@@ -171,6 +173,88 @@ class NotificationCenterViewModelTest {
         assertTrue(model.state.value.notifications.isEmpty()); assertNull(model.state.value.unreadCount)
         assertEquals(1, api.ones); assertEquals(1, api.pages.size); assertFalse(model.belongsTo(original))
         model.foreground(); model.markRead(original, 650); runCurrent(); assertEquals(1, api.ones)
+    }
+
+    @Test fun hiddenCenterRequestsOnlyTheIndependentCountWithoutAdoptingRowsOrReadingAnything() = runTest(dispatcher) {
+        model.foreground(center = false); runCurrent()
+        assertEquals(1, api.pages.single().limit); assertEquals(9000, model.state.value.unreadCount)
+        assertFalse(model.state.value.countStale); assertFalse(model.state.value.loaded)
+        assertTrue(model.state.value.notifications.isEmpty()); assertEquals(0, api.ones); assertEquals(0, api.alls)
+        model.show(api.session.value, center = true); runCurrent()
+        assertEquals(25, api.pages.last().limit); assertEquals(25, model.state.value.notifications.size)
+        assertTrue(model.state.value.loaded); assertFalse(model.state.value.stale)
+    }
+    @Test fun leavingCenterRetiresAllChoiceAndReadIntentsWithoutClearingTheBoundedBody() = runTest(dispatcher) {
+        open(); val selected = choice(); val rows = model.state.value.notifications
+        model.show(api.session.value, center = false); runCurrent()
+        model.markRead(api.session.value, 650); model.requestAll(api.session.value); model.confirmAll(selected)
+        model.older(api.session.value); runCurrent()
+        assertEquals(0, api.ones); assertEquals(0, api.alls); assertNull(model.state.value.allChoice)
+        assertEquals(rows, model.state.value.notifications); assertEquals(1, api.pages.last().limit)
+        assertTrue(model.state.value.stale); assertFalse(model.state.value.countStale)
+    }
+    @Test fun navigationDuringReadPostQueuesSummaryWithoutCancellationOrReplay() = runTest(dispatcher) {
+        open(); api.postGate = CompletableDeferred(); model.markRead(api.session.value, 650); runCurrent()
+        repeat(30) { model.show(api.session.value, center = false) }; runCurrent()
+        assertEquals(1, api.ones); assertEquals(0, api.cancelledPosts); assertEquals(1, api.pages.size)
+        api.postGate!!.complete(Unit); runCurrent()
+        assertEquals(0, api.cancelledPosts); assertEquals(1, api.ones); assertEquals(0, api.alls)
+        assertTrue(api.pages.drop(1).all { it.limit == 1 }); assertEquals(3, api.pages.size)
+        assertTrue(model.state.value.isRead(model.state.value.notifications.first()))
+        assertFalse(model.state.value.countStale); assertEquals(17, model.state.value.unreadCount)
+    }
+    @Test fun summaryGetsCannotGrantExplicitUnknownReadReconciliation() = runTest(dispatcher) {
+        open(); api.postFailure = ApiFailure(FailureKind.TIMEOUT); model.confirmAll(choice()); runCurrent()
+        assertTrue(model.state.value.unknownRead); api.postFailure = null
+        model.show(api.session.value, center = false); runCurrent(); model.refresh(api.session.value); runCurrent()
+        assertTrue(model.state.value.unknownRead); assertEquals(1, api.alls)
+        model.show(api.session.value, center = true); runCurrent()
+        assertTrue(model.state.value.unknownRead); model.requestAll(api.session.value); assertNull(model.state.value.allChoice)
+        model.refresh(api.session.value); runCurrent(); assertFalse(model.state.value.unknownRead)
+        assertEquals(1, api.alls)
+    }
+    @Test fun centerEntryDuringSummaryGetQueuesAFullGetRatherThanAdoptingASingleRowAsHistory() = runTest(dispatcher) {
+        api.getGate = CompletableDeferred(); model.foreground(center = false); runCurrent()
+        model.show(api.session.value, center = true); runCurrent()
+        assertFalse(model.state.value.loaded); assertTrue(model.state.value.notifications.isEmpty())
+        api.getGate!!.complete(Unit); runCurrent()
+        assertEquals(listOf(1, 25), api.pages.map { it.limit }); assertEquals(25, model.state.value.notifications.size)
+        assertFalse(model.state.value.stale); assertEquals(0, api.ones); assertEquals(0, api.alls)
+    }
+    @Test fun summaryRoundTripPreservesFixedHistoricalBoundsAfterCompleteRetentionLoss() = runTest(dispatcher) {
+        open(); repeat(20) { model.older(api.session.value); runCurrent() }
+        val bound = checkNotNull(model.state.value.fixedUpper)
+        model.show(api.session.value, center = false); runCurrent()
+        api.rows = listOf(notice(9000)); model.show(api.session.value, center = true); runCurrent()
+        assertTrue(model.state.value.notifications.isEmpty()); assertFalse(model.state.value.latestWindow)
+        assertEquals(bound, model.state.value.fixedUpper); assertEquals(bound + 1, api.pages.last().before)
+    }
+    @Test fun staleAccountNavigationCannotChangeTheNewOwnersModeOrCount() = runTest(dispatcher) {
+        open(); val old = api.session.value
+        api.session.value = old.copy(generation = 5); model.show(api.session.value, center = false); runCurrent()
+        val count = api.pages.size; model.show(old, center = true); runCurrent()
+        assertEquals(count, api.pages.size); assertEquals(1, api.pages.last().limit)
+        assertFalse(model.belongsTo(old)); assertTrue(model.state.value.notifications.isEmpty())
+    }
+    @Test fun summaryFailureKeepsAnExplicitlyStaleLastKnownCountWithoutPublishingPrivateRows() = runTest(dispatcher) {
+        model.foreground(center = false); runCurrent(); api.getFailure = ApiFailure(FailureKind.NETWORK)
+        model.show(api.session.value, center = false); runCurrent()
+        assertEquals(9000, model.state.value.unreadCount); assertTrue(model.state.value.countStale)
+        assertTrue(model.state.value.notifications.isEmpty()); assertFalse(model.state.value.loaded)
+        assertEquals(0, api.ones); assertEquals(0, api.alls)
+    }
+
+    @Test fun fullCenterModeDoesNotTransferToANewOwnerBeforeItsOwnEntryIsSelected() = runTest(dispatcher) {
+        open(); api.session.value = api.session.value.copy(generation = 2,
+            user = SessionUser(9, "Another viewer", listOf("member"), 1, false))
+        runCurrent()
+        assertEquals(1, api.pages.last().limit); assertFalse(model.state.value.loaded)
+        assertTrue(model.state.value.notifications.isEmpty()); assertEquals(9000, model.state.value.unreadCount)
+        model.markRead(api.session.value, 650); model.requestAll(api.session.value); runCurrent()
+        assertEquals(0, api.ones); assertEquals(0, api.alls); assertNull(model.state.value.allChoice)
+        model.show(api.session.value, center = true); runCurrent()
+        assertEquals(25, api.pages.last().limit); assertEquals(25, model.state.value.notifications.size)
+        assertFalse(model.state.value.stale)
     }
 
     private class Operations : NotificationOperations {
