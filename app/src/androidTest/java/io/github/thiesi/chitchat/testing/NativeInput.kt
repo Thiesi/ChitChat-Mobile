@@ -14,7 +14,7 @@ internal fun ComposeTestRule.tapNativeInput(tag: String, imeBottom: () -> Int,
     val beforeBounds = before.boundsInWindow
     val beforeFocused = before.config[SemanticsProperties.Focused]
     val beforeWindow = nativeInputWindow()
-    node.performClick()
+    node.performNativeTap()
     val requireIme = InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true"
     try {
         waitUntil(5_000) { (!requireIme || imeBottom() > 0) &&

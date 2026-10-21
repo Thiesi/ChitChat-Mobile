@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[System-routed keyboard test taps](milestones/system-native-taps.md) affect instrumentation only, not the HTTP/session/SSE/push contracts or backend baseline. Focused local native evidence is not live-server/device/provider acceptance; issue31/PR49 remain open pending their actual gates. No backend change or new endpoint is implied.
+
 [M5b1](milestones/M5b1-author-mutation-protocol.md) implements existing room/DM author edit/delete contracts (`message_id`, optional edit `body`, HTTP200 `message` metadata). No backend changes, new event, native control or live acceptance is claimed. Both services commit before response metadata retrieval; failed writes must not automatically replay.
 
 [M4c4c2](milestones/M4c4c2-native-notification-center.md) adds native list/read controls and unread-count consumption without another endpoint. Hidden-center count refresh uses existing `list.php?limit=1`, discards its body and preserves unknown read choices. Foreground/navigation refresh is not a guarantee of realtime delivery for arbitrary notices. General destinations and push remain pending; no backend mutation is required for these list/read controls.
