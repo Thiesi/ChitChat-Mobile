@@ -12,6 +12,8 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 The [native notification center](docs/milestones/M4c4c2-native-notification-center.md) adds the account list, independent unread indicator and explicit individual/All read controls. Destination links and background push remain pending; notices say so explicitly. Local verification passed 531 JVM and 113 native tests; destination routing, push and live acceptance remain pending.
 
+The independent merged-main native run then failed 112/113 on the known focused-but-hidden keyboard condition. [IME diagnostics](docs/milestones/native-ime-diagnostics.md) records that failure and the added test-only window/filtered-CI evidence (local 531 JVM/115 native tests passed); issue31 remains open. A later green run is not a production keyboard fix.
+
 Room and DM reply previews can open the exact original as a marked historical window in the normal pane, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Reply composition and general notification/search routing remain pending; see [native reply-target scope and verification](docs/milestones/M4c4b2-native-reply-targets.md).
 
 ## Engineering documents
