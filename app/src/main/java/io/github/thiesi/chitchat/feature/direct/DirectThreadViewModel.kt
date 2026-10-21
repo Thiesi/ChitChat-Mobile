@@ -151,6 +151,27 @@ class DirectThreadViewModel(private val operations: DirectOperations,
     fun adoptTarget(snapshot: TargetSnapshot.DirectMessage): Boolean {
         val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.DirectMessage ?: return false
         if (!canAdoptTarget(fresh)) return false
+        return installTarget(fresh)
+    }
+
+    /** Root must bind preparation to the original entry and consume/navigate in the same main-thread call. */
+    fun canPrepareTarget(snapshot: TargetSnapshot.DirectMessage): Boolean = ready() &&
+        snapshot.matches(session.value) && snapshot.available && write == null
+
+    fun prepareTarget(snapshot: TargetSnapshot.DirectMessage): Boolean {
+        val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.DirectMessage ?: return false
+        if (!canPrepareTarget(fresh)) return false
+        background() // Never cancel a send/read/block POST to serve a notification link.
+        if (mutable.value.peerId != fresh.context.peer.id) {
+            seen = emptySet(); attemptedRead = 0; viewport = null; visibleNewest = null
+            val memo = savedDrafts.value[fresh.context.peer.id]
+            mutable.value = DirectThreadState(peerId = fresh.context.peer.id, draft = memo?.body.orEmpty(),
+                uncertainSend = memo?.uncertain == true) // A target GET is never checkedUnknown consent.
+        }
+        return installTarget(fresh)
+    }
+
+    private fun installTarget(fresh: TargetSnapshot.DirectMessage): Boolean {
         val target = fresh.request.target as? MessageTarget.DirectMessage ?: return false
         val value = mutable.value
         sequence++; job?.cancel(); job = null // No active write: preserve queued invalidation counters.

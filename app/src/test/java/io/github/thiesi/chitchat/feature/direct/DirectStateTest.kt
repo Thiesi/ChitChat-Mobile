@@ -45,6 +45,55 @@ class DirectStateTest {
         thread.latest(); runCurrent(); assertEquals(80L, thread.state.value.messages.single().id)
         assertNull(thread.state.value.fixedUpper); assertNull(thread.state.value.highlightedMessageId)
     }
+    @Test fun notificationPreparationInstallsAnotherPeersExactWindowWithoutEntryGetOrRead() = runTest(dispatcher) {
+        open(); thread.updateDraft("Old peer draft"); api.rows = listOf(row(18, 9), row(80, 9))
+        val snapshot = target(18, 9); val contexts = api.contexts
+        assertTrue(thread.prepareTarget(snapshot)); runCurrent()
+        assertEquals(contexts, api.contexts); assertEquals(9L, thread.state.value.peerId)
+        assertEquals(listOf(18L), thread.state.value.messages.map { it.id }); assertEquals(18L, thread.state.value.fixedUpper)
+        assertEquals(18L, thread.state.value.highlightedMessageId); assertFalse(thread.state.value.latestWindow)
+        assertFalse(thread.state.value.atLatest); assertFalse(thread.state.value.checkedUnknown)
+        assertEquals("Old peer draft", thread.drafts.value[8]?.body)
+        thread.foreground(); runCurrent(); thread.viewport(DirectAnchor(18, 0), setOf(18), 18, true); runCurrent()
+        assertEquals(0, api.reads); assertEquals(0, api.sends)
+        assertEquals(listOf(18L), thread.state.value.messages.map { it.id })
+    }
+    @Test fun notificationPreparationRetainsUnknownDeliveryAcrossPeersWithoutGrantingResendConsent() = runTest(dispatcher) {
+        open(); thread.updateDraft("Unknown old peer draft"); api.sendFailure = ApiFailure(FailureKind.TIMEOUT)
+        thread.send(); runCurrent(); assertTrue(thread.state.value.uncertainSend)
+        api.rows = listOf(row(18, 9)); assertTrue(thread.prepareTarget(target(18, 9))); thread.updateDraft("Other peer draft")
+        api.rows = listOf(row(18)); assertTrue(thread.prepareTarget(target()))
+        assertEquals("Unknown old peer draft", thread.state.value.draft); assertTrue(thread.state.value.uncertainSend)
+        assertFalse(thread.state.value.checkedUnknown); assertEquals("Other peer draft", thread.drafts.value[9]?.body)
+        thread.allowDuplicateRisk(); assertTrue(thread.state.value.uncertainSend); assertEquals(1, api.sends)
+    }
+    @Test fun notificationPreparationRejectsAnActiveSendWithoutCancellingIt() = runTest(dispatcher) {
+        open(); val snapshot = target(); thread.updateDraft("Pending send"); api.gate = CompletableDeferred(); api.gated = "send"
+        thread.send(); runCurrent(); assertFalse(thread.canPrepareTarget(snapshot)); assertFalse(thread.prepareTarget(snapshot))
+        assertTrue(thread.state.value.sending); assertEquals(1, api.sends)
+        api.gate!!.complete(Unit); runCurrent(); assertTrue(thread.prepareTarget(snapshot)); assertEquals(1, api.sends)
+    }
+    @Test fun notificationPreparationRejectsAnActiveWholePeerRead() = runTest(dispatcher) {
+        open(); val snapshot = target(); api.gate = CompletableDeferred(); api.gated = "read"
+        thread.viewport(DirectAnchor(18, 0), setOf(18), 18, true); runCurrent()
+        assertEquals(1, api.reads); assertTrue(thread.state.value.busy); assertFalse(thread.prepareTarget(snapshot))
+        assertEquals(8L, thread.state.value.peerId); api.gate!!.complete(Unit); runCurrent()
+        assertTrue(thread.prepareTarget(snapshot)); assertEquals(1, api.reads)
+    }
+    @Test fun notificationPreparationRejectsStaleOwnerMissingTargetAndUnknownPolicy() = runTest(dispatcher) {
+        open(); val snapshot = target(); assertFalse(thread.prepareTarget(target(99)))
+        api.session.value = api.session.value.copy(chatPolicy = null)
+        assertFalse(thread.prepareTarget(snapshot)); assertEquals(8L, thread.state.value.peerId)
+        api.session.value = api.session.value.copy(generation = 2)
+        assertFalse(thread.prepareTarget(snapshot)); runCurrent(); assertNull(thread.state.value.peerId)
+    }
+    @Test fun notificationPreparationUsesCurrentMuteButNeverTreatsRoomIgnoreAsADirectBlock() = runTest(dispatcher) {
+        open(); api.rows = listOf(row(18, 9)); val snapshot = target(18, 9)
+        val mute = RoomMute(1, "everywhere", null, null, "Fixture reason")
+        api.session.value = api.session.value.copy(chatPolicy = ChatPolicy(setOf(9), mute, DisplayPreferences()))
+        assertTrue(thread.prepareTarget(snapshot)); assertSame(mute, thread.state.value.context?.mutedEverywhere)
+        assertEquals(listOf(18L), thread.state.value.messages.map { it.id })
+    }
     @Test fun adoptionCannotCancelAnActiveWriteOrSupplyUnknownSendConsent() = runTest(dispatcher) {
         open(); val snapshot = target(); thread.updateDraft("Unknown DM reply")
         api.gate = CompletableDeferred(); api.gated = "send"; thread.send(); runCurrent()

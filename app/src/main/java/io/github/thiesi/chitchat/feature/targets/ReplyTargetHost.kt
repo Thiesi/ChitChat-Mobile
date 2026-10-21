@@ -31,18 +31,22 @@ import kotlinx.coroutines.delay
 internal fun ReplyTargetHost(model: MessageTargetViewModel, value: MessageTargetState, session: SessionState,
     conversations: ConversationViewModel, direct: DirectThreadViewModel?, navigationReady: Boolean,
     roomId: Long?, peerId: Long?, onAccept: (TargetSnapshot) -> Boolean,
-    onDenied: (TargetRequest, ApiFailure) -> Unit, refreshSession: () -> Unit) {
+    onDenied: (TargetRequest, ApiFailure) -> Unit, refreshSession: () -> Unit, entryId: String? = null,
+    actualEntryId: () -> String? = { entryId }) {
     val activity = LocalActivity.current
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) model.background() }
     val request = value.request ?: return
-    val inPane = when (val target = request.target) {
+    val fromNotification = value.sourceEntryId != null
+    val inPane = if (fromNotification) entryId == value.sourceEntryId else when (val target = request.target) {
         is MessageTarget.RoomMessage -> target.roomId == roomId
         is MessageTarget.DirectMessage -> target.peerId == peerId
         is MessageTarget.RoomPing -> false // Not a reply; the notification/ping consumer is separate.
     }
-    LaunchedEffect(request, navigationReady, inPane) {
-        if (navigationReady && !inPane) model.cancel(request)
+    LaunchedEffect(request, entryId, navigationReady, inPane) {
+        val actual = actualEntryId()
+        // Nav state collection can briefly lag actual restoration/navigation. Unknown is not departure.
+        if (navigationReady && !inPane && (!fromNotification || actual != null && actual != value.sourceEntryId)) model.cancel(request)
     }
     if (!request.matches(session) || !inPane) return
     LaunchedEffect(request, value.error) {
@@ -60,28 +64,34 @@ internal fun ReplyTargetHost(model: MessageTargetViewModel, value: MessageTarget
     val room by conversations.state.collectAsStateWithLifecycle()
     val thread = direct?.state?.collectAsStateWithLifecycle()?.value
     val result = value.result
-    val canAdopt = when (result) {
+    val canAdopt = if (fromNotification) when (result) {
+        is TargetSnapshot.RoomMessage -> conversations.canPrepareTarget(result)
+        is TargetSnapshot.RoomPing -> conversations.canPrepareTarget(result)
+        is TargetSnapshot.DirectMessage -> direct?.canPrepareTarget(result) == true
+        else -> false
+    } else when (result) {
         is TargetSnapshot.RoomMessage -> !room.busy && !room.reading && conversations.canAdoptTarget(result)
         is TargetSnapshot.DirectMessage -> thread?.busy == false && direct.canAdoptTarget(result)
         else -> false
     }
-    val ready = !session.busy && !session.refreshRequired && !session.storageWarning && now >= session.retryAtMillis
+    val ready = navigationReady && !session.busy && !session.refreshRequired && !session.storageWarning && now >= session.retryAtMillis
     val available = !value.loading && !value.stale && result?.available == true
     LaunchedEffect(request, result, available, canAdopt, ready) {
         if (available && canAdopt && ready) model.adopt(request, onAccept)
     }
     AlertDialog(onDismissRequest = { model.cancel(request) }, modifier = Modifier.testTag("message_target_dialog"),
-        title = { Text(stringResource(R.string.message_target_title)) },
+        title = { Text(stringResource(if (request.target is MessageTarget.RoomPing) R.string.conversation_pings else R.string.message_target_title)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (value.loading) CircularProgressIndicator()
             val label = when {
                 now < session.retryAtMillis -> R.string.message_target_rate
                 !ready && !session.busy -> R.string.message_target_session
                 value.loading -> R.string.message_target_loading
-                value.error?.status in setOf(403, 404) && value.error?.code != "csrf_failed" -> R.string.message_target_unavailable
+                value.error?.status in setOf(403, 404) && value.error?.code != "csrf_failed" ->
+                    if (request.target is MessageTarget.RoomPing) R.string.ping_target_unavailable else R.string.message_target_unavailable
                 value.error?.kind == FailureKind.INCOMPATIBLE -> R.string.message_target_incompatible
                 value.error != null -> R.string.message_target_error
-                result?.available == false -> R.string.message_target_unavailable
+                result?.available == false -> if (request.target is MessageTarget.RoomPing) R.string.ping_target_unavailable else R.string.message_target_unavailable
                 else -> R.string.message_target_waiting
             }
             Text(stringResource(label))
@@ -93,7 +103,7 @@ internal fun ReplyTargetHost(model: MessageTargetViewModel, value: MessageTarget
             else if (!value.loading && (!available || value.error != null)) TextButton(onClick = { model.retry(request) },
                 enabled = ready) { Text(stringResource(R.string.retry)) }
             else if (available) TextButton(onClick = { model.adopt(request, onAccept) }, enabled = ready && canAdopt) {
-                Text(stringResource(R.string.message_target_open_quote))
+                Text(stringResource(if (request.target is MessageTarget.RoomPing) R.string.ping_target_open else R.string.message_target_open_quote))
             }
         },
         dismissButton = { TextButton(onClick = { model.cancel(request) }) { Text(stringResource(R.string.cancel)) } })

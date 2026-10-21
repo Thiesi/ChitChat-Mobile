@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 
 data class MessageTargetState(val request: TargetRequest? = null, val result: TargetSnapshot? = null,
     val loading: Boolean = false, val waitingForSession: Boolean = false, val stale: Boolean = true,
-    val error: ApiFailure? = null) { override fun toString() = "MessageTargetState" }
+    val error: ApiFailure? = null, val sourceEntryId: String? = null) { override fun toString() = "MessageTargetState" }
 
 /** Shared cancellable GET selection; not a native screen or permission to adopt/read a chat window. */
 class MessageTargetViewModel(private val operations: MessageTargetOperations) : ViewModel() {
@@ -37,11 +37,11 @@ class MessageTargetViewModel(private val operations: MessageTargetOperations) : 
         } else startIfNeeded()
     } } }
 
-    fun load(expected: SessionState, target: MessageTarget): TargetRequest? {
+    fun load(expected: SessionState, target: MessageTarget, sourceEntryId: String? = null): TargetRequest? {
         val request = TargetRequest(expected, target)
-        if (!request.matches(session.value) || !target.valid(expected.user?.id)) return null
+        if (!request.matches(session.value) || !target.valid(expected.user?.id) || sourceEntryId?.isBlank() == true) return null
         retire(); owner = session.value.targetOwner(); pending = true
-        mutable.value = MessageTargetState(request = request)
+        mutable.value = MessageTargetState(request = request, sourceEntryId = sourceEntryId)
         startIfNeeded(); return request
     }
     fun foreground() {

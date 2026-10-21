@@ -35,6 +35,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withTimeout
 
 data class TimelineAnchor(val id: Long, val offset: Int, val revision: Long = 0)
+class PingSelection internal constructor(val request: TargetRequest, val id: Long)
 data class ConversationUiState(
     val roomId: Long? = null, val context: ConversationContext? = null,
     val messages: List<RoomMessage> = emptyList(), val pings: List<RoomPing> = emptyList(),
@@ -50,6 +51,7 @@ data class ConversationUiState(
     val syncing: Boolean = false, val syncError: ApiFailure? = null,
     val newerAvailable: Boolean = false, val anchorUnavailable: Boolean = false,
     val draftsOpen: Boolean = false, val draftLimit: Boolean = false,
+    val pingSelection: PingSelection? = null,
 ) { override fun toString() = "ConversationUiState" }
 
 class ConversationViewModel(private val operations: ConversationOperations,
@@ -181,7 +183,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         else reload(current, explicitReconciliation = explicit)
     }
 
-    /** Reply navigation is same-room only; future cross-room routes need their own draft/entry handoff. */
+    /** Reply navigation adopts in place. Notification entry preparation below needs no temporary latest window. */
     fun canAdoptTarget(snapshot: TargetSnapshot.RoomMessage): Boolean = foreground && ready(session.value) &&
         snapshot.matches(session.value) && snapshot.available && snapshot.context.room.id == mutable.value.roomId &&
         !mutable.value.busy && !postInFlight && readJob?.isActive != true
@@ -199,6 +201,52 @@ class ConversationViewModel(private val operations: ConversationOperations,
     fun adoptTarget(snapshot: TargetSnapshot.RoomMessage): Boolean {
         val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.RoomMessage ?: return false
         if (!canAdoptTarget(fresh)) return false
+        return installTarget(fresh)
+    }
+
+    /** Root must bind this to the actual original navigation entry and consume/navigate synchronously. */
+    fun canPrepareTarget(snapshot: TargetSnapshot.RoomMessage): Boolean = ready(session.value) &&
+        snapshot.matches(session.value) && snapshot.available && !postInFlight && readJob?.isActive != true
+
+    fun prepareTarget(snapshot: TargetSnapshot.RoomMessage): Boolean {
+        val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.RoomMessage ?: return false
+        if (!canPrepareTarget(fresh)) return false
+        prepareRoom(fresh.context.room.id, fresh.request.original)
+        return installTarget(fresh).also { mutable.value = mutable.value.copy(notice = null) }
+    }
+
+    fun canPrepareTarget(snapshot: TargetSnapshot.RoomPing): Boolean = ready(session.value) &&
+        snapshot.matches(session.value) && snapshot.available && !postInFlight && readJob?.isActive != true
+
+    fun prepareTarget(snapshot: TargetSnapshot.RoomPing): Boolean {
+        val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.RoomPing ?: return false
+        if (!canPrepareTarget(fresh)) return false
+        prepareRoom(fresh.context.room.id, fresh.request.original)
+        mutable.value = mutable.value.copy(context = fresh.context, pings = fresh.pings, notice = null,
+            pingSelection = PingSelection(fresh.request, fresh.request.target.id))
+        return true // The modal intent exists BEFORE root navigation/actor consumption can expose chat.
+    }
+
+    fun dismissTargetPing(choice: PingSelection) {
+        val target = choice.request.target as? MessageTarget.RoomPing ?: return
+        if (mutable.value.pingSelection !== choice || !choice.request.matches(session.value) ||
+            !belongsTo(choice.request.original) || target.roomId != mutable.value.roomId) return
+        visibleNewest = null
+        mutable.value = mutable.value.copy(pingSelection = null, atLatest = false) // Closing is not viewport proof.
+    }
+
+    private fun prepareRoom(roomId: Long, expected: SessionState) {
+        background() // Only GET work can be active; the guards reject send/read POSTs before this call.
+        if (mutable.value.roomId != roomId) {
+            realtime?.selectRoom(null, false); dividerEstablished = false
+            val memo = savedDrafts.value[roomId]?.takeIf { it.matches(expected) }
+            mutable.value = ConversationUiState(roomId = roomId, draft = memo?.body.orEmpty(),
+                uncertainSend = memo?.uncertain == true)
+        }
+        deliberateSelection = true
+    }
+
+    private fun installTarget(fresh: TargetSnapshot.RoomMessage): Boolean {
         val target = fresh.request.target as? MessageTarget.RoomMessage ?: return false
         val value = mutable.value
         stopSync() // GET work only: active send/read POSTs were rejected above, never cancelled/replayed.
@@ -208,6 +256,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         mutable.value = value.copy(context = fresh.context, messages = fresh.page.messages, pings = fresh.pings,
             loaded = true, stale = false, syncing = false, syncError = null, latestWindow = false,
             fixedUpper = target.id, highlightedMessageId = target.id, atLatest = false,
+            pingSelection = null,
             olderCursor = fresh.page.olderCursor, mayHaveOlder = fresh.page.mayHaveOlder,
             anchor = viewport, anchorUnavailable = false, newerAvailable = true, revealed = emptySet(),
             error = value.error.takeIf { value.uncertainSend }, validation = null,
@@ -317,7 +366,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         val value = mutable.value
         val current = session.value
         val context = value.context ?: return false
-        return ready(current) && canEditDraft() && !value.stale && !value.uncertainSend && activePresence() && context.room.isMember &&
+        return ready(current) && value.pingSelection == null && canEditDraft() && !value.stale && !value.uncertainSend && activePresence() && context.room.isMember &&
             (!current.user!!.guest || context.room.guestAccess == "write") && context.mute == null
     }
 
@@ -326,7 +375,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         viewport = anchor
         visibleNewest = newestVisibleId
         val value = mutable.value
-        val edge = atEdge && value.latestWindow
+        val edge = atEdge && value.latestWindow && value.pingSelection == null
         if (edge != value.atLatest) mutable.value = value.copy(atLatest = edge)
         val newest = value.messages.lastOrNull()?.id ?: return
         if (!foreground || !edge || newestVisibleId != newest || value.busy || value.stale || !activePresence() || readJob?.isActive == true ||
@@ -542,7 +591,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         mutable.value = mutable.value.copy(context = null, messages = emptyList(), pings = emptyList(),
             loaded = false, stale = true, busy = false, sending = false, error = error, revealed = emptySet(),
             unreadDividerId = null, olderCursor = null, mayHaveOlder = false, anchor = null, readCursor = 0,
-            fixedUpper = null, highlightedMessageId = null,
+            fixedUpper = null, highlightedMessageId = null, pingSelection = null,
             uncertainSend = uncertain, reconciledAfterUncertain = false)
         dividerEstablished = false
         rememberDraft()

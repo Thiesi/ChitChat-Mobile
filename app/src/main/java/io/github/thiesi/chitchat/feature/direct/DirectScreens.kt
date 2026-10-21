@@ -135,7 +135,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
 
 @Composable
 fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSession: () -> Unit,
-    targets: MessageTargetViewModel? = null, obscured: Boolean = false) {
+    targets: MessageTargetViewModel? = null, obscured: Boolean = false, isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     val connection = model.realtime?.state?.collectAsStateWithLifecycle()?.value?.takeIf { it.generation == session.generation }
@@ -208,8 +208,10 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 if (highlighted) RequestedMessageMarker(message.id)
                                 if (message.id == state.unreadDividerId) Text(stringResource(R.string.dm_new_divider), style = MaterialTheme.typography.labelMedium)
                                 DirectMessageRow(message, state.context, targets?.let { coordinator -> { id ->
-                                    focus.clearFocus()
-                                    coordinator.load(displayedSession, MessageTarget.DirectMessage(peer, id))
+                                    if (isCurrentEntry()) {
+                                        focus.clearFocus()
+                                        coordinator.load(displayedSession, MessageTarget.DirectMessage(peer, id))
+                                    }
                                     Unit
                                 } })
                             }
@@ -240,10 +242,10 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             }
                         }
                         MessageInput(state.draft, { value ->
-                            if (model.updateDraft(displayedSession, peer, value))
+                            if (isCurrentEntry() && model.updateDraft(displayedSession, peer, value))
                                 model.typing?.input(displayedSession, TypingTarget.Direct(peer), hasTypingContent(value)) }, !state.sending && model.canEditDraft(),
                             stringResource(R.string.dm_message), compact, Modifier.weight(1f).testTag("dm_composer"))
-                        Button(onClick = { model.send(displayedSession, peer) }, enabled = ready && model.canSend(), modifier = Modifier.testTag("dm_send")) { Text(stringResource(R.string.dm_send)) }
+                        Button(onClick = { if (isCurrentEntry()) model.send(displayedSession, peer) }, enabled = ready && model.canSend(), modifier = Modifier.testTag("dm_send")) { Text(stringResource(R.string.dm_send)) }
                     }
                 }
             }

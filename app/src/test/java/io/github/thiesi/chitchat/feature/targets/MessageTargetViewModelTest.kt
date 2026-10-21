@@ -49,6 +49,24 @@ class MessageTargetViewModelTest {
         val result = model.consume(request); assertNotNull(result); assertTrue(result!!.matches(operations.session.value))
         assertNull(model.consume(request)); assertNull(model.state.value.request); assertNull(model.state.value.result)
     }
+    @Test fun sourceEntryIdentitySurvivesBackgroundButIsClearedOnlyAfterAcceptedConsumption() = runTest(dispatcher) {
+        model.foreground(); val request = checkNotNull(model.load(operations.session.value, a, "source-entry")); runCurrent()
+        model.background(); assertEquals("source-entry", model.state.value.sourceEntryId); assertNull(model.state.value.result)
+        model.foreground(); runCurrent(); assertFalse(model.adopt(request) { false })
+        assertEquals("source-entry", model.state.value.sourceEntryId)
+        assertTrue(model.adopt(request) { true }); assertNull(model.state.value.sourceEntryId); assertEquals(2, operations.calls.size)
+    }
+    @Test fun blankOriginAndStaleCloseCannotReplaceOrRetireTheSuccessorsOrigin() = runTest(dispatcher) {
+        model.foreground(); val old = checkNotNull(model.load(operations.session.value, a, "old-entry")); runCurrent()
+        val next = checkNotNull(model.load(operations.session.value, b, "new-entry")); runCurrent()
+        assertNull(model.load(operations.session.value, a, " ")); model.cancel(old); model.retry(old); runCurrent()
+        assertSame(next, model.state.value.request); assertEquals("new-entry", model.state.value.sourceEntryId)
+    }
+    @Test fun ownerReplacementRetiresOriginAlongWithPrivateResultsBeforeANewEntryCanLoad() = runTest(dispatcher) {
+        model.foreground(); checkNotNull(model.load(operations.session.value, a, "old-entry")); runCurrent()
+        operations.session.value = operations.session.value.copy(generation = 2); runCurrent()
+        assertNull(model.state.value.sourceEntryId); assertNull(model.state.value.request); assertNull(model.state.value.result)
+    }
     @Test fun unavailableTargetIsNormalEvidenceAndCannotBeConsumedAsAFoundMessage() = runTest(dispatcher) {
         operations.found = false; model.foreground(); val request = load(); runCurrent()
         assertNotNull(model.state.value.result); assertFalse(model.state.value.result!!.available)
