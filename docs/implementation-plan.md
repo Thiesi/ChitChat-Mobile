@@ -26,6 +26,8 @@ M2 is split to keep authentication changes reviewable: **M2a** adds HTTPS connec
 
 ## Repeated milestone handoff record
 
+[M5a1](milestones/M5a1-reply-composer-state.md) prepares existing room/DM reply contracts and scoped draft/selection state, not native Reply/Copy controls. The combined candidate exceeded the complete-review input budget; preserve the consumer and verify/review each independently buildable slice. Continue into the native consumer after delivery without routine confirmation; do not count this prerequisite as usable reply creation.
+
 [M4c4d](milestones/M4c4d-native-notification-destinations.md) adds guarded native destinations (552 JVM/125 native locally); exact-head CI/reviews precede delivery. Supersedes earlier pending-routing handoffs. Push, guest links, search and live acceptance remain separate; continue autonomously.
 
 [Native IME diagnostics](milestones/native-ime-diagnostics.md) temporarily precedes general notification routing after independent merged-main39541317813 failed112/113. Add scalar window observations and failure-only filtered CI metadata without retrying taps/tests or guessing a production correction. Finish its own build/native/review gates, then continue the functional target consumer. Issue31 remains open; this does not complete additional parity.

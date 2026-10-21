@@ -181,7 +181,7 @@ class RoomIgnoreJourneyTest {
             return MessagePage(page, page.firstOrNull()?.id, false)
         }
         override suspend fun pings(roomId: Long) = emptyList<RoomPing>()
-        override suspend fun send(roomId: Long, body: String): SendResult { sends++; error("No send expected") }
+        override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult { sends++; error("No send expected") }
         override suspend fun read(roomId: Long, messageId: Long): Long { read.set(messageId); return messageId }
     }
     private class Events : RealtimeController {

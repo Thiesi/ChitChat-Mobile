@@ -92,7 +92,7 @@ class AuthJourneyTest {
             override suspend fun history(roomId: Long, beforeId: Long?, limit: Int) = MessagePage(listOf(
                 RoomMessage(80, 42, 8, "Bob", "text", "Navigation private fixture", false, "2026-07-17T08:00:00Z")), 80, false)
             override suspend fun pings(roomId: Long) = emptyList<RoomPing>()
-            override suspend fun send(roomId: Long, body: String): SendResult = error("Unconfigured fixture")
+            override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult = error("Unconfigured fixture")
             override suspend fun read(roomId: Long, messageId: Long) = messageId
         }
         val roomModel = RoomsViewModel(roomOperations)

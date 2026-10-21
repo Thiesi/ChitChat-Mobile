@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.thiesi.chitchat.core.direct.*
+import io.github.thiesi.chitchat.core.conversation.ComposerReply
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
@@ -25,7 +26,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class DirectAnchor(val id: Long, val offset: Int, val revision: Long = 0)
-class DirectDraft(val peer: Long, val name: String?, val body: String, val uncertain: Boolean, val checked: Boolean)
+class DirectDraft(val peer: Long, val name: String?, val body: String, val uncertain: Boolean, val checked: Boolean,
+    val composerReply: ComposerReply? = null)
 data class DirectAttention(val ids: Set<Long> = emptySet(), val additionalMayBeRead: Boolean = false) {
     override fun toString() = "DirectAttention"
 }
@@ -39,7 +41,7 @@ data class DirectThreadState(val peerId: Long? = null, val context: DirectContex
     val error: ApiFailure? = null, val readError: ApiFailure? = null, val validation: String? = null,
     val uncertainSend: Boolean = false, val checkedUnknown: Boolean = false, val uncertainRead: Boolean = false,
     val uncertainBlock: Boolean = false, val confirmedSendId: Long? = null, val draftLimit: Boolean = false,
-    val unreadDividerId: Long? = null) { override fun toString() = "DirectThreadState" }
+    val unreadDividerId: Long? = null, val composerReply: ComposerReply? = null) { override fun toString() = "DirectThreadState" }
 
 /** One serialized operation per thread: hints queue behind writes, never cancel/replay a POST. */
 class DirectThreadViewModel(private val operations: DirectOperations,
@@ -86,7 +88,7 @@ class DirectThreadViewModel(private val operations: DirectOperations,
             viewport = null; visibleNewest = null
             val memo = savedDrafts.value[peer]
             mutable.value = DirectThreadState(peerId = peer, draft = memo?.body.orEmpty(),
-                uncertainSend = memo?.uncertain == true, checkedUnknown = memo?.checked == true)
+                uncertainSend = memo?.uncertain == true, checkedUnknown = memo?.checked == true, composerReply = memo?.composerReply)
         }
         if (!mutable.value.loaded) invalidate() // Entry is not explicit uncertain-send reconciliation/consent.
     }
@@ -166,7 +168,7 @@ class DirectThreadViewModel(private val operations: DirectOperations,
             seen = emptySet(); attemptedRead = 0; viewport = null; visibleNewest = null
             val memo = savedDrafts.value[fresh.context.peer.id]
             mutable.value = DirectThreadState(peerId = fresh.context.peer.id, draft = memo?.body.orEmpty(),
-                uncertainSend = memo?.uncertain == true) // A target GET is never checkedUnknown consent.
+                uncertainSend = memo?.uncertain == true, composerReply = memo?.composerReply) // A target GET is never checkedUnknown consent.
         }
         return installTarget(fresh)
     }
@@ -355,18 +357,38 @@ class DirectThreadViewModel(private val operations: DirectOperations,
         mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false)
         rememberDraft(); return true
     }
+    fun canUseMessage(expected: SessionState, peer: Long?, message: DirectMessage): Boolean {
+        val value = mutable.value
+        return active && selected(expected, peer) && ready() && value.context != null &&
+            value.messages.any { it === message } && !message.deleted && message.id > 0
+    }
+    fun canReplyTo(expected: SessionState, peer: Long?, message: DirectMessage) =
+        canUseMessage(expected, peer, message) && canSend() && canEditDraft() && !mutable.value.sending
+    fun replyTo(expected: SessionState, peer: Long?, message: DirectMessage): Boolean {
+        if (!canReplyTo(expected, peer, message)) return false
+        mutable.value = mutable.value.copy(composerReply = ComposerReply(message.id), validation = null,
+            error = mutable.value.error?.takeUnless { it.code == "invalid_reply_target" })
+        rememberDraft(); return true
+    }
+    fun cancelReply(expected: SessionState, peer: Long?, original: ComposerReply) {
+        val value = mutable.value
+        if (!active || !selected(expected, peer) || value.sending || value.composerReply !== original) return
+        mutable.value = value.copy(composerReply = null, draftLimit = false,
+            error = value.error?.takeUnless { it.code == "invalid_reply_target" })
+        rememberDraft()
+    }
     fun discardSavedDraft(peer: Long) {
         if (!currentIdentity() || mutable.value.sending) return
         savedDrafts.value = savedDrafts.value - peer
-        if (mutable.value.peerId == peer) mutable.value = mutable.value.copy(draft = "", uncertainSend = false,
+        if (mutable.value.peerId == peer) mutable.value = mutable.value.copy(draft = "", composerReply = null, uncertainSend = false,
             checkedUnknown = false, draftLimit = false)
     }
     private fun rememberDraft() {
         if (!currentIdentity()) return
         val value = mutable.value; val peer = value.peerId ?: return
-        savedDrafts.value = if (value.draft.isEmpty() && !value.uncertainSend) savedDrafts.value - peer else
+        savedDrafts.value = if (value.draft.isEmpty() && !value.uncertainSend && value.composerReply == null) savedDrafts.value - peer else
             savedDrafts.value + (peer to DirectDraft(peer, value.context?.peer?.username, value.draft,
-                value.uncertainSend, value.checkedUnknown))
+                value.uncertainSend, value.checkedUnknown, value.composerReply))
     }
     fun canSend() = active && ready() && mutable.value.let { !it.busy && !it.stale && it.loaded &&
         !it.uncertainSend && !it.uncertainBlock && it.context?.relationship?.messagingAvailable == true &&
@@ -375,15 +397,16 @@ class DirectThreadViewModel(private val operations: DirectOperations,
     fun send() {
         if (!canSend()) return
         val body = mutable.value.draft
+        val reply = mutable.value.composerReply
         val typingSession = session.value
         validateDirectBody(body)?.let { mutable.value = mutable.value.copy(validation = it); return }
         mutable.value = mutable.value.copy(sending = true, confirmedSendId = null)
         start { peer ->
             write = Write.SEND
-            val confirmed = checked { operations.send(peer, body) }
+            val confirmed = checked { operations.send(peer, body, reply?.messageId) }
             typing?.sent(typingSession, TypingTarget.Direct(peer))
             write = null
-            mutable.value = mutable.value.copy(draft = "", sending = false, uncertainSend = false,
+            mutable.value = mutable.value.copy(draft = "", composerReply = null, sending = false, uncertainSend = false,
                 checkedUnknown = false, confirmedSendId = confirmed)
             rememberDraft()
             reload(peer, latest = true)

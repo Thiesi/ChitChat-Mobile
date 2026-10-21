@@ -33,9 +33,9 @@ internal class SessionConversationRepository(private val sessions: SessionReposi
         val access = sessions.openAccess()
         return sessions.authorized(access) { roomPings(roomId, access.userId) }
     }
-    override suspend fun send(roomId: Long, body: String): SendResult {
+    override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult {
         val access = sessions.openAccess()
-        return sessions.authorized(access) { sendRoomMessage(roomId, body, access.csrf, access.userId) }
+        return sessions.authorized(access) { sendRoomMessage(roomId, body, access.csrf, access.userId, replyId) }
     }
     override suspend fun read(roomId: Long, messageId: Long): Long {
         val access = sessions.openAccess()

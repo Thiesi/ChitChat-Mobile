@@ -57,11 +57,12 @@ interface ConversationOperations {
     suspend fun window(roomId: Long, lowerInclusive: Long, upperInclusive: Long? = null): WindowSnapshot =
         readCanonicalRoomWindow(roomId, lowerInclusive, upperInclusive) { before, limit -> history(roomId, before, limit) }
     suspend fun pings(roomId: Long): List<RoomPing>
-    suspend fun send(roomId: Long, body: String): SendResult
+    suspend fun send(roomId: Long, body: String, replyId: Long? = null): SendResult
     suspend fun read(roomId: Long, messageId: Long): Long
 }
 
 internal fun String.phpTrim() = trim { it in " \t\n\r\u0000\u000B" }
+internal fun isPrivatePingCommand(input: String) = input.phpTrim().let { it == "/ping" || it.startsWith("/ping ") }
 
 /** PDO history timestamps use a space and may end in +00; pings use DATE_ATOM. */
 fun serverInstant(value: String): Instant? = runCatching {
@@ -72,7 +73,7 @@ fun serverInstant(value: String): Instant? = runCatching {
 fun validateMessageBody(input: String): String? {
     val body = input.phpTrim()
     if (body.isEmpty()) return "empty_message"
-    if (body == "/ping" || body.startsWith("/ping ")) {
+    if (isPrivatePingCommand(body)) {
         val arguments = body.substring(5).phpTrim()
         if (arguments.isEmpty()) return "invalid_ping_command"
         val message = arguments.split(Regex("\\s+"), limit = 2).getOrElse(1) { "" }.phpTrim()

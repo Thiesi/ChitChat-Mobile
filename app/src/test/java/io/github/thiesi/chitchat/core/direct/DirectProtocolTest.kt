@@ -123,6 +123,32 @@ class DirectProtocolTest {
         assertEquals(8L, payload["recipient_user_id"]!!.jsonPrimitive.long); assertEquals(c, request.headers["X-CSRF-Token"])
     }
 
+    @Test fun replySendCarriesTheExactReferenceAndReturnsTheKnownIdWithoutAnotherGet() = runTest {
+        login(); context()
+        val reply = """{"kind":"direct","message_id":9,"available":false,"message":null}"""
+        server.enqueue(json("""{"message":${wire(20, "Answer", true, reply = reply)}}""", 201))
+        val count = server.requestCount
+        assertEquals(20L, direct.send(8, "Answer", 9))
+        assertEquals(count + 1, server.requestCount)
+        val request = take(); val payload = apiJson.parseToJsonElement(request.body!!.utf8()).jsonObject
+        assertEquals("/api/v1/direct-messages/send.php", request.url.encodedPath)
+        assertEquals(8L, payload.getValue("recipient_user_id").jsonPrimitive.long)
+        assertEquals(9L, payload.getValue("reply_to_message_id").jsonPrimitive.long)
+        assertEquals(c, request.headers["X-CSRF-Token"])
+    }
+    @Test fun aMissingReplyAcknowledgmentIsNotAcceptedOrReplayedAsAnOrdinaryDirectSend() = runTest {
+        login(); context(); val count = server.requestCount
+        server.enqueue(json("""{"message":${wire(20, "Answer", true)}}""", 201))
+        assertEquals(FailureKind.INCOMPATIBLE, failure { direct.send(8, "Answer", 9) }.kind)
+        assertEquals(count + 1, server.requestCount)
+    }
+    @Test fun anExpiredDirectReplyRemainsAnExplicitErrorWithoutAnOrdinaryFallback() = runTest {
+        login(); context(); val count = server.requestCount
+        server.enqueue(json("""{"error":{"code":"invalid_reply_target","message":"Original unavailable"}}""", 400))
+        val error = failure { direct.send(8, "Answer", 9) }
+        assertEquals(400, error.status); assertEquals("invalid_reply_target", error.code)
+        assertEquals(count + 1, server.requestCount)
+    }
     @Test fun wholePeerReadCanAcknowledgeAnArrivalNotInTheRenderedHistory() = runTest {
         login(); context(); page(wire(), mutation()); val rendered = direct.history(8).messages.map { it.id }.toSet()
         repeat(3) { take() }; server.enqueue(json("""{"updated":2}""")); assertEquals(2, direct.read(8)); take()

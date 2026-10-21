@@ -382,7 +382,7 @@ class ConversationJourneyTest {
             return MessagePage(page, page.firstOrNull()?.id, beforeId == null && olderMessages.isNotEmpty())
         }
         override suspend fun pings(roomId: Long) = pingList
-        override suspend fun send(roomId: Long, body: String): SendResult {
+        override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult {
             sends++; sendFailure?.let { throw it }
             if (pingResult) return SendResult.Ping(ping())
             val result = message(4, body); messages = messages + result; return SendResult.Message(result)

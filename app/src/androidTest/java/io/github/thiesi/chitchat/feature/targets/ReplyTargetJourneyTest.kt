@@ -239,7 +239,7 @@ class ReplyTargetJourneyTest {
             return MessagePage(enriched, page.firstOrNull()?.id, page.size == limit)
         }
         override suspend fun pings(roomId: Long) = emptyList<RoomPing>()
-        override suspend fun send(roomId: Long, body: String): SendResult {
+        override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult {
             check(roomId == 42L); sends.incrementAndGet(); val row = roomRow(101, body, own = true); rows = rows + row
             return SendResult.Message(row)
         }

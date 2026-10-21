@@ -97,6 +97,44 @@ class ConversationHttpTest {
         }
         assertEquals(bad.size, server.requestCount)
     }
+    private fun replyMessage(target: Long) = message().dropLast(1) +
+        """, "reply_to":{"kind":"room","message_id":$target,"available":false,"message":null}}"""
+    @Test fun replyUsesTheExistingSendAndPreservesAnUnavailableCanonicalReference() = runTest {
+        server.enqueue(json("""{"message":${replyMessage(70)}}""", 201))
+        val sent = api.sendRoomMessage(42, "Answer", csrf, 7, 70) as SendResult.Message
+        assertEquals(70L, sent.message.replyTo?.messageId); assertFalse(sent.message.replyTo!!.available)
+        val request = server.takeRequest()
+        assertEquals("/api/v1/rooms/send.php", request.url.encodedPath)
+        assertEquals(csrf, request.headers["X-CSRF-Token"])
+        assertEquals("""{"room_id":42,"body":"Answer","reply_to_message_id":70}""", request.body!!.utf8())
+        assertEquals(1, server.requestCount) // No fallible original/enrichment GET after a confirmed POST.
+    }
+    @Test fun missingOrDifferentReplyAcknowledgmentIsNotAnOrdinarySendSuccess() = runTest {
+        for ((requestId, response) in listOf(70L to message(), 70L to replyMessage(71), null to replyMessage(70))) {
+            server.enqueue(json("""{"message":$response}""", 201))
+            assertEquals(FailureKind.INCOMPATIBLE, failure { api.sendRoomMessage(42, "Answer", csrf, 7, requestId) }.kind)
+        }
+        assertEquals(3, server.requestCount)
+    }
+    @Test fun aSelectedReplyDoesNotChangeTheServersPrivatePingSemantics() = runTest {
+        server.enqueue(json("""{"ping":${ping()}}""", 201))
+        assertEquals(3L, (api.sendRoomMessage(42, "/ping Bob Private nudge", csrf, 7, 70) as SendResult.Ping).ping.id)
+        assertTrue(server.takeRequest().body!!.utf8().contains("\"reply_to_message_id\":70"))
+        assertEquals(1, server.requestCount)
+    }
+    @Test fun nonPositiveReplyIdsNeverReachTheTransport() = runTest {
+        for (id in listOf(0L, -1L)) {
+            try { api.sendRoomMessage(42, "Answer", csrf, 7, id); fail("Invalid reply accepted") }
+            catch (_: IllegalArgumentException) { }
+        }
+        assertEquals(0, server.requestCount)
+    }
+    @Test fun anExpiredReplyIsNotReplayedOrSilentlyDowngradedToAnOrdinaryMessage() = runTest {
+        server.enqueue(json("""{"error":{"code":"invalid_reply_target","message":"Original unavailable"}}""", 400))
+        val error = failure { api.sendRoomMessage(42, "Answer", csrf, 7, 70) }
+        assertEquals(400, error.status); assertEquals("invalid_reply_target", error.code)
+        assertEquals(1, server.requestCount)
+    }
     @Test fun serverErrorsKeepStatusCodeAndNeverReplayMessagePosts() = runTest {
         val errors = listOf("unauthenticated" to 401, "csrf_failed" to 403, "muted" to 403,
             "membership_required" to 403, "guest_read_only" to 403, "ping_target_not_found" to 404,

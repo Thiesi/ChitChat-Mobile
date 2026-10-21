@@ -44,7 +44,7 @@ internal class NotificationRoutingFixtures(val sessions: TestSessions) {
         override suspend fun pings(roomId: Long) = (100L downTo 1L).map {
             RoomPing(it, roomId, MessagePerson(if (it == 80L) 8 else 9, "Peer"), MessagePerson(7, "Viewer"), "Private ping $it", timestamp)
         }
-        override suspend fun send(roomId: Long, body: String): SendResult {
+        override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult {
             sends++; sendFailure?.let { throw it }
             return SendResult.Message(RoomMessage(101, roomId, 7, "Viewer", "text", body, false, timestamp))
         }
