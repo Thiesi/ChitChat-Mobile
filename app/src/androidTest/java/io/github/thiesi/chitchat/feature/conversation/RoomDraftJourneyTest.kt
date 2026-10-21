@@ -7,9 +7,9 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
@@ -76,6 +76,13 @@ class RoomDraftJourneyTest {
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Viewer")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         dismissIme()
+        if (InstrumentationRegistry.getArguments().getString("cancelFixtureAutofill") == "true") {
+            // Only this synthetic login's Activity context; never disable the device's service.
+            // Otherwise a provider's save-password modal can cover subsequent keyboard journeys.
+            compose.runOnIdle {
+                compose.activity.getSystemService(android.view.autofill.AutofillManager::class.java)?.cancel()
+            }
+        }
         compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.AUTHENTICATED }
         compose.runOnIdle { sessions.state.value = sessions.state.value.copy(shareTyping = true,
@@ -114,7 +121,10 @@ class RoomDraftJourneyTest {
     }
     private fun input() = compose.tapNativeInput("conversation_composer", { ime })
     private fun draft(value: String) = compose.onNodeWithTag("conversation_composer").assert(
-        SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(value)))
+        // Preserve every character, not IME/platform annotations on the editable text.
+        SemanticsMatcher("EditableText has the complete expected fixture body") {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == value
+        })
     private fun details() = compose.onNodeWithContentDescription(text(R.string.conversation_details)).assertIsDisplayed().performClick()
     private fun dialogButton(id: Int) = compose.onNode(hasText(text(id)) and hasAnyAncestor(isDialog()))
 

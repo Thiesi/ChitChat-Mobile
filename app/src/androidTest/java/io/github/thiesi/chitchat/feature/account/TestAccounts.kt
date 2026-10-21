@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.feature.account
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.app.ChitChatApp
 import io.github.thiesi.chitchat.app.SettingsViewModel
 import io.github.thiesi.chitchat.app.EmptyRoomOperations
@@ -73,6 +74,16 @@ internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel, a
     val accountModel = account ?: remember(auth) { AccountViewModel(TestAccounts(auth.state)) }
     val rooms = roomModel ?: remember(auth) { RoomsViewModel(EmptyRoomOperations(auth.state)) }
     val conversations = conversationModel ?: remember(auth) { ConversationViewModel(EmptyConversationOperations(auth.state)) }
-    ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox,
-        directThread = directThread, messageTargets = messageTargets, notifications = notifications)
+    // An interceptor changes the pipeline even when it delegates correctly. Normal gates must
+    // exercise the original pipeline; enable this only for an explicitly labelled diagnostic run.
+    val traceInput = remember {
+        InstrumentationRegistry.getArguments().getString("traceNativeInput") == "true"
+    }
+    if (traceInput) io.github.thiesi.chitchat.testing.ObserveNativeTextInput {
+        ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox,
+            directThread = directThread, messageTargets = messageTargets, notifications = notifications)
+    } else {
+        ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox,
+            directThread = directThread, messageTargets = messageTargets, notifications = notifications)
+    }
 }
