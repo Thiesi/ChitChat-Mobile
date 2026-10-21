@@ -70,7 +70,7 @@ class ConversationIgnorePolicyTest {
             pingCalls++
             return listOf(RoomPing(9, 42, MessagePerson(8, "Peer"), MessagePerson(7, "Viewer"), "Private fixture", "2026-10-20T12:00:00Z"))
         }
-        override suspend fun send(roomId: Long, body: String): SendResult { sends++; error("No POST expected") }
+        override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult { sends++; error("No POST expected") }
         override suspend fun read(roomId: Long, messageId: Long) = messageId
     }
     private class Events : RealtimeController {

@@ -414,7 +414,7 @@ class ConversationRealtimeTest {
         }
         override suspend fun pings(roomId: Long) = listOf(RoomPing(9, roomId, MessagePerson(8, "Other"),
             MessagePerson(7, "Viewer"), "Private ping", "2026-10-20T12:00:00Z"))
-        override suspend fun send(roomId: Long, body: String): SendResult {
+        override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult {
             sends++; val acknowledged = message((rows(roomId).lastOrNull()?.id ?: 0) + 1, roomId, 7)
             sendGate?.let { withContext(NonCancellable) { it.await() } }
             sendFailure?.let { throw it }

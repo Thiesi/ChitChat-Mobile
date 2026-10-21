@@ -9,6 +9,6 @@ internal class EmptyConversationOperations(override val session: StateFlow<Sessi
     override suspend fun context(roomId: Long): ConversationContext = error("Unconfigured fixture")
     override suspend fun history(roomId: Long, beforeId: Long?, limit: Int) = MessagePage(emptyList(), null, false)
     override suspend fun pings(roomId: Long) = emptyList<RoomPing>()
-    override suspend fun send(roomId: Long, body: String): SendResult = error("Unconfigured fixture")
+    override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult = error("Unconfigured fixture")
     override suspend fun read(roomId: Long, messageId: Long): Long = error("Unconfigured fixture")
 }

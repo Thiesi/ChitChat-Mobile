@@ -21,6 +21,11 @@ class ConversationPolicyTest {
         assertEquals("ping_too_long", validateMessageBody("/ping Alice " + "😀".repeat(501)))
         assertEquals("unknown_command", validateMessageBody("/ping\tAlice"))
     }
+    @Test fun composerAndTransportClassifyPrivatePingsWithTheSamePhpWhitespaceRules() {
+        for (text in listOf("/ping", "/ping Alice", " \t\n/ping Alice \r")) assertTrue(isPrivatePingCommand(text))
+        for (text in listOf("/pinged Alice", "/PING Alice", "/ping\tAlice", "\u00a0/ping Alice", "Hello /ping Alice"))
+            assertFalse(isPrivatePingCommand(text))
+    }
     @Test fun timestampParserAcceptsActualPdoAndDateAtomShapesWithoutDeviceTimezoneGuessing() {
         val expected = Instant.parse("2026-07-17T08:00:00Z")
         for (text in listOf("2026-07-17 08:00:00+00", "2026-07-17T08:00:00+00:00", "2026-07-17T10:00:00+02:00"))

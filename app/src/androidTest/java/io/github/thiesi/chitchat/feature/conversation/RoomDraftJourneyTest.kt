@@ -207,7 +207,7 @@ class RoomDraftJourneyTest {
             return MessagePage(rows, rows.firstOrNull()?.id, false)
         }
         override suspend fun pings(roomId: Long) = emptyList<RoomPing>()
-        override suspend fun send(roomId: Long, body: String): SendResult {
+        override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult {
             sends.incrementAndGet(); failure?.let { throw it }
             val acknowledged = RoomMessage(4, roomId, 7, "Viewer", "text", body, false, "2026-10-20T12:00:00Z")
             sent[roomId] = acknowledged

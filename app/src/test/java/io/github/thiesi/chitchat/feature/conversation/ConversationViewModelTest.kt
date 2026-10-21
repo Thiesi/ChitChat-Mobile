@@ -271,7 +271,7 @@ class ConversationViewModelTest {
             return MessagePage(messages, messages.firstOrNull()?.id, beforeId == null)
         }
         override suspend fun pings(roomId: Long) = pingList
-        override suspend fun send(roomId: Long, body: String): SendResult {
+        override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult {
             sends++; lastBody = body; gate?.let { withContext(NonCancellable) { it.await() } }
             sendFailure?.let { throw it }
             // The server changes independently; a cancelled native response must still be rejected.

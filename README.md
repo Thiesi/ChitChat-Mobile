@@ -16,6 +16,8 @@ The independent merged-main native run then failed 112/113 on the known focused-
 
 Room and DM reply previews open the exact original as a marked historical window, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Reply composition and search remain pending. See [reply-target scope](docs/milestones/M4c4b2-native-reply-targets.md).
 
+[M5a1 reply protocol/state](docs/milestones/M5a1-reply-composer-state.md) prepares scoped reply drafts and existing send contracts. Native Reply/Copy controls follow separately; this prerequisite does not make reply creation usable yet.
+
 ## Engineering documents
 
 M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native announcements. M3c3a/b add bounded canonical history and native room/directory/presence consumers. An open event connection does not prove current history; stale/gap/retry states remain explicit. See actual checks and acceptance limits below.

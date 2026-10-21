@@ -188,7 +188,7 @@ class ConversationRealtimeJourneyTest {
         }
         override suspend fun pings(roomId: Long) = emptyList<RoomPing>()
         override suspend fun read(roomId: Long, messageId: Long): Long { reads++; lastRead = messageId; return messageId }
-        override suspend fun send(roomId: Long, body: String): SendResult { sends++; error("Unexpected fixture send") }
+        override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult { sends++; error("Unexpected fixture send") }
     }
     private class Directory(override val session: MutableStateFlow<SessionState>) : RoomOperations {
         var lists = 0

@@ -135,7 +135,7 @@ class CanonicalRoomWindowTest {
             }
             override suspend fun context(roomId: Long): ConversationContext = error("Unused")
             override suspend fun pings(roomId: Long): List<RoomPing> = error("Unused")
-            override suspend fun send(roomId: Long, body: String): SendResult = error("Unused")
+            override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult = error("Unused")
             override suspend fun read(roomId: Long, messageId: Long): Long = error("Unused")
         }
         assertEquals(80L, operations.window(42, 80, 90).messages.single().id); assertEquals(1, reads)

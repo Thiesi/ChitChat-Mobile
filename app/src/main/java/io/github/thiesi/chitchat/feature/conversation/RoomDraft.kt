@@ -2,10 +2,11 @@ package io.github.thiesi.chitchat.feature.conversation
 
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
+import io.github.thiesi.chitchat.core.conversation.ComposerReply
 
 /** Unsent input, never server message storage or saved-instance state. No generated content string. */
 class RoomDraft internal constructor(private val owner: RoomDraftAccount, val roomId: Long,
-    val roomName: String?, val body: String, val uncertain: Boolean) {
+    val roomName: String?, val body: String, val uncertain: Boolean, val composerReply: ComposerReply? = null) {
     internal fun matches(session: SessionState) = owner == session.roomDraftAccount()
 }
 

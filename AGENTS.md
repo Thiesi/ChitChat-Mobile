@@ -50,6 +50,8 @@
 - Live room/DM send/read/edit/delete is approved ONLY for dedicated non-admin test accounts and dedicated private fixtures; never mutate existing real rooms/users/content. Ordinary members cannot create rooms: operator provisioning/membership is required, not elevation/admin credentials. Keep all credentials in ignored user-owned `.env.integration`, consumed only by an explicitly invoked opt-in task. Fixture approval is not a successful live gate or permission for account lifecycle/other moderation mutations.
 - Signing material and final public application identity must be confirmed by the maintainer. No invented identifiers, private keys, service accounts, or production URLs. Optional embedded FCM uses UnifiedPush's Web Push registration path, not the Firebase SDK; verify its Play Services IPC compatibility on devices before release. Keep test fakes out of production source sets.
 
+- M5a1 adds reply protocol/scoped VM draft state, not native controls; see `docs/milestones/M5a1-reply-composer-state.md`. Store only ID-plus-instance identity, never incoming bodies. Reply-only drafts consume capacity; pending sends freeze selection/removal, stale row/owner/resource/token callbacks fail closed. Cancel must not clear uncertain-send/staleness/consent. Room ping ignores quotes; DM slash text remains literal. Invalid references never downgrade/replay a POST. Native Reply/Copy consumer follows with separate complete-review gates.
+
 <!-- codebase-memory-mcp:start -->
 For structural codebase exploration, use the installed `codebase-memory` skill.
 <!-- codebase-memory-mcp:end -->

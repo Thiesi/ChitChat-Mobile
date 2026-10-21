@@ -319,13 +319,98 @@ class DirectStateTest {
         assertEquals(100, thread.drafts.value.size); assertEquals("New fixture", thread.drafts.value[108]?.body)
     }
 
+    @Test fun replyOnlyDraftsFollowTheirOwnPeersAndExplicitDiscard() = runTest(dispatcher) {
+        api.rows = listOf(row(18), row(28, peer = 9)); open()
+        assertTrue(thread.replyTo(api.session.value, 8, thread.state.value.messages.first()))
+        val first = thread.state.value.composerReply!!
+        thread.open(9); runCurrent(); assertTrue(thread.replyTo(api.session.value, 9, thread.state.value.messages.first()))
+        val second = thread.state.value.composerReply!!
+        thread.open(8); runCurrent(); assertSame(first, thread.state.value.composerReply)
+        assertEquals("", thread.drafts.value.getValue(8).body)
+        thread.open(9); runCurrent(); assertSame(second, thread.state.value.composerReply)
+        thread.discardSavedDraft(9); assertNull(thread.state.value.composerReply)
+        assertSame(first, thread.drafts.value.getValue(8).composerReply); assertEquals(0, api.sends)
+    }
+    @Test fun oldReplyCancelAndReplacedRowsCannotChangeTheSuccessor() = runTest(dispatcher) {
+        open(); val owner = api.session.value; val originalRow = thread.state.value.messages.first()
+        assertTrue(thread.replyTo(owner, 8, originalRow)); val original = thread.state.value.composerReply!!
+        assertTrue(thread.replyTo(owner, 8, originalRow)); val successor = thread.state.value.composerReply!!
+        thread.cancelReply(owner, 8, original); assertSame(successor, thread.state.value.composerReply)
+        api.rows = listOf(row(18)); thread.refresh(); runCurrent(); assertFalse(thread.replyTo(owner, 8, originalRow))
+        thread.updateDraft("Keep authored text"); thread.cancelReply(owner, 8, successor)
+        assertNull(thread.state.value.composerReply); assertEquals("Keep authored text", thread.state.value.draft)
+    }
+    @Test fun pendingDirectSendFreezesItsReplyAndSuccessClearsBothDraftParts() = runTest(dispatcher) {
+        api.rows = listOf(row(18), row(19)); open(); val owner = api.session.value
+        assertTrue(thread.replyTo(owner, 8, thread.state.value.messages.first()))
+        val original = thread.state.value.composerReply!!; thread.updateDraft("Answer")
+        api.gate = CompletableDeferred(); api.gated = "send"; thread.send(); runCurrent()
+        assertEquals(18L, api.sentReply); assertTrue(thread.state.value.sending)
+        assertFalse(thread.replyTo(owner, 8, thread.state.value.messages.last()))
+        thread.cancelReply(owner, 8, original); assertSame(original, thread.state.value.composerReply)
+        api.gate!!.complete(Unit); runCurrent()
+        assertNull(thread.state.value.composerReply); assertEquals("", thread.state.value.draft)
+        assertFalse(8L in thread.drafts.value); assertEquals(1, api.sends)
+    }
+    @Test fun unknownDirectReplySurvivesPeerSwitchAndCancelKeepsTheUnknownGuard() = runTest(dispatcher) {
+        api.rows = listOf(row(18), row(28, peer = 9)); open(); val owner = api.session.value
+        assertTrue(thread.replyTo(owner, 8, thread.state.value.messages.first()))
+        val original = thread.state.value.composerReply!!; thread.updateDraft("Answer")
+        api.sendFailure = ApiFailure(FailureKind.TIMEOUT); thread.send(); runCurrent()
+        thread.open(9); runCurrent(); thread.open(8); runCurrent()
+        assertSame(original, thread.state.value.composerReply); assertTrue(thread.state.value.uncertainSend)
+        thread.cancelReply(owner, 8, original)
+        assertNull(thread.state.value.composerReply); assertTrue(thread.state.value.uncertainSend)
+        assertFalse(thread.canSend()); assertEquals("Answer", thread.state.value.draft); assertEquals(1, api.sends)
+    }
+    @Test fun onlyReplyMemosUseTheSameBoundedDraftCapacityWithoutEviction() = runTest(dispatcher) {
+        api.rows = (8L..108L).map { row(it * 10, peer = it) }; thread.foreground()
+        for (peer in 8L..107L) { thread.open(peer); runCurrent()
+            assertTrue(thread.replyTo(api.session.value, peer, thread.state.value.messages.first())) }
+        assertEquals(100, thread.drafts.value.size)
+        thread.open(108); runCurrent()
+        assertFalse(thread.canReplyTo(api.session.value, 108, thread.state.value.messages.first()))
+        assertFalse(thread.replyTo(api.session.value, 108, thread.state.value.messages.first()))
+        assertEquals(100, thread.drafts.value.size)
+        assertNotNull(thread.drafts.value[8]?.composerReply); thread.discardSavedDraft(8)
+        assertTrue(thread.replyTo(api.session.value, 108, thread.state.value.messages.first()))
+        assertEquals(100, thread.drafts.value.size)
+    }
+    @Test fun ownerReplacementPurgesReplyMemosAndRejectsTheOldRow() = runTest(dispatcher) {
+        open(); val owner = api.session.value; val row = thread.state.value.messages.first()
+        assertTrue(thread.replyTo(owner, 8, row))
+        api.session.value = owner.copy(generation = owner.generation + 1); runCurrent()
+        assertNull(thread.state.value.composerReply); assertTrue(thread.drafts.value.isEmpty())
+        assertFalse(thread.replyTo(owner, 8, row)); assertEquals(0, api.sends)
+    }
+    @Test fun blockingDisablesReplyButDoesNotInventAHistoryOrCopyRestriction() = runTest(dispatcher) {
+        open(); val owner = api.session.value; val originalRow = thread.state.value.messages.first()
+        assertTrue(thread.replyTo(owner, 8, originalRow)); val selected = thread.state.value.composerReply!!
+        thread.setBlocked(true); runCurrent()
+        assertTrue(thread.canUseMessage(owner, 8, thread.state.value.messages.first()))
+        assertFalse(thread.canReplyTo(owner, 8, thread.state.value.messages.first()))
+        assertSame(selected, thread.state.value.composerReply)
+        thread.cancelReply(owner, 8, selected); assertNull(thread.state.value.composerReply)
+        assertFalse(thread.canSend())
+    }
+    @Test fun removingARejectedReplyKeepsItsTextButDoesNotResetStalenessOrSend() = runTest(dispatcher) {
+        open(); val owner = api.session.value
+        assertTrue(thread.replyTo(owner, 8, thread.state.value.messages.first()))
+        val original = thread.state.value.composerReply!!; thread.updateDraft("Keep answer")
+        api.sendFailure = ApiFailure(FailureKind.HTTP, 400, "invalid_reply_target"); thread.send(); runCurrent()
+        assertEquals("invalid_reply_target", thread.state.value.error?.code); assertFalse(thread.state.value.uncertainSend)
+        thread.cancelReply(owner, 8, original)
+        assertNull(thread.state.value.error); assertTrue(thread.state.value.stale)
+        assertEquals("Keep answer", thread.state.value.draft); thread.send(); runCurrent(); assertEquals(1, api.sends)
+        thread.refresh(); runCurrent(); assertTrue(thread.canSend()); assertNull(thread.state.value.composerReply)
+    }
     private class Directs : DirectOperations {
         override val session = MutableStateFlow(SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED,
             user = SessionUser(7, "Viewer", listOf("member"), 1, false)))
         val privacy = MessagePrivacy(DirectPrivacy(false, false, "admin", "permanently", 0),
             RevisionPrivacy(false, "super_admin", true, true, false))
         var rows = listOf(row(18)); var relationship = DirectRelationship(false, true)
-        var contexts = 0; var inboxes = 0; var sends = 0; var reads = 0; var blocks = 0
+        var contexts = 0; var inboxes = 0; var sends = 0; var reads = 0; var blocks = 0; var sentReply: Long? = null
         var gate: CompletableDeferred<Unit>? = null; var searchGate: CompletableDeferred<Unit>? = null
         var gated = ""; var ignoreCancellation = false; var sendFailure: ApiFailure? = null
         var failAfterSend = false; var historyFailure: ApiFailure? = null; var onRead: (() -> Unit)? = null
@@ -350,7 +435,7 @@ class DirectStateTest {
             return DirectPage(page, page.firstOrNull()?.id, page.size == limit)
         }
         override suspend fun send(peerId: Long, body: String, replyId: Long?): Long {
-            sends++; await("send"); sendFailure?.let { throw it }
+            sends++; sentReply = replyId; await("send"); sendFailure?.let { throw it }
             rows += row(99, peerId, outgoing = true)
             if (failAfterSend) historyFailure = ApiFailure(FailureKind.HTTP, 500)
             return 99

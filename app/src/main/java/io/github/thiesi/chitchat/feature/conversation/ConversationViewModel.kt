@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
+import io.github.thiesi.chitchat.core.conversation.ComposerReply
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -52,6 +54,7 @@ data class ConversationUiState(
     val newerAvailable: Boolean = false, val anchorUnavailable: Boolean = false,
     val draftsOpen: Boolean = false, val draftLimit: Boolean = false,
     val pingSelection: PingSelection? = null,
+    val composerReply: ComposerReply? = null,
 ) { override fun toString() = "ConversationUiState" }
 
 class ConversationViewModel(private val operations: ConversationOperations,
@@ -109,7 +112,8 @@ class ConversationViewModel(private val operations: ConversationOperations,
             background(); foreground = wasForeground; dividerEstablished = false
             realtime?.selectRoom(null, false)
             val memo = savedDrafts.value[roomId]?.takeIf { it.matches(expected) }
-            mutable.value = ConversationUiState(roomId = roomId, draft = memo?.body.orEmpty(), uncertainSend = memo?.uncertain == true)
+            mutable.value = ConversationUiState(roomId = roomId, draft = memo?.body.orEmpty(),
+                uncertainSend = memo?.uncertain == true, composerReply = memo?.composerReply)
         }
         if (interacted) deliberateSelection = true
         if (!mutable.value.loaded && !mutable.value.busy) loadEntry()
@@ -146,6 +150,30 @@ class ConversationViewModel(private val operations: ConversationOperations,
         mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false)
         rememberDraft(); return true
     }
+    fun canUseMessage(expected: SessionState, roomId: Long?, message: RoomMessage): Boolean {
+        val value = mutable.value
+        val context = value.context ?: return false
+        return foreground && belongsTo(expected) && ready(session.value) && roomId != null && value.roomId == roomId &&
+            value.pingSelection == null && message.roomId == roomId && message.id > 0 &&
+            value.messages.any { it === message } && !message.deleted &&
+            (message.senderId !in currentPolicy(context).policy.ignoredUserIds || message.id in value.revealed)
+    }
+    fun canReplyTo(expected: SessionState, roomId: Long?, message: RoomMessage) =
+        canUseMessage(expected, roomId, message) && canSend() && !mutable.value.busy && !mutable.value.sending
+    fun replyTo(expected: SessionState, roomId: Long?, message: RoomMessage): Boolean {
+        if (!canReplyTo(expected, roomId, message)) return false
+        mutable.value = mutable.value.copy(composerReply = ComposerReply(message.id), validation = null,
+            error = mutable.value.error?.takeUnless { it.code == "invalid_reply_target" })
+        rememberDraft(); return true
+    }
+    fun cancelReply(expected: SessionState, roomId: Long?, original: ComposerReply) {
+        val value = mutable.value
+        if (!foreground || !belongsTo(expected) || roomId == null || roomId != value.roomId ||
+            value.sending || value.composerReply !== original) return
+        mutable.value = value.copy(composerReply = null, draftLimit = false,
+            error = value.error?.takeUnless { it.code == "invalid_reply_target" })
+        rememberDraft()
+    }
     fun showDrafts(expected: SessionState = session.value) {
         if (expected.identity() != null && expected.identity() == identity && expected.identity() == session.value.identity())
             mutable.value = mutable.value.copy(draftsOpen = true)
@@ -157,7 +185,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
     fun discardDraft(draft: RoomDraft) {
         if (!draft.matches(session.value) || mutable.value.sending || savedDrafts.value[draft.roomId] !== draft) return
         savedDrafts.value = savedDrafts.value - draft.roomId
-        mutable.value = if (mutable.value.roomId == draft.roomId) mutable.value.copy(draft = "", uncertainSend = false,
+        mutable.value = if (mutable.value.roomId == draft.roomId) mutable.value.copy(draft = "", composerReply = null, uncertainSend = false,
             reconciledAfterUncertain = false, draftLimit = false, validation = null) else mutable.value.copy(draftLimit = false)
     }
     private fun rememberDraft() {
@@ -167,9 +195,9 @@ class ConversationViewModel(private val operations: ConversationOperations,
         val previous = savedDrafts.value[roomId]
         val name = value.context?.room?.name ?: previous?.roomName
         if (previous != null && previous.matches(session.value) && previous.body == value.draft &&
-            previous.uncertain == value.uncertainSend && previous.roomName == name) return
-        savedDrafts.value = if (value.draft.isEmpty() && !value.uncertainSend) savedDrafts.value - roomId else
-            savedDrafts.value + (roomId to RoomDraft(owner, roomId, name, value.draft, value.uncertainSend))
+            previous.uncertain == value.uncertainSend && previous.roomName == name && previous.composerReply === value.composerReply) return
+        savedDrafts.value = if (value.draft.isEmpty() && !value.uncertainSend && value.composerReply == null) savedDrafts.value - roomId else
+            savedDrafts.value + (roomId to RoomDraft(owner, roomId, name, value.draft, value.uncertainSend, value.composerReply))
     }
     fun reveal(id: Long) { mutable.value = mutable.value.copy(revealed = mutable.value.revealed + id) }
     private fun loadEntry() { request { current -> refreshWindow(current) } }
@@ -241,7 +269,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
             realtime?.selectRoom(null, false); dividerEstablished = false
             val memo = savedDrafts.value[roomId]?.takeIf { it.matches(expected) }
             mutable.value = ConversationUiState(roomId = roomId, draft = memo?.body.orEmpty(),
-                uncertainSend = memo?.uncertain == true)
+                uncertainSend = memo?.uncertain == true, composerReply = memo?.composerReply)
         }
         deliberateSelection = true
     }
@@ -342,11 +370,11 @@ class ConversationViewModel(private val operations: ConversationOperations,
         val typingSession = session.value
         request(sending = true) { current ->
             postInFlight = true
-            val result = operations.send(checkNotNull(value.roomId), body)
+            val result = operations.send(checkNotNull(value.roomId), body, value.composerReply?.messageId)
             current(); postInFlight = false
             typing?.sent(typingSession, TypingTarget.Room(checkNotNull(value.roomId)))
             realtime?.activity(checkNotNull(value.roomId)) // Only an acknowledged, current send/ping.
-            mutable.value = mutable.value.copy(draft = "", notice = if (result is SendResult.Ping) "ping_sent" else "sent")
+            mutable.value = mutable.value.copy(draft = "", composerReply = null, notice = if (result is SendResult.Ping) "ping_sent" else "sent")
             when (result) {
                 is SendResult.Message -> if (value.latestWindow) {
                     val existing = mutable.value

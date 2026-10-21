@@ -233,17 +233,19 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         return pings
     }
 
-    suspend fun sendRoomMessage(roomId: Long, body: String, csrf: String, viewerId: Long): SendResult {
+    suspend fun sendRoomMessage(roomId: Long, body: String, csrf: String, viewerId: Long, replyId: Long? = null): SendResult {
         require(roomId > 0)
+        require(replyId == null || replyId > 0)
         validateMessageBody(body)?.let { throw ApiFailure(FailureKind.HTTP, 400, it) }
-        val raw = request("rooms/send.php", apiJson.encodeToString(SendRequest(roomId, body)), csrf)
+        val raw = request("rooms/send.php", apiJson.encodeToString(SendRequest(roomId, body, replyId)), csrf)
         incompatibleUnless(raw.status == 201)
         val reply = decode<SendReply>(raw)
         incompatibleUnless((reply.message == null) != (reply.ping == null))
-        val isPing = body.phpTrim().let { it == "/ping" || it.startsWith("/ping ") }
+        val isPing = isPrivatePingCommand(body)
         return if (reply.message != null) {
             requireValidMessage(reply.message, roomId)
             incompatibleUnless(!isPing && reply.message.senderId == viewerId && !reply.message.deleted)
+            incompatibleUnless(reply.message.replyTo?.messageId == replyId)
             SendResult.Message(reply.message)
         } else {
             val ping = checkNotNull(reply.ping)
@@ -377,7 +379,8 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         val raw = request("direct-messages/send.php", apiJson.encodeToString(DirectSendRequest(peer, body, replyId)), csrf)
         incompatibleUnless(raw.status == 201)
         val message = decode<DirectSendReply>(raw).message
-        requireDirectWire(message, viewer, peer); incompatibleUnless(message.outgoing)
+        requireDirectWire(message, viewer, peer)
+        incompatibleUnless(message.outgoing && message.replyTo?.messageId == replyId)
         return message.id // Do not hide a known POST acknowledgment behind a fallible enrichment GET.
     }
 
