@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.core.network
 
 import io.github.thiesi.chitchat.core.conversation.*
+import io.github.thiesi.chitchat.core.mutations.AuthorMessageActions
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -14,9 +15,11 @@ import kotlinx.serialization.Serializable
 @Serializable internal class ReadReply(@SerialName("last_read_message_id") val messageId: Long)
 @Serializable internal class MutationsReply(val messages: List<MessageMutation>)
 @Serializable internal class MessageMutation(val id: Long, val body: String?, val type: String,
-    @SerialName("edited_at") val editedAt: String?, val deleted: Boolean,
+    @SerialName("edited_at") val editedAt: String?, @Serializable(with = StrictJsonBoolean::class) val deleted: Boolean,
     @SerialName("deletion_kind") val deletionKind: String?,
-    val mentions: List<MessageMention>, val reactions: List<MessageReaction>)
+    val mentions: List<MessageMention>, val reactions: List<MessageReaction>,
+    @SerialName("can_edit") @Serializable(with = StrictJsonBoolean::class) val canEdit: Boolean? = null,
+    @SerialName("can_delete") @Serializable(with = StrictJsonBoolean::class) val canDelete: Boolean? = null)
 
 internal fun incompatibleUnless(condition: Boolean) { if (!condition) throw ApiFailure(FailureKind.INCOMPATIBLE) }
 
@@ -53,9 +56,12 @@ internal fun requireValidMute(value: RoomMute, roomId: Long?) {
 internal fun applyMutation(message: RoomMessage, mutation: MessageMutation): RoomMessage {
     requireValidAttention(mutation.mentions, mutation.reactions)
     incompatibleUnless(mutation.type in setOf("text", "emote", "system", "attachment") &&
-        (mutation.deleted || mutation.body != null) && mutation.deletionKind in setOf(null, "author", "moderator"))
+        (mutation.deleted || mutation.body != null) && mutation.deletionKind in setOf(null, "author", "moderator") &&
+        (mutation.editedAt == null || serverInstant(mutation.editedAt) != null) &&
+        (!mutation.deleted || mutation.canEdit != true && mutation.canDelete != true))
     return RoomMessage(message.id, message.roomId, message.senderId, message.username, mutation.type,
         if (mutation.deleted) null else mutation.body, mutation.deleted, message.createdAt,
         if (mutation.deleted) null else message.attachment, if (mutation.deleted) null else message.replyTo,
-        if (mutation.deleted) emptyList() else mutation.mentions, mutation.reactions, mutation.editedAt, mutation.deletionKind)
+        if (mutation.deleted) emptyList() else mutation.mentions, mutation.reactions, mutation.editedAt, mutation.deletionKind,
+        if (mutation.canEdit != null && mutation.canDelete != null) AuthorMessageActions(mutation.canEdit, mutation.canDelete) else null)
 }

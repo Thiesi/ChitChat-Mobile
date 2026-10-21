@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- M5b1 author edit/delete reuses original-session capabilities/canonical rows; see `docs/milestones/M5b1-author-mutation-protocol.md`. Edits are literal PHP-trimmed Unicode text, never room-send commands. Both services commit before response metadata: exceptions/cancellation require explicit GET reconciliation before a fresh choice, never replay. Room `authorActions` is transient enrichment, unknown unless both actual flags exist; check author/current scope too. Native controls/state remain separate.
+
 - This repository owns the native Kotlin/Jetpack Compose client only. Never edit, commit, fetch into, or otherwise mutate the sibling `Thiesi/ChitChat` checkout. Backend issues are permitted; backend patches are not.
 - Read [discovery](docs/discovery.md), [compatibility](docs/backend-compatibility.md), [parity](docs/feature-parity.md), [push decision](docs/push-architecture.md), and [milestones](docs/implementation-plan.md) before implementation. Milestone records distinguish implemented native auth/room/DM slices from pending parity/live acceptance. Public identity/distribution and ordinary-DM alerts remain decisions.
 - For structural codebase exploration use the installed `codebase-memory` skill. Check index freshness and coverage; read source for missing, stale, or unusable coverage. Do not reindex the backend as part of this task: that writes to its checkout.
