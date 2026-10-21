@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.core.conversation
 
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
+import io.github.thiesi.chitchat.core.mutations.AuthorMessageActions
 import io.github.thiesi.chitchat.core.session.SessionState
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.SerialName
@@ -20,6 +21,8 @@ import java.time.OffsetDateTime
     val mentions: List<MessageMention> = emptyList(), val reactions: List<MessageReaction> = emptyList(),
     @SerialName("edited_at") val editedAt: String? = null,
     @SerialName("deletion_kind") val deletionKind: String? = null,
+    // Client enrichment from message-mutations.php, NOT a room-history wire field.
+    @kotlinx.serialization.Transient val authorActions: AuthorMessageActions? = null,
 )
 @Serializable class MessageAttachment(val id: Long, val name: String,
     @SerialName("mime_type") val mimeType: String, @SerialName("size_bytes") val sizeBytes: Long,

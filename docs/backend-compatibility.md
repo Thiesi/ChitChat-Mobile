@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5b1](milestones/M5b1-author-mutation-protocol.md) implements existing room/DM author edit/delete contracts (`message_id`, optional edit `body`, HTTP200 `message` metadata). No backend changes, new event, native control or live acceptance is claimed. Both services commit before response metadata retrieval; failed writes must not automatically replay.
+
 [M4c4c2](milestones/M4c4c2-native-notification-center.md) adds native list/read controls and unread-count consumption without another endpoint. Hidden-center count refresh uses existing `list.php?limit=1`, discards its body and preserves unknown read choices. Foreground/navigation refresh is not a guarantee of realtime delivery for arbitrary notices. General destinations and push remain pending; no backend mutation is required for these list/read controls.
 
 [M4c4c1](milestones/M4c4c1-notification-state.md) consumes the existing notification page/read contracts through scoped presentation state and bounded canonical GET reconciliation, now used by M4c4c2's native list/read/count controls. Counts remain independent of loaded rows; View message and Mark as read stay separate. Its bounds/coverage/confirmed-read overlay are local state, not server fields or timestamps. No new endpoint, SSE event, authorization mechanism or backend checkout change is introduced; general-link consumption remains pending.

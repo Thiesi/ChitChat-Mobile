@@ -8,6 +8,8 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
+[M5b1](docs/milestones/M5b1-author-mutation-protocol.md) prepares existing author edit/delete APIs and session-bound contract tests. Native controls and live mutation acceptance remain pending; this does not unblock PR49's keyboard gate or complete editing parity.
+
 [Additional input-handoff observations](docs/milestones/native-ime-handoff-observations.md) investigate open issue31 after PR49's native CI passed136/137. All12 new Reply/Copy journeys passed, but that PR remains unmerged. This test-only work does not fix the keyboard or add parity; existing failures remain recorded.
 
 **Native authentication, export and foreground room/DM conversations are implemented**, including typing privacy, room-ignore controls, scoped draft/unknown-delivery recovery and notification list/read/destination controls. Push, remaining parity and live acceptance are pending. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). See milestone records for gates.

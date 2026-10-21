@@ -25,8 +25,9 @@ import kotlinx.serialization.Serializable
 @Serializable internal class DirectReadReply(val updated: Int)
 @Serializable internal class DirectMutationsReply(val messages: List<DirectMutation>)
 @Serializable internal class DirectMutation(val id: Long, val body: String?,
-    @SerialName("edited_at") val editedAt: String?, val deleted: Boolean,
-    @SerialName("can_edit") val canEdit: Boolean, @SerialName("can_delete") val canDelete: Boolean,
+    @SerialName("edited_at") val editedAt: String?, @Serializable(with = StrictJsonBoolean::class) val deleted: Boolean,
+    @SerialName("can_edit") @Serializable(with = StrictJsonBoolean::class) val canEdit: Boolean,
+    @SerialName("can_delete") @Serializable(with = StrictJsonBoolean::class) val canDelete: Boolean,
     val mentions: List<DirectMention>, val reactions: List<MessageReaction>)
 @Serializable internal class DirectAttachmentsReply(val attachments: List<DirectAttachment>)
 @Serializable internal class DirectAttachment(val id: Long, @SerialName("message_id") val messageId: Long,

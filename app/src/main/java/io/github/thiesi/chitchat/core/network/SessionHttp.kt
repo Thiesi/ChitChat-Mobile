@@ -14,6 +14,7 @@ import io.github.thiesi.chitchat.core.realtime.PresenceUser
 import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.notifications.NotificationPage
 import io.github.thiesi.chitchat.core.notifications.NotificationReadResult
+import io.github.thiesi.chitchat.core.mutations.validateEditedBody
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.time.ZonedDateTime
@@ -253,6 +254,44 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
             incompatibleUnless(isPing && ping.sender.id == viewerId)
             SendResult.Ping(ping)
         }
+    }
+
+    suspend fun editRoomMessage(original: RoomMessage, body: String, csrf: String, viewer: Long): RoomMessage {
+        requireOwnRoomMessage(original, viewer)
+        validateEditedBody(body)?.let { throw ApiFailure(FailureKind.HTTP, 400, it) }
+        val mutation = decode<RoomMutationReply>(request("rooms/edit-message.php",
+            apiJson.encodeToString(EditMessageRequest(original.id, body)), csrf).require200()).message
+        return ownRoomMutation(original, mutation, deleting = false)
+    }
+
+    suspend fun deleteOwnRoomMessage(original: RoomMessage, csrf: String, viewer: Long): RoomMessage {
+        requireOwnRoomMessage(original, viewer)
+        val mutation = decode<RoomMutationReply>(request("rooms/delete-own-message.php",
+            apiJson.encodeToString(DeleteMessageRequest(original.id)), csrf).require200()).message
+        return ownRoomMutation(original, mutation, deleting = true)
+    }
+
+    private fun ownRoomMutation(original: RoomMessage, mutation: MessageMutation, deleting: Boolean): RoomMessage {
+        incompatibleUnless(mutation.id == original.id && mutation.type == original.type &&
+            mutation.canEdit != null && mutation.canDelete != null && (!deleting || mutation.deleted) &&
+            (if (mutation.deleted) mutation.deletionKind in setOf("author", "moderator") else mutation.deletionKind == null))
+        return applyMutation(original, mutation)
+    }
+
+    suspend fun editDirectMessage(original: DirectMessage, body: String, csrf: String, viewer: Long): DirectMessage {
+        requireOwnDirectMessage(original, viewer)
+        validateEditedBody(body)?.let { throw ApiFailure(FailureKind.HTTP, 400, it) }
+        val mutation = decode<DirectMutationReply>(request("direct-messages/edit.php",
+            apiJson.encodeToString(EditMessageRequest(original.id, body)), csrf).require200()).message
+        return applyDirectMutation(original, mutation)
+    }
+
+    suspend fun deleteOwnDirectMessage(original: DirectMessage, csrf: String, viewer: Long): DirectMessage {
+        requireOwnDirectMessage(original, viewer)
+        val mutation = decode<DirectMutationReply>(request("direct-messages/delete.php",
+            apiJson.encodeToString(DeleteMessageRequest(original.id)), csrf).require200()).message
+        incompatibleUnless(mutation.deleted)
+        return applyDirectMutation(original, mutation)
     }
 
     suspend fun readRoom(roomId: Long, messageId: Long, csrf: String): Long {

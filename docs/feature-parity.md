@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5b1](milestones/M5b1-author-mutation-protocol.md) prepares author edit/delete transport and original-session/canonical safeguards. Author-action parity remains incomplete until native controls and their state/UX tests ship; live acceptance and issue31 are unchanged.
+
 Baseline: [ChitChat v3.2.1, commit 4f53ff4](https://github.com/Thiesi/ChitChat/tree/4f53ff497f5572072fddad42d8ac3979e9cdf0d1). M1 is merged. M2a implements server bootstrap, password/recovery and session lifecycle; M2b1 adds registration/PoW and explicit closing-account restoration ([current evidence](milestones/M2b-registration-restoration.md)); see [actual verification](milestones/M2a-session-auth.md). Other server-backed features remain unimplemented unless explicitly marked below. Feasibility is not an implementation claim. Update status/evidence per milestone; never mark a dependency-blocked feature complete because a fake passes tests.
 
 Classification: **Existing** = existing backend contract, **Android** = client-only/system adaptation, **Dependency** = missing server support, **Special** = needs platform treatment, **Excluded** = browser/operator-only function with justification. Milestones are defined in [the plan](implementation-plan.md). Links below refer to the pinned backend snapshot.
