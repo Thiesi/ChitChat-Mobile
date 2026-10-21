@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[M4c4c1](milestones/M4c4c1-notification-state.md) adds tested account-scoped center state and bounded canonical pagination, not native center/read/badge controls. Individual/All reads stay independent from navigation and chat reads. Unconfirmed writes require an explicit GET/current-state review, never automatic replay. The native consumer and general target routing remain pending; no live/push completion is inferred.
+
 [M4c4b2a](milestones/M4c4b2a-target-adoption-state.md) corrects historical empty-range widening and freezes existing input/send/block/entry callback scopes. Its target-adoption/denial state now supports M4c4b2's same-conversation quote consumer below; general notification routing remains separate. No live/push or full-parity completion is inferred.
 
 As of native room-draft recovery after M4c3b member room-ignore controls (live chat/typing/ignore acceptance pending), 2026-10-20:

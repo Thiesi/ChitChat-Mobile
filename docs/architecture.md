@@ -1,5 +1,7 @@
 # Proposed Android architecture
 
+[M4c4c1](milestones/M4c4c1-notification-state.md) adds memory-only notification presentation state, bounded canonical GET windows, independent server unread counts and explicit reference-scoped read/All confirmation/reconciliation. Its native center/badge/general-link consumers remain separate; no cache, new event, background connection or push worker is introduced.
+
 [M4c4b2a](milestones/M4c4b2a-target-adoption-state.md) hardens historical empty-range bounds and original rendered callback scopes, and provides rejectable same-pane target-adoption/denial state consumed by the native quote controls. No new transport, cache or background worker is introduced.
 
 Current implementation includes native room/DM consumers, foreground realtime/typing, member room-ignore and memory-only draft recovery. [M4c4b1](milestones/M4c4b1-message-target-state.md) adds shared exact-target lookup/state; [M4c4b2](milestones/M4c4b2-native-reply-targets.md) adds its same-conversation quote consumer. General notification routing/center and live chat acceptance remain pending. Milestone-specific narratives below record earlier delivery baselines; cache/push sections are target design. Decentralized push is accepted; public release identity/distribution and ordinary-DM alerts remain open.
