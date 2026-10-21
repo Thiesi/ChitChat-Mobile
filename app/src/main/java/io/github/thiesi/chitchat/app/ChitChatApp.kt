@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,10 +53,12 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -91,6 +94,11 @@ import io.github.thiesi.chitchat.feature.direct.DirectThreadScreen
 import io.github.thiesi.chitchat.feature.direct.directIdentity
 import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
 import io.github.thiesi.chitchat.feature.targets.ReplyTargetHost
+import io.github.thiesi.chitchat.feature.notifications.NotificationCenterViewModel
+import io.github.thiesi.chitchat.feature.notifications.NotificationCenterScreen
+import io.github.thiesi.chitchat.feature.notifications.NotificationCenterState
+import io.github.thiesi.chitchat.feature.notifications.NotificationLifecycle
+import io.github.thiesi.chitchat.feature.notifications.noticeIdentity
 import io.github.thiesi.chitchat.core.targets.TargetSnapshot
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.network.FailureKind
@@ -106,6 +114,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     directInbox: DirectInboxViewModel? = null, directThread: DirectThreadViewModel? = null,
     typingPreferences: TypingPreferenceViewModel? = null, ignores: IgnorePersonViewModel? = null,
     messageTargets: MessageTargetViewModel? = null,
+    notifications: NotificationCenterViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by auth.state.collectAsStateWithLifecycle()
@@ -134,6 +143,13 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     MaterialTheme(colorScheme = colors) {
         val nav = rememberNavController()
         val entry by nav.currentBackStackEntryAsState()
+        val notificationState = notifications?.state?.collectAsStateWithLifecycle()?.value
+            ?.takeIf { notifications.belongsTo(displayedSession) } ?: NotificationCenterState()
+        val noticeArgs = entry?.arguments
+        val noticeScope = noticeArgs != null && matchesNotificationScope(session, noticeArgs.getLong("generation", -1),
+            noticeArgs.getLong("viewer", -1), noticeArgs.getInt("version", -1), noticeArgs.getString("server"))
+        val inNotifications = entry?.destination?.route == NOTIFICATIONS_ROUTE && noticeScope
+        notifications?.let { NotificationLifecycle(it, displayedSession, inNotifications, entry) }
         val focus = LocalFocusManager.current
         val openDirect: (Long?) -> Unit = { peer ->
             val actual = auth.state.value
@@ -151,8 +167,10 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             }
         }
         val atHome = entry?.destination?.route.let { it == null || it == "home" }
-        LaunchedEffect(entry?.destination?.route, session.phase, session.server, session.generation,
+        LaunchedEffect(entry, session.phase, session.server, session.generation,
             session.user?.id, session.user?.sessionVersion) {
+            if (entry?.destination?.route == NOTIFICATIONS_ROUTE && (!noticeScope || notifications == null))
+                nav.popBackStack("home", false)
             if (entry?.destination?.route == "account" && session.phase != SessionPhase.AUTHENTICATED) {
                 nav.popBackStack("home", false)
                 account.cancel()
@@ -194,7 +212,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         Scaffold(
             topBar = {
                 if (!compactKeyboard) TopAppBar(
-                    title = { Text(stringResource(if (entry?.destination?.route?.startsWith("direct") == true) R.string.dm_title
+                    title = { Text(stringResource(if (entry?.destination?.route == NOTIFICATIONS_ROUTE) R.string.notifications_title
+                        else if (entry?.destination?.route?.startsWith("direct") == true) R.string.dm_title
                         else if (entry?.destination?.route?.startsWith("conversation/") == true)
                         R.string.rooms_conversation else when (entry?.destination?.route) {
                         "settings" -> R.string.settings
@@ -239,7 +258,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                     if (state.settings.serverError != null) Text(stringResource(R.string.saved_server_invalid),
                         Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error)
                     if (state.hasLoadedSettings) NavHost(navController = nav, startDestination = "home", modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        composable("home") {
+                        composable("home") { homeEntry ->
                             // A successful save/forget replaces the page, not just its body:
                             // never retain the editor's scrolled offset on the confirmation.
                             key(state.settings.server?.value, session.generation) {
@@ -257,6 +276,23 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                             }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.rooms_title)) }
                                             if (session.phase == SessionPhase.AUTHENTICATED && directInbox != null && directThread != null)
                                                 Button(onClick = { openDirect(null) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.dm_title)) }
+                                            if (session.noticeIdentity() != null && notifications != null) {
+                                                val countText = notificationState.unreadCount?.let { count -> pluralStringResource(
+                                                    if (notificationState.countStale) R.plurals.notifications_last_count else R.plurals.notifications_count, count, count)
+                                                } ?: stringResource(R.string.notifications_count_unknown)
+                                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                    Button(onClick = {
+                                                        if (nav.currentBackStackEntry === homeEntry && displayedSession.noticeIdentity() == auth.state.value.noticeIdentity())
+                                                            notificationRoute(displayedSession)?.let { nav.navigate(it) { launchSingleTop = true } }
+                                                    }, modifier = Modifier.fillMaxWidth().testTag("notifications_open").semantics { stateDescription = countText }) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                            Text(stringResource(R.string.notifications_title))
+                                                            notificationState.unreadCount?.takeIf { it > 0 }?.let { count -> Badge { Text(count.toString()) } }
+                                                        }
+                                                    }
+                                                    Text(countText, style = MaterialTheme.typography.bodySmall)
+                                                }
+                                            }
                                             Button(onClick = { nav.navigate("server") }, enabled = session.canChangeServer) {
                                                 Text(stringResource(R.string.change_server))
                                             }
@@ -289,6 +325,17 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                     Text(stringResource(R.string.room_drafts_count, roomDraftCount))
                                 }
                                 Box(Modifier.weight(1f)) { RoomsScreen(rooms, auth::refresh, openRoom) }
+                            }
+                        }
+                        composable(NOTIFICATIONS_ROUTE, arguments = notificationArguments()) { destination ->
+                            val args = destination.arguments
+                            if (notifications != null && args != null && matchesNotificationScope(session,
+                                args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server"))) {
+                                key(session.noticeIdentity()) {
+                                    NotificationCenterScreen(notifications, displayedSession, auth::refresh) {
+                                        nav.currentBackStackEntry === destination
+                                    }
+                                }
                             }
                         }
                         composable("conversation/{roomId}", arguments = listOf(navArgument("roomId") { type = NavType.LongType })) { destination ->

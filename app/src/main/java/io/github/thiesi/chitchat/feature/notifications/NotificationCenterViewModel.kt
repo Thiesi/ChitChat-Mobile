@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 class ReadAllChoice internal constructor(val original: SessionState)
 data class NotificationCenterState(val notifications: List<AccountNotification> = emptyList(),
     val loaded: Boolean = false, val busy: Boolean = false, val writing: Boolean = false, val stale: Boolean = true,
-    val unreadCount: Int? = null, val confirmedReadIds: Set<Long> = emptySet(),
+    val unreadCount: Int? = null, val countStale: Boolean = true, val confirmedReadIds: Set<Long> = emptySet(),
     val olderCursor: Long? = null, val mayHaveOlder: Boolean = false,
     val latestWindow: Boolean = true, val fixedUpper: Long? = null, val incompleteRange: Boolean = false,
     val unknownRead: Boolean = false, val allChoice: ReadAllChoice? = null, val scrollRequest: Long = 0,
@@ -29,7 +29,7 @@ data class NotificationCenterState(val notifications: List<AccountNotification> 
     override fun toString() = "NotificationCenterState"
 }
 
-/** Account-scoped memory state only. Native center/badge/link consumers are a separate slice. */
+/** Account-scoped memory state. A hidden center fetches only one row for the independent count. */
 class NotificationCenterViewModel(private val operations: NotificationOperations,
     private val now: () -> Long = System::currentTimeMillis) : ViewModel() {
     val session = operations.session
@@ -37,6 +37,8 @@ class NotificationCenterViewModel(private val operations: NotificationOperations
     val state = mutable.asStateFlow()
     private var owner = session.value.noticeIdentity()
     private var active = false
+    private var centerVisible = true
+    private var centerOwner = owner
     private var cleared = false
     private var sequence = 0L
     private var requested = 0L
@@ -58,22 +60,35 @@ class NotificationCenterViewModel(private val operations: NotificationOperations
         !session.value.refreshRequired && !session.value.storageWarning && now() >= session.value.retryAtMillis
     private fun current(token: Long, expected: SessionState) = token == sequence && active && belongsTo(expected)
 
-    fun foreground() { if (!cleared) { active = true; open(session.value) } }
+    fun foreground(center: Boolean = true) {
+        if (!cleared) {
+            active = true; centerVisible = center; centerOwner = session.value.noticeIdentity(); open(session.value)
+        }
+    }
+    /** Navigation never cancels/replays a read POST. Only the real root entry controls this mode. */
+    fun show(expected: SessionState, center: Boolean) {
+        if (cleared || expected.noticeIdentity() == null || expected.noticeIdentity() != session.value.noticeIdentity()) return
+        centerVisible = center
+        centerOwner = expected.noticeIdentity()
+        mutable.value = mutable.value.copy(allChoice = null, stale = true)
+        open(expected)
+    }
     fun open(expected: SessionState) {
         if (cleared) return
         val identity = expected.noticeIdentity() ?: return
         if (identity != session.value.noticeIdentity()) return
         if (identity != owner) { retire(); owner = identity; mutable.value = NotificationCenterState() }
+        mutable.value = mutable.value.copy(countStale = true)
         requested++; drain()
     }
     fun background() {
         active = false
         val unknown = mutable.value.unknownRead || postInFlight
         retire()
-        mutable.value = mutable.value.copy(busy = false, writing = false, stale = true, unknownRead = unknown, allChoice = null)
+        mutable.value = mutable.value.copy(busy = false, writing = false, stale = true, countStale = true, unknownRead = unknown, allChoice = null)
     }
     fun invalidate() { if (belongsTo(session.value)) { requested++; drain() } }
-    fun connectionLost() { mutable.value = mutable.value.copy(stale = true) }
+    fun connectionLost() { mutable.value = mutable.value.copy(stale = true, countStale = true) }
 
     /** Explicit current-state check, not an automatic repeat of a previous ids/All POST. */
     fun refresh(expected: SessionState) {
@@ -110,11 +125,18 @@ class NotificationCenterViewModel(private val operations: NotificationOperations
 
     private suspend fun reconcile(token: Long, expected: SessionState, explicit: Boolean, latest: Boolean = false) {
         val old = mutable.value
+        if (!centerVisible || centerOwner != expected.noticeIdentity()) {
+            val page = operations.page(expected, limit = 1)
+            if (!current(token, expected)) return
+            // Summary GETs never adopt their single row or reconcile an unknown read choice.
+            mutable.value = mutable.value.copy(unreadCount = page.unreadCount, countStale = false, stale = true, error = null)
+            return
+        }
         if (!old.loaded || latest) {
             val page = operations.page(expected)
             if (!current(token, expected)) return
             mutable.value = mutable.value.copy(notifications = page.notifications, loaded = true, stale = false,
-                unreadCount = page.unreadCount, confirmedReadIds = emptySet(), olderCursor = page.olderCursor,
+                unreadCount = page.unreadCount, countStale = false, confirmedReadIds = emptySet(), olderCursor = page.olderCursor,
                 mayHaveOlder = page.mayHaveOlder, latestWindow = true, fixedUpper = null, incompleteRange = false,
                 unknownRead = old.unknownRead && !explicit, error = null,
                 scrollRequest = old.scrollRequest + if (latest) 1 else 0)
@@ -128,12 +150,12 @@ class NotificationCenterViewModel(private val operations: NotificationOperations
         }
         if (!current(token, expected)) return
         if (!window.coveredLowerBoundary) {
-            mutable.value = mutable.value.copy(stale = true, incompleteRange = true, unreadCount = window.unreadCount)
+            mutable.value = mutable.value.copy(stale = true, incompleteRange = true, unreadCount = window.unreadCount, countStale = false)
             return
         }
         val rows = window.notifications.take(500)
         val trimmed = window.notifications.size > 500
-        mutable.value = mutable.value.copy(notifications = rows, stale = false, unreadCount = window.unreadCount,
+        mutable.value = mutable.value.copy(notifications = rows, stale = false, unreadCount = window.unreadCount, countStale = false,
             confirmedReadIds = emptySet(), olderCursor = if (trimmed) rows.last().id else window.olderCursor,
             mayHaveOlder = trimmed || window.mayHaveOlder, incompleteRange = false,
             unknownRead = old.unknownRead && !explicit, error = null)
@@ -148,13 +170,13 @@ class NotificationCenterViewModel(private val operations: NotificationOperations
             val merged = (mutable.value.notifications + page.notifications).distinctBy { it.id }.sortedByDescending { it.id }
             val rows = merged.takeLast(500)
             val live = old.latestWindow && merged.size <= 500
-            mutable.value = mutable.value.copy(notifications = rows, unreadCount = page.unreadCount,
+            mutable.value = mutable.value.copy(notifications = rows, unreadCount = page.unreadCount, countStale = false,
                 olderCursor = page.olderCursor, mayHaveOlder = page.mayHaveOlder, latestWindow = live,
                 fixedUpper = if (live) null else if (merged.size > 500) rows.firstOrNull()?.id else old.fixedUpper,
                 confirmedReadIds = mutable.value.confirmedReadIds.intersect(rows.map { it.id }.toSet()))
         }
     }
-    private fun canBrowse(expected: SessionState) = active && ready(expected) && mutable.value.let {
+    private fun canBrowse(expected: SessionState) = active && centerVisible && centerOwner == expected.noticeIdentity() && ready(expected) && mutable.value.let {
         it.loaded && !it.busy && !it.stale
     }
     private fun eligible(expected: SessionState) = canBrowse(expected) && !mutable.value.unknownRead
@@ -187,7 +209,7 @@ class NotificationCenterViewModel(private val operations: NotificationOperations
                 val value = mutable.value
                 // No fabricated server read_at timestamp: pending canonical GET keeps a local overlay.
                 val affected = if (all) value.notifications.map { it.id }.toSet() else ids.toSet()
-                mutable.value = value.copy(writing = false, unreadCount = reply.unreadCount, stale = true,
+                mutable.value = value.copy(writing = false, unreadCount = reply.unreadCount, countStale = false, stale = true,
                     confirmedReadIds = value.confirmedReadIds + affected)
                 reconcile(token, expected, explicit = false)
             } catch (cancelled: CancellationException) {
@@ -201,7 +223,7 @@ class NotificationCenterViewModel(private val operations: NotificationOperations
     }
     private fun failed(failure: ApiFailure) {
         val revoked = failure.kind == FailureKind.INCOMPATIBLE || failure.status in setOf(401, 403, 404) && failure.code != "csrf_failed"
-        mutable.value = mutable.value.copy(stale = true, error = failure,
+        mutable.value = mutable.value.copy(stale = true, countStale = true, error = failure,
             notifications = if (revoked) emptyList() else mutable.value.notifications,
             loaded = mutable.value.loaded && !revoked, unreadCount = mutable.value.unreadCount.takeUnless { revoked },
             confirmedReadIds = if (revoked) emptySet() else mutable.value.confirmedReadIds,
@@ -211,7 +233,7 @@ class NotificationCenterViewModel(private val operations: NotificationOperations
         sequence++; job?.cancel(); job = null; postInFlight = false; requested = 0; attempted = 0
     }
     override fun onCleared() {
-        cleared = true; active = false; retire(); owner = null
+        cleared = true; active = false; retire(); owner = null; centerOwner = null
         mutable.value = NotificationCenterState()
         super.onCleared()
     }
@@ -222,8 +244,8 @@ class NotificationCenterViewModel(private val operations: NotificationOperations
     }
 }
 
-private data class NoticeIdentity(val server: String, val generation: Long, val user: Long, val version: Int)
-private fun SessionState.noticeIdentity(): NoticeIdentity? {
+internal data class NoticeIdentity(val server: String, val generation: Long, val user: Long, val version: Int)
+internal fun SessionState.noticeIdentity(): NoticeIdentity? {
     val address = server?.value ?: return null
     return user?.takeIf { phase == SessionPhase.AUTHENTICATED && !it.guest }
         ?.let { NoticeIdentity(address, generation, it.id, it.sessionVersion) } // Guest UI/lifecycle remains M7.

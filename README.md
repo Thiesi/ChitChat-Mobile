@@ -8,7 +8,9 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-**Native authentication, export and foreground room/direct conversations are implemented.** M4b2 adds the native DM inbox, recipient search, privacy-aware conversation/composer, blocking and read-race attention. M4c1/2 add typing privacy and foreground member typing; M4c3b adds private room-ignore controls and policy reconciliation. Room switching retains scoped memory-only drafts and delivery-unknown guards, with explicit recovery/discard controls. Notification center, push and remaining parity are still pending. Live chat/typing/ignore acceptance is not established. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). Exact verification boundaries are linked from the milestone plan.
+**Native authentication, export and foreground room/direct conversations are implemented.** M4b2 adds the native DM inbox, recipient search, privacy-aware conversation/composer, blocking and read-race attention. M4c1/2 add typing privacy and foreground member typing; M4c3b adds private room-ignore controls and policy reconciliation. Room switching retains scoped memory-only drafts and delivery-unknown guards, with explicit recovery/discard controls. Native notification-list/read controls are implemented; destination routing, push and remaining parity are pending. Live chat/typing/ignore acceptance is not established. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). Exact verification boundaries are linked from the milestone plan.
+
+The [native notification center](docs/milestones/M4c4c2-native-notification-center.md) adds the account list, independent unread indicator and explicit individual/All read controls. Destination links and background push remain pending; notices say so explicitly. Local verification passed 531 JVM and 113 native tests; destination routing, push and live acceptance remain pending.
 
 Room and DM reply previews can open the exact original as a marked historical window in the normal pane, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Reply composition and general notification/search routing remain pending; see [native reply-target scope and verification](docs/milestones/M4c4b2-native-reply-targets.md).
 
@@ -35,11 +37,12 @@ M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native 
 - [Room-ignore protocol prerequisite](docs/milestones/M4c3a-ignore-protocol.md)
 - [Native room-ignore controls and verification](docs/milestones/M4c3b-native-ignore.md)
 - [Room-switch draft retention and explicit recovery](docs/milestones/room-draft-retention.md)
-- [Notification HTTP/native-route prerequisite; center UI still pending](docs/milestones/M4c4a-notification-contracts.md)
+- [Notification HTTP/native-route prerequisite](docs/milestones/M4c4a-notification-contracts.md)
 - [Exact-message lookup/state prerequisite](docs/milestones/M4c4b1-message-target-state.md)
 - [Historical-boundary/scoped-callback corrections and target-adoption state](docs/milestones/M4c4b2a-target-adoption-state.md)
 - [Native same-conversation reply-target navigation](docs/milestones/M4c4b2-native-reply-targets.md)
-- [Scoped notification-center state prerequisite; native center still pending](docs/milestones/M4c4c1-notification-state.md)
+- [Scoped notification-center state prerequisite](docs/milestones/M4c4c1-notification-state.md)
+- [Native notification list/read controls and remaining routing](docs/milestones/M4c4c2-native-notification-center.md)
 - [Backend issues](docs/backend-dependencies.md)
 - [Accepted decentralized push architecture](docs/push-architecture.md)
 - [UnifiedPush and optional FCM fallback setup](docs/firebase-setup.md)

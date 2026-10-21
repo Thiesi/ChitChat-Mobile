@@ -13,7 +13,7 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="saved_server">Your server</string>
-    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations, and typing indicators. Room author actions include private ignore controls. Account includes typing privacy. Notifications are not available yet.</string>
+    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations, typing, and the notification list with explicit read controls. Notification destinations and background push are not yet available. Room author actions include private ignore controls; Account includes typing privacy.</string>
     <string name="change_server">Change server</string>
     <string name="forget_server">Forget server</string>
     <string name="forget_title">Forget this server?</string>
@@ -43,7 +43,7 @@
     <string name="use_recovery_code">Use recovery code</string>
     <string name="cancel_sign_in">Cancel sign-in</string>
     <string name="signed_in_as">Signed in as %1$s</string>
-    <string name="auth_preview_limit">Open Rooms or Direct messages to read and send messages and see typing indicators. Room author actions include private ignore controls. Account includes typing privacy. Notifications arrive later.</string>
+    <string name="auth_preview_limit">Open Rooms or Direct messages to read and send messages and see typing indicators. Notifications has the account notification list and separate read controls; destinations and background push follow later. Room author actions include private ignore controls; Account includes typing privacy.</string>
     <string name="session_retention">Your session is encrypted on this device. Sign in again after seven inactive days or thirty days from sign-in. Your server may expire it earlier.</string>
     <string name="recovery_remaining">Unused recovery codes remaining: %1$d</string>
     <string name="session_not_available">Session not available</string>
@@ -219,4 +219,34 @@
     <string name="message_target_session">Refresh the session before opening this message. Your draft is kept.</string>
     <string name="message_target_waiting">Waiting for the current conversation operation to finish…</string>
     <string name="message_target_rate">The server asked us to wait before retrying. Your draft is kept.</string>
+    <string name="notifications_title">Notifications</string>
+    <plurals name="notifications_count">
+        <item quantity="one">%1$d unread notification</item>
+        <item quantity="other">%1$d unread notifications</item>
+    </plurals>
+    <plurals name="notifications_last_count">
+        <item quantity="one">Last checked: %1$d unread notification</item>
+        <item quantity="other">Last checked: %1$d unread notifications</item>
+    </plurals>
+    <string name="notifications_count_unknown">Unread count not yet confirmed</string>
+    <string name="notifications_read_scope">Reading a notification is separate from reading a chat. Opening this list does not mark anything as read.</string>
+    <string name="notifications_loading">Checking notifications…</string>
+    <string name="notifications_writing">Marking notifications as read…</string>
+    <string name="notifications_unknown_read">The read request was not confirmed and will not be repeated automatically. Refresh notifications to check the server before making a new read choice.</string>
+    <string name="notifications_incomplete">This range could not be fully checked. Refresh or explicitly jump to the latest notifications; unrelated ranges have not been combined.</string>
+    <string name="notifications_stale">These notifications may be out of date. Refresh before changing read state.</string>
+    <string name="notifications_historical">Showing an older window. Refresh keeps this range; Latest returns to new notifications.</string>
+    <string name="notifications_refresh">Refresh notifications</string>
+    <string name="notifications_latest">Latest notifications</string>
+    <string name="notifications_mark_all">Mark all as read</string>
+    <string name="notifications_mark_read">Mark as read</string>
+    <string name="notifications_read">Read</string>
+    <string name="notifications_unread">Unread</string>
+    <string name="notifications_empty">No notifications.</string>
+    <string name="notifications_empty_range">No notifications remain in this older range. Use Latest to check new notifications.</string>
+    <string name="notifications_more">Older notifications</string>
+    <string name="notifications_all_title">Mark every notification as read?</string>
+    <string name="notifications_all_body">This includes notifications not loaded here and any that arrive before the server processes your request. It does not mark room or direct-message chats as read.</string>
+    <string name="notifications_network">Could not check notifications. Check your connection, then refresh. Any read request will not be repeated automatically.</string>
+    <string name="notifications_link_pending">Opening this notification’s destination is not yet available in this app.</string>
 </resources>

@@ -19,6 +19,8 @@ import io.github.thiesi.chitchat.core.direct.DirectOperations
 import io.github.thiesi.chitchat.core.direct.SessionDirectRepository
 import io.github.thiesi.chitchat.core.targets.MessageTargetOperations
 import io.github.thiesi.chitchat.core.targets.SessionMessageTargetRepository
+import io.github.thiesi.chitchat.core.notifications.NotificationOperations
+import io.github.thiesi.chitchat.core.notifications.SessionNotificationRepository
 import io.github.thiesi.chitchat.core.typing.TypingController
 import io.github.thiesi.chitchat.core.typing.TypingCoordinator
 import io.github.thiesi.chitchat.core.typing.SessionTypingRepository
@@ -42,6 +44,7 @@ class ChitChatApplication : Application() {
     val conversations: ConversationOperations by lazy { SessionConversationRepository(sessionRepository) }
     val directMessages: DirectOperations by lazy { SessionDirectRepository(sessionRepository) }
     val messageTargets: MessageTargetOperations by lazy { SessionMessageTargetRepository(sessionRepository) }
+    val notifications: NotificationOperations by lazy { SessionNotificationRepository(sessionRepository) }
     private val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val realtimeCoordinator by lazy {
         RealtimeCoordinator(SessionRealtimeRepository(sessionRepository), sessions, processScope)
