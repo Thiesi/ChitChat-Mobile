@@ -52,6 +52,9 @@
 
 - M5a1 adds reply protocol/scoped VM draft state, not native controls; see `docs/milestones/M5a1-reply-composer-state.md`. Store only ID-plus-instance identity, never incoming bodies. Reply-only drafts consume capacity; pending sends freeze selection/removal, stale row/owner/resource/token callbacks fail closed. Cancel must not clear uncertain-send/staleness/consent. Room ping ignores quotes; DM slash text remains literal. Invalid references never downgrade/replay a POST. Native Reply/Copy consumer follows with separate complete-review gates.
 
+- Input-handoff diagnostics additionally observe native touch mode and optional API30+ IME controllability. Null is unknown; controllability is not readiness/visibility proof. Keep listeners ephemeral/finally-removed and metadata scalar-only; never request focus/IME/control or call timing changes a fix. Public Compose input-session tracing in the shared test root is opt-in (`-e traceNativeInput true`), never enabled for normal full/CI gates; even delegating interception can change timing. Passing subsets/cohorts/traced runs cannot replace failed full gates; require current-head untraced full CI/reviews. See `docs/milestones/native-ime-handoff-observations.md`.
+- On phones with a configured password manager, synthetic-login fixtures can summon a real save-password modal. Never save fixture credentials, inspect/dismiss other-app UI automatically or disable global autofill. RoomDraft's explicit `cancelFixtureAutofill=true` option cancels only its current Activity context before fake sign-in; leave it off in normal CI/full gates. Preserve interrupted results and label isolated phone comparisons. Assert complete draft characters, not incidental annotated-text metadata; never relax native keyboard/visibility/send checks.
+
 <!-- codebase-memory-mcp:start -->
 For structural codebase exploration, use the installed `codebase-memory` skill.
 <!-- codebase-memory-mcp:end -->

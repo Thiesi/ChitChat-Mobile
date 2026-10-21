@@ -6,6 +6,8 @@ Classification: **Existing** = existing backend contract, **Android** = client-o
 
 Native keyboard/navigation verification also covers one-tap input focus and actual IME before semantic text injection; see [DM search readiness](milestones/dm-search-keyboard-navigation.md) for the merged-main failure, correction and gate boundaries.
 
+[Input-handoff observations](milestones/native-ime-handoff-observations.md) investigate PR49's136/137 native result with additional passive scalars. Reply/Copy12/12 passed, but the PR is unmerged; no keyboard fix or extra parity is claimed.
+
 [Additional IME diagnostics](milestones/native-ime-diagnostics.md) follows the later merged-main112/113 failure. This is test observability, not a completed keyboard correction or another user feature; issue31 and remaining target/push parity stay open.
 
 | Browser feature / behavior | Feasibility and Android treatment | Evidence | Milestone / dependency |

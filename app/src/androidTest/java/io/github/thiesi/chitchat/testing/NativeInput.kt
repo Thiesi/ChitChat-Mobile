@@ -23,7 +23,7 @@ internal fun ComposeTestRule.tapNativeInput(tag: String, imeBottom: () -> Int,
         val current = node.fetchSemanticsNode()
         val extra = runCatching(failureMetadata).getOrDefault("extra diagnostics unavailable")
         val afterWindow = nativeInputWindow()
-        throw AssertionError("Tap fixture: tag=$tag, IME=${imeBottom()}, focusedBefore=$beforeFocused, focused=${current.config[SemanticsProperties.Focused]}, before=$beforeBounds, after=${current.boundsInWindow}, beforeWindow=$beforeWindow, afterWindow=$afterWindow, $extra", failure)
+        throw AssertionError("Tap fixture: tag=$tag, IME=${imeBottom()}, focusedBefore=$beforeFocused, focused=${current.config[SemanticsProperties.Focused]}, before=$beforeBounds, after=${current.boundsInWindow}, beforeWindow=$beforeWindow, afterWindow=$afterWindow, inputSessions=${NativeTextInputTrace.describe()}, $extra", failure)
     }
     return node.assertIsFocused().assertIsDisplayed()
 }
