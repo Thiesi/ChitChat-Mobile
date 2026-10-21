@@ -100,12 +100,15 @@ import io.github.thiesi.chitchat.feature.notifications.NotificationCenterState
 import io.github.thiesi.chitchat.feature.notifications.NotificationLifecycle
 import io.github.thiesi.chitchat.feature.notifications.noticeIdentity
 import io.github.thiesi.chitchat.core.targets.TargetSnapshot
+import io.github.thiesi.chitchat.core.targets.MessageTarget
+import io.github.thiesi.chitchat.core.notifications.NotificationDestination
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
 import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.currentStateAsState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,7 +120,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     notifications: NotificationCenterViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
-    val session by auth.state.collectAsStateWithLifecycle()
+    val session = auth.state.collectAsStateWithLifecycle().value
     val displayedSession = session
     val targetState = messageTargets?.state?.collectAsStateWithLifecycle()?.value
     val targetObscured = targetState?.request?.matches(session) == true
@@ -142,7 +145,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     )
     MaterialTheme(colorScheme = colors) {
         val nav = rememberNavController()
-        val entry by nav.currentBackStackEntryAsState()
+        val entry = nav.currentBackStackEntryAsState().value
+        val entryStarted = entry?.lifecycle?.currentStateAsState()?.value?.isAtLeast(Lifecycle.State.STARTED) == true
         val notificationState = notifications?.state?.collectAsStateWithLifecycle()?.value
             ?.takeIf { notifications.belongsTo(displayedSession) } ?: NotificationCenterState()
         val noticeArgs = entry?.arguments
@@ -169,20 +173,23 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         val atHome = entry?.destination?.route.let { it == null || it == "home" }
         LaunchedEffect(entry, session.phase, session.server, session.generation,
             session.user?.id, session.user?.sessionVersion) {
-            if (entry?.destination?.route == NOTIFICATIONS_ROUTE && (!noticeScope || notifications == null))
+            if (nav.currentBackStackEntry !== entry) return@LaunchedEffect
+            if (entry?.destination?.route in setOf(NOTIFICATIONS_ROUTE, NOTIFICATION_ROOM_ROUTE, NOTIFICATION_ACCOUNT_ROUTE) &&
+                (!noticeScope || notifications == null))
                 nav.popBackStack("home", false)
-            if (entry?.destination?.route == "account" && session.phase != SessionPhase.AUTHENTICATED) {
+            val accountRoute = entry?.destination?.route in setOf("account", NOTIFICATION_ACCOUNT_ROUTE)
+            if (accountRoute && session.phase != SessionPhase.AUTHENTICATED) {
                 nav.popBackStack("home", false)
                 account.cancel()
                 typingPreferences?.cancel()
-            } else if (entry?.destination?.route != null && entry?.destination?.route != "account") {
+            } else if (entry?.destination?.route != null && !accountRoute) {
                 account.cancel(); typingPreferences?.cancel()
             }
             if (entry?.destination?.route == "rooms" && session.phase != SessionPhase.AUTHENTICATED) {
                 nav.popBackStack("home", false)
                 rooms.cancel()
             } else if (entry?.destination?.route != null && entry?.destination?.route != "rooms") rooms.cancel()
-            val conversation = entry?.destination?.route?.startsWith("conversation/") == true
+            val conversation = entry?.destination?.route?.startsWith("conversation/") == true || entry?.destination?.route == NOTIFICATION_ROOM_ROUTE
             if (entry?.destination?.route != null && (!conversation || session.phase != SessionPhase.AUTHENTICATED))
                 ignores?.cancel()
             if (conversation && session.phase != SessionPhase.AUTHENTICATED) {
@@ -206,7 +213,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
         // A toolbar can consume the entire keyboard-visible landscape viewport. Keep editing
         // controls usable; system Back dismisses the IME and restores the ordinary navigation bar.
-        val conversationRoute = entry?.destination?.route?.let { it.startsWith("direct") || it.startsWith("conversation/") } == true
+        val conversationRoute = entry?.destination?.route?.let { it.startsWith("direct") || it.startsWith("conversation/") || it == NOTIFICATION_ROOM_ROUTE } == true
         val compactConversation = conversationRoute && maxHeight < 400.dp
         val compactKeyboard = imeVisible && maxHeight < 240.dp
         Scaffold(
@@ -214,10 +221,10 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 if (!compactKeyboard) TopAppBar(
                     title = { Text(stringResource(if (entry?.destination?.route == NOTIFICATIONS_ROUTE) R.string.notifications_title
                         else if (entry?.destination?.route?.startsWith("direct") == true) R.string.dm_title
-                        else if (entry?.destination?.route?.startsWith("conversation/") == true)
+                        else if (entry?.destination?.route?.startsWith("conversation/") == true || entry?.destination?.route == NOTIFICATION_ROOM_ROUTE)
                         R.string.rooms_conversation else when (entry?.destination?.route) {
                         "settings" -> R.string.settings
-                        "account" -> R.string.account
+                        "account", NOTIFICATION_ACCOUNT_ROUTE -> R.string.account
                         "rooms" -> R.string.rooms_title
                         else -> R.string.app_name
                     })) },
@@ -318,6 +325,14 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                 typingPreferences?.let { TypingPreferenceCard(it, session, auth::refresh) }
                             }
                         }
+                        composable(NOTIFICATION_ACCOUNT_ROUTE, arguments = notificationArguments()) { destination ->
+                            val args = destination.arguments
+                            if (args != null && matchesNotificationScope(session, args.getLong("generation", -1),
+                                args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server"))) ScreenContent {
+                                AccountScreen(account, session, auth::refresh)
+                                typingPreferences?.let { TypingPreferenceCard(it, session, auth::refresh) }
+                            }
+                        }
                         composable("rooms") {
                             if (session.phase == SessionPhase.AUTHENTICATED) Column(Modifier.fillMaxSize()) {
                                 if (roomDraftCount > 0) TextButton(onClick = { conversations.showDrafts(displayedSession) },
@@ -332,8 +347,33 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             if (notifications != null && args != null && matchesNotificationScope(session,
                                 args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server"))) {
                                 key(session.noticeIdentity()) {
-                                    NotificationCenterScreen(notifications, displayedSession, auth::refresh) {
-                                        nav.currentBackStackEntry === destination
+                                    NotificationCenterScreen(notifications, displayedSession, auth::refresh,
+                                        onOpen = if (messageTargets == null) null else { item, link ->
+                                            val current = auth.state.value
+                                            if (nav.currentBackStackEntry === destination && notifications.belongsTo(displayedSession) &&
+                                                displayedSession.noticeIdentity() == current.noticeIdentity() &&
+                                                notifications.state.value.notifications.any { it === item }) {
+                                                when (link) {
+                                                    is NotificationDestination.Room -> {
+                                                        val target = link.messageId?.let { MessageTarget.RoomMessage(link.roomId, it) }
+                                                            ?: link.pingId?.let { MessageTarget.RoomPing(link.roomId, it) }
+                                                        if (target != null) messageTargets.load(displayedSession, target, destination.id)
+                                                        else notificationRoomRoute(displayedSession, link.roomId)?.let { route ->
+                                                            focus.clearFocus(); conversations.open(link.roomId, interacted = true, expected = displayedSession)
+                                                            nav.navigate(route) { launchSingleTop = true }
+                                                        }
+                                                    }
+                                                    is NotificationDestination.Direct -> if (link.messageId != null)
+                                                        messageTargets.load(displayedSession, MessageTarget.DirectMessage(link.peerId, link.messageId), destination.id)
+                                                        else openDirect(link.peerId)
+                                                    NotificationDestination.Account -> notificationAccountRoute(displayedSession)?.let { route ->
+                                                        focus.clearFocus(); nav.navigate(route) { launchSingleTop = true }
+                                                    }
+                                                    NotificationDestination.Registration -> Unit // Explicitly unavailable, never an auth mutation.
+                                                }
+                                            }
+                                        }) {
+                                        nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
                                     }
                                 }
                             }
@@ -341,7 +381,17 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         composable("conversation/{roomId}", arguments = listOf(navArgument("roomId") { type = NavType.LongType })) { destination ->
                             val id = destination.arguments?.getLong("roomId") ?: 0L
                             if (session.phase == SessionPhase.AUTHENTICATED && id > 0)
-                                ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured)
+                                ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured) {
+                                    nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
+                        }
+                        composable(NOTIFICATION_ROOM_ROUTE, arguments = notificationArguments() +
+                            navArgument("roomId") { type = NavType.LongType; defaultValue = -1L }) { destination ->
+                            val args = destination.arguments
+                            val id = args?.getLong("roomId", -1) ?: -1
+                            if (id > 0 && args != null && matchesNotificationScope(session, args.getLong("generation", -1),
+                                args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
+                                ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured) {
+                                    nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
                         }
                         composable(DIRECT_INBOX_ROUTE, arguments = directArguments()) { destination ->
                             val args = destination.arguments
@@ -354,7 +404,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             val peer = args?.getLong("peerId", -1) ?: -1
                             if (directThread != null && args != null && peer > 0 && peer != session.user?.id && matchesDirectScope(session,
                                 args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
-                                DirectThreadScreen(directThread, peer, auth::refresh, messageTargets, targetObscured)
+                                DirectThreadScreen(directThread, peer, auth::refresh, messageTargets, targetObscured) {
+                                    nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
                         }
                     }
                 }
@@ -365,19 +416,40 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         if (messageTargets != null && targetState != null) {
             val route = entry?.destination?.route
             val args = entry?.arguments
-            val roomId = args?.getLong("roomId")?.takeIf { route == "conversation/{roomId}" && it > 0 }
+            val roomId = args?.getLong("roomId")?.takeIf { (route == "conversation/{roomId}" || route == NOTIFICATION_ROOM_ROUTE && noticeScope) && it > 0 }
             val peerId = args?.getLong("peerId")?.takeIf { route == DIRECT_THREAD_ROUTE && it > 0 &&
                 matchesDirectScope(session, args.getLong("generation", -1), args.getLong("viewer", -1),
                     args.getInt("version", -1), args.getString("server")) }
-            ReplyTargetHost(messageTargets, targetState, session, conversations, directThread, entry != null, roomId, peerId,
+            ReplyTargetHost(messageTargets, targetState, session, conversations, directThread, entryStarted, roomId, peerId,
                 onAccept = { snapshot ->
                     // Effects may outlive their rendered entry. Check the REAL current back-stack entry too.
                     val actual = nav.currentBackStackEntry
                     val actualArgs = actual?.arguments
-                    if (!snapshot.matches(auth.state.value)) false else when (snapshot) {
-                        is TargetSnapshot.RoomMessage -> actual?.destination?.route == "conversation/{roomId}" &&
+                    val source = targetState.sourceEntryId
+                    if (!snapshot.matches(auth.state.value) || messageTargets.state.value.request !== snapshot.request ||
+                        actual?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.STARTED) != true) false
+                    else if (source != null) {
+                        if (actual !== entry || actual.id != source || actual.destination.route != NOTIFICATIONS_ROUTE ||
+                            actualArgs == null || !matchesNotificationScope(auth.state.value, actualArgs.getLong("generation", -1),
+                                actualArgs.getLong("viewer", -1), actualArgs.getInt("version", -1), actualArgs.getString("server"))) false
+                        else when (snapshot) {
+                            is TargetSnapshot.RoomMessage -> notificationRoomRoute(snapshot.request.original, snapshot.context.room.id)?.let { next ->
+                                if (conversations.prepareTarget(snapshot)) { focus.clearFocus(); nav.navigate(next); true } else false
+                            } == true
+                            is TargetSnapshot.RoomPing -> notificationRoomRoute(snapshot.request.original, snapshot.context.room.id)?.let { next ->
+                                if (conversations.prepareTarget(snapshot)) { focus.clearFocus(); nav.navigate(next); true } else false
+                            } == true
+                            is TargetSnapshot.DirectMessage -> directRoute(snapshot.request.original, snapshot.context.peer.id)?.let { next ->
+                                if (directThread?.prepareTarget(snapshot) == true) { focus.clearFocus(); nav.navigate(next); true } else false
+                            } == true
+                        }
+                    } else when (snapshot) {
+                        is TargetSnapshot.RoomMessage -> (actual.destination.route == "conversation/{roomId}" ||
+                            actual.destination.route == NOTIFICATION_ROOM_ROUTE && actualArgs != null &&
+                                matchesNotificationScope(auth.state.value, actualArgs.getLong("generation", -1), actualArgs.getLong("viewer", -1),
+                                    actualArgs.getInt("version", -1), actualArgs.getString("server"))) &&
                             actualArgs?.getLong("roomId") == snapshot.context.room.id && conversations.adoptTarget(snapshot)
-                        is TargetSnapshot.DirectMessage -> actual?.destination?.route == DIRECT_THREAD_ROUTE && actualArgs != null &&
+                        is TargetSnapshot.DirectMessage -> actual.destination.route == DIRECT_THREAD_ROUTE && actualArgs != null &&
                             actualArgs.getLong("peerId") == snapshot.context.peer.id && matchesDirectScope(auth.state.value,
                                 actualArgs.getLong("generation", -1), actualArgs.getLong("viewer", -1),
                                 actualArgs.getInt("version", -1), actualArgs.getString("server")) && directThread?.adoptTarget(snapshot) == true
@@ -386,7 +458,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 }, onDenied = { request, failure ->
                     conversations.targetDenied(request, failure)
                     directThread?.targetDenied(request, failure)
-                }, refreshSession = auth::refresh)
+                }, refreshSession = auth::refresh, entryId = entry?.id, actualEntryId = { nav.currentBackStackEntry?.id })
         }
     }
 }

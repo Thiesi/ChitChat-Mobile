@@ -8,13 +8,13 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-**Native authentication, export and foreground room/direct conversations are implemented.** M4b2 adds the native DM inbox, recipient search, privacy-aware conversation/composer, blocking and read-race attention. M4c1/2 add typing privacy and foreground member typing; M4c3b adds private room-ignore controls and policy reconciliation. Room switching retains scoped memory-only drafts and delivery-unknown guards, with explicit recovery/discard controls. Native notification-list/read controls are implemented; destination routing, push and remaining parity are pending. Live chat/typing/ignore acceptance is not established. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). Exact verification boundaries are linked from the milestone plan.
+**Native authentication, export and foreground room/DM conversations are implemented**, including typing privacy, room-ignore controls, scoped draft/unknown-delivery recovery and notification list/read/destination controls. Push, remaining parity and live acceptance are pending. Audited baseline: [ChitChat v3.2.1](https://github.com/Thiesi/ChitChat/releases/tag/v3.2.1). See milestone records for gates.
 
-The [native notification center](docs/milestones/M4c4c2-native-notification-center.md) adds the account list, independent unread indicator and explicit individual/All read controls. Destination links and background push remain pending; notices say so explicitly. Local verification passed 531 JVM and 113 native tests; destination routing, push and live acceptance remain pending.
+The [native notification center](docs/milestones/M4c4c2-native-notification-center.md) adds the account list, independent unread indicator and explicit individual/All read controls. [Native destinations](docs/milestones/M4c4d-native-notification-destinations.md) add room/DM historical-message and private-ping handoffs, normal room/peer links and Account (552 JVM/125 native tests locally). View and Mark read remain separate. Unsupported/foreign/guest-registration links stay inert; push and live acceptance remain pending.
 
 The independent merged-main native run then failed 112/113 on the known focused-but-hidden keyboard condition. [IME diagnostics](docs/milestones/native-ime-diagnostics.md) records that failure and the added test-only window/filtered-CI evidence (local 531 JVM/115 native tests passed); issue31 remains open. A later green run is not a production keyboard fix.
 
-Room and DM reply previews can open the exact original as a marked historical window in the normal pane, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Reply composition and general notification/search routing remain pending; see [native reply-target scope and verification](docs/milestones/M4c4b2-native-reply-targets.md).
+Room and DM reply previews open the exact original as a marked historical window, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Reply composition and search remain pending. See [reply-target scope](docs/milestones/M4c4b2-native-reply-targets.md).
 
 ## Engineering documents
 

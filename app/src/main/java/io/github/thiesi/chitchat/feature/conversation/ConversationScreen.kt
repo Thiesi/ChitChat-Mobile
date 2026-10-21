@@ -23,6 +23,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -80,18 +81,19 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
-    ignores: IgnorePersonViewModel? = null, targets: MessageTargetViewModel? = null, obscured: Boolean = false) {
+    ignores: IgnorePersonViewModel? = null, targets: MessageTargetViewModel? = null, obscured: Boolean = false,
+    isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     key(roomId, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
         LaunchedEffect(roomId) { model.open(roomId, expected = displayedSession) }
-        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured)
+        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, isCurrentEntry)
     }
 }
 
 @Composable
 private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
-    ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean) {
+    ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean, isCurrentEntry: () -> Boolean) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session // Freeze callback origin; delegated Flow values can change before recomposition.
@@ -110,6 +112,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val lifecycleState by lifecycle.currentStateAsState()
     val window = LocalWindowInfo.current
     var pingsOpen by remember { mutableStateOf(false) }
+    val pingsVisible = pingsOpen || state.pingSelection != null
     var detailsOpen by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val timeline = rememberLazyListState()
@@ -136,7 +139,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
         }
     }
-    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsOpen, detailsOpen, personDialog, state.draftsOpen, obscured, lifecycle,
+    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsVisible, detailsOpen, personDialog, state.draftsOpen, obscured, lifecycle,
         connection?.presencePhase, connection?.selectedRoomId, lifecycleState) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             snapshotFlow {
@@ -148,7 +151,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val edgeVisible = last != null && isReadEdgeVisible(last.offset, last.size,
                     timeline.layoutInfo.viewportStartOffset, timeline.layoutInfo.viewportEndOffset)
                 val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused,
-                    !pingsOpen && !detailsOpen && !personDialog && !state.draftsOpen && !obscured)
+                    !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !obscured)
                 Triple(anchor, if (edgeVisible && readable) newest else null, !timeline.canScrollForward && readable)
             }.collect { (anchor, newest, edge) -> model.viewport(anchor, newest, edge) }
         }
@@ -271,8 +274,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     if (ignored && message.id !in state.revealed) TextButton(onClick = { model.reveal(message.id) }) {
                         Text(stringResource(R.string.conversation_ignored))
                     } else MessageContent(message, state.context, targets?.let { coordinator -> { id ->
-                        focus.clearFocus()
-                        coordinator.load(displayedSession, MessageTarget.RoomMessage(roomId, id))
+                        if (isCurrentEntry()) {
+                            focus.clearFocus()
+                            coordinator.load(displayedSession, MessageTarget.RoomMessage(roomId, id))
+                        }
                         Unit
                     } })
                 }
@@ -280,7 +285,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             item(key = "history_end") { Spacer(Modifier.height(1.dp)) }
         }
         TypingStatus(model.typing, session, TypingTarget.Room(roomId),
-            viewing = state.loaded && !state.stale && state.context != null && !pingsOpen && !detailsOpen && !personDialog && !state.draftsOpen && !obscured,
+            viewing = state.loaded && !state.stale && state.context != null && !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !obscured,
             publishing = ready && !state.busy && !obscured && model.canSend())
         Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
@@ -301,12 +306,12 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 }
             }
             MessageInput(state.draft, { value ->
-                if (model.updateDraft(displayedSession, roomId, value))
+                if (isCurrentEntry() && model.updateDraft(displayedSession, roomId, value) && model.state.value.pingSelection == null)
                     model.typing?.input(displayedSession, TypingTarget.Room(roomId), hasTypingContent(value)) },
                 !state.sending && model.canEditDraft(),
                 stringResource(R.string.conversation_message), compact,
                 Modifier.weight(1f).testTag("conversation_composer"))
-            Button(onClick = { model.send(displayedSession, roomId) }, enabled = ready && !state.busy && model.canSend() && state.draft.isNotBlank(),
+            Button(onClick = { if (isCurrentEntry()) model.send(displayedSession, roomId) }, enabled = ready && !state.busy && model.canSend() && state.draft.isNotBlank(),
                 modifier = Modifier.testTag("conversation_send")) { Text(stringResource(if (state.sending) R.string.conversation_sending else R.string.conversation_send)) }
         }
     }
@@ -321,18 +326,44 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         } },
         confirmButton = { TextButton(onClick = { detailsOpen = false }) { Text(stringResource(R.string.rooms_close)) } })
     }
-    if (pingsOpen) AlertDialog(onDismissRequest = { pingsOpen = false },
-        title = { Text(stringResource(R.string.conversation_pings)) },
-        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(stringResource(R.string.conversation_pings_private))
-            val visiblePings = state.pings.filterNot { it.sender.id in ignoredIds }
-            if (visiblePings.isEmpty()) Text(stringResource(R.string.conversation_no_pings))
-            visiblePings.forEach { ping ->
-                Text(stringResource(R.string.conversation_ping_people, ping.sender.username ?: stringResource(R.string.conversation_unknown_user),
-                    ping.target.username ?: stringResource(R.string.conversation_unknown_user)))
-                Text(ping.message); Text(displayTime(ping.createdAt, state.context), style = MaterialTheme.typography.labelSmall)
+    if (pingsVisible) {
+        val choice = state.pingSelection // Freeze the close callback's original selection, not a delegated live value.
+        val visiblePings = state.pings.filterNot { it.sender.id in ignoredIds }
+        val targetMissing = choice != null && visiblePings.none { it.id == choice.id }
+        val pingList = rememberLazyListState()
+        var positioned by remember(choice) { mutableStateOf(false) }
+        LaunchedEffect(choice, visiblePings.map { it.id }) {
+            val index = visiblePings.indexOfFirst { it.id == choice?.id }
+            if (choice != null && !positioned && index >= 0) { pingList.scrollToItem(index + 1); positioned = true }
+        }
+        val close: () -> Unit = { if (isCurrentEntry()) {
+            pingsOpen = false; choice?.let(model::dismissTargetPing)
+        } }
+        AlertDialog(onDismissRequest = close, modifier = Modifier.testTag("private_pings_dialog"),
+        title = { Text(stringResource(if (targetMissing) R.string.ping_target_missing_title else R.string.conversation_pings)) },
+        text = { LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), state = pingList,
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item(key = "explanation") { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.conversation_pings_private))
+                if (choice != null) Text(stringResource(R.string.ping_target_limit))
+                if (targetMissing) Text(stringResource(R.string.ping_target_unavailable))
+                else if (visiblePings.isEmpty()) Text(stringResource(R.string.conversation_no_pings))
+            } }
+            items(visiblePings, key = { it.id }) { ping ->
+                val isTarget = ping.id == choice?.id
+                val selectedLabel = stringResource(R.string.ping_target_selected)
+                Card(Modifier.fillMaxWidth().testTag("private_ping:${ping.id}").semantics {
+                    selected = isTarget
+                    if (isTarget) stateDescription = selectedLabel
+                }) { Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (isTarget) Text(selectedLabel, style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(R.string.conversation_ping_people, ping.sender.username ?: stringResource(R.string.conversation_unknown_user),
+                        ping.target.username ?: stringResource(R.string.conversation_unknown_user)))
+                    Text(ping.message); Text(displayTime(ping.createdAt, state.context), style = MaterialTheme.typography.labelSmall)
+                } }
             }
-        } }, confirmButton = { TextButton(onClick = { pingsOpen = false }) { Text(stringResource(R.string.rooms_close)) } })
+        } }, confirmButton = { TextButton(onClick = close) { Text(stringResource(R.string.rooms_close)) } })
+    }
     if (ignores != null && ignoreState != null) IgnorePersonDialog(ignores, ignoreState, session, roomId, now, onRefreshSession)
 }
 

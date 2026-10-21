@@ -25,4 +25,13 @@ class NotificationNavigationTest {
         assertNull(notificationRoute(session.copy(server = null)))
         assertNull(notificationRoute(session.copy(user = session.user!!.let { SessionUser(it.id, it.username, it.roles, it.sessionVersion, true) })))
     }
+    @Test fun roomAndAccountDestinationsCarryTheOriginalEncodedOwnerWithoutNoticeContents() {
+        val owner = "generation=2&viewer=7&version=3&server=https%3A%2F%2Fchat.example.test%3A8443%2F"
+        assertEquals("notification-room/42?$owner", notificationRoomRoute(session, 42))
+        assertEquals("notification-account?$owner", notificationAccountRoute(session))
+        assertFalse(notificationAccountRoute(session)!!.contains("Private fixture name"))
+        assertNull(notificationRoomRoute(session, 0)); assertNull(notificationRoomRoute(session, -1))
+        assertNull(notificationRoomRoute(session.copy(phase = SessionPhase.SIGNED_OUT), 42))
+        assertNull(notificationAccountRoute(session.copy(server = null)))
+    }
 }

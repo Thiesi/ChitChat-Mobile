@@ -13,7 +13,7 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="saved_server">Your server</string>
-    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations, typing, and the notification list with explicit read controls. Notification destinations and background push are not yet available. Room author actions include private ignore controls; Account includes typing privacy.</string>
+    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations, typing, and the notification list with explicit read controls and supported native destinations. Background push is not yet available. Room author actions include private ignore controls; Account includes typing privacy. Guest registration links remain unavailable.</string>
     <string name="change_server">Change server</string>
     <string name="forget_server">Forget server</string>
     <string name="forget_title">Forget this server?</string>
@@ -43,7 +43,7 @@
     <string name="use_recovery_code">Use recovery code</string>
     <string name="cancel_sign_in">Cancel sign-in</string>
     <string name="signed_in_as">Signed in as %1$s</string>
-    <string name="auth_preview_limit">Open Rooms or Direct messages to read and send messages and see typing indicators. Notifications has the account notification list and separate read controls; destinations and background push follow later. Room author actions include private ignore controls; Account includes typing privacy.</string>
+    <string name="auth_preview_limit">Open Rooms or Direct messages to read and send messages and see typing indicators. Notifications has separate read controls and supported native destinations, including exact messages and private pings; background push follows later. Room author actions include private ignore controls; Account includes typing privacy. Guest registration links remain unavailable.</string>
     <string name="session_retention">Your session is encrypted on this device. Sign in again after seven inactive days or thirty days from sign-in. Your server may expire it earlier.</string>
     <string name="recovery_remaining">Unused recovery codes remaining: %1$d</string>
     <string name="session_not_available">Session not available</string>
@@ -249,4 +249,11 @@
     <string name="notifications_all_body">This includes notifications not loaded here and any that arrive before the server processes your request. It does not mark room or direct-message chats as read.</string>
     <string name="notifications_network">Could not check notifications. Check your connection, then refresh. Any read request will not be repeated automatically.</string>
     <string name="notifications_link_pending">Opening this notification’s destination is not yet available in this app.</string>
+    <string name="notifications_view">View destination</string>
+    <string name="notifications_link_unsupported">This destination is not supported in the native app. No browser or external link has been opened.</string>
+    <string name="ping_target_selected">Requested private ping</string>
+    <string name="ping_target_limit">Only the latest 100 private pings are available. Opening a ping does not read the room conversation.</string>
+    <string name="ping_target_unavailable">The requested private ping is not available here. Only the latest 100 private pings can be searched; it may also have expired or been hidden by your ignore preferences.</string>
+    <string name="ping_target_open">Open private ping</string>
+    <string name="ping_target_missing_title">Requested ping unavailable</string>
 </resources>

@@ -26,6 +26,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
+import io.github.thiesi.chitchat.core.notifications.AccountNotification
+import io.github.thiesi.chitchat.core.notifications.NotificationDestination
+import io.github.thiesi.chitchat.core.notifications.notificationDestination
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.ui.InlineError
 import io.github.thiesi.chitchat.core.ui.messageTime
@@ -42,7 +45,8 @@ internal fun NotificationLifecycle(model: NotificationCenterViewModel, expected:
 
 @Composable
 internal fun NotificationCenterScreen(model: NotificationCenterViewModel, expected: SessionState,
-    refreshSession: () -> Unit, isCurrentEntry: () -> Boolean) {
+    refreshSession: () -> Unit, onOpen: ((AccountNotification, NotificationDestination) -> Unit)? = null,
+    isCurrentEntry: () -> Boolean) {
     val observed by model.state.collectAsStateWithLifecycle()
     val value = observed.takeIf { model.belongsTo(expected) } ?: NotificationCenterState()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -102,8 +106,18 @@ internal fun NotificationCenterScreen(model: NotificationCenterViewModel, expect
                     Text(messageTime(item.createdAt, expected.chatPolicy?.display), style = MaterialTheme.typography.bodySmall)
                     Text(item.message)
                     item.details.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
-                    // Plain text only: no browser intent, auto-linking or fake View-message action.
-                    if (item.link != null) Text(stringResource(R.string.notifications_link_pending), style = MaterialTheme.typography.bodySmall)
+                    val destination = expected.server?.let { notificationDestination(it, item.link) }
+                    val supported = destination != null && destination != NotificationDestination.Registration &&
+                        (destination !is NotificationDestination.Direct || destination.peerId != expected.user?.id)
+                    if (item.link != null) {
+                        if (supported && onOpen != null) TextButton(onClick = {
+                            if (isCurrentEntry() && model.belongsTo(expected) && model.state.value.notifications.any { it === item })
+                                onOpen(item, checkNotNull(destination))
+                        }, enabled = canGet, modifier = Modifier.testTag("notification_view:${item.id}")) {
+                            Text(stringResource(R.string.notifications_view))
+                        } else Text(stringResource(if (onOpen == null) R.string.notifications_link_pending else
+                            R.string.notifications_link_unsupported), style = MaterialTheme.typography.bodySmall)
+                    }
                     if (!read) TextButton(onClick = { if (isCurrentEntry()) model.markRead(expected, item.id) },
                         enabled = canRead, modifier = Modifier.testTag("notification_read:${item.id}")) {
                         Text(stringResource(R.string.notifications_mark_read))

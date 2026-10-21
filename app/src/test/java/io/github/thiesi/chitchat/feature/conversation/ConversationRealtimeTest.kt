@@ -37,6 +37,54 @@ class ConversationRealtimeTest {
         return TargetSnapshot.RoomMessage(TargetRequest(api.session.value, MessageTarget.RoomMessage(room, id)),
             context, api.history(room, beforeTarget(id)), api.pings(room))
     }
+    private suspend fun ping(room: Long = 43): TargetSnapshot.RoomPing {
+        val context = api.context(room)
+        api.session.value = api.session.value.copy(chatPolicy = context.policy)
+        return TargetSnapshot.RoomPing(TargetRequest(api.session.value, MessageTarget.RoomPing(room, 9)), context, api.pings(room))
+    }
+
+    @Test fun privatePingPreparationOpensItsSeparateModalWithoutAdoptingAnIdenticallyNumberedMessage() = runTest(dispatcher) {
+        open(); model.updateDraft("Old room draft"); assertTrue(model.prepareTarget(ping()))
+        val value = model.state.value
+        assertEquals(43L, value.roomId); assertEquals(9L, value.pingSelection?.id)
+        assertTrue(value.messages.isEmpty()); assertNull(value.highlightedMessageId); assertNull(value.fixedUpper)
+        assertEquals("Old room draft", model.drafts.value[42]?.body); assertEquals(0, api.reads)
+    }
+    @Test fun privatePingModalRejectsStaleViewportAndSendProofAndClosingRequiresFreshVisibility() = runTest(dispatcher) {
+        assertTrue(model.prepareTarget(ping())); val choice = checkNotNull(model.state.value.pingSelection)
+        model.foreground(); runCurrent(); assertSame(choice, model.state.value.pingSelection)
+        model.updateDraft("Keep this draft")
+        val newest = checkNotNull(model.state.value.messages.lastOrNull()?.id)
+        model.viewport(TimelineAnchor(newest, 0), newest, true); runCurrent()
+        assertFalse(model.state.value.atLatest); assertFalse(model.canSend()); model.send(); runCurrent()
+        assertEquals(0, api.reads); assertEquals(0, api.sends)
+        model.dismissTargetPing(checkNotNull(model.state.value.pingSelection)); runCurrent(); assertEquals(0, api.reads)
+        model.viewport(TimelineAnchor(newest, 0), newest, true); runCurrent(); assertEquals(1, api.reads)
+    }
+    @Test fun oldPingCloseCannotDismissASuccessorWithTheSameNumericPingId() = runTest(dispatcher) {
+        assertTrue(model.prepareTarget(ping())); val old = checkNotNull(model.state.value.pingSelection)
+        assertTrue(model.prepareTarget(ping())); val next = checkNotNull(model.state.value.pingSelection)
+        assertNotSame(old, next); model.dismissTargetPing(old); assertSame(next, model.state.value.pingSelection)
+        model.dismissTargetPing(next); assertNull(model.state.value.pingSelection)
+    }
+    @Test fun currentIgnoreAndParticipantRulesCannotBeBypassedByAPreviouslyFetchedPingSnapshot() = runTest(dispatcher) {
+        open(); val snapshot = ping()
+        api.session.value = api.session.value.copy(chatPolicy = ChatPolicy(setOf(8), null, DisplayPreferences()))
+        assertFalse(model.prepareTarget(snapshot)); assertEquals(42L, model.state.value.roomId)
+        api.session.value = api.session.value.copy(chatPolicy = snapshot.context.policy)
+        val foreign = TargetSnapshot.RoomPing(snapshot.request, snapshot.context, listOf(RoomPing(9, 43,
+            MessagePerson(8, "Other"), MessagePerson(9, "Not viewer"), "Unrelated ping", "2026-10-20T12:00:00Z")))
+        assertFalse(model.prepareTarget(foreign)); assertNull(model.state.value.pingSelection)
+    }
+    @Test fun privatePingCannotCancelAnActiveReadAndOwnerReplacementClearsItsSelection() = runTest(dispatcher) {
+        open(); val snapshot = ping(); api.readGate = CompletableDeferred()
+        model.viewport(TimelineAnchor(3, 0), 3, true); runCurrent()
+        assertFalse(model.prepareTarget(snapshot)); assertEquals(0, api.cancelledReads)
+        api.readGate!!.complete(Unit); runCurrent(); assertTrue(model.prepareTarget(snapshot))
+        val choice = checkNotNull(model.state.value.pingSelection)
+        api.session.value = api.session.value.copy(generation = 2)
+        model.dismissTargetPing(choice); runCurrent(); assertNull(model.state.value.pingSelection); assertTrue(model.state.value.pings.isEmpty())
+    }
 
     @Test fun exactReplyAdoptionPreservesDraftAndNeverGrantsLatestReadProof() = runTest(dispatcher) {
         open(); model.updateDraft("Keep reply-navigation draft"); val snapshot = target()
@@ -47,6 +95,57 @@ class ConversationRealtimeTest {
         assertEquals("Keep reply-navigation draft", value.draft); assertEquals(1L, value.readCursor)
         model.viewport(TimelineAnchor(2, 0), 2, true); runCurrent()
         assertEquals(0, api.reads); assertEquals(0, api.sends)
+    }
+    @Test fun notificationPreparationInstallsAnExactHistoricalEntryWithoutAnIntermediateLatestGet() = runTest(dispatcher) {
+        val snapshot = target(20, 43)
+        assertTrue(model.prepareTarget(snapshot)); runCurrent()
+        val value = model.state.value
+        assertEquals(43L, value.roomId); assertTrue(value.loaded); assertEquals(listOf(20L), value.messages.map { it.id })
+        assertEquals(20L, value.fixedUpper); assertEquals(20L, value.highlightedMessageId)
+        assertFalse(value.latestWindow); assertFalse(value.atLatest); assertFalse(value.reconciledAfterUncertain)
+        assertTrue(api.windows.isEmpty()); assertEquals(0, api.reads); assertEquals(0, api.sends)
+        model.foreground(); runCurrent()
+        assertTrue(api.windows.isNotEmpty()); assertTrue(api.windows.all { it.room == 43L && it.upper == 20L })
+        model.viewport(TimelineAnchor(20, 0), 20, true); runCurrent(); assertEquals(0, api.reads)
+    }
+    @Test fun notificationPreparationRetainsBothRoomsDraftsAndUnknownDeliveryWithoutResendConsent() = runTest(dispatcher) {
+        open(); model.updateDraft("Unconfirmed old room draft"); api.sendFailure = ApiFailure(FailureKind.TIMEOUT)
+        model.send(); runCurrent(); assertTrue(model.state.value.uncertainSend)
+        assertTrue(model.prepareTarget(target(20, 43))); model.updateDraft("New room draft")
+        assertTrue(model.prepareTarget(target()))
+        assertEquals("Unconfirmed old room draft", model.state.value.draft); assertTrue(model.state.value.uncertainSend)
+        assertFalse(model.state.value.reconciledAfterUncertain); assertEquals("New room draft", model.drafts.value[43]?.body)
+        model.acknowledgeDuplicateRisk(); assertTrue(model.state.value.uncertainSend); assertEquals(1, api.sends)
+    }
+    @Test fun notificationPreparationRejectsAnActiveReadWithoutCancellingIt() = runTest(dispatcher) {
+        open(); val snapshot = target(20, 43); api.readGate = CompletableDeferred()
+        model.viewport(TimelineAnchor(3, 0), 3, true); runCurrent()
+        assertTrue(model.state.value.reading); assertFalse(model.canPrepareTarget(snapshot))
+        assertFalse(model.prepareTarget(snapshot)); assertEquals(42L, model.state.value.roomId)
+        assertEquals(0, api.cancelledReads); api.readGate!!.complete(Unit); runCurrent()
+        assertTrue(model.prepareTarget(snapshot)); assertEquals(1, api.reads)
+    }
+    @Test fun notificationPreparationRejectsAnActiveSendInsteadOfCancellingOrReplayingIt() = runTest(dispatcher) {
+        open(); val snapshot = target(20, 43); model.updateDraft("Send is pending")
+        api.sendGate = CompletableDeferred(); model.send(); runCurrent()
+        assertFalse(model.prepareTarget(snapshot)); assertEquals(42L, model.state.value.roomId)
+        assertTrue(model.state.value.sending); assertEquals(1, api.sends)
+        api.sendGate!!.complete(Unit); runCurrent(); assertTrue(model.prepareTarget(snapshot)); assertEquals(1, api.sends)
+    }
+    @Test fun notificationPreparationRejectsOldOwnerAndUnavailableTargetsBeforeChangingTheRoom() = runTest(dispatcher) {
+        open(); val snapshot = target(20, 43)
+        assertFalse(model.prepareTarget(target(99, 43))); assertEquals(42L, model.state.value.roomId)
+        api.session.value = api.session.value.copy(generation = 2)
+        assertFalse(model.prepareTarget(snapshot)); assertEquals(42L, model.state.value.roomId)
+        runCurrent(); assertNull(model.state.value.roomId); assertTrue(model.drafts.value.isEmpty())
+    }
+    @Test fun notificationPreparationRebindsCurrentPolicyAndRejectsUnknownPolicy() = runTest(dispatcher) {
+        open(); val snapshot = target(20, 43)
+        api.session.value = api.session.value.copy(chatPolicy = null)
+        assertFalse(model.prepareTarget(snapshot)); assertEquals(42L, model.state.value.roomId)
+        api.session.value = api.session.value.copy(chatPolicy = ChatPolicy(setOf(8), null, DisplayPreferences()))
+        assertTrue(model.prepareTarget(snapshot)); assertEquals(setOf(8L), model.state.value.context?.policy?.ignoredUserIds)
+        assertTrue(model.state.value.pings.isEmpty()); assertTrue(model.state.value.revealed.isEmpty())
     }
     @Test fun targetRangeRemainsBoundedAfterEveryRowDisappearsAcrossHintResumeAndRefresh() = runTest(dispatcher) {
         open(); assertTrue(model.adoptTarget(target()))

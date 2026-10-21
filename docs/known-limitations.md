@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[M4c4d](milestones/M4c4d-native-notification-destinations.md) adds member destinations (552 JVM/125 native locally), superseding older pending-routing descriptions. Targets give no read/resend consent; pings have the latest100 limit. Unsupported links stay inert; push, guests and live acceptance remain pending.
+
 [Native IME diagnostics](milestones/native-ime-diagnostics.md) follows merged-main run39541317813's 112/113 native result at `1f551dc` (build checks passed). The existing room tap focused the composer but did not show the keyboard before its original5s predicate; issue31 remains open. The test-only scalar snapshot and filtered failure trace do not retry input, weaken the gate, change production behavior or establish a root cause. Local verification passed 531 JVM/115 native tests and ten Python diagnostics tests; current-head CI/review gates remain.
 
 [M4c4c2](milestones/M4c4c2-native-notification-center.md) implements native member notification list/read controls and a Home indicator (531 JVM/113 native locally verified; live acceptance pending). Explicit read choices do not read chat. Count refresh is foreground/navigation/manual, not guaranteed instantaneous remote-notice SSE. General notification destinations are still unavailable and disclosed per linked row; no fake View/browser fallback is supplied. Guest consumption and background push remain separate milestones. Older state-only descriptions below are historical prerequisites, not the current consumer scope.

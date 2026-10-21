@@ -26,6 +26,8 @@ M2 is split to keep authentication changes reviewable: **M2a** adds HTTPS connec
 
 ## Repeated milestone handoff record
 
+[M4c4d](milestones/M4c4d-native-notification-destinations.md) adds guarded native destinations (552 JVM/125 native locally); exact-head CI/reviews precede delivery. Supersedes earlier pending-routing handoffs. Push, guest links, search and live acceptance remain separate; continue autonomously.
+
 [Native IME diagnostics](milestones/native-ime-diagnostics.md) temporarily precedes general notification routing after independent merged-main39541317813 failed112/113. Add scalar window observations and failure-only filtered CI metadata without retrying taps/tests or guessing a production correction. Finish its own build/native/review gates, then continue the functional target consumer. Issue31 remains open; this does not complete additional parity.
 
 M4c4c2 supplies [native center/read controls and Home count](milestones/M4c4c2-native-notification-center.md), with independent server counts, original-scope/restored-route/actual-entry guards and count-only foreground/navigation GETs. Local 531 JVM/113 native checks passed; required review/CI delivery gates remain. General destination consumption follows as a separate complete-review slice: cross-room/peer draft handoff, exact target adoption, private pings, no false latest/read/unknown-send consent. The list explicitly discloses pending destinations; this is not full notification parity or push integration.
