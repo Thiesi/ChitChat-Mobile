@@ -2,7 +2,7 @@
 
 - [Input observations](docs/milestones/input-failure-observations.md): preserve async-auth receipt/result separation and immediate-vs-later failure scalars. Standalone tracing stays opt-in; never treat post-timeout UI queries as deadline proof or rerun/restart until green. This is not a production keyboard fix; preserve issue31's maintainer closure.
 
-- Maintainer-approved development exception [#55](https://github.com/Thiesi/ChitChat-Mobile/issues/55): retain the known Windows/API36 standalone100-cycle keyboard-control failure as non-gating, never disable its CI test or replay until green. All other failures, required CI/reviews/conflicts still block; assess new regressions, not a blanket keyboard exemption. No production-fix or release-acceptance waiver.
+- Maintainer-approved development exceptions: [#55](https://github.com/Thiesi/ChitChat-Mobile/issues/55)'s known Windows/API36 standalone control, and [#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56)'s three exact recorded room-ignore/DM-navigation/initial-room IME failures in Full159/163. Retain failed evidence/all CI tests; never replay until green. Other/new failures, current-head CI/reviews/conflicts still block. No blanket keyboard exemption, production-fix or release waiver.
 
 - Follow [M5b2](docs/milestones/M5b2-room-author-controls.md)'s author uncertainty, canonical-rebind and adaptive-dialog contracts. Require48dp input, own-window IME/Save geometry and a NEW canonical outcome; compact fixtures use Details. Never repair focus/timing to obtain a pass.
 

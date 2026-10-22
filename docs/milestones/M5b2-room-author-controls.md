@@ -1,6 +1,8 @@
 # M5b2: native room author Edit/Delete
 
-BLOCKED on PR54 (`44440a8`):623 fresh JVM/23author/lint0/build passed4m1s (production/R8 reused). Native6/6 baseline70.102s,150%-portrait81.745s,landscape49.486s; six author cases also passed Full. Full159/163 FAILED688.397s: room-ignore second tap, DM search/thread entry, room-target FIRST tap before lookup, standalone cycle5. [#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56) tracks three failures outside #55; no merge/waiver. CI/reviews pending; DM/guests/live separate.
+On PR54 (`44440a8`):623 fresh JVM/23author/lint0/build passed4m1s (production/R8 reused). Native6/6 baseline70.102s,150%-portrait81.745s,landscape49.486s; six author cases also passed Full. Full159/163 remains FAILED688.397s: room-ignore second tap, DM search/thread entry, room-target FIRST tap before lookup, standalone cycle5. Maintainer explicitly extended development-only treatment to [#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56)'s three exact recorded failures, in addition to #55; other/new failures still block. No fix/release waiver.
+
+Candidate4aa4c81 passed unfiltered CI166/166 (6m56.65s),623 fresh JVM/23author/lint0/R8 executed and fresh exact-head review. Both isolated three-case cohorts passed: merged PR54 in51.564s, candidate53.81s. Neither erases Full or establishes cause. Approval documentation changes no compiled inputs; its current-head CI/reviews remain gates. DM/guests/live acceptance separate.
 
 ## Behavior and scope
 
