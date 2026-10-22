@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[Async-auth/input observations](milestones/input-failure-observations.md) are test-only, with no additional product parity or keyboard-fix claim. PR49 is delivered and issue31 maintainer-closed; older checkpoint narratives below are historical. Room-author controls remain a separate blocked candidate.
+
 [Failure-only IME snapshots](milestones/native-ime-server-snapshot.md) are test observability only. Initial head2a8 passed local143 native/598 fresh JVM/build/lint but failed hosted142/143. The window expansion passed new builds/598 fresh JVM/lint0/eleven focused cases; full native/CI/reviews remain gates. No production fix, extra parity or waiver of PR49's failed gate is claimed.
 
 [System-routed keyboard test taps](milestones/system-native-taps.md) distinguish native OS input from direct View-dispatched component gestures. Current local gates passed598 fresh JVM/137 native/lint0, including100 legacy-editor dialog cycles; CI and completed initial/fresh reviews remain merge prerequisites. This is test infrastructure, not additional user parity or a production keyboard correction; issue31/PR49 remain open.

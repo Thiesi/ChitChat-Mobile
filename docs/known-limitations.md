@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[Input observations](milestones/input-failure-observations.md) add diagnostics/async fixture coverage, not a keyboard fix. Room-author Full157/163 remains failed; one cold-start control also failed. Preserve issue31's maintainer closure and earlier evidence. PR49 is delivered; older open-gate narratives below are historical.
+
 - [M5b1](milestones/M5b1-author-mutation-protocol.md) is author edit/delete API/session groundwork only. Native controls, uncertain-mutation reconciliation UX and live author-write acceptance remain pending. PR49's keyboard failures remain separate blockers; diagnostic passes do not close issue31.
 
 [M5a](milestones/M5a-reply-composition.md) adds native Reply/Copy and reply-only drafts. Copy exports whole-body plaintext, not substrings; clipboard may outlive logout. Memory-only drafts vanish on process death. Live/API26/device/TalkBack acceptance, mentions, other M5 tools and push remain pending.

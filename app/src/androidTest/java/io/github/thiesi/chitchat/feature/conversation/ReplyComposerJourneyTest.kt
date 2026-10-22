@@ -33,6 +33,8 @@ import io.github.thiesi.chitchat.testing.tapNativeInput
 import io.github.thiesi.chitchat.testing.performNativeTap
 import io.github.thiesi.chitchat.testing.NativeChatFixtures
 import io.github.thiesi.chitchat.testing.nativeInputWindow
+import io.github.thiesi.chitchat.testing.nativeImeServerAfterFailure
+import io.github.thiesi.chitchat.testing.NativeTextInputTrace
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -144,8 +146,26 @@ class ReplyComposerJourneyTest {
         val requireIme = InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true"
         // Reply deliberately transfers focus after its dialog releases the window. Observe that
         // natural transition before hide/navigation; never request focus, force IME or retry a tap.
-        compose.waitUntil(5_000) { (!requireIme || ime > 0) &&
-            runCatching { input.assertIsFocused().assertIsDisplayed() }.isSuccess }
+        try {
+            compose.waitUntil(5_000) { (!requireIme || ime > 0) &&
+                runCatching { input.assertIsFocused().assertIsDisplayed() }.isSuccess }
+        } catch (failure: ComposeTimeoutException) {
+            // Failure-only scalars: no message contents, raw trees, extra taps or focus changes.
+            val observedAt = android.os.SystemClock.uptimeMillis()
+            val deadlineIme = ime
+            val selected = if (isRoom) room.state.value.composerReply else direct.state.value.composerReply
+            val focused = runCatching { input.assertIsFocused() }.isSuccess
+            val displayed = runCatching { input.assertIsDisplayed() }.isSuccess
+            val bounds = runCatching { input.fetchSemanticsNode().boundsInWindow }.getOrNull()
+            val options = runCatching { compose.onAllNodesWithTag("message_actions").fetchSemanticsNodes().size }.getOrNull()
+            val canSend = compose.runOnIdle { if (isRoom) room.canSend() else direct.canSend() }
+            val window = nativeInputWindow()
+            val inputSessions = NativeTextInputTrace.describe()
+            val server = nativeImeServerAfterFailure()
+            throw AssertionError("Reply handoff: uptime=$observedAt, room=$isRoom, selected=${selected != null}, " +
+                "focused=$focused, displayed=$displayed, bounds=$bounds, options=$options, canSend=$canSend, " +
+                "deadlineIME=$deadlineIme, laterIME=$ime, window=$window, inputSessions=$inputSessions, server=$server", failure)
+        }
     }
     private fun options() {
         hideIme(); compose.onNodeWithTag("composer_reply_options").assertIsDisplayed().performNativeTap()

@@ -8,6 +8,8 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
+[Input verification investigation](docs/milestones/input-failure-observations.md) adds controlled async-login coverage and failure-only Reply/opt-in standalone-input diagnostics. Its pre-publication build passed600 fresh JVM/lint0/debug/release/test APK; native/CI/review remain gates. No production keyboard fix or failed-gate waiver is claimed. Room Edit/Delete remains separate.
+
 Verification paragraphs retain publication-time checkpoints; linked PRs record subsequent gates and merges.
 
 [Failure-only IME snapshots](docs/milestones/native-ime-server-snapshot.md) observe server/IME-window state before cleanup. Initial head2a8 passed local143 native/598 fresh JVM/build/lint but failed hosted142/143 in the existing tracing self-test. The window expansion passed new builds/598 fresh JVM/lint0/eleven focused cases; full native/CI/reviews remain gates. Issue31/PR49 remain unresolved; no production fix or extra parity is claimed.

@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [Input observations](docs/milestones/input-failure-observations.md): preserve async-auth receipt/result separation and immediate-vs-later failure scalars. Standalone tracing stays opt-in; never treat post-timeout UI queries as deadline proof or rerun/restart until green. This is not a production keyboard fix; preserve issue31's maintainer closure.
+
 - Failed native input assertions collect bounded IME server and unambiguous IME-type window flags before cleanup; see `docs/milestones/native-ime-server-snapshot.md`. Sequential samples have separate timestamps, not an atomic-state claim. Never use as pre-tap readiness, retain raw dumps/titles/text, invent hidden state from missing fields, or call it a keyboard fix. Successful tap paths are unchanged.
 
 - Keyboard/device journeys use test-only `performNativeTap` for consistent OS-routed input/modal taps; Compose `performClick` dispatches MotionEvents directly to a root View and remains a component-level action, not equivalent system routing. See `docs/milestones/system-native-taps.md`. Preserve all existing focus/display/strict-IME assertions and5-second deadlines. Default-display instrumentation only; no focus/show/clock/readiness workaround or tap replay. Failed injection stays failed; cancellation only retires a possibly held pointer. Routing evidence is not a production keyboard fix or permission to close issue31/merge PR49's old red head.
