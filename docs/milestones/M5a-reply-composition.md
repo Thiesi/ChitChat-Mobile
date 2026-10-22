@@ -1,17 +1,11 @@
 # M5a - Native Reply/Copy
 
-Consumes [PR48's contracts/state](M5a1-reply-composer-state.md), audited against backend v3.2.1; no new APIs.
+Consumes [scoped contracts/state](M5a1-reply-composer-state.md), backend v3.2.1; no new APIs.
 
-## Behavior
+Room/DM tap/long-press opens Reply/Copy with canonical redaction and original scope/entry/row guards. ID-only100-slot reply drafts retain unknown-send guards; invalid targets never downgrade/replay. Room pings ignore quotes; DM slash stays literal. Blocks disable Reply, not Copy/history.
 
-Tap/long-press opens guarded room/DM actions. Canonical previews redact ignored/deleted/unloaded content; original owner/entry/row/selection guards reject stale callbacks. Reuse ID-only100-slot drafts and unknown-send protections. Room pings ignore quotes (explained); DM slash text stays literal. Invalid targets retain drafts for removal, never downgrade/replay. DM block disables Reply, not Copy/history.
+Whole-body Copy exports plaintext that may outlive logout; the sensitive flag is not encryption. Preview/removal and pinned48dp Send remain reachable. Modals suppress read/typing/input/send. View original grants no read/resend consent.
 
-Copy explicitly exports the whole body, not substrings; plaintext may outlive logout and its sensitive flag is not encryption. Expanded/compact preview/removal and48dp Send keep input reachable. Modals suppress read/typing/input/send. View original reuses guarded historical adoption; selection makes no request.
+[PR49](https://github.com/Thiesi/ChitChat-Mobile/pull/49) retains all gates/failures, including30d05's local145/146 despite hosted149/149. Passes neither erase failures nor prove an IME fix. Inert-title dismissal isolates clipboard previews without clearing Copy; [PR53](native-ime-server-snapshot.md) observes failures before cleanup.
 
-## Verification and limits
-
-[PR49](https://github.com/Thiesi/ChitChat-Mobile/pull/49) retains the failed/revised fixture, layout and keyboard runs. Its historical final head passed579 JVM,134 clipboard-safe native and strict150% portrait/landscape9 each, but hosted CI stayed136/137 (new Reply/Copy12/12 passed). Later passes do not erase failures or prove an IME fix.
-
-[PR50 diagnostics](native-ime-handoff-observations.md) and [PR52 OS-routed taps](system-native-taps.md) are integrated. Reply journey button taps use the shared system helper; long-press/scroll and semantic text injection remain Compose actions. Existing focus/strict-IME assertions and5-second deadlines are unchanged. Every head needs build/native/CI and initial/fresh reviews; current results are recorded on PR49. Local runs exclude only3 clipboard writers; CI is unfiltered. Live/API26/manual consumer-device/TalkBack, other M5 tools and push remain separate. No integration credentials/live endpoints were accessed. Issue31 stays open.
-
-Rebased ed89192 passed local builds/600 fresh JVM/lint0/146 native and focused/150% portrait/landscape9 each, but hosted149 had2 teardown failures immediately after clipboard writers. Root now taps the inert app title before notification entry to dismiss a leftover system preview without clearing Copy. This hypothesis requires new full149 CI/reviews; old passes/reviews are not approval. Setup-only orientation failure remains preserved on PR49; no assertion is waived.
+Original5-second focus/IME checks remain. Buttons use OS taps; long-press/scroll/text use Compose. Local excludes only3 clipboard writers; CI is unfiltered. Full gates/reviews required. Live/API26/device/TalkBack, other M5/push remain pending; issue31 open.
