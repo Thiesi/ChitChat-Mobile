@@ -1,5 +1,7 @@
 # Proposed Android architecture
 
+[M5b2](milestones/M5b2-room-author-controls.md) reuses the mutation repository/conversation actor, with separate author jobs/uncertainty and ACK-before-GET quote updates; no new transport or durable queue.
+
 [M5b1](milestones/M5b1-author-mutation-protocol.md) adds original-session author edit/delete operations over the existing transport, canonical response reconstruction and transient room action hints. Native modal/state consumers follow separately; post-commit errors require explicit GET reconciliation, never replay.
 
 [M5a](milestones/M5a-reply-composition.md) shares guarded actions, canonical excerpts/reply controls and48dp Send; no new transport/cache. Copy explicitly exports plaintext.

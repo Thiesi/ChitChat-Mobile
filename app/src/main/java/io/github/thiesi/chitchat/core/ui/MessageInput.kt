@@ -18,10 +18,10 @@ import androidx.compose.ui.unit.dp
 /** One input component through IME resize: no focus loss from swapping compact/expanded fields. */
 @Composable
 internal fun MessageInput(value: String, onValueChange: (String) -> Unit, enabled: Boolean,
-    label: String, compact: Boolean, modifier: Modifier = Modifier) {
+    label: String, compact: Boolean, modifier: Modifier = Modifier, readOnly: Boolean = false) {
     val interaction = remember { MutableInteractionSource() }
     BasicTextField(value, onValueChange, modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {},
-        enabled = enabled, maxLines = if (compact) 1 else 4, interactionSource = interaction,
+        enabled = enabled, readOnly = readOnly, maxLines = if (compact) 1 else 4, interactionSource = interaction,
         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), decorationBox = { inner ->
             OutlinedTextFieldDefaults.DecorationBox(value, inner, enabled, false, VisualTransformation.None,

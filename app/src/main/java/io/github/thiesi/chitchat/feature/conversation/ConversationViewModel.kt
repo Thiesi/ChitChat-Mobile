@@ -13,8 +13,11 @@ import io.github.thiesi.chitchat.core.conversation.RoomMessage
 import io.github.thiesi.chitchat.core.conversation.RoomPing
 import io.github.thiesi.chitchat.core.conversation.SendResult
 import io.github.thiesi.chitchat.core.conversation.validateMessageBody
+import io.github.thiesi.chitchat.core.conversation.phpTrim
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
+import io.github.thiesi.chitchat.core.mutations.MessageMutationOperations
+import io.github.thiesi.chitchat.core.mutations.validateEditedBody
 import io.github.thiesi.chitchat.core.realtime.PresencePhase
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
 import io.github.thiesi.chitchat.core.typing.TypingController
@@ -55,11 +58,14 @@ data class ConversationUiState(
     val draftsOpen: Boolean = false, val draftLimit: Boolean = false,
     val pingSelection: PingSelection? = null,
     val composerReply: ComposerReply? = null,
+    val authorDialog: RoomAuthorDialog? = null, val authorWriting: Boolean = false,
+    val authorUnknown: RoomAuthorUnknown? = null, val authorLimit: Boolean = false,
 ) { override fun toString() = "ConversationUiState" }
 
-class ConversationViewModel(private val operations: ConversationOperations,
+class ConversationViewModel internal constructor(private val operations: ConversationOperations,
     val realtime: RealtimeController? = null,
-    val typing: TypingController? = null) : ViewModel() {
+    val typing: TypingController? = null,
+    private val mutations: MessageMutationOperations? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(ConversationUiState())
     val state = mutable.asStateFlow()
@@ -81,12 +87,16 @@ class ConversationViewModel(private val operations: ConversationOperations,
     private var attemptedSync = 0L
     private var appliedSync = 0L
     private var deliberateSelection = false
+    private var authorJob: Job? = null
+    private var authorPosting: RoomAuthorRequest? = null
+    private val unknownAuthors = mutableMapOf<Long, RoomAuthorUnknown>()
 
     init { viewModelScope.launch { session.collect { current ->
         if (current.identity() != identity) {
             retire(); identity = current.identity(); dividerEstablished = false
             mutable.value = ConversationUiState()
             savedDrafts.value = emptyMap()
+            unknownAuthors.clear()
         } else {
             val value = mutable.value
             val context = value.context
@@ -105,7 +115,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         val owner = expected.identity() ?: return
         if (roomId <= 0 || owner != session.value.identity()) return
         if (owner != identity) {
-            retire(); identity = owner; savedDrafts.value = emptyMap(); mutable.value = ConversationUiState()
+            retire(); identity = owner; savedDrafts.value = emptyMap(); unknownAuthors.clear(); mutable.value = ConversationUiState()
         }
         if (mutable.value.roomId != roomId) {
             val wasForeground = foreground
@@ -113,7 +123,8 @@ class ConversationViewModel(private val operations: ConversationOperations,
             realtime?.selectRoom(null, false)
             val memo = savedDrafts.value[roomId]?.takeIf { it.matches(expected) }
             mutable.value = ConversationUiState(roomId = roomId, draft = memo?.body.orEmpty(),
-                uncertainSend = memo?.uncertain == true, composerReply = memo?.composerReply)
+                uncertainSend = memo?.uncertain == true, composerReply = memo?.composerReply,
+                authorUnknown = unknownAuthors[roomId])
         }
         if (interacted) deliberateSelection = true
         if (!mutable.value.loaded && !mutable.value.busy) loadEntry()
@@ -145,7 +156,8 @@ class ConversationViewModel(private val operations: ConversationOperations,
     fun updateDraft(value: String) { updateDraft(session.value, mutable.value.roomId, value) }
     fun updateDraft(expected: SessionState, roomId: Long?, value: String): Boolean {
         if (roomId == null || roomId != mutable.value.roomId || expected.identity() == null ||
-            expected.identity() != identity || expected.identity() != session.value.identity() || mutable.value.sending) return false
+            expected.identity() != identity || expected.identity() != session.value.identity() || mutable.value.sending ||
+            mutable.value.authorDialog != null || mutable.value.authorWriting) return false
         if (!canEditDraft() && value.isNotEmpty()) { mutable.value = mutable.value.copy(draftLimit = true); return false }
         mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false)
         rememberDraft(); return true
@@ -154,7 +166,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         val value = mutable.value
         val context = value.context ?: return false
         return foreground && belongsTo(expected) && ready(session.value) && roomId != null && value.roomId == roomId &&
-            value.pingSelection == null && message.roomId == roomId && message.id > 0 &&
+            value.pingSelection == null && value.authorDialog == null && !value.authorWriting && message.roomId == roomId && message.id > 0 &&
             value.messages.any { it === message } && !message.deleted &&
             (message.senderId !in currentPolicy(context).policy.ignoredUserIds || message.id in value.revealed)
     }
@@ -204,6 +216,195 @@ class ConversationViewModel(private val operations: ConversationOperations,
     fun refresh() { request { current -> refreshWindow(current, explicit = true) } }
     fun latest() { request { current -> reload(current, forceLatest = true, explicitReconciliation = true) } }
 
+    private fun authorRowCurrent(request: RoomAuthorRequest): Boolean {
+        val value = mutable.value
+        val user = session.value.user ?: return false
+        val context = value.context ?: return false
+        val message = request.original
+        val hints = message.authorActions ?: return false
+        return mutations != null && foreground && belongsTo(request.expected) && ready(session.value) &&
+            session.value.phase == SessionPhase.AUTHENTICATED && !user.guest && value.loaded && !value.stale &&
+            value.roomId == message.roomId && value.pingSelection == null && context.room.isMember &&
+            message.id > 0 && message.senderId == user.id && !message.deleted && message.body != null &&
+            message.type in setOf("text", "emote", "attachment") && value.messages.any { it === message } &&
+            when (request.kind) {
+                AuthorChangeKind.EDIT -> hints.canEdit && currentPolicy(context).mute == null
+                AuthorChangeKind.DELETE -> hints.canDelete
+            }
+    }
+
+    fun canBeginAuthor(expected: SessionState, roomId: Long, message: RoomMessage, kind: AuthorChangeKind): Boolean =
+        roomId == mutable.value.roomId && mutable.value.authorDialog == null && !mutable.value.busy &&
+            readJob?.isActive != true && unknownAuthors[roomId] == null &&
+            (roomId in unknownAuthors || unknownAuthors.size < 100) && authorRowCurrent(RoomAuthorRequest(expected, message, kind))
+
+    fun beginAuthor(expected: SessionState, roomId: Long, message: RoomMessage, kind: AuthorChangeKind): Boolean {
+        if (!canBeginAuthor(expected, roomId, message, kind)) {
+            if (belongsTo(expected) && roomId == mutable.value.roomId && unknownAuthors.size >= 100)
+                mutable.value = mutable.value.copy(authorLimit = true)
+            return false
+        }
+        val request = RoomAuthorRequest(expected, message, kind)
+        visibleNewest = null
+        mutable.value = mutable.value.copy(authorDialog = RoomAuthorDialog(request,
+            if (kind == AuthorChangeKind.EDIT) message.body.orEmpty() else ""), atLatest = false, authorLimit = false)
+        return true
+    }
+
+    fun authorAvailable(request: RoomAuthorRequest) = mutable.value.authorDialog?.request === request &&
+        mutable.value.authorDialog?.checked != true && authorRowCurrent(request) && unknownAuthors[request.original.roomId] == null
+
+    fun authorTargetCurrent(request: RoomAuthorRequest) = mutable.value.authorDialog?.request === request &&
+        belongsTo(request.expected) && mutable.value.roomId == request.original.roomId &&
+        mutable.value.messages.any { it === request.original && !it.deleted }
+
+    fun authorCapacityFull() = unknownAuthors.size >= 100 && mutable.value.roomId !in unknownAuthors
+
+    private fun currentAuthorRow(request: RoomAuthorRequest): RoomMessage? = mutable.value.messages.firstOrNull {
+        foreground && belongsTo(request.expected) && mutable.value.roomId == request.original.roomId &&
+            it.roomId == request.original.roomId && it.id == request.original.id && !it.deleted &&
+            it.senderId == session.value.user?.id
+    }
+    fun authorCurrentPreview(request: RoomAuthorRequest): String? = currentAuthorRow(request)?.body
+    fun canReviewAuthor(request: RoomAuthorRequest): Boolean {
+        val dialog = mutable.value.authorDialog ?: return false
+        val current = currentAuthorRow(request) ?: return false
+        return dialog.request === request && dialog.checked && request.kind == AuthorChangeKind.EDIT &&
+            !mutable.value.busy && readJob?.isActive != true && unknownAuthors[current.roomId] == null &&
+            !authorCapacityFull() && authorRowCurrent(RoomAuthorRequest(request.expected, current, AuthorChangeKind.EDIT))
+    }
+    /** Explicit fresh choice after GET: preserve proposed text, never replay the retired request. */
+    fun reviewAuthorProposal(request: RoomAuthorRequest): Boolean {
+        if (!canReviewAuthor(request)) return false
+        val dialog = checkNotNull(mutable.value.authorDialog)
+        val current = checkNotNull(currentAuthorRow(request))
+        mutable.value = mutable.value.copy(authorDialog = RoomAuthorDialog(
+            RoomAuthorRequest(request.expected, current, AuthorChangeKind.EDIT), dialog.body), error = null)
+        return true
+    }
+
+    /** A refresh may replace DTO instances without changing the author's revision. Retain private
+     * edit text only for that same revision; use the fresh row/permissions/quote/file for any POST.
+     * A changed body/edit timestamp/type/author or deletion never upgrades the old modal. */
+    private fun rebindUnchangedAuthor(messages: List<RoomMessage>) {
+        val request = mutable.value.authorDialog?.request ?: return
+        if (!belongsTo(request.expected)) return
+        val original = request.original
+        val current = messages.firstOrNull { it.id == original.id && it.roomId == original.roomId } ?: return
+        if (!current.deleted && current.senderId == original.senderId && current.type == original.type &&
+            current.body == original.body && current.editedAt == original.editedAt && current.createdAt == original.createdAt)
+            request.original = current
+    }
+
+    fun updateAuthorBody(request: RoomAuthorRequest, body: String) {
+        if (authorAvailable(request) && !mutable.value.busy && request.kind == AuthorChangeKind.EDIT)
+            mutable.value = mutable.value.copy(authorDialog = RoomAuthorDialog(request, body))
+    }
+
+    fun dismissAuthor(request: RoomAuthorRequest) {
+        if (mutable.value.authorDialog?.request === request && belongsTo(request.expected) && !mutable.value.busy)
+            mutable.value = mutable.value.copy(authorDialog = null, atLatest = false)
+    }
+
+    fun submitAuthor(request: RoomAuthorRequest) {
+        val value = mutable.value
+        if (!authorAvailable(request) || value.busy || readJob?.isActive == true) return
+        val body = value.authorDialog?.body.orEmpty()
+        if (request.kind == AuthorChangeKind.EDIT) {
+            val invalid = validateEditedBody(body) ?: "message_unchanged".takeIf { body.phpTrim() == request.original.body }
+            if (invalid != null) {
+                mutable.value = value.copy(authorDialog = RoomAuthorDialog(request, body, invalid)); return
+            }
+        }
+        authorRequest(request.original.roomId) { current ->
+            // Check the same canonical instance again after waiting for session readiness.
+            if (!authorAvailable(request)) throw CancellationException("Author selection changed")
+            authorPosting = request
+            mutable.value = mutable.value.copy(authorWriting = true)
+            val result = when (request.kind) {
+                AuthorChangeKind.EDIT -> checkNotNull(mutations).editRoom(request.expected, request.original, body)
+                AuthorChangeKind.DELETE -> checkNotNull(mutations).deleteRoom(request.expected, request.original)
+            }
+            current()
+            if (result.id != request.original.id || result.roomId != request.original.roomId ||
+                result.senderId != request.original.senderId || result.type != request.original.type ||
+                (request.kind == AuthorChangeKind.DELETE && !result.deleted)) throw ApiFailure(FailureKind.INCOMPATIBLE)
+            // Acknowledgment precedes every fallible GET. A later failure is NOT write uncertainty.
+            authorPosting = null
+            mutable.value = mutable.value.copy(messages = applyRoomAuthorResult(mutable.value.messages, result),
+                authorDialog = null, authorWriting = false, stale = true,
+                notice = if (request.kind == AuthorChangeKind.EDIT) "author_edited" else "author_deleted")
+            val revision = requestedSync
+            synchronizeWindow(mutable.value, sequence, current)
+            appliedSync = maxOf(appliedSync, revision); attemptedSync = maxOf(attemptedSync, revision)
+        }
+    }
+
+    /** Only this explicit GET clears author uncertainty; passive sync/entry/send reconciliation never does. */
+    fun checkAuthorHistory(expected: SessionState, original: RoomAuthorUnknown) {
+        if (!foreground || !belongsTo(expected) || mutable.value.roomId != original.roomId ||
+            unknownAuthors[original.roomId] !== original || mutable.value.busy || readJob?.isActive == true) return
+        val editor = mutable.value.authorDialog?.takeIf { it.request.original.roomId == original.roomId &&
+            it.request.original.id == original.messageId && it.request.kind == original.kind }
+        authorRequest(original.roomId) { current ->
+            if (mutable.value.loaded) synchronizeWindow(mutable.value, sequence, current)
+            else reload(current) // Does not grant uncertain-send consent.
+            current()
+            if (unknownAuthors[original.roomId] === original) {
+                unknownAuthors.remove(original.roomId)
+                val retained = editor?.takeIf { mutable.value.authorDialog?.request === it.request }
+                mutable.value = mutable.value.copy(authorUnknown = null, authorLimit = false, notice = "author_checked",
+                    authorDialog = if (retained != null && retained.request.kind == AuthorChangeKind.EDIT)
+                        RoomAuthorDialog(retained.request, retained.body, checked = true)
+                    else if (retained != null) null else mutable.value.authorDialog)
+            }
+        }
+    }
+
+    private fun rememberUnknownAuthor(request: RoomAuthorRequest) {
+        val unknown = RoomAuthorUnknown(request.original.roomId, request.original.id, request.kind)
+        unknownAuthors[unknown.roomId] = unknown // Capacity was reserved before the POST could start.
+        if (mutable.value.roomId == unknown.roomId) mutable.value = mutable.value.copy(authorUnknown = unknown)
+    }
+
+    private fun authorRequest(roomId: Long, action: suspend (() -> Unit) -> Unit) {
+        val expected = session.value.identity() ?: return
+        if (mutable.value.busy || expected != identity) return
+        stopSync()
+        val attempt = ++sequence
+        mutable.value = mutable.value.copy(busy = true, error = null)
+        authorJob = viewModelScope.launch {
+            try {
+                withTimeout(60_000) {
+                    val currentSession = withTimeoutOrNull(30_000) { session.first { !it.busy || it.identity() != expected } }
+                        ?: throw ApiFailure(FailureKind.TIMEOUT)
+                    ensureCurrent(expected, attempt, roomId)
+                    if (!ready(currentSession)) throw ApiFailure(FailureKind.HTTP, code = "csrf_failed")
+                    action { ensureCurrent(expected, attempt, roomId) }
+                }
+            } catch (_: TimeoutCancellationException) {
+                if (isCurrent(expected, attempt, roomId)) mutable.value = mutable.value.copy(error = ApiFailure(FailureKind.TIMEOUT), stale = true)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: ApiFailure) {
+                if (isCurrent(expected, attempt, roomId)) {
+                    // Any exception after starting an author operation can follow its committed write.
+                    if (failure.status in setOf(403, 404) && failure.code in setOf("room_forbidden", "room_not_found"))
+                        clearUnauthorized(failure)
+                    else mutable.value = mutable.value.copy(error = failure, stale = true)
+                }
+            } finally {
+                if (isCurrent(expected, attempt, roomId)) {
+                    authorPosting?.let(::rememberUnknownAuthor)
+                    authorPosting = null; authorJob = null
+                    // On failure retain the foreground proposal until explicit close/background.
+                    // Success already retired it before its fallible canonical GET.
+                    mutable.value = mutable.value.copy(busy = false, authorWriting = false)
+                    drainSync()
+                }
+            }
+        }
+    }
+
     private suspend fun refreshWindow(current: () -> Unit, explicit: Boolean = false) {
         val value = mutable.value
         if (value.loaded && !value.latestWindow && !(explicit && value.uncertainSend))
@@ -214,7 +415,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
     /** Reply navigation adopts in place. Notification entry preparation below needs no temporary latest window. */
     fun canAdoptTarget(snapshot: TargetSnapshot.RoomMessage): Boolean = foreground && ready(session.value) &&
         snapshot.matches(session.value) && snapshot.available && snapshot.context.room.id == mutable.value.roomId &&
-        !mutable.value.busy && !postInFlight && readJob?.isActive != true
+        !mutable.value.busy && mutable.value.authorDialog == null && !postInFlight && readJob?.isActive != true
 
     fun belongsTo(expected: SessionState) = expected.identity() != null && expected.identity() == identity &&
         identity == session.value.identity()
@@ -234,7 +435,8 @@ class ConversationViewModel(private val operations: ConversationOperations,
 
     /** Root must bind this to the actual original navigation entry and consume/navigate synchronously. */
     fun canPrepareTarget(snapshot: TargetSnapshot.RoomMessage): Boolean = ready(session.value) &&
-        snapshot.matches(session.value) && snapshot.available && !postInFlight && readJob?.isActive != true
+        snapshot.matches(session.value) && snapshot.available && !postInFlight && authorPosting == null &&
+        mutable.value.authorDialog == null && readJob?.isActive != true
 
     fun prepareTarget(snapshot: TargetSnapshot.RoomMessage): Boolean {
         val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.RoomMessage ?: return false
@@ -244,7 +446,8 @@ class ConversationViewModel(private val operations: ConversationOperations,
     }
 
     fun canPrepareTarget(snapshot: TargetSnapshot.RoomPing): Boolean = ready(session.value) &&
-        snapshot.matches(session.value) && snapshot.available && !postInFlight && readJob?.isActive != true
+        snapshot.matches(session.value) && snapshot.available && !postInFlight && authorPosting == null &&
+        mutable.value.authorDialog == null && readJob?.isActive != true
 
     fun prepareTarget(snapshot: TargetSnapshot.RoomPing): Boolean {
         val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.RoomPing ?: return false
@@ -269,7 +472,8 @@ class ConversationViewModel(private val operations: ConversationOperations,
             realtime?.selectRoom(null, false); dividerEstablished = false
             val memo = savedDrafts.value[roomId]?.takeIf { it.matches(expected) }
             mutable.value = ConversationUiState(roomId = roomId, draft = memo?.body.orEmpty(),
-                uncertainSend = memo?.uncertain == true, composerReply = memo?.composerReply)
+                uncertainSend = memo?.uncertain == true, composerReply = memo?.composerReply,
+                authorUnknown = unknownAuthors[roomId])
         }
         deliberateSelection = true
     }
@@ -342,6 +546,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
             val old = mutable.value
             val live = old.latestWindow && merged.size <= 500
             val targetLost = old.highlightedMessageId != null && trimmed.none { it.id == old.highlightedMessageId }
+            rebindUnchangedAuthor(trimmed)
             mutable.value = mutable.value.copy(messages = trimmed, olderCursor = page.olderCursor,
                 mayHaveOlder = page.mayHaveOlder, latestWindow = live,
                 fixedUpper = if (live) null else if (merged.size > 500) trimmed.lastOrNull()?.id else old.fixedUpper ?: trimmed.lastOrNull()?.id,
@@ -394,7 +599,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         val value = mutable.value
         val current = session.value
         val context = value.context ?: return false
-        return ready(current) && value.pingSelection == null && canEditDraft() && !value.stale && !value.uncertainSend && activePresence() && context.room.isMember &&
+        return ready(current) && value.pingSelection == null && value.authorDialog == null && !value.authorWriting && canEditDraft() && !value.stale && !value.uncertainSend && activePresence() && context.room.isMember &&
             (!current.user!!.guest || context.room.guestAccess == "write") && context.mute == null
     }
 
@@ -403,7 +608,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         viewport = anchor
         visibleNewest = newestVisibleId
         val value = mutable.value
-        val edge = atEdge && value.latestWindow && value.pingSelection == null
+        val edge = atEdge && value.latestWindow && value.pingSelection == null && value.authorDialog == null
         if (edge != value.atLatest) mutable.value = value.copy(atLatest = edge)
         val newest = value.messages.lastOrNull()?.id ?: return
         if (!foreground || !edge || newestVisibleId != newest || value.busy || value.stale || !activePresence() || readJob?.isActive == true ||
@@ -460,6 +665,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
         }?.id else value.unreadDividerId
         dividerEstablished = true
         attemptedRead = 0
+        rebindUnchangedAuthor(page.messages.takeLast(500))
         mutable.value = value.copy(context = context, messages = page.messages.takeLast(500), pings = pings.filterNot {
             it.sender.id in context.policy.ignoredUserIds }.sortedBy { it.id }.takeLast(100), loaded = true, stale = false, latestWindow = true,
             fixedUpper = null, highlightedMessageId = null,
@@ -563,6 +769,7 @@ class ConversationViewModel(private val operations: ConversationOperations,
             val survivor = messages.firstOrNull { it.id >= savedAnchor.id } ?: messages.lastOrNull()
             survivor?.let { TimelineAnchor(it.id, if (anchorLost) 0 else savedAnchor.offset, attempt) }
         }
+        rebindUnchangedAuthor(messages)
         mutable.value = previous.copy(context = context, messages = messages,
             pings = pings.filterNot { it.sender.id in context.policy.ignoredUserIds }.sortedBy { it.id }.takeLast(100),
             stale = false, syncError = null, latestWindow = latest,
@@ -629,10 +836,12 @@ class ConversationViewModel(private val operations: ConversationOperations,
         ?.let { ConversationContext(context.room, it) } ?: context
 
     private fun retire() {
+        authorPosting?.let(::rememberUnknownAuthor)
+        authorPosting = null; authorJob?.cancel(); authorJob = null
         sequence++; readSequence++; job?.cancel(); readJob?.cancel(); readJob = null; syncJob?.cancel(); syncJob = null
         postInFlight = false; viewport = null; visibleNewest = null; attemptedRead = 0
         requestedSync = 0; attemptedSync = 0; appliedSync = 0; deliberateSelection = false
-        mutable.value = mutable.value.copy(syncing = false, reading = false)
+        mutable.value = mutable.value.copy(syncing = false, reading = false, authorDialog = null, authorWriting = false)
     }
     private fun isReadCurrent(expected: Identity, attempt: Long, roomId: Long) = readSequence == attempt &&
         session.value.identity() == expected && mutable.value.roomId == roomId
@@ -649,9 +858,9 @@ class ConversationViewModel(private val operations: ConversationOperations,
     private fun ApiFailure.ambiguous() = kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.TLS,
         FailureKind.REDIRECT, FailureKind.INCOMPATIBLE, FailureKind.TOO_LARGE) || (status ?: 0) >= 500
     companion object {
-        fun factory(operations: ConversationOperations, realtime: RealtimeController? = null,
-            typing: TypingController? = null): ViewModelProvider.Factory = viewModelFactory {
-            initializer { ConversationViewModel(operations, realtime, typing) }
+        internal fun factory(operations: ConversationOperations, realtime: RealtimeController? = null,
+            typing: TypingController? = null, mutations: MessageMutationOperations? = null): ViewModelProvider.Factory = viewModelFactory {
+            initializer { ConversationViewModel(operations, realtime, typing, mutations) }
         }
     }
 }

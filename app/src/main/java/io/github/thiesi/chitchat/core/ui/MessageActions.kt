@@ -24,7 +24,9 @@ internal class MessageActionSelection(val messageId: Long)
 
 @Composable
 internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Boolean,
-    onReply: () -> Unit, onCopy: () -> Unit, onDismiss: () -> Unit) {
+    onReply: () -> Unit, onCopy: () -> Unit, onDismiss: () -> Unit,
+    onEdit: (() -> Unit)? = null, canEdit: Boolean = false,
+    onDelete: (() -> Unit)? = null, canDelete: Boolean = false) {
     AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("message_actions"),
         title = { Text(stringResource(R.string.message_actions)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -37,6 +39,18 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
             TextButton(onClick = onCopy, enabled = available && canCopy,
                 modifier = Modifier.fillMaxWidth().testTag("message_copy_action")) {
                 Text(stringResource(R.string.message_copy_action))
+            }
+            onEdit?.let { action ->
+                TextButton(onClick = action, enabled = available && canEdit,
+                    modifier = Modifier.fillMaxWidth().testTag("message_edit_action")) {
+                    Text(stringResource(R.string.message_edit_action))
+                }
+            }
+            onDelete?.let { action ->
+                TextButton(onClick = action, enabled = available && canDelete,
+                    modifier = Modifier.fillMaxWidth().testTag("message_delete_action")) {
+                    Text(stringResource(R.string.message_delete_action))
+                }
             }
         } },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })

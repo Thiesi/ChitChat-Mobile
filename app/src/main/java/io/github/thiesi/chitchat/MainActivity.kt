@@ -37,7 +37,8 @@ class MainActivity : ComponentActivity() {
             val rooms: RoomsViewModel = viewModel(factory = RoomsViewModel.factory((application as ChitChatApplication).rooms,
                 (application as ChitChatApplication).realtime))
             val conversations: ConversationViewModel = viewModel(factory = ConversationViewModel.factory((application as ChitChatApplication).conversations,
-                (application as ChitChatApplication).realtime, (application as ChitChatApplication).typing))
+                (application as ChitChatApplication).realtime, (application as ChitChatApplication).typing,
+                (application as ChitChatApplication).messageMutations))
             val directInbox: DirectInboxViewModel = viewModel(factory = DirectInboxViewModel.factory(
                 (application as ChitChatApplication).directMessages, (application as ChitChatApplication).realtime))
             val directThread: DirectThreadViewModel = viewModel(factory = DirectThreadViewModel.factory(

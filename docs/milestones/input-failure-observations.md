@@ -1,5 +1,7 @@
 # Input verification: async authentication and failure observations
 
+PR54 merged at`44440a8`:600 fresh local JVM/lint0, CI160 native and both reviews passed; physical1/1 journey/100cycles passed141.75s. Local Full156/157 remains failed. The maintainer approved only that known Windows/API36 control as non-gating for development ([#55](https://github.com/Thiesi/ChitChat-Mobile/issues/55)); keep CI enabled, other failures blocking, no fix/release waiver. Independent main passed160/160 native/lint0;600 JVM reports/R8 were cached. Earlier checkpoints are historical.
+
 Test-only prerequisite for native room Edit/Delete; not a production keyboard correction. No server, dependency, focus, timeout, single-tap or IME-predicate change. Preserve the maintainer's closure of issue31 and all failed evidence. Passing subsets, traced runs or hosted checks cannot silently waive a known failed full gate.
 
 ## Changes

@@ -8,7 +8,11 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-[Input verification investigation](docs/milestones/input-failure-observations.md) adds controlled async-login coverage and failure-only Reply/opt-in standalone-input diagnostics. Its pre-publication build passed600 fresh JVM/lint0/debug/release/test APK; native/CI/review remain gates. No production keyboard fix or failed-gate waiver is claimed. Room Edit/Delete remains separate.
+[Reply/Copy PR49](https://github.com/Thiesi/ChitChat-Mobile/pull/49) and [input-observation PR54](https://github.com/Thiesi/ChitChat-Mobile/pull/54) are merged. PR54 passed600 fresh local JVM/lint0, CI160 native, both reviews and physical100cycles. Independent main passed160 native/lint0; JVM/R8 were cached. Local156/157 remains under the development-only [#55 exception](https://github.com/Thiesi/ChitChat-Mobile/issues/55), not a fix/release waiver. Preserve issue31 closure.
+
+[M5b2 room Edit/Delete](docs/milestones/M5b2-room-author-controls.md) passed623 fresh JVM/lint0 and six native cases per layout/Full; hosted166/166 passed. Local Full159/163 remains FAILED. The maintainer extended the development-only exception to [#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56)'s three exact recorded IME failures, not other/new failures. Current-head CI/reviews still required; no fix/release waiver, DM/live separate.
+
+### Historical milestone checkpoints
 
 Verification paragraphs retain publication-time checkpoints; linked PRs record subsequent gates and merges.
 
