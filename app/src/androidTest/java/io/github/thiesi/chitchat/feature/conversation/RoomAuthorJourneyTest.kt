@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
+import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
+
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -7,14 +9,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.R
@@ -32,7 +31,8 @@ import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
 import io.github.thiesi.chitchat.testing.NativeChatFixtures
 import io.github.thiesi.chitchat.testing.nativeInputWindow
 import io.github.thiesi.chitchat.testing.performNativeTap
-import io.github.thiesi.chitchat.testing.nativeTapPoint
+import io.github.thiesi.chitchat.testing.nativeAuthorSaveGeometry
+import io.github.thiesi.chitchat.testing.nativeAuthorImeBottom
 import io.github.thiesi.chitchat.testing.tapNativeInput
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -108,48 +108,14 @@ class RoomAuthorJourneyTest {
         assertEquals(body, compose.onNodeWithTag("author_edit_body").fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
     }
     // The Dialog owns the editor's insets; the unfocused Activity is a different window.
-    private fun editorImeBottom(): Int {
-        val node = compose.onNodeWithTag("author_edit_body").fetchSemanticsNode()
-        var bottom = 0
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val view = (node.root as? ViewRootForTest)?.view
-            val insets = view?.let(ViewCompat::getRootWindowInsets)
-            if (insets?.isVisible(WindowInsetsCompat.Type.ime()) == true)
-                bottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-        }
-        return bottom // Missing target-window metadata fails closed, not "keyboard ready".
-    }
+    private fun editorImeBottom() = compose.nativeAuthorImeBottom()
     private fun hideIme() {
         compose.waitForIdle()
         if (ime > 0 || nativeInputWindow().imeVisible != false) Espresso.closeSoftKeyboard()
         compose.waitUntil(5_000) { ime == 0 }
         assertEquals(false, nativeInputWindow().imeVisible)
     }
-    /** Own test windows and scalars only: no dumps, titles, input text, focus/IME requests or readiness waits. */
-    private class SaveGeometry(val pointY: Float, val keyboardTop: Int?, val details: String)
-    private fun saveGeometry(): SaveGeometry {
-        val node = compose.onNodeWithTag("author_change_confirm").fetchSemanticsNode()
-        var result: SaveGeometry? = null
-        compose.runOnIdle {
-            val view = (node.root as? ViewRootForTest)?.view
-            val dialogFrame = android.graphics.Rect(); view?.getWindowVisibleDisplayFrame(dialogFrame)
-            val activity = compose.activity.window.decorView
-            val activityFrame = android.graphics.Rect(); activity.getWindowVisibleDisplayFrame(activityFrame)
-            val activityLocation = IntArray(2); activity.getLocationOnScreen(activityLocation)
-            val dialogLocation = IntArray(2); view?.getLocationOnScreen(dialogLocation)
-            val activityInsets = ViewCompat.getRootWindowInsets(activity)
-            val dialogInsets = view?.let(ViewCompat::getRootWindowInsets)
-            val point = nativeTapPoint(node.boundsInWindow, node.positionInWindow, node.positionOnScreen, view?.display?.displayId)
-            val keyboardTop = dialogInsets?.takeIf { it.isVisible(WindowInsetsCompat.Type.ime()) }
-                ?.getInsets(WindowInsetsCompat.Type.ime())?.bottom?.let { dialogLocation[1] + checkNotNull(view).height - it }
-            val details = "bounds=${node.boundsInWindow}, point=$point, dialogView=(${dialogLocation[0]},${dialogLocation[1]},${view?.width},${view?.height}), " +
-                "dialogFrame=$dialogFrame, dialogIme=${dialogInsets?.isVisible(WindowInsetsCompat.Type.ime())}/${dialogInsets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom}, " +
-                "activityView=(${activityLocation[0]},${activityLocation[1]},${activity.width},${activity.height}), activityFrame=$activityFrame, " +
-                "activityIme=${activityInsets?.isVisible(WindowInsetsCompat.Type.ime())}/${activityInsets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom}, composeIme=$ime"
-            result = SaveGeometry(point.y, keyboardTop, details)
-        }
-        return checkNotNull(result)
-    }
+    private fun saveGeometry() = compose.nativeAuthorSaveGeometry(compose.activity, ime)
     private fun confirmMutation(kind: AuthorChangeKind = AuthorChangeKind.EDIT) {
         val choice = checkNotNull(room.state.value.authorDialog)
         val id = choice.request.original.id

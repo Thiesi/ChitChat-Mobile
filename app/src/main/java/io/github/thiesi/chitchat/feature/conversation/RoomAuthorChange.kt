@@ -5,8 +5,7 @@ import io.github.thiesi.chitchat.core.conversation.MessageReply
 import io.github.thiesi.chitchat.core.conversation.ReplyMessage
 import io.github.thiesi.chitchat.core.conversation.MessagePerson
 import io.github.thiesi.chitchat.core.session.SessionState
-
-enum class AuthorChangeKind { EDIT, DELETE }
+import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
 
 /** Stable modal origin. Neither this nor its private text belongs in saved state or logs. */
 class RoomAuthorRequest internal constructor(

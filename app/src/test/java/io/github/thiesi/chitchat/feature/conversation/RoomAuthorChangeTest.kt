@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
+import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
+
 import io.github.thiesi.chitchat.core.conversation.*
 import io.github.thiesi.chitchat.core.direct.DirectMessage
 import io.github.thiesi.chitchat.core.mutations.AuthorMessageActions

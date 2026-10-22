@@ -1,5 +1,7 @@
 # Proposed Android architecture
 
+The [shared author dialog](milestones/shared-author-dialog.md) extracts presentation only into `core/ui`; feature-owned state, canonical requests and authorization are unchanged. Native own-window observations are shared only in androidTest. DM controls follow separately.
+
 [M5b2](milestones/M5b2-room-author-controls.md) reuses the mutation repository/conversation actor, with separate author jobs/uncertainty and ACK-before-GET quote updates; no new transport or durable queue.
 
 [M5b1](milestones/M5b1-author-mutation-protocol.md) adds original-session author edit/delete operations over the existing transport, canonical response reconstruction and transient room action hints. Native modal/state consumers follow separately; post-commit errors require explicit GET reconciliation, never replay.

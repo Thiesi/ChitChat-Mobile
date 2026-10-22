@@ -86,4 +86,6 @@ Continue directly into the next independently buildable milestone without reques
 
 ## Integration configuration needed before acceptance
 
+M5b3 DM author controls measured126571 bytes before documentation. First deliver the independently buildable [shared-editor prerequisite](milestones/shared-author-dialog.md), with its own full gates/reviews; then rebase the preserved DM consumer and complete its vertical slice. Never truncate review inputs or mistake extraction for DM parity. M5b2 is delivered in PR57; live acceptance remains separate.
+
 Maintainer supplies the confirmed public application ID and signing/distribution choice before release, and a non-production HTTPS ChitChat instance with accounts covering ordinary users, relevant staff roles, MFA, optional providers and guest mode before live acceptance. The recommended namespace can be used for M1 development. Push topology is accepted: installed UnifiedPush distributor first, optional embedded FCM fallback, no mandatory publisher service or Firebase project/configuration. Testing needs two distributors and fallback-capable devices as documented in [setup](firebase-setup.md). Obtain credentials securely, not in public issues. UI/build/error testing can proceed without a live server; final end-to-end acceptance cannot pass without one.

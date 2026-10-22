@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- The [shared author dialog](docs/milestones/shared-author-dialog.md) is presentation/test-observation reuse only; canonical authorization, original requests and jobs remain feature-owned. Do not treat it as native DM editing or a keyboard fix.
+
 - [Input observations](docs/milestones/input-failure-observations.md): preserve async-auth receipt/result separation and immediate-vs-later failure scalars. Standalone tracing stays opt-in; never treat post-timeout UI queries as deadline proof or rerun/restart until green. This is not a production keyboard fix; preserve issue31's maintainer closure.
 
 - Maintainer-approved development exceptions: [#55](https://github.com/Thiesi/ChitChat-Mobile/issues/55)'s known Windows/API36 standalone control, and [#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56)'s three exact recorded room-ignore/DM-navigation/initial-room IME failures in Full159/163. Retain failed evidence/all CI tests; never replay until green. Other/new failures, current-head CI/reviews/conflicts still block. No blanket keyboard exemption, production-fix or release waiver.
