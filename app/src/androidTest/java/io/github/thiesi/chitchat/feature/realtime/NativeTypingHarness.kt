@@ -19,12 +19,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.JsonObject
 
 /** UI-only fake transport feeding the real lifecycle coordinator; never a live-server claim. */
-internal class NativeTypingHarness(override val session: StateFlow<SessionState>) : TypingOperations, AutoCloseable {
+internal class NativeTypingHarness(override val session: StateFlow<SessionState>,
+    elapsed: () -> Long = { System.nanoTime() / 1_000_000 }) : TypingOperations, AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val events = Events(session.value.generation)
     private val ids = AtomicLong()
     val requests = AtomicInteger()
-    val controller = TypingCoordinator(this, events, scope).also { it.setForeground(true) }
+    val controller = TypingCoordinator(this, events, scope, elapsed = elapsed).also { it.setForeground(true) }
     init { scope.launch { session.collect { events.state.value = events.state.value.copy(generation = it.generation) } } }
     override suspend fun signal(expected: SessionState, target: TypingTarget): Boolean {
         requests.incrementAndGet(); return true

@@ -30,7 +30,9 @@ M2 is split to keep authentication changes reviewable: **M2a** adds HTTPS connec
 
 [M5b1](milestones/M5b1-author-mutation-protocol.md) independently prepares author edit/delete transport while PR49 remains blocked by issue31. It needs its own complete build/tests/CI/reviews; native mutation state/modal controls follow separately. This is not usable Edit/Delete or a waiver of Reply/Copy failures.
 
-[Native input-handoff observations](milestones/native-ime-handoff-observations.md) temporarily precede PR49 delivery after its unchanged room-switch journey failed the original IME predicate (136/137 hosted; new Reply/Copy12/12). Preserve the red gate and strengthen passive evidence, not tap retries or guessed UI changes. This adds no parity or production correction. Keep issue31 open and require current-head green checks/reviews before either PR can merge.
+[Input-handoff observations](milestones/native-ime-handoff-observations.md) shipped in PR50 after PR49's136/137 hosted result (new Reply/Copy12/12 passed). That failure remains recorded; diagnostics/fixture isolation are not a production fix. Issue31 stays open and every current head still needs green checks/reviews.
+
+[M5a](milestones/M5a-reply-composition.md) consumes reply state through native room/DM Reply/Copy, preview/removal and draft labels. Complete build/native/CI/review gates before delivery, then continue remaining M5 tools without confirmation. Push/live acceptance stay separate.
 
 [M5a1](milestones/M5a1-reply-composer-state.md) prepares existing room/DM reply contracts and scoped draft/selection state, not native Reply/Copy controls. The combined candidate exceeded the complete-review input budget; preserve the consumer and verify/review each independently buildable slice. Continue into the native consumer after delivery without routine confirmation; do not count this prerequisite as usable reply creation.
 

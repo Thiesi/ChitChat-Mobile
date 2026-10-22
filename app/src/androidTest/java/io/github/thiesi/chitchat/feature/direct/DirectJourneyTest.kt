@@ -266,13 +266,18 @@ class DirectJourneyTest {
     @Test fun compactInitialFailureStillExposesSessionSafeExplicitRecovery() {
         api.contextFailure = ApiFailure(FailureKind.NETWORK)
         content(loadFailure = true, height = 180)
+        compose.runOnIdle { model.updateDraft("Retained recovery draft") }
+        compose.onNodeWithTag("dm_composer").assertTextContains("Retained recovery draft")
         compose.onNodeWithTag("dm_send").assertIsNotEnabled()
         details()
         compose.onNodeWithText("The network request failed.", substring = true).performScrollTo().assertIsDisplayed()
         compose.runOnIdle { api.contextFailure = null; assertEquals(0, api.sends); assertEquals(0, api.reads) }
         compose.onNodeWithText("Refresh").performScrollTo().performClick()
         compose.waitUntil(5_000) { model.state.value.loaded && !model.state.value.busy }
+        compose.onNodeWithTag("dm_composer").assertTextContains("Retained recovery draft")
         compose.onNodeWithTag("dm_send").assertIsEnabled()
+        compose.runOnIdle { assertTrue(model.canSend()); assertEquals(0, api.sends); model.updateDraft(" \n\t") }
+        compose.onNodeWithTag("dm_send").assertIsNotEnabled()
     }
 
     @Test fun compactReadRetryReconcilesAndWaitsForUnobscuredReadProof() {

@@ -2,7 +2,7 @@
 
 - [M5b1](milestones/M5b1-author-mutation-protocol.md) is author edit/delete API/session groundwork only. Native controls, uncertain-mutation reconciliation UX and live author-write acceptance remain pending. PR49's keyboard failures remain separate blockers; diagnostic passes do not close issue31.
 
-[M5a1 reply protocol/state](milestones/M5a1-reply-composer-state.md) is a prerequisite only. Native reply creation, previews/removal, Copy and reply-only draft management remain pending the preserved consumer's separate verification/review. Existing quote-to-original navigation remains functional; this slice adds no push or live-acceptance claim.
+[M5a](milestones/M5a-reply-composition.md) adds native Reply/Copy and reply-only drafts. Copy exports whole-body plaintext, not substrings; clipboard may outlive logout. Memory-only drafts vanish on process death. Live/API26/device/TalkBack acceptance, mentions, other M5 tools and push remain pending.
 
 [M4c4d](milestones/M4c4d-native-notification-destinations.md) adds member destinations (552 JVM/125 native locally), superseding older pending-routing descriptions. Targets give no read/resend consent; pings have the latest100 limit. Unsupported links stay inert; push, guests and live acceptance remain pending.
 

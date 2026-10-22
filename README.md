@@ -8,6 +8,8 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
+Verification paragraphs retain publication-time checkpoints; linked PRs record subsequent gates and merges.
+
 [Failure-only IME snapshots](docs/milestones/native-ime-server-snapshot.md) observe server/IME-window state before cleanup. Initial head2a8 passed local143 native/598 fresh JVM/build/lint but failed hosted142/143 in the existing tracing self-test. The window expansion passed new builds/598 fresh JVM/lint0/eleven focused cases; full native/CI/reviews remain gates. Issue31/PR49 remain unresolved; no production fix or extra parity is claimed.
 
 [System-routed keyboard test taps](docs/milestones/system-native-taps.md) are locally verified test infrastructure:598 fresh JVM tests,137 native cases (including100 consistent-OS-tap dialog cycles), lint0 and debug/release builds passed. Current-head CI and completed initial/fresh reviews are required before merge. No production editor/keyboard fix or extra parity is claimed; issue31 and PR49 remain open.
@@ -22,9 +24,9 @@ The [native notification center](docs/milestones/M4c4c2-native-notification-cent
 
 The independent merged-main native run then failed 112/113 on the known focused-but-hidden keyboard condition. [IME diagnostics](docs/milestones/native-ime-diagnostics.md) records that failure and the added test-only window/filtered-CI evidence (local 531 JVM/115 native tests passed); issue31 remains open. A later green run is not a production keyboard fix.
 
-Room and DM reply previews open the exact original as a marked historical window, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Reply composition and search remain pending. See [reply-target scope](docs/milestones/M4c4b2-native-reply-targets.md).
+Room and DM reply previews open the exact original as a marked historical window, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Search remains pending. See [reply-target scope](docs/milestones/M4c4b2-native-reply-targets.md).
 
-[M5a1 reply protocol/state](docs/milestones/M5a1-reply-composer-state.md) prepares scoped reply drafts and existing send contracts. Native Reply/Copy controls follow separately; this prerequisite does not make reply creation usable yet.
+[Native Reply/Copy](docs/milestones/M5a-reply-composition.md) adds room/DM preview/removal and scoped reply-only drafts. Unknown sends stay guarded; copied plaintext may outlive logout. See the separate gate/acceptance limits.
 
 ## Engineering documents
 

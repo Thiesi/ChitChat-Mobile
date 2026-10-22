@@ -2,6 +2,8 @@
 
 [M5b1](milestones/M5b1-author-mutation-protocol.md) adds original-session author edit/delete operations over the existing transport, canonical response reconstruction and transient room action hints. Native modal/state consumers follow separately; post-commit errors require explicit GET reconciliation, never replay.
 
+[M5a](milestones/M5a-reply-composition.md) shares guarded actions, canonical excerpts/reply controls and48dp Send; no new transport/cache. Copy explicitly exports plaintext.
+
 [M4c4c2](milestones/M4c4c2-native-notification-center.md) consumes notification state through native list/read controls and a Home unread indicator. A single root lifecycle controls summary/full GET modes; navigation stores only original owner metadata and callbacks check the actual entry reference. Hidden-center `limit=1` summaries update only the independent count, never history or unknown-write consent. Navigation queues behind writes instead of cancelling/replaying POSTs. General destination routing and background push remain separate; local verification passed; delivery gates are recorded in the milestone.
 
 [M4c4c1](milestones/M4c4c1-notification-state.md) adds memory-only notification presentation state, bounded canonical GET windows, independent server unread counts and explicit reference-scoped read/All confirmation/reconciliation. M4c4c2 now consumes the list/read/count portion; general-link routing remains separate. No cache, new event, background connection or push worker is introduced.

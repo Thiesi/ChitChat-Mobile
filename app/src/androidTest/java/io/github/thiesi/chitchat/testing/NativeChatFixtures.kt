@@ -1,4 +1,4 @@
-package io.github.thiesi.chitchat.feature.notifications
+package io.github.thiesi.chitchat.testing
 
 import io.github.thiesi.chitchat.core.conversation.*
 import io.github.thiesi.chitchat.core.direct.*
@@ -7,12 +7,13 @@ import io.github.thiesi.chitchat.core.notifications.*
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
 import io.github.thiesi.chitchat.core.targets.*
 import io.github.thiesi.chitchat.feature.auth.TestSessions
+import io.github.thiesi.chitchat.feature.notifications.noticeIdentity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 /** Typed native-journey fixtures only. No live HTTP, push, credentials or production fallback. */
-internal class NotificationRoutingFixtures(val sessions: TestSessions) {
+internal class NativeChatFixtures(val sessions: TestSessions) {
     val policy = ChatPolicy(emptySet(), null, DisplayPreferences())
     val privacy = MessagePrivacy(DirectPrivacy(false, false, "admin", "permanently", 0),
         RevisionPrivacy(false, "super_admin", true, true, false))
@@ -28,10 +29,25 @@ internal class NotificationRoutingFixtures(val sessions: TestSessions) {
         val histories = mutableListOf<Triple<Long, Long?, Int>>()
         var sends = 0
         var sendFailure: ApiFailure? = null
+        val sent = java.util.concurrent.CopyOnWriteArrayList<Triple<Long, String, Long?>>()
+        var sendGate: CompletableDeferred<Unit>? = null
+        var ignoreSendCancellation = false
+        val deleted = mutableSetOf<Pair<Long, Long>>()
+        private val posted = mutableMapOf<Long, MutableList<Triple<Long, String, Long?>>>()
         override suspend fun context(roomId: Long) = ConversationContext(RoomInfo(roomId, "room$roomId", "Room $roomId",
             "", "private", 0, 0, 7, "member", false, "none", 100, 0), checkNotNull(session.value.chatPolicy))
         private fun rows(room: Long) = (1L..100L).map {
-            RoomMessage(it, room, 8, "Peer", "text", "Room $room message $it", false, timestamp)
+            val removed = (room to it) in deleted
+            RoomMessage(it, room, 8, "Peer", "text", if (removed) null else "Room $room message $it", removed, timestamp)
+        } + posted[room].orEmpty().map { (id, body, reply) ->
+            RoomMessage(id, room, 7, "Viewer", "text", body, false, timestamp, replyTo = reply?.let { roomReply(room, it) })
+        }
+        private fun roomReply(room: Long, id: Long): MessageReply {
+            val own = posted[room].orEmpty().firstOrNull { it.first == id }
+            val available = (room to id) !in deleted && (id in 1L..100L || own != null)
+            return MessageReply("room", id, available, if (available) ReplyMessage(id,
+                MessagePerson(if (own == null) 8 else 7, if (own == null) "Peer" else "Viewer"), "text",
+                own?.second ?: "Room $room message $id", false) else null)
         }
         override suspend fun history(roomId: Long, beforeId: Long?, limit: Int): MessagePage {
             histories += Triple(roomId, beforeId, limit)
@@ -45,8 +61,16 @@ internal class NotificationRoutingFixtures(val sessions: TestSessions) {
             RoomPing(it, roomId, MessagePerson(if (it == 80L) 8 else 9, "Peer"), MessagePerson(7, "Viewer"), "Private ping $it", timestamp)
         }
         override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult {
-            sends++; sendFailure?.let { throw it }
-            return SendResult.Message(RoomMessage(101, roomId, 7, "Viewer", "text", body, false, timestamp))
+            sends++; sent += Triple(roomId, body, replyId)
+            sendGate?.let { if (ignoreSendCancellation) withContext(NonCancellable) { it.await() } else it.await() }
+            sendFailure?.let { throw it }
+            if (isPrivatePingCommand(body)) return SendResult.Ping(RoomPing(101, roomId, MessagePerson(7, "Viewer"),
+                MessagePerson(8, "Peer"), body.substringAfter("/ping Peer", "").trim(), timestamp))
+            if (replyId != null && rows(roomId).none { it.id == replyId })
+                throw ApiFailure(FailureKind.HTTP, 400, "invalid_reply_target")
+            val messages = posted.getOrPut(roomId) { mutableListOf() }
+            val id = 101L + messages.size; messages += Triple(id, body, replyId)
+            return SendResult.Message(rows(roomId).first { it.id == id })
         }
         override suspend fun read(roomId: Long, messageId: Long): Long { reads += roomId; return messageId }
     }
@@ -57,11 +81,30 @@ internal class NotificationRoutingFixtures(val sessions: TestSessions) {
         private val readPeers = mutableSetOf<Long>()
         var sends = 0
         var sendFailure: ApiFailure? = null
+        val sent = java.util.concurrent.CopyOnWriteArrayList<Triple<Long, String, Long?>>()
+        var sendGate: CompletableDeferred<Unit>? = null
+        var ignoreSendCancellation = false
+        val deleted = mutableSetOf<Pair<Long, Long>>()
+        private val posted = mutableMapOf<Long, MutableList<Triple<Long, String, Long?>>>()
+        private val relationships = mutableMapOf<Long, DirectRelationship>()
         override suspend fun context(peerId: Long) = DirectContext(MessagePerson(peerId, "Peer $peerId"),
-            DirectRelationship(false, true), privacy, policy.display, null)
-        private fun rows(peer: Long) = (1L..100L).map { DirectMessage(it, MessagePerson(peer, "Peer $peer"),
-            MessagePerson(7, "Viewer"), "Direct $peer message $it", timestamp.takeIf { peer in readPeers }, timestamp, false, false,
-            null, false, false, null, emptyList(), emptyList(), null) }
+            relationships[peerId] ?: DirectRelationship(false, true), privacy, policy.display, null)
+        private fun rows(peer: Long) = (1L..100L).map {
+            val removed = (peer to it) in deleted
+            DirectMessage(it, MessagePerson(peer, "Peer $peer"), MessagePerson(7, "Viewer"),
+                if (removed) null else "Direct $peer message $it", timestamp.takeIf { peer in readPeers }, timestamp, false, removed,
+                null, false, false, null, emptyList(), emptyList(), null)
+        } + posted[peer].orEmpty().map { (id, body, reply) ->
+            DirectMessage(id, MessagePerson(7, "Viewer"), MessagePerson(peer, "Peer $peer"), body, null, timestamp, true, false,
+                null, true, true, reply?.let { directReply(peer, it) }, emptyList(), emptyList(), null)
+        }
+        private fun directReply(peer: Long, id: Long): DirectReply {
+            val own = posted[peer].orEmpty().firstOrNull { it.first == id }
+            val available = (peer to id) !in deleted && (id in 1L..100L || own != null)
+            return DirectReply("direct", id, available, if (available) DirectReplyTarget(id,
+                MessagePerson(if (own == null) peer else 7, if (own == null) "Peer $peer" else "Viewer"),
+                own?.second ?: "Direct $peer message $id", false) else null)
+        }
         override suspend fun history(peerId: Long, beforeId: Long?, limit: Int): DirectPage {
             val rows = rows(peerId).filter { beforeId == null || it.id < beforeId }.takeLast(limit)
             return DirectPage(rows, rows.firstOrNull()?.id, rows.size == limit)
@@ -70,9 +113,17 @@ internal class NotificationRoutingFixtures(val sessions: TestSessions) {
             rows(peerId).filter { it.id >= lower && (upper == null || it.id <= upper) }, true, lower, lower > 1)
         override suspend fun inbox() = DirectInbox(emptyList(), privacy, policy.display)
         override suspend fun search(prefix: String, limit: Int) = emptyList<MessagePerson>()
-        override suspend fun send(peerId: Long, body: String, replyId: Long?): Long { sends++; sendFailure?.let { throw it }; return 101 }
+        override suspend fun send(peerId: Long, body: String, replyId: Long?): Long {
+            sends++; sent += Triple(peerId, body, replyId)
+            sendGate?.let { if (ignoreSendCancellation) withContext(NonCancellable) { it.await() } else it.await() }
+            sendFailure?.let { throw it }
+            if (replyId != null && rows(peerId).none { it.id == replyId })
+                throw ApiFailure(FailureKind.HTTP, 400, "invalid_reply_target")
+            val messages = posted.getOrPut(peerId) { mutableListOf() }
+            val id = 101L + messages.size; messages += Triple(id, body, replyId); return id
+        }
         override suspend fun read(peerId: Long): Int { reads += peerId; return if (readPeers.add(peerId)) 100 else 0 }
-        override suspend fun setBlocked(peerId: Long, blocked: Boolean) = DirectRelationship(blocked, !blocked)
+        override suspend fun setBlocked(peerId: Long, blocked: Boolean) = DirectRelationship(blocked, !blocked).also { relationships[peerId] = it }
     }
 
     inner class Notices : NotificationOperations {
