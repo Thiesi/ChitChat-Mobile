@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[Failure-only IME snapshots](milestones/native-ime-server-snapshot.md) are test observability only. Initial head2a8 passed local143 native/598 fresh JVM/build/lint but failed hosted142/143. The window expansion passed new builds/598 fresh JVM/lint0/eleven focused cases; full native/CI/reviews remain gates. No production fix, extra parity or waiver of PR49's failed gate is claimed.
+
 [System-routed keyboard test taps](milestones/system-native-taps.md) distinguish native OS input from direct View-dispatched component gestures. Current local gates passed598 fresh JVM/137 native/lint0, including100 legacy-editor dialog cycles; CI and completed initial/fresh reviews remain merge prerequisites. This is test infrastructure, not additional user parity or a production keyboard correction; issue31/PR49 remain open.
 
 [M5b1](milestones/M5b1-author-mutation-protocol.md) prepares author edit/delete transport and original-session/canonical safeguards. Author-action parity remains incomplete until native controls and their state/UX tests ship; live acceptance and issue31 are unchanged.
