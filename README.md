@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-[Failure-only IME server snapshots](docs/milestones/native-ime-server-snapshot.md) add bounded, fixed-field observations before failed-test cleanup (598 fresh JVM/six focused native cases and build/lint gates passed). Full native/CI/review delivery gates remain required; this does not resolve issue31, waive PR49's failed gate or add product parity.
+[Failure-only IME snapshots](docs/milestones/native-ime-server-snapshot.md) observe server/IME-window state before cleanup. Initial head2a8 passed local143 native/598 fresh JVM/build/lint but failed hosted142/143 in the existing tracing self-test. The window expansion passed new builds/598 fresh JVM/lint0/eleven focused cases; full native/CI/reviews remain gates. Issue31/PR49 remain unresolved; no production fix or extra parity is claimed.
 
 [System-routed keyboard test taps](docs/milestones/system-native-taps.md) are locally verified test infrastructure:598 fresh JVM tests,137 native cases (including100 consistent-OS-tap dialog cycles), lint0 and debug/release builds passed. Current-head CI and completed initial/fresh reviews are required before merge. No production editor/keyboard fix or extra parity is claimed; issue31 and PR49 remain open.
 
