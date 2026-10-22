@@ -51,7 +51,6 @@ M3c1/M3c2 supply the shared-session transport/runtime, forced logout and native 
 - [Exact-message lookup/state prerequisite](docs/milestones/M4c4b1-message-target-state.md)
 - [Historical-boundary/scoped-callback corrections and target-adoption state](docs/milestones/M4c4b2a-target-adoption-state.md)
 - [Native same-conversation reply-target navigation](docs/milestones/M4c4b2-native-reply-targets.md)
-- [Native Reply/Copy and composer verification](docs/milestones/M5a-reply-composition.md)
 - [Scoped notification-center state prerequisite](docs/milestones/M4c4c1-notification-state.md)
 - [Native notification list/read controls and remaining routing](docs/milestones/M4c4c2-native-notification-center.md)
 - [Backend issues](docs/backend-dependencies.md)

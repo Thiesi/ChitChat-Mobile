@@ -87,6 +87,9 @@ class ReplyComposerJourneyTest {
             runBlocking { sessions.signIn("Viewer", "fixture-password") }
             sessions.state.value = sessions.state.value.copy(chatPolicy = api.policy, privacy = api.privacy, shareTyping = true)
         }
+        // Retire a previous fixture's system clipboard preview with an outside, inert app tap.
+        // Do not clear exported text or let the preview intercept the notification-entry tap.
+        compose.onNodeWithText(text(R.string.app_name)).assertIsDisplayed().performNativeTap()
         compose.onNodeWithTag("notifications_open").performScrollTo().assertIsDisplayed().performNativeTap(); fresh()
     }
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
