@@ -133,10 +133,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     var focusReply by remember { mutableStateOf<ComposerReply?>(null) }
     val composerFocus = remember { FocusRequester() }
     val androidContext = LocalContext.current
-    val composerDialog = actions != null || replyOptions != null
-    fun interactive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !obscured &&
+    val composerDialog = actions != null || replyOptions != null || state.authorDialog != null
+    fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !obscured &&
         !pingsOpen && model.state.value.pingSelection == null && !detailsOpen &&
         ignores?.state?.value?.target == null && !model.state.value.draftsOpen
+    fun interactive() = paneInteractive() && model.state.value.authorDialog == null
     fun openActions(message: RoomMessage) {
         if (interactive() && actions == null && replyOptions == null && model.canUseMessage(displayedSession, roomId, message)) {
             focus.clearFocus(); actions = MessageActionSelection(message.id)
@@ -252,6 +253,14 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             }
             if (now < session.retryAtMillis) Text(stringResource(R.string.rate_limited))
             if (state.draftLimit || !model.canEditDraft()) Text(stringResource(R.string.room_draft_limit))
+            if (state.authorLimit || model.authorCapacityFull()) Text(stringResource(R.string.author_limit))
+            state.authorUnknown?.let { pending ->
+                Text(stringResource(R.string.author_unconfirmed, pending.messageId.toString()))
+                if (state.authorDialog == null) TextButton(onClick = { close(); if (interactive()) model.checkAuthorHistory(displayedSession, pending) },
+                    enabled = ready && !state.busy && !state.reading, modifier = Modifier.testTag("author_check_history")) {
+                    Text(stringResource(R.string.author_check_history))
+                }
+            }
             if (draftCount > 0) TextButton(onClick = { close(); model.showDrafts(displayedSession) }) {
                 Text(stringResource(R.string.room_drafts_count, draftCount))
             }
@@ -270,6 +279,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 "ping_sent" -> R.string.conversation_ping_sent; "sent" -> R.string.conversation_sent
                 "window" -> R.string.conversation_window; "duplicate_risk" -> R.string.conversation_duplicate_choice
                 "latest_reset" -> R.string.conversation_latest_reset
+                "author_edited" -> R.string.author_edited; "author_deleted" -> R.string.author_deleted
+                "author_checked" -> R.string.author_checked
                 else -> R.string.conversation_cancelled
             }), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
             if (!state.atLatest || !state.latestWindow) TextButton(onClick = { close(); model.latest() }, enabled = ready && !state.busy) {
@@ -363,7 +374,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val label = stringResource(R.string.conversation_details)
                 val blocked = !ready || state.busy || !model.canSend()
                 val status = stringResource(if (blocked) R.string.conversation_send_unavailable_details else R.string.conversation_details_attention)
-                val attention = state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend ||
+                val attention = state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend || state.authorUnknown != null || state.authorLimit ||
                     state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
                     state.notice != null || blocked || connection?.takeIf { it.generation == session.generation }?.let {
                         it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null || it.roomId == roomId }
@@ -401,7 +412,29 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     message.body?.takeIf { it.isNotEmpty() }?.let { copyMessage(androidContext, it) }
                     actions = null
                 }
-            }, onDismiss = { if (actions === request) actions = null })
+            }, onDismiss = { if (actions === request) actions = null },
+            onEdit = message?.takeIf { it.senderId == displayedSession.user?.id && it.authorActions?.canEdit == true }?.let { original -> {
+                if (actions === request && interactive() && model.beginAuthor(displayedSession, roomId, original, AuthorChangeKind.EDIT)) actions = null
+            } }, canEdit = message?.let { model.canBeginAuthor(displayedSession, roomId, it, AuthorChangeKind.EDIT) } == true,
+            onDelete = message?.takeIf { it.senderId == displayedSession.user?.id && it.authorActions?.canDelete == true }?.let { original -> {
+                if (actions === request && interactive() && model.beginAuthor(displayedSession, roomId, original, AuthorChangeKind.DELETE)) actions = null
+            } }, canDelete = message?.let { model.canBeginAuthor(displayedSession, roomId, it, AuthorChangeKind.DELETE) } == true)
+    }
+    state.authorDialog?.takeIf { paneInteractive() }?.let { dialog ->
+        val request = dialog.request
+        val pending = state.authorUnknown?.takeIf { it.roomId == roomId && it.messageId == request.original.id && it.kind == request.kind }
+        RoomAuthorChangeDialog(dialog, model.authorTargetCurrent(request), model.authorAvailable(request), state.busy,
+            onChange = { if (paneInteractive()) model.updateAuthorBody(request, it) },
+            onConfirm = { if (paneInteractive()) when {
+                pending != null -> model.checkAuthorHistory(displayedSession, pending)
+                dialog.checked -> model.reviewAuthorProposal(request)
+                else -> model.submitAuthor(request)
+            } }, onDismiss = { if (isCurrentEntry()) model.dismissAuthor(request) }, pending = pending,
+            canConfirm = when {
+                pending != null -> ready && !state.busy && !state.reading
+                dialog.checked -> model.canReviewAuthor(request)
+                else -> model.authorAvailable(request)
+            }, currentPreview = model.authorCurrentPreview(request), error = state.error?.let { conversationError(it) })
     }
     replyOptions?.let { choice ->
         val current = state.composerReply === choice
@@ -526,7 +559,7 @@ private fun conversationError(error: ApiFailure) = stringResource(when {
 })
 
 @Composable
-private fun validationMessage(code: String) = stringResource(when (code) {
+internal fun validationMessage(code: String) = stringResource(when (code) {
     "empty_message" -> R.string.conversation_empty_message
     "message_too_long" -> R.string.conversation_too_long
     "ping_too_long" -> R.string.conversation_ping_long

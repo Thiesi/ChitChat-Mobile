@@ -1,6 +1,6 @@
 # Current status and limitations
 
-[Input observations](milestones/input-failure-observations.md) add diagnostics/async fixture coverage, not a keyboard fix. Room-author Full157/163 remains failed; one cold-start control also failed. Preserve issue31's maintainer closure and earlier evidence. PR49 is delivered; older open-gate narratives below are historical.
+[M5b2](milestones/M5b2-room-author-controls.md) built623 JVM/lint0/native6 per layout, but Full159/163 failed: [#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56) blocks delivery for three keyboard journeys beyond the standalone control. The [#55 exception](https://github.com/Thiesi/ChitChat-Mobile/issues/55) does NOT waive them. Keep CI tests/all failed evidence; no fix/release claim. PR49/54 merged, issue31 closed; DM/guests/live pending, older narratives historical.
 
 - [M5b1](milestones/M5b1-author-mutation-protocol.md) is author edit/delete API/session groundwork only. Native controls, uncertain-mutation reconciliation UX and live author-write acceptance remain pending. PR49's keyboard failures remain separate blockers; diagnostic passes do not close issue31.
 

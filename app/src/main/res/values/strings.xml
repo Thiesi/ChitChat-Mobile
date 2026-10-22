@@ -13,7 +13,7 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="saved_server">Your server</string>
-    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations with replies and explicit Copy, typing, and the notification list with explicit read controls and supported native destinations. Background push is not yet available. Room author actions include private ignore controls; Account includes typing privacy. Guest registration links remain unavailable.</string>
+    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations with replies and explicit Copy, typing, and the notification list with explicit read controls and supported native destinations. Room authors can edit or delete their own messages, with retained-history disclosures and explicit recovery after unconfirmed changes. DM author controls and background push are not yet available. Room author actions also include private ignore controls; Account includes typing privacy. Guest registration links remain unavailable.</string>
     <string name="change_server">Change server</string>
     <string name="forget_server">Forget server</string>
     <string name="forget_title">Forget this server?</string>
@@ -272,4 +272,26 @@
     <string name="composer_reply_invalid">The original is no longer available for this reply. Refresh before retrying. Choose another message or remove the reply; your text is kept.</string>
     <string name="composer_reply_ping_title">Private ping, not a reply</string>
     <string name="composer_reply_ping_ignored">Private pings do not quote messages. This selection will be cleared after the ping is sent.</string>
+    <string name="message_edit_action">Edit message</string>
+    <string name="message_delete_action">Delete for everyone</string>
+    <string name="author_delete_title">Delete this message for everyone?</string>
+    <string name="author_retention">Edits and deletion affect everyone with access. Revisions and files may remain under the server’s retention policy; this does not erase retained history or copies.</string>
+    <string name="author_edit_body">Edited message</string>
+    <string name="author_character_count">%1$d / 4000 characters</string>
+    <string name="author_unchanged">Make a change before saving.</string>
+    <string name="author_save">Save edit</string>
+    <string name="author_delete_confirm">Delete for everyone</string>
+    <string name="author_working">Confirming the change…</string>
+    <string name="author_temporarily_unavailable">This action is currently unavailable. Wait for the current operation or refresh the session before trying again.</string>
+    <string name="author_unconfirmed">A change to message %1$s could not be confirmed. It may already have happened. Check history before choosing another edit or deletion; nothing will be repeated automatically.</string>
+    <string name="author_check_history">Check author-change history</string>
+    <string name="author_limit">100 rooms have unconfirmed message changes. Check their histories before changing messages in another room.</string>
+    <string name="author_edited">Message edit confirmed.</string>
+    <string name="author_deleted">Message deletion confirmed.</string>
+    <string name="author_checked">History checked. Review the current message before choosing a new action.</string>
+    <string name="author_proposed_text">Proposed edit</string>
+    <string name="author_proposal_retained">Your proposed text stays here while you check history and review a fresh choice. Closing or backgrounding discards it; the warning stays in memory for this account. Nothing here survives process death.</string>
+    <string name="author_review_edit">Review proposed edit</string>
+    <string name="author_current_message">Current message: %1$s</string>
+    <string name="author_current_unavailable">This message is no longer editable in this view. Your proposed text is kept here until you close.</string>
 </resources>

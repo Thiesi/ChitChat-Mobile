@@ -6,6 +6,9 @@ import io.github.thiesi.chitchat.core.network.*
 import io.github.thiesi.chitchat.core.notifications.*
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
 import io.github.thiesi.chitchat.core.targets.*
+import io.github.thiesi.chitchat.core.mutations.AuthorMessageActions
+import io.github.thiesi.chitchat.core.mutations.MessageMutationOperations
+import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.feature.auth.TestSessions
 import io.github.thiesi.chitchat.feature.notifications.noticeIdentity
 import kotlinx.coroutines.CompletableDeferred
@@ -22,6 +25,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
     val directs = Directs()
     val notices = Notices()
     val lookups = Lookups()
+    val authorChanges = AuthorChanges()
 
     inner class Rooms : ConversationOperations {
         override val session = sessions.state
@@ -33,6 +37,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
         var sendGate: CompletableDeferred<Unit>? = null
         var ignoreSendCancellation = false
         val deleted = mutableSetOf<Pair<Long, Long>>()
+        private val edited = mutableSetOf<Pair<Long, Long>>()
         private val posted = mutableMapOf<Long, MutableList<Triple<Long, String, Long?>>>()
         override suspend fun context(roomId: Long) = ConversationContext(RoomInfo(roomId, "room$roomId", "Room $roomId",
             "", "private", 0, 0, 7, "member", false, "none", 100, 0), checkNotNull(session.value.chatPolicy))
@@ -40,7 +45,19 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
             val removed = (room to it) in deleted
             RoomMessage(it, room, 8, "Peer", "text", if (removed) null else "Room $room message $it", removed, timestamp)
         } + posted[room].orEmpty().map { (id, body, reply) ->
-            RoomMessage(id, room, 7, "Viewer", "text", body, false, timestamp, replyTo = reply?.let { roomReply(room, it) })
+            val removed = (room to id) in deleted
+            RoomMessage(id, room, 7, "Viewer", "text", body.takeUnless { removed }, removed, timestamp,
+                replyTo = reply?.takeUnless { removed }?.let { roomReply(room, it) },
+                editedAt = timestamp.takeIf { (room to id) in edited }, authorActions = AuthorMessageActions(!removed, !removed))
+        }
+        fun changeOwn(original: RoomMessage, body: String?, deleting: Boolean): RoomMessage {
+            val messages = checkNotNull(posted[original.roomId])
+            val index = messages.indexOfFirst { it.first == original.id }
+            check(index >= 0)
+            if (deleting) deleted += original.roomId to original.id
+            else { val before = messages[index]; messages[index] = Triple(before.first, checkNotNull(body), before.third)
+                edited += original.roomId to original.id }
+            return rows(original.roomId).first { it.id == original.id }
         }
         private fun roomReply(room: Long, id: Long): MessageReply {
             val own = posted[room].orEmpty().firstOrNull { it.first == id }
@@ -73,6 +90,24 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
             return SendResult.Message(rows(roomId).first { it.id == id })
         }
         override suspend fun read(roomId: Long, messageId: Long): Long { reads += roomId; return messageId }
+    }
+
+    inner class AuthorChanges : MessageMutationOperations {
+        val writes = java.util.concurrent.CopyOnWriteArrayList<Pair<Long, Boolean>>()
+        var failure: ApiFailure? = null
+        var gate: CompletableDeferred<Unit>? = null
+        var ignoreCancellation = false
+        private suspend fun change(original: RoomMessage, body: String?, deleting: Boolean): RoomMessage {
+            writes += original.id to deleting
+            gate?.let { if (ignoreCancellation) withContext(NonCancellable) { it.await() } else it.await() }
+            val changed = rooms.changeOwn(original, body, deleting)
+            failure?.let { throw it } // Deliberately after the fake commit, as the real services can fail after commit.
+            return changed
+        }
+        override suspend fun editRoom(expected: SessionState, original: RoomMessage, body: String) = change(original, body, false)
+        override suspend fun deleteRoom(expected: SessionState, original: RoomMessage) = change(original, null, true)
+        override suspend fun editDirect(expected: SessionState, original: DirectMessage, body: String): DirectMessage = error("No native DM author consumer")
+        override suspend fun deleteDirect(expected: SessionState, original: DirectMessage): DirectMessage = error("No native DM author consumer")
     }
 
     inner class Directs : DirectOperations {

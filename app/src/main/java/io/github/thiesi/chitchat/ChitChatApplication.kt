@@ -21,6 +21,7 @@ import io.github.thiesi.chitchat.core.targets.MessageTargetOperations
 import io.github.thiesi.chitchat.core.targets.SessionMessageTargetRepository
 import io.github.thiesi.chitchat.core.notifications.NotificationOperations
 import io.github.thiesi.chitchat.core.notifications.SessionNotificationRepository
+import io.github.thiesi.chitchat.core.mutations.SessionMessageMutationRepository
 import io.github.thiesi.chitchat.core.typing.TypingController
 import io.github.thiesi.chitchat.core.typing.TypingCoordinator
 import io.github.thiesi.chitchat.core.typing.SessionTypingRepository
@@ -42,6 +43,7 @@ class ChitChatApplication : Application() {
     val ignores: IgnoreOperations by lazy { SessionIgnoreRepository(sessionRepository) }
     val rooms: RoomOperations by lazy { SessionRoomRepository(sessionRepository) }
     val conversations: ConversationOperations by lazy { SessionConversationRepository(sessionRepository) }
+    internal val messageMutations by lazy { SessionMessageMutationRepository(sessionRepository) }
     val directMessages: DirectOperations by lazy { SessionDirectRepository(sessionRepository) }
     val messageTargets: MessageTargetOperations by lazy { SessionMessageTargetRepository(sessionRepository) }
     val notifications: NotificationOperations by lazy { SessionNotificationRepository(sessionRepository) }
