@@ -28,6 +28,7 @@ import io.github.thiesi.chitchat.core.settings.AppSettings
 import io.github.thiesi.chitchat.core.settings.SettingsStore
 import io.github.thiesi.chitchat.core.settings.ThemePreference
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -127,8 +128,20 @@ class AuthJourneyTest {
         compose.onNodeWithText("The username or password is incorrect.").assertIsDisplayed()
         compose.onNodeWithText("Username").assertTextContains("Alice")
         compose.onNodeWithText("Password").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        // Real authentication suspends outside Compose's idleness tracking. Hold the corrected
+        // response to prove receipt and absence of premature authenticated UI, then await its result.
+        val completion = CompletableDeferred<Unit>()
+        compose.runOnIdle { sessions.nextLoginCompletion = completion }
         compose.onNodeWithText("Password").performScrollTo().performTextInput("corrected-fixture-password")
-        compose.onNodeWithText("Sign in").performScrollTo().performClick()
+        try {
+            compose.onNodeWithText("Sign in").performScrollTo().performClick()
+            compose.waitUntil(5_000) { sessions.logins == 2 }
+            compose.onNodeWithText("Signed in as Alice").assertDoesNotExist()
+            compose.onNodeWithText("Password").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+        } finally { completion.complete(Unit) }
+        compose.waitUntil(5_000) { runCatching {
+            compose.onNodeWithText("Signed in as Alice").assertExists()
+        }.isSuccess }
         compose.onNodeWithText("Signed in as Alice").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(2, sessions.logins) }
         compose.onNodeWithText("Change server").performScrollTo().assertIsNotEnabled()

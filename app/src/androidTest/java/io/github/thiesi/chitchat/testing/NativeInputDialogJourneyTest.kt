@@ -15,6 +15,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
+import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.core.ui.MessageInput
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -37,7 +38,7 @@ class NativeInputDialogJourneyTest {
 
     @Test fun hundredNativeInputDialogCyclesPreserveBodyWithoutInventingEdits() {
         var edits = 0
-        compose.setContent {
+        val fixture: @Composable () -> Unit = {
             var modal by remember { mutableStateOf(false) }
             val focus = LocalFocusManager.current
             val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
@@ -59,6 +60,10 @@ class NativeInputDialogJourneyTest {
                     confirmButton = { TextButton(onClick = { modal = false },
                         modifier = Modifier.testTag("input_close")) { Text("Close") } })
             }
+        }
+        val trace = InstrumentationRegistry.getArguments().getString("traceNativeInput") == "true"
+        compose.setContent {
+            if (trace) ObserveNativeTextInput(content = fixture) else fixture()
         }
         repeat(100) { cycle ->
             compose.tapNativeInput("native_composer", { ime }, { "nativeInputDialogCycle=$cycle" })

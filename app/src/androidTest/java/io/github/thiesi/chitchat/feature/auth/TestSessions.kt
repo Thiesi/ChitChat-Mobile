@@ -12,13 +12,15 @@ import io.github.thiesi.chitchat.core.session.SessionController
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CompletableDeferred
 
 /** UI-only fixture; no production fake or credential persistence. HTTP is tested separately. */
 class TestSessions : SessionController {
     override val state = MutableStateFlow(SessionState())
     var failNextLogin = false
     var requireMfa = false
-    var logins = 0
+    @Volatile var logins = 0
+    var nextLoginCompletion: CompletableDeferred<Unit>? = null
     var recoveries = 0
     var registrationEnabled = false
     var failNextRegistration = false
@@ -33,6 +35,9 @@ class TestSessions : SessionController {
         check(password.isNotEmpty()) { "The fixture must receive the submitted password before field clearing" }
         logins++
         if (restore) restores++
+        val completion = nextLoginCompletion
+        nextLoginCompletion = null
+        completion?.await()
         if (failNextLogin) {
             failNextLogin = false
             state.value = state.value.copy(error = ApiFailure(FailureKind.HTTP, 401, "invalid_credentials"))
