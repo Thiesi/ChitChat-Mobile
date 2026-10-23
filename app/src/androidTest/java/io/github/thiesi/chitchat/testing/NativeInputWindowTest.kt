@@ -56,6 +56,12 @@ class NativeInputWindowTest {
         assertTrue(NativeInputWindow::class.java.declaredFields.filterNot { it.isSynthetic }.all {
             it.type in scalarTypes
         })
+        // A missing target must not borrow this known focused Activity's metadata.
+        val missing = nativeInputTargetWindow(null)
+        assertNull(missing.resumedActivities); assertNull(missing.windowFocused)
+        assertNull(missing.attached); assertNull(missing.imeVisible); assertNull(missing.imeBottom)
+        assertNull(missing.softInputMode); assertNull(missing.configurationOrientation)
+        assertNull(missing.imeControllable)
     }
 
     @Test fun samplingDoesNotAcquireFocusAndStillObservesTheUserFocusedEditor() {
@@ -95,8 +101,17 @@ class NativeInputWindowTest {
                 confirmButton = { TextButton(onClick = { dialog = false }) { Text("Close diagnostic dialog") } })
         } }
         compose.onNodeWithText("Close diagnostic dialog").assertIsDisplayed()
-        compose.waitUntil(5_000) { nativeInputWindow().windowFocused == false }
+        val dialogNode = compose.onNodeWithText("Close diagnostic dialog").fetchSemanticsNode()
+        // Inert observer fixture, not an OS-input journey or a pre-tap readiness condition.
+        compose.waitUntil(5_000) { nativeInputWindow().windowFocused == false &&
+            nativeInputTargetWindow(dialogNode).windowFocused == true }
         assertEquals(1, nativeInputWindow().resumedActivities)
+        val target = nativeInputTargetWindow(dialogNode)
+        assertEquals(true, target.attached)
+        assertEquals(true, target.windowFocused)
+        assertNotNull(target.imeVisible); assertNotNull(target.imeBottom)
+        assertNull(target.resumedActivities) // No Activity fallback or invented target count.
+        assertNull(target.imeControllable) // Target sampling installs no controller listener.
         compose.onNodeWithText("Close diagnostic dialog").performClick()
         compose.waitUntil(5_000) { nativeInputWindow().windowFocused == true }
         assertEquals(true, nativeInputWindow().windowFocused)

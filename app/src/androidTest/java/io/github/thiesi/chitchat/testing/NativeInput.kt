@@ -24,9 +24,12 @@ internal fun ComposeTestRule.tapNativeInput(tag: String, imeBottom: () -> Int,
         val extra = runCatching(failureMetadata).getOrDefault("extra diagnostics unavailable")
         val afterWindow = nativeInputWindow()
         val afterIme = imeBottom()
+        // Existing window snapshots describe the Activity; a Dialog can own this editor.
+        // Observe only after failure and after the existing receipt scalars are frozen.
+        val targetWindow = nativeInputTargetWindow(current)
         val inputSessions = NativeTextInputTrace.describe()
         val server = nativeImeServerAfterFailure()
-        throw AssertionError("Tap fixture: tag=$tag, IME=$afterIme, focusedBefore=$beforeFocused, focused=${current.config[SemanticsProperties.Focused]}, before=$beforeBounds, after=${current.boundsInWindow}, beforeWindow=$beforeWindow, afterWindow=$afterWindow, inputSessions=$inputSessions, server=$server, $extra", failure)
+        throw AssertionError("Tap fixture: tag=$tag, IME=$afterIme, focusedBefore=$beforeFocused, focused=${current.config[SemanticsProperties.Focused]}, before=$beforeBounds, after=${current.boundsInWindow}, beforeWindow=$beforeWindow, afterWindow=$afterWindow, targetWindow=$targetWindow, inputSessions=$inputSessions, server=$server, $extra", failure)
     }
     return node.assertIsFocused().assertIsDisplayed()
 }

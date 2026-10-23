@@ -5,9 +5,12 @@ import android.os.SystemClock
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.WindowManager
 import androidx.annotation.RequiresApi
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
@@ -58,6 +61,34 @@ internal fun nativeInputWindow(): NativeInputWindow {
         }
     }
     return result // Missing/ambiguous metadata stays null, never a fabricated "IME hidden".
+}
+
+/** Failure-only target owner, which can be a Dialog rather than the resumed Activity.
+ * Never fall back to another window, retain the node/View, or use this as tap readiness.
+ * No controllability listener is installed; these later scalars are not deadline proof.
+ */
+internal fun nativeInputTargetWindow(node: SemanticsNode?): NativeInputWindow {
+    var result = NativeInputWindow()
+    runCatching {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            result = runCatching {
+                val view = (node?.root as? ViewRootForTest)?.view
+                val focused = view?.findFocus()
+                val insets = view?.let(ViewCompat::getRootWindowInsets)
+                val configuration = view?.resources?.configuration
+                NativeInputWindow(windowFocused = view?.hasWindowFocus(),
+                    attached = view?.isAttachedToWindow, viewFocused = view?.hasFocus(),
+                    inTouchMode = view?.isInTouchMode, textEditor = focused?.onCheckIsTextEditor(),
+                    imeVisible = insets?.isVisible(WindowInsetsCompat.Type.ime()),
+                    imeBottom = insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom,
+                    softInputMode = (view?.rootView?.layoutParams as? WindowManager.LayoutParams)?.softInputMode,
+                    configurationOrientation = configuration?.orientation,
+                    configurationWidthDp = configuration?.screenWidthDp,
+                    configurationHeightDp = configuration?.screenHeightDp)
+            }.getOrDefault(NativeInputWindow())
+        }
+    }
+    return result
 }
 
 /** Main-thread, bounded observation only. No callback received means unknown, not uncontrollable.
