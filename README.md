@@ -8,6 +8,8 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
+[PR59 DM Edit/Delete](docs/milestones/M5b3-direct-author-controls.md) is merged after pre-merge172/172 CI and169/169 local native gates. Its independent merged-main run failed171/172 on an existing room-keyboard journey;648 fresh JVM/lint0 passed. [First-failure diagnostics](docs/milestones/native-ime-failure-retention.md) address missing observation, not the unknown keyboard cause. The Linux failure is outside the Windows exceptions; it remains recorded/gating, with no production-fix or release-ready claim. Older checkpoint descriptions below are historical.
+
 [Reply/Copy PR49](https://github.com/Thiesi/ChitChat-Mobile/pull/49) and [input-observation PR54](https://github.com/Thiesi/ChitChat-Mobile/pull/54) are merged. PR54 passed600 fresh local JVM/lint0, CI160 native, both reviews and physical100cycles. Independent main passed160 native/lint0; JVM/R8 were cached. Local156/157 remains under the development-only [#55 exception](https://github.com/Thiesi/ChitChat-Mobile/issues/55), not a fix/release waiver. Preserve issue31 closure.
 
 [M5b2 room Edit/Delete](docs/milestones/M5b2-room-author-controls.md) is merged in PR57; merged-main166 native/623 fresh JVM/lint0 passed. Local Full159/163 remains FAILED under the exact development-only #55/#56 exceptions, not a fix/release waiver. The [shared-dialog prerequisite](docs/milestones/shared-author-dialog.md) prepares reuse; native DM editing/live acceptance remain separate.

@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [First-failure IME retention](docs/milestones/native-ime-failure-retention.md) is host/test observation, not a keyboard fix. Keep the frozen first-failure window, unchanged privacy allowlist, bounded streaming scalar capture and original native exit status. Missing/truncated metadata is unknown; no input/timing repair or retry-until-green. PR59's independent-main171/172 failure is outside Windows exceptions; preserve original evidence and #31/#55 closures.
+
 - [M5b3 DM author controls](docs/milestones/M5b3-direct-author-controls.md) extend the existing serialized DM actor with distinct AUTHOR markers, not room's separate jobs. Keep blocked/muted author deletion, ACK-before-GET quote redaction and ID-only uncertainty separate from SEND/READ/BLOCK consent. Original owner/peer/entry/canonical callbacks and explicit GET -> Review -> Save remain mandatory.
 
 - The [shared author dialog](docs/milestones/shared-author-dialog.md) is presentation/test-observation reuse only; canonical authorization, original requests and jobs remain feature-owned. Do not treat it as native DM editing or a keyboard fix.

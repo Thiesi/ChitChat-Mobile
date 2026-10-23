@@ -1,5 +1,7 @@
 # Current status and limitations
 
+PR59's independent-main run failed171/172 native on an existing room IME journey despite green pre-merge checks. Cause unresolved; this Linux failure is outside the Windows-only exceptions. [First-failure retention](milestones/native-ime-failure-retention.md) improves test observation, not product behavior, and cannot erase the failure or establish release acceptance.
+
 [M5b3 DM author controls](milestones/M5b3-direct-author-controls.md) have their own recorded verification gates, not supplied by PR58's shared-editor refactor. Proposals/unknown IDs are generation-scoped memory only; process death clears them and no POST is replayed. Off-window absence is not deletion proof. Live mutations/guest parity remain separate.
 
 The [shared-editor prerequisite](milestones/shared-author-dialog.md) is a refactor, not DM editing, a keyboard fix or live acceptance. PR57 room controls are delivered; its recorded local failures stay failed. New-source failures require their own assessment, not the old frozen evidence waiver.
