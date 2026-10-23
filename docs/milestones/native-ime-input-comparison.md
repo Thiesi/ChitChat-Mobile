@@ -18,15 +18,14 @@ No existing case, deadline, predicate or CI filter changes. The existing failed 
 
 The [complete inset-corrected checkpoint](https://github.com/Thiesi/ChitChat-Mobile/blob/f3ac3c676c91f20774f57d3a33bce5c6033c3650/docs/milestones/native-ime-input-comparison.md) retains the earlier plans, source/build/APK/log/trace hashes, timing observations and limitations. Its [preceding complete record](https://github.com/Thiesi/ChitChat-Mobile/blob/c7b2d767250ff21e23d095362650b1bd93abfdac/docs/milestones/native-ime-input-comparison.md) retains the unabridged Back probes. These immutable records replace repetitive historical prose here; no failed artifact or published test was removed.
 
-| Recorded comparison | Actual outcome and limit |
+| Historical comparison | Actual result; complete detail in the immutable records above |
 | --- | --- |
-| First native/Compose cohort | AndroidView/EditText18 successes then failure; untraced Material6 then failure; Basic/traced20 each passed. The native control still shared a Compose owner. Passing subsets do not replace the failures. |
-| First plain-View cohort | Detached-target guard passed; keyboard failed at round1 after one success. No Compose owner, test clock or input pipeline. IME0/NO_SURFACE was observed despite earlier onShown; neither establishes physical display state or a common cause. |
-| Raw Back retirement | Espresso20 and Back9 successful input trials; retirement then ended the Activity before another tap, with final retirement failure. Five methods: four positive/one negative status, two causes. Zero polls for the interrupted round means unknown. |
-| UiAutomation Back retirement | Back7 passed before accepted retirement ended the Activity; following Espresso2 passed, then VERIFY failed. Native IME259 at36858032 became false/0 at36858409 while the editor stayed focused. Three positive/two negative method statuses, three causes. This was transient observation, not a5000ms timeout. |
-| Replacement versus retention | Separate predeclared cohorts each passed6/6 methods and20/20 inputs, no skips/errors/timeouts. Before-focus replacement false20; retention false1/true19. They did not establish a fix; default replacement remains. |
-| Published Linux failures | Earlier179/180 and187/188 remain preserved. `c7b2d76` failed191/192 despite two completed clean reviews: traced Material's first tap after AndroidView/EditText, editor/window focused and IME0. Sequential shown flags/NO_SURFACE are not a cause or deadline proof. |
-| Fresh software AVD5556 | Same image/config/heap/display/IME/font/animation/rotation as5554; first cohort6/6 methods and20/20 inputs passed. The original device was preserved. A later original-device pass prevents attributing success to fresh history. |
+| First native/Compose cohort | AndroidView18 successes then failure; untraced Material6 then failure; Basic/traced20 each passed. Native still shared a Compose owner. |
+| Plain View | Guard passed; round1 failed after one success, no Compose. IME0/NO_SURFACE despite earlier onShown; no common-cause proof. |
+| Back retirement | Raw Back29 successful inputs, then Activity/final-retirement failure. UiAutomation Back7, retirement ended Activity; Espresso2 then VERIFY failure with transient IME259 to0. Both inconclusive; interrupted zero-poll state unknown. |
+| Replacement/retention | Each6/6 methods,20/20 inputs; before-focus false20 versus false1/true19. No fix established; default replacement remains. |
+| Linux |179/180,187/188 and c7's191/192 negatives preserved despite clean reviews. Last negative: traced first tap after native control, focused editor/window, IME0. |
+| Fresh5556 | Matching image/config/runtime; first6/6 methods,20/20 inputs passed. Later original-device pass prevents attributing success to fresh history. |
 
 The local emulator is37.2.12/build16428233, Google APIs x86_64 API36.0 image revision7, fingerprint `google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys`. Linux also reported emulator37.2.12, which does not prove identical image/host conditions. An upstream36.1 closing-Activity report is not a demonstrated match for this36.0 within-Activity failure. No transition workaround, test exclusion, new exception or production keyboard correction is justified by these observations.
 
