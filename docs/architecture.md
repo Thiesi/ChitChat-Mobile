@@ -1,5 +1,7 @@
 # Proposed Android architecture
 
+[M5b3](milestones/M5b3-direct-author-controls.md) adds DM author state/native consumers to the existing serialized actor. AUTHOR has its own original-request/ID-only uncertainty, never SEND consent; shared dialog presentation has no authorization or jobs. Canonical ACK updates rows/available same-peer quotes before fallible GET. No new transport, durable queue or cache.
+
 The [shared author dialog](milestones/shared-author-dialog.md) extracts presentation only into `core/ui`; feature-owned state, canonical requests and authorization are unchanged. Native own-window observations are shared only in androidTest. DM controls follow separately.
 
 [M5b2](milestones/M5b2-room-author-controls.md) reuses the mutation repository/conversation actor, with separate author jobs/uncertainty and ACK-before-GET quote updates; no new transport or durable queue.

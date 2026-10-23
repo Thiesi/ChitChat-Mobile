@@ -38,6 +38,7 @@ import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.direct.*
 import io.github.thiesi.chitchat.core.conversation.ComposerReply
 import io.github.thiesi.chitchat.core.conversation.phpTrim
+import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.session.SessionState
@@ -158,7 +159,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
         val state by model.state.collectAsStateWithLifecycle()
         LaunchedEffect(peer) { model.open(peer, displayedSession) }
         DirectLifecycle(model::foreground, model::background, model::invalidate)
-        if (model.belongsTo(displayedSession)) {
+        if (model.belongsTo(displayedSession) && state.peerId == peer) {
             val focus = LocalFocusManager.current
             val attention by model.attention.collectAsStateWithLifecycle()
             val now = rememberSessionNow(session.retryAtMillis)
@@ -181,9 +182,13 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             var focusReply by remember { mutableStateOf<ComposerReply?>(null) }
             val composerFocus = remember { FocusRequester() }
             val androidContext = LocalContext.current
-            val composerDialog = actions != null || replyOptions != null
-            fun interactive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+            val composerDialog = actions != null || replyOptions != null || state.authorDialog != null
+            fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
                 !obscured && !blockConfirm && !detailsOpen
+            fun interactive() = paneInteractive() && model.state.value.authorDialog == null
+            val checkAuthorHistory: (DirectAuthorUnknown) -> Unit = { original ->
+                if (interactive()) model.checkAuthorHistory(displayedSession, original)
+            }
             fun openActions(message: DirectMessage) {
                 if (interactive() && actions == null && replyOptions == null && model.canUseMessage(displayedSession, peer, message)) {
                     focus.clearFocus(); actions = MessageActionSelection(message.id)
@@ -204,10 +209,12 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     focus.clearFocus(); replyOptions = choice
                 }
             }
-            LaunchedEffect(state.composerReply, obscured, lifecycleState) {
+            LaunchedEffect(state.composerReply, obscured, lifecycleState, state.authorDialog, state.busy) {
                 if (replyOptions != null && replyOptions !== state.composerReply) replyOptions = null
                 if (obscured || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
                     actions = null; replyOptions = null; focusReply = null; detailsOpen = false; blockConfirm = false
+                    // Navigation/background retires a private proposal, never an active POST.
+                    model.state.value.authorDialog?.let { if (!model.state.value.busy) model.dismissAuthor(it.request) }
                 }
             }
             LaunchedEffect(focusReply, window.isWindowFocused, lifecycleState, obscured) {
@@ -241,7 +248,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                 val compact = maxHeight < 240.dp
                 val replyInline = compact
                 val replyControl: @Composable (Boolean) -> Unit = { inline -> selectedReply?.let { choice ->
-                    ComposerReplyControl(inline, replyTitle, replyPreview, !state.sending && !obscured,
+                    ComposerReplyControl(inline, replyTitle, replyPreview, !state.sending && !obscured && !composerDialog,
                         onOptions = { showReplyOptions(choice) }, onCancel = {
                             if (interactive() && actions == null && replyOptions == null) model.cancelReply(displayedSession, peer, choice)
                         })
@@ -253,7 +260,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         SessionNotice(session, now, onRefreshSession)
                         Text(state.context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleLarge)
                         state.context?.let { Text(stringResource(R.string.dm_privacy_short, it.privacy.direct.retention), style = MaterialTheme.typography.bodySmall) }
-                        ThreadFeedback(model, state, attention[peer], ready)
+                        ThreadFeedback(model, state, attention[peer], ready, onAuthorCheck = checkAuthorHistory)
                     }
                     LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("dm_timeline"), timeline,
                         contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -296,6 +303,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 expanded = detailsOpen, onExpandedChange = { detailsOpen = it },
                                 needsAttention = state.stale || state.error != null || state.validation != null || state.newerAvailable ||
                                     state.uncertainSend || state.uncertainRead || state.readError != null || state.uncertainBlock ||
+                                    state.authorUnknown != null || state.authorLimit || state.authorNotice != null ||
                                     attention[peer] != null || state.draftLimit || !model.canEditDraft() ||
                                     context?.relationship?.messagingAvailable == false || context?.mutedEverywhere != null || !ready ||
                                     connection?.let { it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null } } == true) { dismiss ->
@@ -303,7 +311,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                     RealtimeStatus(connection, model.realtime::retry, model.realtime::dismissBroadcast, roomId = null)
                                 Text(context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleMedium)
                                 SessionNotice(session, now, onRefreshSession)
-                                ThreadFeedback(model, state, attention[peer], ready, true, dismiss)
+                                ThreadFeedback(model, state, attention[peer], ready, true, dismiss, checkAuthorHistory)
                                 if (context != null) TextButton(onClick = { dismiss(); blockConfirm = true }, enabled = ready && !state.busy && !state.uncertainBlock) {
                                     Text(stringResource(if (context.relationship.blockedByMe) R.string.dm_unblock else R.string.dm_block))
                                 }
@@ -335,7 +343,29 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             message.body?.takeIf { it.isNotEmpty() }?.let { copyMessage(androidContext, it) }
                             actions = null
                         }
-                    }, onDismiss = { if (actions === request) actions = null })
+                    }, onDismiss = { if (actions === request) actions = null },
+                    onEdit = message?.takeIf { it.sender.id == displayedSession.user?.id && it.canEdit }?.let { original -> {
+                        if (actions === request && interactive() && model.beginAuthor(displayedSession, peer, original, AuthorChangeKind.EDIT)) actions = null
+                    } }, canEdit = message?.let { model.canBeginAuthor(displayedSession, peer, it, AuthorChangeKind.EDIT) } == true,
+                    onDelete = message?.takeIf { it.sender.id == displayedSession.user?.id && it.canDelete }?.let { original -> {
+                        if (actions === request && interactive() && model.beginAuthor(displayedSession, peer, original, AuthorChangeKind.DELETE)) actions = null
+                    } }, canDelete = message?.let { model.canBeginAuthor(displayedSession, peer, it, AuthorChangeKind.DELETE) } == true)
+            }
+            state.authorDialog?.takeIf { paneInteractive() }?.let { dialog ->
+                val request = dialog.request
+                val pending = state.authorUnknown?.takeIf { it.peerId == peer && it.messageId == request.original.id && it.kind == request.kind }
+                DirectAuthorChangeDialog(dialog, model.authorTargetCurrent(request), model.authorAvailable(request), state.busy,
+                    onChange = { if (paneInteractive()) model.updateAuthorBody(request, it) },
+                    onConfirm = { if (paneInteractive()) when {
+                        pending != null -> model.checkAuthorHistory(displayedSession, pending)
+                        dialog.checked -> model.reviewAuthorProposal(request)
+                        else -> model.submitAuthor(request)
+                    } }, onDismiss = { if (isCurrentEntry()) model.dismissAuthor(request) }, pending = pending,
+                    canConfirm = when {
+                        pending != null -> ready && !state.busy
+                        dialog.checked -> model.canReviewAuthor(request)
+                        else -> model.authorAvailable(request)
+                    }, currentPreview = model.authorCurrentPreview(request), error = state.error?.let { directError(it) })
             }
             replyOptions?.let { choice ->
                 val current = state.composerReply === choice
@@ -365,7 +395,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
 
 @Composable
 private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadState, attention: DirectAttention?,
-    ready: Boolean, alwaysRefresh: Boolean = false, dismiss: () -> Unit = {}) {
+    ready: Boolean, alwaysRefresh: Boolean = false, dismiss: () -> Unit = {}, onAuthorCheck: (DirectAuthorUnknown) -> Unit) {
     if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
     if (state.stale && state.loaded) Text(stringResource(R.string.dm_stale))
     if (state.anchorLost) Text(stringResource(R.string.conversation_anchor_unavailable))
@@ -386,6 +416,19 @@ private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadStat
         if (it.additionalMayBeRead) TextButton(onClick = model::acknowledgeAdditionalRead) { Text(stringResource(R.string.dm_checked_additional)) }
     }
     if (state.uncertainBlock) Text(stringResource(R.string.dm_block_unknown))
+    if (state.authorLimit || model.authorCapacityFull()) Text(stringResource(R.string.author_limit))
+    state.authorUnknown?.let { original ->
+        Text(stringResource(R.string.author_unconfirmed, original.messageId.toString()))
+        if (state.authorDialog == null) TextButton(onClick = { dismiss(); onAuthorCheck(original) },
+            enabled = ready && !state.busy, modifier = Modifier.testTag("author_check_history")) {
+            Text(stringResource(R.string.author_check_history))
+        }
+    }
+    state.authorNotice?.let { notice -> Text(stringResource(when (notice) {
+        "author_edited" -> R.string.author_edited
+        "author_deleted" -> R.string.author_deleted
+        else -> R.string.author_checked
+    }), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
     state.context?.let { context ->
         if (context.relationship.blockedByMe) Text(stringResource(R.string.dm_you_blocked))
         else if (!context.relationship.messagingAvailable) Text(stringResource(R.string.dm_unavailable))

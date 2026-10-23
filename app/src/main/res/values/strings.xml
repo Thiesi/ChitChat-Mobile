@@ -13,7 +13,7 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="saved_server">Your server</string>
-    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations with replies and explicit Copy, typing, and the notification list with explicit read controls and supported native destinations. Room authors can edit or delete their own messages, with retained-history disclosures and explicit recovery after unconfirmed changes. DM author controls and background push are not yet available. Room author actions also include private ignore controls; Account includes typing privacy. Guest registration links remain unavailable.</string>
+    <string name="preview_limit">This development build supports sign-in, foreground room and direct conversations with replies and explicit Copy, typing, and the notification list with explicit read controls and supported native destinations. Room and direct-message authors can edit or delete their own messages, with retained-history disclosures and explicit recovery after unconfirmed changes. Background push is not yet available. Room author actions also include private ignore controls; Account includes typing privacy. Guest registration links remain unavailable.</string>
     <string name="change_server">Change server</string>
     <string name="forget_server">Forget server</string>
     <string name="forget_title">Forget this server?</string>

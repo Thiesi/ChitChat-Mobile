@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[M5b3 DM author controls](milestones/M5b3-direct-author-controls.md) have their own recorded verification gates, not supplied by PR58's shared-editor refactor. Proposals/unknown IDs are generation-scoped memory only; process death clears them and no POST is replayed. Off-window absence is not deletion proof. Live mutations/guest parity remain separate.
+
 The [shared-editor prerequisite](milestones/shared-author-dialog.md) is a refactor, not DM editing, a keyboard fix or live acceptance. PR57 room controls are delivered; its recorded local failures stay failed. New-source failures require their own assessment, not the old frozen evidence waiver.
 
 [M5b2](milestones/M5b2-room-author-controls.md) passed623 JVM/lint0/native6 per layout and CI166/166, but local Full159/163 remains failed. Maintainer-approved [#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56) extends [#55](https://github.com/Thiesi/ChitChat-Mobile/issues/55) ONLY to three exact recorded IME failures. Cause unknown; keep all tests/evidence, other/new failures blocking, current-head CI/reviews required. No fix/release claim; DM/guests/live pending. PR49/54 merged, issue31 closed; older narratives historical.
