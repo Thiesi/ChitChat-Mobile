@@ -17,6 +17,7 @@ import io.github.thiesi.chitchat.core.conversation.phpTrim
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.mutations.MessageMutationOperations
+import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
 import io.github.thiesi.chitchat.core.mutations.validateEditedBody
 import io.github.thiesi.chitchat.core.realtime.PresencePhase
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
