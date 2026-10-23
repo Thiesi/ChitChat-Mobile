@@ -8,6 +8,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -19,7 +23,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -41,6 +47,17 @@ internal fun imeComparisonRounds(raw: String?): Int {
     return raw.toInt().also { require(it in 1..25) { "Comparison requires1..25 rounds" } }
 }
 
+/** Retire the finished owner, never manufacture readiness/focus for its successor. */
+internal fun imeComparisonRetireFocus(raw: String?): Boolean = when (raw) {
+    null, "true" -> true
+    "false" -> false
+    else -> throw IllegalArgumentException("Invalid owned-focus retirement plan")
+}
+
+internal fun NativeInputWindow.provesRetiredComparisonInput(): Boolean =
+    resumedActivities == 1 && attached == true && imeVisible == false && imeBottom == 0 &&
+        (textEditor == false || (textEditor == null && viewFocused == false))
+
 class NativeInputComparisonPlanTest {
     @Test fun defaultIsOneAndDiagnosticRepetitionsAreExplicitlyBounded() {
         assertEquals(1, imeComparisonRounds(null))
@@ -52,6 +69,29 @@ class NativeInputComparisonPlanTest {
         listOf("", "0", "26", "100", "-1", " 1", "private-canary").forEach {
             assertThrows(IllegalArgumentException::class.java) { imeComparisonRounds(it) }
         }
+    }
+    @Test fun ownedRetirementIsDefaultAndExplicitControlKeepsTheOriginalCleanup() {
+        assertTrue(imeComparisonRetireFocus(null))
+        assertTrue(imeComparisonRetireFocus("true"))
+        assertFalse(imeComparisonRetireFocus("false"))
+        val retired = NativeInputWindow(uptimeMillis = 0, resumedActivities = 1, attached = true,
+            viewFocused = false, imeVisible = false, imeBottom = 0)
+        assertTrue(retired.provesRetiredComparisonInput())
+        assertTrue(retired.copy(viewFocused = true, textEditor = false).provesRetiredComparisonInput())
+        assertFalse(retired.copy(textEditor = true).provesRetiredComparisonInput())
+    }
+    @Test fun unknownWindowsOrRetirementPlansCannotProveCleanup() {
+        listOf("", "TRUE", "private-canary").forEach {
+            assertThrows(IllegalArgumentException::class.java) { imeComparisonRetireFocus(it) }
+        }
+        val retired = NativeInputWindow(uptimeMillis = 0, resumedActivities = 1, attached = true,
+            viewFocused = false, imeVisible = false, imeBottom = 0)
+        assertFalse(NativeInputWindow(uptimeMillis = 0).provesRetiredComparisonInput())
+        assertFalse(retired.copy(imeVisible = null).provesRetiredComparisonInput())
+        assertFalse(retired.copy(imeBottom = null).provesRetiredComparisonInput())
+        assertFalse(retired.copy(attached = false).provesRetiredComparisonInput())
+        assertFalse(retired.copy(resumedActivities = 0).provesRetiredComparisonInput())
+        assertFalse(retired.copy(viewFocused = null).provesRetiredComparisonInput())
     }
 }
 
@@ -65,10 +105,21 @@ class NativeInputComparisonTest {
     @Volatile private var focused = false
     private val records = mutableListOf<String>()
     private var caseName = "UNSTARTED"
+    private var kind: Kind? = null
+    private var nativeEditor: EditText? = null
+    private var focusManager: FocusManager? = null
+    private val retireFocus = imeComparisonRetireFocus(
+        InstrumentationRegistry.getArguments().getString("imeComparisonRetireFocus"))
 
     @After fun retireFixtureAndPublishOnlyScalarOutcomes() {
-        try { Espresso.closeSoftKeyboard() }
+        try { retireFinishedFixture() }
+        catch (failure: Throwable) {
+            records += "kind=$caseName,phase=FINAL_RETIRE,retireFocus=$retireFocus,error=${failure.javaClass.simpleName}"
+            throw failure
+        }
         finally {
+            nativeEditor = null
+            focusManager = null
             InstrumentationRegistry.getInstrumentation().addResults(Bundle().apply {
                 putString("imeComparison$caseName", records.joinToString("\n"))
             })
@@ -85,12 +136,16 @@ class NativeInputComparisonTest {
     private fun compare(kind: Kind) {
         val rounds = imeComparisonRounds(InstrumentationRegistry.getArguments().getString("imeComparisonRounds"))
         caseName = kind.name
+        this.kind = kind
+        records += "kind=$caseName,retireFocus=$retireFocus"
         var epoch by mutableIntStateOf(0)
         focused = false
         compose.setContent {
             val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
-            SideEffect { ime = bottom }
-            MaterialTheme { Box(Modifier.fillMaxSize()) {
+            val manager = LocalFocusManager.current
+            SideEffect { ime = bottom; focusManager = manager }
+            MaterialTheme { Box(Modifier.fillMaxSize().windowInsetsPadding(
+                WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
                 key(epoch) {
                     if (kind == Kind.TRACED) ObserveNativeTextInput { ComparisonField(kind) }
                     else ComparisonField(kind)
@@ -102,7 +157,7 @@ class NativeInputComparisonTest {
             // control's closed-IME boundary before replacing the field for the next planned trial.
             if (round > 0) {
                 try {
-                    Espresso.closeSoftKeyboard()
+                    retireFinishedFixture()
                     compose.waitUntil(5_000) { ime == 0 }
                 } catch (failure: Throwable) {
                     records += "kind=$kind,round=$round,phase=RETIRE,error=${failure.javaClass.simpleName}"
@@ -152,11 +207,30 @@ class NativeInputComparisonTest {
                     setText("Input fixture")
                     isSaveEnabled = false
                     onFocusChangeListener = android.view.View.OnFocusChangeListener { _, hasFocus -> focused = hasFocus }
-                }
+                }.also { nativeEditor = it }
             }, modifier = modifier)
             Kind.BASIC -> BasicTextField("Input fixture", {}, modifier = modifier.onFocusChanged { focused = it.isFocused })
             Kind.OUTLINED, Kind.TRACED -> OutlinedTextField("Input fixture", {},
                 modifier = modifier.onFocusChanged { focused = it.isFocused })
+        }
+    }
+
+    /** Old owner remains attached until its focus/session and IME are known retired.
+     * This runs only after success/failure capture, before replacement or Activity destruction.
+     */
+    private fun retireFinishedFixture() {
+        if (retireFocus) compose.runOnIdle {
+            if (kind == Kind.NATIVE) nativeEditor?.clearFocus()
+            else focusManager?.clearFocus(force = true)
+        }
+        Espresso.closeSoftKeyboard()
+        if (retireFocus) {
+            var window = NativeInputWindow()
+            compose.waitUntil(5_000) {
+                if (focused || ime != 0) false
+                else nativeInputWindow().also { window = it }.provesRetiredComparisonInput()
+            }
+            records += "kind=$caseName,phase=RETIRED,retireFocus=true,window=$window,sessions=${NativeTextInputTrace.describe()}"
         }
     }
 }

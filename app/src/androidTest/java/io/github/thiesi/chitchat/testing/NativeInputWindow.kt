@@ -25,6 +25,9 @@ internal data class NativeInputWindow(
     val imeBottom: Int? = null,
     val softInputMode: Int? = null,
     val imeControllable: Boolean? = null,
+    val configurationOrientation: Int? = null,
+    val configurationWidthDp: Int? = null,
+    val configurationHeightDp: Int? = null,
 )
 
 /** Observe, don't request focus/show/hide, restart input, or call IMM getters that flush focus. */
@@ -38,6 +41,7 @@ internal fun nativeInputWindow(): NativeInputWindow {
                 val decor = activity?.window?.decorView
                 val focused = decor?.findFocus()
                 val insets = decor?.let(ViewCompat::getRootWindowInsets)
+                val configuration = activity?.resources?.configuration
                 NativeInputWindow(resumedActivities = resumed.size, windowFocused = decor?.hasWindowFocus(),
                     attached = decor?.isAttachedToWindow, viewFocused = decor?.hasFocus(),
                     inTouchMode = decor?.isInTouchMode,
@@ -46,7 +50,10 @@ internal fun nativeInputWindow(): NativeInputWindow {
                     imeBottom = insets?.getInsets(WindowInsetsCompat.Type.ime())?.bottom,
                     softInputMode = activity?.window?.attributes?.softInputMode,
                     imeControllable = if (Build.VERSION.SDK_INT >= 30 && decor != null)
-                        observeImeControl(decor) else null)
+                        observeImeControl(decor) else null,
+                    configurationOrientation = configuration?.orientation,
+                    configurationWidthDp = configuration?.screenWidthDp,
+                    configurationHeightDp = configuration?.screenHeightDp)
             }.getOrDefault(NativeInputWindow())
         }
     }

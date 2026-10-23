@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.testing
 
 import android.accessibilityservice.AccessibilityService
+import android.app.KeyguardManager
 import android.graphics.Rect as AndroidRect
 import android.os.Bundle
 import android.os.SystemClock
@@ -33,6 +34,28 @@ internal fun viewOnlyHierarchy(raw: String?): ViewOnlyHierarchy = when (raw) {
     "retain" -> ViewOnlyHierarchy.RETAIN
     else -> throw IllegalArgumentException("Unknown View-only hierarchy plan")
 }
+internal fun viewOnlyPrivateDevice(raw: String?): Boolean = when (raw) {
+    null, "false" -> false
+    "true" -> true
+    else -> throw IllegalArgumentException("Invalid private-device input plan")
+}
+internal fun viewOnlyPrivatePlanAllowed(cleanup: ViewOnlyCleanup, hierarchy: ViewOnlyHierarchy) =
+    cleanup == ViewOnlyCleanup.ESPRESSO && hierarchy == ViewOnlyHierarchy.REPLACE
+internal fun NativeInputWindow.provesOwnedPrivateInputWindow() =
+    resumedActivities == 1 && attached == true && windowFocused == true
+
+/** Structural point ownership only, never an IME/focus-readiness predicate. */
+internal fun ViewOnlyGeometry.provesPointOutsideSystemUi(): Boolean {
+    val left = safeLeft ?: return false
+    val top = safeTop ?: return false
+    val right = safeRight ?: return false
+    val bottom = safeBottom ?: return false
+    if (!pointX.isFinite() || !pointY.isFinite() || rootWidth <= 0 || rootHeight <= 0 ||
+        minOf(left, top, right, bottom) < 0 ||
+        left.toLong() + right >= rootWidth || top.toLong() + bottom >= rootHeight) return false
+    return pointX >= rootScreenLeft.toLong() + left && pointX < rootScreenLeft.toLong() + rootWidth - right &&
+        pointY >= rootScreenTop.toLong() + top && pointY < rootScreenTop.toLong() + rootHeight - bottom
+}
 
 class ViewOnlyPlanTest {
     @Test fun defaultsRetainPublishedEspressoReplacementContract() {
@@ -42,12 +65,37 @@ class ViewOnlyPlanTest {
         assertEquals(ViewOnlyHierarchy.REPLACE, viewOnlyHierarchy("replace"))
         assertEquals(ViewOnlyCleanup.BACK, viewOnlyCleanup("global-back"))
         assertEquals(ViewOnlyHierarchy.RETAIN, viewOnlyHierarchy("retain"))
+        assertFalse(viewOnlyPrivateDevice(null))
+        assertFalse(viewOnlyPrivateDevice("false"))
+        assertTrue(viewOnlyPrivateDevice("true"))
+        assertTrue(viewOnlyPrivatePlanAllowed(ViewOnlyCleanup.ESPRESSO, ViewOnlyHierarchy.REPLACE))
+        assertFalse(viewOnlyPrivatePlanAllowed(ViewOnlyCleanup.BACK, ViewOnlyHierarchy.REPLACE))
+        assertFalse(viewOnlyPrivatePlanAllowed(ViewOnlyCleanup.ESPRESSO, ViewOnlyHierarchy.RETAIN))
+        val phone = ViewOnlyGeometry(0, 525f, 105f, 0, 0, 1050, 210, 0, 0, 1050, 210,
+            0, 0, 1440, 3120, 0, 149, 0, 56)
+        assertFalse(phone.provesPointOutsideSystemUi()) // Recorded original phone point.
+        assertTrue(phone.copy(pointY = 254f, fieldScreenTop = 149).provesPointOutsideSystemUi())
+        assertTrue(phone.copy(pointY = 149f).provesPointOutsideSystemUi())
+        assertFalse(phone.copy(pointY = 3064f).provesPointOutsideSystemUi())
     }
     @Test fun unknownPlansFailInsteadOfSilentlyChangingTheComparison() {
         listOf("", "BACK", "private-canary").forEach {
             assertThrows(IllegalArgumentException::class.java) { viewOnlyCleanup(it) }
             assertThrows(IllegalArgumentException::class.java) { viewOnlyHierarchy(it) }
+            assertThrows(IllegalArgumentException::class.java) { viewOnlyPrivateDevice(it) }
         }
+        val owned = NativeInputWindow(uptimeMillis = 0, resumedActivities = 1, attached = true, windowFocused = true)
+        assertTrue(owned.provesOwnedPrivateInputWindow())
+        assertFalse(owned.copy(windowFocused = null).provesOwnedPrivateInputWindow())
+        assertFalse(owned.copy(resumedActivities = 0).provesOwnedPrivateInputWindow())
+        val phone = ViewOnlyGeometry(0, 525f, 254f, 0, 149, 1050, 210, 0, 0, 1050, 210,
+            0, 0, 1440, 3120, 0, 149, 0, 56)
+        assertFalse(phone.copy(safeTop = null).provesPointOutsideSystemUi())
+        assertFalse(phone.copy(safeTop = -1).provesPointOutsideSystemUi())
+        assertFalse(phone.copy(rootWidth = 0).provesPointOutsideSystemUi())
+        assertFalse(phone.copy(safeBottom = 3120).provesPointOutsideSystemUi())
+        assertFalse(phone.copy(pointX = Float.NaN).provesPointOutsideSystemUi())
+        assertFalse(phone.copy(pointY = Float.POSITIVE_INFINITY).provesPointOutsideSystemUi())
     }
 }
 
@@ -56,6 +104,13 @@ internal data class ViewOnlyState(val attached: Boolean, val shown: Boolean, val
 internal data class ViewOnlyTransition(val receivedUptimeMillis: Long, val state: ViewOnlyState)
 internal data class ViewOnlyTraceSnapshot(val polls: Int, val knownImePolls: Int, val visibleImePolls: Int,
     val maximumImeBottom: Int?, val discardedTransitions: Int, val transitions: List<ViewOnlyTransition>)
+
+/** Only this fixture's coordinates/insets. No View, text, other window or input interception. */
+internal data class ViewOnlyGeometry(val receivedUptimeMillis: Long, val pointX: Float, val pointY: Float,
+    val fieldScreenLeft: Int, val fieldScreenTop: Int, val fieldWidth: Int, val fieldHeight: Int,
+    val clippedLeft: Int, val clippedTop: Int, val clippedRight: Int, val clippedBottom: Int,
+    val rootScreenLeft: Int, val rootScreenTop: Int, val rootWidth: Int, val rootHeight: Int,
+    val safeLeft: Int?, val safeTop: Int?, val safeRight: Int?, val safeBottom: Int?)
 
 /** Test-thread scalar observation, not a View/connection/content retention or input interceptor. */
 internal class ViewOnlyTrace(private val capacity: Int = 32,
@@ -124,15 +179,25 @@ class ViewOnlyInputComparisonTest {
     private var caseName = "VIEW_ONLY_UNSTARTED"
     private val records = mutableListOf<String>()
     private var cleanup = ViewOnlyCleanup.ESPRESSO
+    private val privateDevice = viewOnlyPrivateDevice(
+        InstrumentationRegistry.getArguments().getString("nativeInputPrivateDevice"))
+    private var geometryOnly = false
     private data class RetirementObservation(var before: ViewOnlyState? = null, var actionAccepted: Boolean? = null)
 
     @After fun retireBeforeActivityDestructionAndPublishScalarOutcomes() {
         try {
-            if (cleanup == ViewOnlyCleanup.ESPRESSO) Espresso.closeSoftKeyboard()
-            else {
-                val state = sample()
-                if (state.imeVisible == true) closeImeAfterSuccessfulTrial()
-                else check(state.imeVisible == false && state.imeBottom == 0) { "Unknown View-only cleanup state" }
+            // The observation never injects input or explicitly controls IME. The detached guard
+            // cannot own an input session. Never hide another window's keyboard on a private phone.
+            if (!geometryOnly && !(privateDevice && caseName == "VIEW_ONLY_GUARD")) {
+                if (privateDevice) check(onMain { editor?.let {
+                    it.isAttachedToWindow && it.hasWindowFocus()
+                } == true }) { "Private fixture no longer owns cleanup; no keyboard action" }
+                if (cleanup == ViewOnlyCleanup.ESPRESSO) Espresso.closeSoftKeyboard()
+                else {
+                    val state = sample()
+                    if (state.imeVisible == true) closeImeAfterSuccessfulTrial()
+                    else check(state.imeVisible == false && state.imeBottom == 0) { "Unknown View-only cleanup state" }
+                }
             }
         } catch (failure: Throwable) {
             records += "kind=$caseName,phase=FINAL_RETIRE,error=${failure.javaClass.simpleName}"
@@ -154,10 +219,40 @@ class ViewOnlyInputComparisonTest {
         records += "kind=$caseName,detachedTargetRejected=true"
     }
 
+    /** Observe fixture geometry; this is deliberately NOT a keyboard trial. */
+    @Test fun observeFixtureTapGeometryWithoutInputInjection() {
+        geometryOnly = true
+        caseName = "VIEW_ONLY_GEOMETRY"
+        installFixture()
+        awaitState { it.attached && it.shown }
+        val before = nativeInputWindow()
+        assertPrivateWindowOwned(before)
+        val geometry = onMain {
+            val field = checkNotNull(editor)
+            check(field.isAttachedToWindow && field.isShown) { "Geometry fixture detached or hidden" }
+            if (privateDevice) check(field.hasWindowFocus()) { "Geometry fixture window not owned" }
+            val visible = AndroidRect()
+            check(field.getLocalVisibleRect(visible) && !visible.isEmpty) { "Geometry fixture clipped" }
+            val window = IntArray(2).also(field::getLocationInWindow)
+            val screen = IntArray(2).also(field::getLocationOnScreen)
+            val point = nativeTapPoint(Rect((visible.left + window[0]).toFloat(), (visible.top + window[1]).toFloat(),
+                (visible.right + window[0]).toFloat(), (visible.bottom + window[1]).toFloat()),
+                Offset(window[0].toFloat(), window[1].toFloat()),
+                Offset(screen[0].toFloat(), screen[1].toFloat()), field.display?.displayId)
+            geometryOf(field, visible, point, screen)
+        }
+        records += "kind=$caseName,inputInjected=false,before=$before,geometry=$geometry"
+        assertTrue("Fixture tap point overlaps system UI or its bounds are unknown", geometry.provesPointOutsideSystemUi())
+    }
+
     @Test fun nativeEditTextWithoutComposeOwnerShowsKeyboardAfterOneTap() {
         val arguments = InstrumentationRegistry.getArguments()
-        cleanup = viewOnlyCleanup(arguments.getString("imeComparisonCleanup"))
+        val requestedCleanup = viewOnlyCleanup(arguments.getString("imeComparisonCleanup"))
         val hierarchy = viewOnlyHierarchy(arguments.getString("imeComparisonHierarchy"))
+        require(!privateDevice || viewOnlyPrivatePlanAllowed(requestedCleanup, hierarchy)) {
+            "Private-device fixture requires default cleanup and hierarchy"
+        }
+        cleanup = requestedCleanup
         caseName = (if (cleanup == ViewOnlyCleanup.BACK) "VIEW_ONLY_BACK" else "VIEW_ONLY") +
             (if (hierarchy == ViewOnlyHierarchy.RETAIN) "_RETAINED" else "")
         val rounds = imeComparisonRounds(arguments.getString("imeComparisonRounds"))
@@ -173,21 +268,14 @@ class ViewOnlyInputComparisonTest {
                     closeImeAfterSuccessfulTrial(retirement)
                 }
                 phase = "SETUP"
-                if (round == 0 || hierarchy == ViewOnlyHierarchy.REPLACE) activity.scenario.onActivity { owner ->
-                    val density = owner.resources.displayMetrics.density
-                    val parent = FrameLayout(owner)
-                    val field = EditText(owner).apply {
-                        setText("Input fixture")
-                        isSaveEnabled = false
-                    }
-                    parent.addView(field, FrameLayout.LayoutParams(
-                        (280 * density).roundToInt(), (56 * density).roundToInt()))
-                    owner.setContentView(parent)
-                    editor = field
-                }
+                if (round == 0 || hierarchy == ViewOnlyHierarchy.REPLACE) installFixture()
                 phase = "DISPLAY"
                 awaitState { it.attached && it.shown }
                 before = nativeInputWindow()
+                if (privateDevice) {
+                    phase = "OWNERSHIP"
+                    assertPrivateWindowOwned(before)
+                }
                 val point = tapPoint()
                 phase = "TAP"
                 tapAttempted = true
@@ -208,12 +296,38 @@ class ViewOnlyInputComparisonTest {
             } catch (failure: Throwable) {
                 if (failure is VirtualMachineError || failure is ThreadDeath) throw failure
                 val after = nativeInputWindow()
-                val server = nativeImeServerAfterFailure()
+                val server = if (privateDevice) "omitted for private-device privacy" else nativeImeServerAfterFailure().toString()
                 records += "kind=$caseName,round=$round,passed=false,phase=$phase,tapAttempted=$tapAttempted," +
                     "before=$before,after=$after,retirement=$retirement,observations=${trace.snapshot()},server=$server"
                 // No retry of a failed tap, hidden keyboard repair or continuation to a later green.
                 throw AssertionError(records.joinToString("\n"), failure)
             }
+        }
+    }
+
+    private fun installFixture() = activity.scenario.onActivity { owner ->
+        val density = owner.resources.displayMetrics.density
+        val parent = FrameLayout(owner)
+        ViewCompat.setOnApplyWindowInsetsListener(parent) { view, insets ->
+            val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
+            insets // Preserve IME/native inset observations; no keyboard type is consumed.
+        }
+        val field = EditText(owner).apply { setText("Input fixture"); isSaveEnabled = false }
+        parent.addView(field, FrameLayout.LayoutParams(
+            (280 * density).roundToInt(), (56 * density).roundToInt()))
+        owner.setContentView(parent)
+        editor = field
+    }
+
+    private fun assertPrivateWindowOwned(before: NativeInputWindow) {
+        if (privateDevice) {
+            check(before.provesOwnedPrivateInputWindow()) { "Fixture window not owned; no input action" }
+            val locked = onMain {
+                val guard = checkNotNull(checkNotNull(editor).context.getSystemService(KeyguardManager::class.java))
+                guard.isDeviceLocked || guard.isKeyguardLocked
+            }
+            check(!locked) { "Private device locked; no input action" }
         }
     }
 
@@ -258,14 +372,32 @@ class ViewOnlyInputComparisonTest {
     private fun tapPoint(): Offset = onMain {
         val field = checkNotNull(editor) { "View-only fixture is not installed" }
         check(field.isAttachedToWindow && field.isShown) { "View-only tap target is detached or hidden" }
+        if (privateDevice) check(field.hasWindowFocus()) { "Fixture no longer owns its window; no tap injected" }
         val visible = AndroidRect()
         check(field.getLocalVisibleRect(visible) && !visible.isEmpty) { "View-only tap target is clipped" }
         val window = IntArray(2).also(field::getLocationInWindow)
         val screen = IntArray(2).also(field::getLocationOnScreen)
-        nativeTapPoint(Rect((visible.left + window[0]).toFloat(), (visible.top + window[1]).toFloat(),
+        val point = nativeTapPoint(Rect((visible.left + window[0]).toFloat(), (visible.top + window[1]).toFloat(),
             (visible.right + window[0]).toFloat(), (visible.bottom + window[1]).toFloat()),
             Offset(window[0].toFloat(), window[1].toFloat()),
             Offset(screen[0].toFloat(), screen[1].toFloat()), field.display?.displayId)
+        if (privateDevice) check(geometryOf(field, visible, point, screen).provesPointOutsideSystemUi()) {
+            "Private fixture tap is outside its system-UI-safe bounds; no input injected"
+        }
+        point
+    }
+
+    /** Main-thread own-root values only, not a global window query or control request. */
+    private fun geometryOf(field: EditText, visible: AndroidRect, point: Offset, screen: IntArray): ViewOnlyGeometry {
+        val root = field.rootView
+        val origin = IntArray(2).also(root::getLocationOnScreen)
+        val safe = ViewCompat.getRootWindowInsets(root)?.getInsets(
+            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+        return ViewOnlyGeometry(SystemClock.uptimeMillis(), point.x, point.y,
+            screen[0], screen[1], field.width, field.height,
+            visible.left, visible.top, visible.right, visible.bottom,
+            origin[0], origin[1], root.width, root.height,
+            safe?.left, safe?.top, safe?.right, safe?.bottom)
     }
 
     private fun <T> onMain(block: () -> T): T {

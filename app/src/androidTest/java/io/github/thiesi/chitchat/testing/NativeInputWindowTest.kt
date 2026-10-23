@@ -42,6 +42,9 @@ class NativeInputWindowTest {
         assertTrue(snapshot.imeBottom!! >= 0)
         assertNotNull(snapshot.softInputMode)
         assertNotNull(snapshot.inTouchMode)
+        assertNotNull(snapshot.configurationOrientation)
+        assertTrue((snapshot.configurationWidthDp ?: 0) > 0)
+        assertTrue((snapshot.configurationHeightDp ?: 0) > 0)
         if (android.os.Build.VERSION.SDK_INT < 30) assertNull(snapshot.imeControllable)
         assertFalse(snapshot.toString().contains("private-window-canary"))
         assertTrue(NativeInputWindow::class.java.declaredFields.none { field ->
