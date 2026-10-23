@@ -1,6 +1,6 @@
 # Independently verifiable implementation milestones
 
-Current prerequisite: [retain first-failure IME evidence](milestones/native-ime-failure-retention.md) after PR59's independent-main171/172 failure. Host/parser tests, builds and one declared Linux comparison precede a product correction; no new keyboard exemption or replay-until-green. Remaining product milestones retain their existing scope.
+Current prerequisite: [first-failure IME evidence](milestones/native-ime-failure-retention.md) now includes PR60's179/180 Linux result and the earlier independent-main171/172 failure. The [native/Compose/observer comparison](milestones/native-ime-input-comparison.md) narrows the input path before any justified correction. Routine diagnosis and bounded comparisons proceed autonomously; preserve failures, existing gates and privacy boundaries, with no new keyboard exemption or replay-until-green. Remaining product milestones retain their existing scope.
 
 PR54's independent main passed160 native/lint0. Finish [M5b2](milestones/M5b2-room-author-controls.md), then DM author controls without routine confirmation. Retain failed evidence/issue31 closure and the approved [#55](https://github.com/Thiesi/ChitChat-Mobile/issues/55)/[#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56) development exceptions; other/new failures/current-head CI/reviews still block. No fix/release waiver or new live/phone access.
 

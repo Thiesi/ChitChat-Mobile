@@ -1,6 +1,6 @@
 # Feature-parity matrix
 
-Current verification override: PR59's native DM author controls are merged, but independent-main171/172 failed in a room IME journey. [First-failure retention](milestones/native-ime-failure-retention.md) is observation only, not additional parity or a correction. Original failure stays failed/gating; Windows exceptions do not cover it. Older milestone checkpoints below remain historical.
+Current verification override: PR59's native DM author controls are merged, but independent-main171/172 failed in a room IME journey. PR60's [first-failure retention](milestones/native-ime-failure-retention.md) subsequently captured a179/180 Linux failure in an existing minimal traced field. The [native/Compose/observer comparison](milestones/native-ime-input-comparison.md) investigates the input path; neither diagnostic adds parity or proves a correction. Original failures remain recorded/gating; Windows exceptions do not cover them. Older milestone checkpoints below remain historical.
 
 Current: PR49/54 merged, issue31 closed. [M5b2](milestones/M5b2-room-author-controls.md) has native author/layout/CI passes; Full159/163 retained as failed under maintainer-approved [#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56) extension for three exact IME failures. Other/new failures/current-head CI/reviews still gate delivery; no fix/release waiver. DM/live pending; older checkpoints historical.
 
