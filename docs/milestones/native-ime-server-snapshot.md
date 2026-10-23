@@ -1,5 +1,7 @@
 # Failure-only native IME server snapshot
 
+Later observation update: [first-failure retention](native-ime-failure-retention.md) streams bounded input-method fields beyond the old64KiB prefix, retaining only existing fixed scalars. The window-type reader and original assertions remain; historical snapshot results below are not retroactively changed or a keyboard-fix claim.
+
 Publication-time checkpoints follow. PR53 merged as b0ad909 after local/hosted148/148 and clean initial/fresh reviews; issue31/PR49 remain unresolved.
 
 Test observability for [issue31](https://github.com/Thiesi/ChitChat-Mobile/issues/31), not a keyboard correction or product feature. Production code, dependencies, focus/IME behavior, existing predicates and five-second deadlines are unchanged.

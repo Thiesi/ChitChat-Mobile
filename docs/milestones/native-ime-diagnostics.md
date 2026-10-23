@@ -1,5 +1,7 @@
 # Native IME failure diagnostics
 
+Historical collector checkpoint: the later [first-failure retention slice](native-ime-failure-retention.md) replaces the post-suite trace tail with a bounded concurrent collector. Its original merged-main failures remain retained; no production keyboard correction or reopening of #31 is implied.
+
 This is a test/CI observability slice for [issue31](https://github.com/Thiesi/ChitChat-Mobile/issues/31), not a production keyboard correction or a parity feature. The backend, dependencies, input implementation and user-visible behavior are unchanged. General notification destinations remain the next functional slice; push and live acceptance are still pending.
 
 ## Reason for the slice

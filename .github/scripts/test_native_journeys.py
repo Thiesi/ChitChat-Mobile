@@ -1,6 +1,7 @@
 """Credential/device-free tests: no subprocess, Gradle, adb or report writes are real."""
 
 from pathlib import Path
+import io
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -51,45 +52,153 @@ invalid private-body-canary I ImeTracker: io.github.thiesi.chitchat.debug:abc: o
 class GateTests(unittest.TestCase):
     def setUp(self):
         self.run = self.enterContext(patch.object(runner.subprocess, "run"))
-        self.mkdir = self.enterContext(patch.object(Path, "mkdir"))
-        self.write = self.enterContext(patch.object(Path, "write_text"))
+        self.collector_type = self.enterContext(patch.object(runner, "TraceCollector"))
+        self.collector = self.collector_type.return_value
 
-    def test_success_runs_once_without_capture_or_report_writes(self):
+    def test_success_runs_once_and_preserves_bounded_collector_evidence(self):
         self.run.return_value = subprocess.CompletedProcess(runner.GRADLE, 0)
         self.assertEqual(0, runner.main())
         self.run.assert_called_once_with(runner.GRADLE, cwd=runner.ROOT, check=False)
-        self.mkdir.assert_not_called(); self.write.assert_not_called()
+        self.collector.start.assert_called_once_with()
+        self.collector.stop.assert_called_once_with()
+        self.collector.save.assert_called_once_with()
 
-    def test_failure_keeps_original_status_and_saves_only_filtered_capture(self):
-        self.run.side_effect = [subprocess.CompletedProcess(runner.GRADLE, 7),
-                                subprocess.CompletedProcess(runner.LOGCAT, 0, TRACE + "private-body-canary")]
+    def test_failure_keeps_original_status_without_a_post_suite_logcat_dump(self):
+        self.run.return_value = subprocess.CompletedProcess(runner.GRADLE, 7)
         self.assertEqual(7, runner.main())
-        self.assertEqual(2, self.run.call_count)
-        self.assertEqual(runner.LOGCAT, self.run.call_args.args[0])
-        self.assertEqual(15, self.run.call_args.kwargs["timeout"])
-        self.write.assert_called_once_with(runner.filtered_trace(TRACE), encoding="utf-8")
+        self.run.assert_called_once_with(runner.GRADLE, cwd=runner.ROOT, check=False)
+        self.collector.stop.assert_called_once_with()
+        self.collector.save.assert_called_once_with()
 
-    def test_capture_failure_never_masks_gradle_failure(self):
-        for failure in (OSError(), subprocess.TimeoutExpired(runner.LOGCAT, 15),
-                        subprocess.CompletedProcess(runner.LOGCAT, 1, "private-body-canary")):
-            with self.subTest(failure=type(failure).__name__):
-                self.run.side_effect = [subprocess.CompletedProcess(runner.GRADLE, 9), failure]
+    def test_collector_start_cleanup_and_save_failures_never_mask_gradle_failure(self):
+        for phase in ('start', 'stop', 'save'):
+            with self.subTest(phase=phase):
+                self.collector.reset_mock(side_effect=True)
+                getattr(self.collector, phase).side_effect = RuntimeError('private-body-canary')
+                self.run.return_value = subprocess.CompletedProcess(runner.GRADLE, 9)
                 self.assertEqual(9, runner.main())
-                self.write.assert_not_called()
-
-    def test_report_write_failure_never_masks_gradle_failure(self):
-        self.run.side_effect = [subprocess.CompletedProcess(runner.GRADLE, 4),
-                                subprocess.CompletedProcess(runner.LOGCAT, 0, TRACE)]
-        self.write.side_effect = OSError()
-        self.assertEqual(4, runner.main())
 
     def test_signal_failure_stays_nonzero(self):
-        self.run.side_effect = [subprocess.CompletedProcess(runner.GRADLE, -15), OSError()]
+        self.run.return_value = subprocess.CompletedProcess(runner.GRADLE, -15)
         self.assertEqual(143, runner.main())
 
     def test_launch_failure_stays_nonzero(self):
         self.run.side_effect = OSError()
         self.assertEqual(1, runner.main())
+
+    def test_gradle_exception_still_stops_and_saves_collector(self):
+        self.run.side_effect = KeyboardInterrupt()
+        with self.assertRaises(KeyboardInterrupt):
+            runner.main()
+        self.collector.stop.assert_called_once_with()
+        self.collector.save.assert_called_once_with()
+
+
+class WindowTests(unittest.TestCase):
+    def test_first_failure_context_survives_thousands_of_later_safe_records(self):
+        window = runner.TraceWindow()
+        safe = runner.filtered_trace(TRACE).splitlines(keepends=True)
+        for line in safe:
+            window.accept(line)
+        for _ in range(5000):
+            window.accept(safe[0])
+        self.assertTrue(window.text().startswith(''.join(safe)))
+        self.assertEqual(3 + runner.AFTER_FAILURE, len(window.text().splitlines()))
+        self.assertEqual(5003, window.seen)
+
+    def test_prefailure_history_is_bounded_and_second_failure_cannot_replace_first(self):
+        window = runner.TraceWindow()
+        show, _, failure = runner.filtered_trace(TRACE).splitlines(keepends=True)
+        for _ in range(5000):
+            window.accept(show)
+        self.assertEqual(runner.BEFORE_FAILURE, len(window.recent))
+        window.accept(failure)
+        frozen = window.text()
+        for _ in range(runner.AFTER_FAILURE + 1):
+            window.accept(show)
+        window.accept(failure.replace('keyboardTap', 'laterFailure'))
+        self.assertTrue(window.text().startswith(frozen))
+        self.assertNotIn('laterFailure', window.text())
+        self.assertEqual(runner.BEFORE_FAILURE + runner.AFTER_FAILURE, len(window.text().splitlines()))
+
+
+class CollectorTests(unittest.TestCase):
+    def setUp(self):
+        self.clock = self.enterContext(patch.object(runner.subprocess, 'run'))
+        self.clock.return_value = subprocess.CompletedProcess(runner.DEVICE_TIME, 0, '2026-10-23T01:00:00.123\n')
+        self.popen = self.enterContext(patch.object(runner.subprocess, 'Popen'))
+        self.process = self.popen.return_value
+        self.process.stdout = io.BytesIO(TRACE.encode())
+        self.process.poll.return_value = None
+        self.collector = runner.TraceCollector()
+
+    def test_device_clock_bounds_stream_and_only_allowlisted_content_is_retained(self):
+        self.process.stdout = io.BytesIO((TRACE + 'private-body-canary\n').encode())
+        self.collector.start()
+        self.collector.thread.join(timeout=2)
+        self.collector.stop()
+        self.clock.assert_called_once()
+        self.assertEqual(runner.DEVICE_TIME, self.clock.call_args.args[0])
+        self.assertEqual(runner.LOGCAT + ['-T', '2026-10-23 01:00:00.123'], self.popen.call_args.args[0])
+        self.assertEqual(subprocess.DEVNULL, self.popen.call_args.kwargs['stderr'])
+        self.assertEqual(runner.filtered_trace(TRACE), self.collector.window.text())
+        self.assertTrue(self.process.stdout.closed)
+        self.process.terminate.assert_called_once()
+        self.assertIn('stream_ended_early', self.collector.errors)
+
+    def test_overlong_line_and_its_suffix_are_discarded_before_filtering(self):
+        tail = TRACE.splitlines(keepends=True)[0]
+        self.process.stdout = io.BytesIO(('x' * runner.MAX_LINE + tail + tail).encode())
+        self.collector.start()
+        self.collector.thread.join(timeout=2)
+        self.collector.stop()
+        self.assertEqual(1, self.collector.long_lines)
+        self.assertEqual(runner.filtered_trace(tail), self.collector.window.text())
+
+    def test_invalid_or_failed_clock_never_uses_raw_or_stale_fallback(self):
+        for reply in (subprocess.CompletedProcess(runner.DEVICE_TIME, 0, 'private-body-canary'),
+                      subprocess.CompletedProcess(runner.DEVICE_TIME, 1, ''), OSError(),
+                      subprocess.TimeoutExpired(runner.DEVICE_TIME, 5)):
+            with self.subTest(reply=type(reply).__name__):
+                collector = runner.TraceCollector()
+                self.clock.side_effect = [reply]
+                collector.start(); collector.stop()
+                self.assertEqual(['start_failed'], collector.errors)
+                self.popen.assert_not_called()
+
+    def test_termination_timeout_kills_only_owned_collector_and_stops_reader(self):
+        self.collector.process = self.process
+        self.process.wait.side_effect = [subprocess.TimeoutExpired('adb', 3), 0]
+        self.collector.stop()
+        self.process.terminate.assert_called_once()
+        self.process.kill.assert_called_once()
+        self.assertEqual(['terminate_failed'], self.collector.errors)
+
+    def test_stream_launch_failure_is_fixed_metadata_not_raw_exception(self):
+        self.popen.side_effect = OSError('private-body-canary')
+        self.collector.start(); self.collector.stop()
+        self.assertEqual(['start_failed'], self.collector.errors)
+        self.assertEqual('', self.collector.window.text())
+
+    def test_reader_failure_is_fixed_metadata_and_owned_pipe_is_closed(self):
+        with patch.object(self.process.stdout, 'readline', side_effect=OSError('private-body-canary')):
+            self.collector.process = self.process
+            self.collector._read()
+        self.collector.stop()
+        self.assertEqual(['read_failed'], self.collector.errors)
+        self.assertTrue(self.process.stdout.closed)
+
+    def test_reports_only_safe_records_fixed_counters_and_fixed_errors(self):
+        self.collector.window.accept(runner.filtered_trace(TRACE.splitlines()[0]))
+        self.collector.errors.append('start_failed')
+        with patch.object(Path, 'mkdir'), patch.object(Path, 'write_text') as write:
+            self.collector.save()
+        self.assertEqual(2, write.call_count)
+        combined = ''.join(call.args[0] for call in write.call_args_list)
+        self.assertNotIn('private', combined)
+        self.assertIn('first_failure_observed=False', combined)
+        self.assertIn('safe_records_seen=1', combined)
+        self.assertIn('errors=start_failed', combined)
 
 
 if __name__ == "__main__":

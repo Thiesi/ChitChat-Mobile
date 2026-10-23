@@ -1,6 +1,8 @@
 package io.github.thiesi.chitchat.feature.conversation
 
 import android.content.ClipboardManager
+import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -39,6 +41,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicLong
+import java.util.ArrayDeque
 import org.junit.*
 import org.junit.Assert.*
 
@@ -60,6 +63,16 @@ class ReplyComposerJourneyTest {
         override suspend fun saveTheme(theme: ThemePreference) { settings.value = settings.value.copy(theme = theme) }
     }
     @Volatile private var ime = 0
+    private val publishHandoffObservations = when (
+        InstrumentationRegistry.getArguments().getString("observeReplyHandoff")) {
+        null, "false" -> false
+        "true" -> true
+        else -> throw IllegalArgumentException("Invalid reply handoff observation plan")
+    }
+    private data class HandoffPoll(val startedUptimeMillis: Long,
+        val startedSinceCallNanos: Long, val finishedSinceCallNanos: Long, val imeAtStart: Int,
+        val focusAssertionPassed: Boolean?, val displayAssertionPassed: Boolean?,
+        val failureClass: String?, val accepted: Boolean)
     @Before fun bind() {
         compose.activityRule.scenario.onActivity { install(it) }
     }
@@ -146,13 +159,42 @@ class ReplyComposerJourneyTest {
         val requireIme = InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true"
         // Reply deliberately transfers focus after its dialog releases the window. Observe that
         // natural transition before hide/navigation; never request focus, force IME or retry a tap.
+        val callStartedNanos = System.nanoTime()
+        val lastPolls = ArrayDeque<HandoffPoll>(8)
+        var polls = 0
         try {
-            compose.waitUntil(5_000) { (!requireIme || ime > 0) &&
-                runCatching { input.assertIsFocused().assertIsDisplayed() }.isSuccess }
+            compose.waitUntil(5_000) {
+                val startedNanos = System.nanoTime() - callStartedNanos
+                val startedUptime = SystemClock.uptimeMillis()
+                val observedIme = ime
+                var focusPassed: Boolean? = null
+                var displayPassed: Boolean? = null
+                var failureClass: String? = null
+                val accepted = (!requireIme || observedIme > 0) && runCatching {
+                    val focusedInput = input.assertIsFocused().also { focusPassed = true }
+                    focusedInput.assertIsDisplayed().also { displayPassed = true }
+                }.onFailure {
+                    // Assertion outcome is not proof of underlying focus/display state: an idle
+                    // or node lookup error can fail too. Never retain its message or semantics tree.
+                    if (focusPassed == null) focusPassed = false else displayPassed = false
+                    failureClass = it.javaClass.simpleName
+                }.isSuccess
+                polls++
+                if (lastPolls.size == 8) lastPolls.removeFirst()
+                lastPolls.addLast(HandoffPoll(startedUptime, startedNanos,
+                    System.nanoTime() - callStartedNanos, observedIme,
+                    focusPassed, displayPassed, failureClass, accepted))
+                accepted
+            }
+            if (publishHandoffObservations) InstrumentationRegistry.getInstrumentation().addResults(Bundle().apply {
+                putString("replyHandoff$callStartedNanos", "room=$isRoom,passed=true,polls=$polls," +
+                    "outsideCallElapsedNanos=${System.nanoTime() - callStartedNanos},lastPolls=${lastPolls.toList()}")
+            })
         } catch (failure: ComposeTimeoutException) {
             // Failure-only scalars: no message contents, raw trees, extra taps or focus changes.
-            val observedAt = android.os.SystemClock.uptimeMillis()
-            val deadlineIme = ime
+            val observedAt = SystemClock.uptimeMillis()
+            val receiptIme = ime
+            val failedPolls = lastPolls.toList() // Freeze before any later UI/idle/window query.
             val selected = if (isRoom) room.state.value.composerReply else direct.state.value.composerReply
             val focused = runCatching { input.assertIsFocused() }.isSuccess
             val displayed = runCatching { input.assertIsDisplayed() }.isSuccess
@@ -164,7 +206,8 @@ class ReplyComposerJourneyTest {
             val server = nativeImeServerAfterFailure()
             throw AssertionError("Reply handoff: uptime=$observedAt, room=$isRoom, selected=${selected != null}, " +
                 "focused=$focused, displayed=$displayed, bounds=$bounds, options=$options, canSend=$canSend, " +
-                "deadlineIME=$deadlineIme, laterIME=$ime, window=$window, inputSessions=$inputSessions, server=$server", failure)
+                "receiptIME=$receiptIme, laterIME=$ime, polls=$polls, lastPolls=$failedPolls, " +
+                "window=$window, inputSessions=$inputSessions, server=$server", failure)
         }
     }
     private fun options() {
