@@ -94,6 +94,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
 
     inner class AuthorChanges : MessageMutationOperations {
         val writes = java.util.concurrent.CopyOnWriteArrayList<Pair<Long, Boolean>>()
+        val directWrites = java.util.concurrent.CopyOnWriteArrayList<Pair<Long, Boolean>>()
         var failure: ApiFailure? = null
         var gate: CompletableDeferred<Unit>? = null
         var ignoreCancellation = false
@@ -106,8 +107,15 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
         }
         override suspend fun editRoom(expected: SessionState, original: RoomMessage, body: String) = change(original, body, false)
         override suspend fun deleteRoom(expected: SessionState, original: RoomMessage) = change(original, null, true)
-        override suspend fun editDirect(expected: SessionState, original: DirectMessage, body: String): DirectMessage = error("No native DM author consumer")
-        override suspend fun deleteDirect(expected: SessionState, original: DirectMessage): DirectMessage = error("No native DM author consumer")
+        private suspend fun changeDirect(original: DirectMessage, body: String?, deleting: Boolean): DirectMessage {
+            directWrites += original.id to deleting
+            gate?.let { if (ignoreCancellation) withContext(NonCancellable) { it.await() } else it.await() }
+            val changed = directs.changeOwn(original, body, deleting)
+            failure?.let { throw it } // Test-only committed-but-unconfirmed response, never a production fallback.
+            return changed
+        }
+        override suspend fun editDirect(expected: SessionState, original: DirectMessage, body: String) = changeDirect(original, body.phpTrim(), false)
+        override suspend fun deleteDirect(expected: SessionState, original: DirectMessage) = changeDirect(original, null, true)
     }
 
     inner class Directs : DirectOperations {
@@ -120,18 +128,31 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
         var sendGate: CompletableDeferred<Unit>? = null
         var ignoreSendCancellation = false
         val deleted = mutableSetOf<Pair<Long, Long>>()
+        private val edited = mutableSetOf<Pair<Long, Long>>()
         private val posted = mutableMapOf<Long, MutableList<Triple<Long, String, Long?>>>()
         private val relationships = mutableMapOf<Long, DirectRelationship>()
         override suspend fun context(peerId: Long) = DirectContext(MessagePerson(peerId, "Peer $peerId"),
-            relationships[peerId] ?: DirectRelationship(false, true), privacy, policy.display, null)
+            relationships[peerId] ?: DirectRelationship(false, true), privacy, policy.display, session.value.chatPolicy?.mutedEverywhere)
         private fun rows(peer: Long) = (1L..100L).map {
             val removed = (peer to it) in deleted
             DirectMessage(it, MessagePerson(peer, "Peer $peer"), MessagePerson(7, "Viewer"),
                 if (removed) null else "Direct $peer message $it", timestamp.takeIf { peer in readPeers }, timestamp, false, removed,
                 null, false, false, null, emptyList(), emptyList(), null)
         } + posted[peer].orEmpty().map { (id, body, reply) ->
-            DirectMessage(id, MessagePerson(7, "Viewer"), MessagePerson(peer, "Peer $peer"), body, null, timestamp, true, false,
-                null, true, true, reply?.let { directReply(peer, it) }, emptyList(), emptyList(), null)
+            val removed = (peer to id) in deleted
+            DirectMessage(id, MessagePerson(7, "Viewer"), MessagePerson(peer, "Peer $peer"), body.takeUnless { removed }, null, timestamp, true, removed,
+                timestamp.takeIf { (peer to id) in edited }, !removed && relationships[peer]?.messagingAvailable != false,
+                !removed, reply?.takeUnless { removed }?.let { directReply(peer, it) }, emptyList(), emptyList(), null)
+        }
+        fun changeOwn(original: DirectMessage, body: String?, deleting: Boolean): DirectMessage {
+            val peer = original.recipient.id
+            val messages = checkNotNull(posted[peer])
+            val index = messages.indexOfFirst { it.first == original.id }
+            check(index >= 0 && original.sender.id == 7L)
+            if (deleting) deleted += peer to original.id
+            else { val before = messages[index]; messages[index] = Triple(before.first, checkNotNull(body), before.third)
+                edited += peer to original.id }
+            return rows(peer).first { it.id == original.id }
         }
         private fun directReply(peer: Long, id: Long): DirectReply {
             val own = posted[peer].orEmpty().firstOrNull { it.first == id }

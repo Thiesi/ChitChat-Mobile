@@ -20,7 +20,7 @@ Verification paragraphs retain publication-time checkpoints; linked PRs record s
 
 [System-routed keyboard test taps](docs/milestones/system-native-taps.md) are locally verified test infrastructure:598 fresh JVM tests,137 native cases (including100 consistent-OS-tap dialog cycles), lint0 and debug/release builds passed. Current-head CI and completed initial/fresh reviews are required before merge. No production editor/keyboard fix or extra parity is claimed; issue31 and PR49 remain open.
 
-[M5b1](docs/milestones/M5b1-author-mutation-protocol.md) prepares existing author edit/delete APIs and session-bound contract tests. Native controls and live mutation acceptance remain pending; this does not unblock PR49's keyboard gate or complete editing parity.
+[M5b1](docs/milestones/M5b1-author-mutation-protocol.md)'s existing author APIs now serve delivered room controls and the [M5b3 DM candidate](docs/milestones/M5b3-direct-author-controls.md). The shared editor is delivered in PR58; the DM candidate's own full gates and live acceptance are not implied by that refactor. Retained revisions/deletion copies remain disclosed; no keyboard-fix or release claim.
 
 [Additional input-handoff observations](docs/milestones/native-ime-handoff-observations.md) investigate open issue31 after PR49's native CI passed136/137. All12 new Reply/Copy journeys passed, but that PR remains unmerged. This test-only work does not fix the keyboard or add parity; existing failures remain recorded.
 

@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [M5b3 DM author controls](docs/milestones/M5b3-direct-author-controls.md) extend the existing serialized DM actor with distinct AUTHOR markers, not room's separate jobs. Keep blocked/muted author deletion, ACK-before-GET quote redaction and ID-only uncertainty separate from SEND/READ/BLOCK consent. Original owner/peer/entry/canonical callbacks and explicit GET -> Review -> Save remain mandatory.
+
 - The [shared author dialog](docs/milestones/shared-author-dialog.md) is presentation/test-observation reuse only; canonical authorization, original requests and jobs remain feature-owned. Do not treat it as native DM editing or a keyboard fix.
 
 - [Input observations](docs/milestones/input-failure-observations.md): preserve async-auth receipt/result separation and immediate-vs-later failure scalars. Standalone tracing stays opt-in; never treat post-timeout UI queries as deadline proof or rerun/restart until green. This is not a production keyboard fix; preserve issue31's maintainer closure.

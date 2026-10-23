@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5b3](milestones/M5b3-direct-author-controls.md) consumes unchanged M5b1 DM edit/delete endpoints. Both commit before metadata; no server CAS or safe POST replay is assumed. Block/mute restricts edit, not otherwise-authorized own deletion. No backend source/API/event change or new dependency issue is required; native/live verification remains separately recorded.
+
 [M5b2](milestones/M5b2-room-author-controls.md), delivered in PR57, uses unchanged M5b1 APIs/capabilities, not server CAS. The [shared editor](milestones/shared-author-dialog.md) changes no contract or backend source. PR49 is merged; older open-gate narratives are historical. DM controls/live acceptance remain separate.
 
 [System-routed keyboard test taps](milestones/system-native-taps.md) affect instrumentation only, not the HTTP/session/SSE/push contracts or backend baseline. Focused local native evidence is not live-server/device/provider acceptance; issue31/PR49 remain open pending their actual gates. No backend change or new endpoint is implied.
