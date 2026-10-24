@@ -1,0 +1,5 @@
+<resources>
+    <string name="diagnostic_ime_name">ChitChat diagnostic IME (test only)</string>
+    <string name="diagnostic_ime_space">Space</string>
+    <string name="diagnostic_ime_delete">Delete</string>
+</resources>

@@ -8,6 +8,8 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
+[Test-only diagnostic IME](docs/testing/diagnostic-input-method.md) adds no user-facing capability and changes no production code. The corrected standalone service passed its original100-cycle comparison; the matched stock-keyboard arm failed at cycle2. The stacked checkpoint passed199/199 CI and198/199 locally, with only the existing Windows standalone-control failure (#55). Those results and PR60/61 negatives remain recorded; no keyboard fix or broader exception is claimed. This independently scoped slice retains all172 existing main tests and adds four inert checks (expected176); its own build/full CI/reviews remain required.
+
 [Reply/Copy PR49](https://github.com/Thiesi/ChitChat-Mobile/pull/49) and [input-observation PR54](https://github.com/Thiesi/ChitChat-Mobile/pull/54) are merged. PR54 passed600 fresh local JVM/lint0, CI160 native, both reviews and physical100cycles. Independent main passed160 native/lint0; JVM/R8 were cached. Local156/157 remains under the development-only [#55 exception](https://github.com/Thiesi/ChitChat-Mobile/issues/55), not a fix/release waiver. Preserve issue31 closure.
 
 [M5b2 room Edit/Delete](docs/milestones/M5b2-room-author-controls.md) is merged in PR57; merged-main166 native/623 fresh JVM/lint0 passed. Local Full159/163 remains FAILED under the exact development-only #55/#56 exceptions, not a fix/release waiver. The [shared-dialog prerequisite](docs/milestones/shared-author-dialog.md) prepares reuse; native DM editing/live acceptance remain separate.
