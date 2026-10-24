@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [IME history cohorts](docs/testing/ime-history-cohorts.md) retain the failed isolated/predecessor pair at87b96. The next fixed CI arm selects the existing View-only EditText method for25 rounds; require every ordered round receipt before accepting success. Native source stays pinned to d302; no input/assertion/cleanup changes or replay until green. Normal195-method CI stays unfiltered; its later pass does not erase either failed arm or older non-exempt failures. Both PRs remain blocked pending investigation.
+
 - Failure-only `targetWindow` comes from the failing semantics root; legacy beforeWindow/afterWindow are Activity snapshots and can be unfocused behind a Dialog. Null target never falls back to another window; no target listener, input repair or deadline claim. Alternate-host193/195 includes a non-exempt room-editor recreation failure. Preserve all negatives and #55/#56 boundaries; see [input comparison](docs/milestones/native-ime-input-comparison.md).
 
 - Reply handoff diagnostics retain only the last eight scalar predicate samples. Keep the original short circuit/UI queries and5000ms deadline; nullable assertion outcomes are not native-state proof. Freeze observations before later UI queries; external-call clocks and post-timeout IME are not internal deadline proof. Successful output is opt-in `observeReplyHandoff=true`; never retain exception messages, add readiness/focus repair or replace a failed full gate with subsets. See [input comparison](docs/milestones/native-ime-input-comparison.md).
