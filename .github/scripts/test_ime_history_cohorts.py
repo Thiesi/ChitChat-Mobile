@@ -21,6 +21,49 @@ def output(mode, codes=None, order=None):
 
 
 class HistoryCohortTests(unittest.TestCase):
+    def view_output(self, rounds=None):
+        records = rounds if rounds is not None else [(i, True) for i in range(25)]
+        return output("view-only") + "INSTRUMENTATION_RESULT: imeComparisonVIEW_ONLY=" + "\n".join(
+            f"kind=VIEW_ONLY,round={number},passed={str(passed).lower()},state=private-body-canary"
+            for number, passed in records) + "\nINSTRUMENTATION_CODE: -1\n"
+
+    def test_view_only_has_one_existing_method_and_exact_fixed_round_argument(self):
+        self.assertEqual([cohort.VIEW_ONLY], cohort.expected("view-only"))
+        self.assertEqual(["-e", "class", "#".join(cohort.VIEW_ONLY), "-e", "expectSoftKeyboard", "true",
+                          "-e", "imeComparisonRounds", "25"], cohort.instrumentation_arguments("view-only"))
+        for mode in ("isolated", "after-comparison"):
+            self.assertNotIn("imeComparisonRounds", cohort.instrumentation_arguments(mode))
+
+    def test_view_only_success_requires_all_ordered_round_receipts(self):
+        result = cohort.summarize(self.view_output(), "view-only", 0)
+        self.assertTrue(result["nativePass"])
+        self.assertEqual(25, len(result["viewOnlyRounds"]))
+        self.assertNotIn("canary", json.dumps(result))
+
+    def test_one_terminal_pass_cannot_conceal_missing_duplicate_or_failed_rounds(self):
+        correct = [(i, True) for i in range(25)]
+        for records in ([], correct[:-1], correct + [correct[-1]], list(reversed(correct)),
+                        correct[:-1] + [(24, False)]):
+            result = cohort.summarize(self.view_output(records), "view-only", 0)
+            self.assertFalse(result["nativePass"])
+            self.assertIn("missing_duplicate_or_failed_view_rounds", result["integrityErrors"])
+
+    def test_view_records_in_a_stack_do_not_replace_missing_bundle_receipts(self):
+        raw = self.view_output().replace("INSTRUMENTATION_RESULT: imeComparisonVIEW_ONLY=",
+                                        "INSTRUMENTATION_STATUS: stack=")
+        self.assertFalse(cohort.summarize(raw, "view-only", 0)["nativePass"])
+
+    def test_duplicate_result_bundles_cannot_pass(self):
+        self.assertFalse(cohort.summarize(self.view_output() * 2, "view-only", 0)["nativePass"])
+
+    def test_failed_view_round_remains_negative_with_successful_adb_exit(self):
+        raw = self.view_output([(0, True), (1, False)]).replace(
+            "INSTRUMENTATION_STATUS_CODE: 0", "INSTRUMENTATION_STATUS_CODE: -2").replace("OK (1 test)\n", "")
+        result = cohort.summarize(raw, "view-only", 0)
+        self.assertFalse(result["nativePass"])
+        self.assertEqual(1, result["failed"])
+        self.assertEqual([{"round": 0, "passed": True}, {"round": 1, "passed": False}], result["viewOnlyRounds"])
+
     def test_failed_cleanup_still_saves_and_retains_only_fixed_error_metadata(self):
         collector = SimpleNamespace(errors=["read_failed"],
             stop=Mock(side_effect=RuntimeError("private-body-canary")), save=Mock())

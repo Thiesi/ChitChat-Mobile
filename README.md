@@ -4,7 +4,7 @@
 
 ChitChat is a small, self-hosted browser chat application. ChitChat Mobile is its native mobile client.
 
-Current verification: parent PR60 head d302 has a failed required Linux native check194/195; the alternate Windows host failed193/195. [Fixed IME history cohorts](docs/testing/ime-history-cohorts.md) compare the standalone control with its observed predecessors without changing native code or the unfiltered195-method gate. Neither parent nor this diagnostic work is merge/release ready. Older checkpoints below remain historical.
+Current verification: parent PR60 head d302 failed Linux194/195; the alternate Windows host failed193/195. Diagnostic head87b96 passed the unchanged full195-method CI gate, but its isolated/predecessor controls both failed (cycles43/7). [Fixed IME comparisons](docs/testing/ime-history-cohorts.md) retain these results and next select25 rounds of the existing View-only EditText fixture without changing native code or the full gate. Neither parent nor this investigation is merge/release ready. Older checkpoints below remain historical.
 
 The Android application uses Kotlin and Jetpack Compose with ChitChat's existing PHP sessions, CSRF protection, HTTP APIs and foreground Server-Sent Events. Background push will use UnifiedPush with the existing Web Push backend: prefer an installed distributor, with an optional embedded FCM distributor fallback. No publisher-operated relay or Firebase project is required.
 

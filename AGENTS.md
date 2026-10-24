@@ -1,6 +1,6 @@
 # ChitChat Android engineering
 
-- [IME history cohorts](docs/testing/ime-history-cohorts.md) are a fixed diagnostic CI pair (control alone / four observed predecessors then control), not full-gate credit. Native source is pinned to d302; preserve exact identities/order/counts, failure exits and collector gaps. No source/input/assertion changes or rerun-until-green. Normal195-method CI stays unfiltered; failed required checks and non-exempt failures still block both PRs.
+- [IME history cohorts](docs/testing/ime-history-cohorts.md) retain the failed isolated/predecessor pair at87b96. The next fixed CI arm selects the existing View-only EditText method for25 rounds; require every ordered round receipt before accepting success. Native source stays pinned to d302; no input/assertion/cleanup changes or replay until green. Normal195-method CI stays unfiltered; its later pass does not erase either failed arm or older non-exempt failures. Both PRs remain blocked pending investigation.
 
 - Failure-only `targetWindow` comes from the failing semantics root; legacy beforeWindow/afterWindow are Activity snapshots and can be unfocused behind a Dialog. Null target never falls back to another window; no target listener, input repair or deadline claim. Alternate-host193/195 includes a non-exempt room-editor recreation failure. Preserve all negatives and #55/#56 boundaries; see [input comparison](docs/milestones/native-ime-input-comparison.md).
 

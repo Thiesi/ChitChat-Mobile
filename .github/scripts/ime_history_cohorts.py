@@ -15,6 +15,9 @@ SOURCE = "d302706ab4588270310d304ef70de22e4ac8a612"
 COMPARISON = "io.github.thiesi.chitchat.testing.NativeInputComparisonTest"
 CONTROL = ("io.github.thiesi.chitchat.testing.NativeInputDialogJourneyTest",
            "hundredNativeInputDialogCyclesPreserveBodyWithoutInventingEdits")
+VIEW_ONLY = ("io.github.thiesi.chitchat.testing.ViewOnlyInputComparisonTest",
+             "nativeEditTextWithoutComposeOwnerShowsKeyboardAfterOneTap")
+VIEW_ROUNDS = 25
 PREFIX = [(COMPARISON, name) for name in (
     "legacyBasicTextFieldSingleTapShowsTheKeyboard",
     "legacyMaterialTextFieldSingleTapShowsTheKeyboard",
@@ -23,6 +26,8 @@ PREFIX = [(COMPARISON, name) for name in (
 
 
 def expected(mode):
+    if mode == "view-only":
+        return [VIEW_ONLY]
     if mode == "isolated":
         return [CONTROL]
     if mode == "after-comparison":
@@ -32,8 +37,28 @@ def expected(mode):
 
 def selector(mode):
     expected(mode)
+    if mode == "view-only":
+        return "#".join(VIEW_ONLY)
     control = "#".join(CONTROL)
     return control if mode == "isolated" else COMPARISON + "," + control
+
+
+def instrumentation_arguments(mode):
+    arguments = ["-e", "class", selector(mode), "-e", "expectSoftKeyboard", "true"]
+    if mode == "view-only":
+        arguments += ["-e", "imeComparisonRounds", str(VIEW_ROUNDS)]
+    return arguments
+
+
+def view_rounds(raw):
+    # Read only the fixture's result bundle, not duplicate records in failure stacks.
+    bundles = re.findall(r"^INSTRUMENTATION_RESULT: imeComparisonVIEW_ONLY=(.*?)(?=^INSTRUMENTATION_[A-Z_]+:|\Z)",
+                         raw, re.M | re.S)
+    if len(bundles) != 1:
+        return []
+    return [{"round": int(number), "passed": passed == "true"}
+            for number, passed in re.findall(r"^kind=VIEW_ONLY,round=(\d{1,3}),passed=(true|false)(?:,|\r?$)",
+                                             bundles[0], re.M)]
 
 
 def summarize(raw, mode, adb_exit, timed_out=False, collector_errors=()):
@@ -62,6 +87,10 @@ def summarize(raw, mode, adb_exit, timed_out=False, collector_errors=()):
     passed = sum(r["code"] == 0 for r in terminals)
     failed = sum(r["code"] in (-1, -2) for r in terminals)
     skipped = sum(r["code"] in (-3, -4) for r in terminals)
+    rounds = view_rounds(raw) if mode == "view-only" else []
+    if mode == "view-only" and passed == 1 and rounds != [
+            {"round": number, "passed": True} for number in range(VIEW_ROUNDS)]:
+        problems.append("missing_duplicate_or_failed_view_rounds")
     ok = re.findall(r"^OK \((\d+) tests?\)\r?$", raw, re.M)
     native_pass = (adb_exit == 0 and not timed_out and not problems and
                    passed == len(wanted) and failed == 0 and skipped == 0 and
@@ -73,6 +102,7 @@ def summarize(raw, mode, adb_exit, timed_out=False, collector_errors=()):
             "skipped": skipped, "adbExit": adb_exit, "timedOut": timed_out,
             "integrityErrors": sorted(set(problems)),
             "collectorErrors": list(collector_errors), "nativePass": native_pass,
+            "viewOnlyRounds": rounds,
             "exitCode": 1 if not native_pass else 2 if collector_errors else 0,
             "fullGateReplaced": False}
 
@@ -94,7 +124,7 @@ def retire_collector(collector):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("isolated", "after-comparison"))
+    parser.add_argument("mode", choices=("isolated", "after-comparison", "view-only"))
     mode = parser.parse_args().mode
     out = ROOT / "app/build/reports/ime-history" / mode
     out.mkdir(parents=True, exist_ok=False)
@@ -162,8 +192,7 @@ def main():
         timed_out = False
         with (out / "native.log").open("w", encoding="utf-8") as log:
             try:
-                native = subprocess.run(adb + ["shell", "am", "instrument", "-w", "-r", "-e", "class", selector(mode),
-                    "-e", "expectSoftKeyboard", "true",
+                native = subprocess.run(adb + ["shell", "am", "instrument", "-w", "-r"] + instrumentation_arguments(mode) + [
                     "io.github.thiesi.chitchat.debug.test/androidx.test.runner.AndroidJUnitRunner"],
                     cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, timeout=600, check=False)
                 adb_exit = native.returncode
