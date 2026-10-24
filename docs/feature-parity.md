@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[Test-only diagnostic IME](testing/diagnostic-input-method.md) adds no user-facing capability and changes no production code. The corrected standalone service passed its original100-cycle comparison; the matched stock-keyboard arm failed at cycle2. The stacked checkpoint passed199/199 CI and198/199 locally, with only the existing Windows standalone-control failure (#55). Those results and PR60/61 negatives remain recorded; no keyboard fix or broader exception is claimed. This independently scoped slice retains all172 existing main tests and adds four inert checks (expected176); its own build/full CI/reviews remain required.
+
 Current: PR49/54 merged, issue31 closed. [M5b2](milestones/M5b2-room-author-controls.md) has native author/layout/CI passes; Full159/163 retained as failed under maintainer-approved [#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56) extension for three exact IME failures. Other/new failures/current-head CI/reviews still gate delivery; no fix/release waiver. DM/live pending; older checkpoints historical.
 
 [Failure-only IME snapshots](milestones/native-ime-server-snapshot.md) are test observability only. Initial head2a8 passed local143 native/598 fresh JVM/build/lint but failed hosted142/143. The window expansion passed new builds/598 fresh JVM/lint0/eleven focused cases; full native/CI/reviews remain gates. No production fix, extra parity or waiver of PR49's failed gate is claimed.

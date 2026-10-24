@@ -1,0 +1,16 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Explicitly selected only on a new owned emulator; never part of the app APK. -->
+        <service
+            android:name="io.github.thiesi.chitchat.testing.DiagnosticImeService"
+            android:label="@string/diagnostic_ime_name"
+            android:exported="true"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:process=":diagnosticIme">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data android:name="android.view.im" android:resource="@xml/diagnostic_input_method" />
+        </service>
+    </application>
+</manifest>

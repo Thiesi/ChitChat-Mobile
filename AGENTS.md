@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- The [diagnostic IME](docs/testing/diagnostic-input-method.md) is an androidTest-only framework control. Its standalone service/helpers must depend only on the Android/Java platform: AGP strips target-app Kotlin/AndroidX classes from the test APK. Keep the isolated-APK classloader regression; normal instrumentation can conceal missing runtime dependencies. The service is protected by BIND_INPUT_METHOD in a separate process. Never select it on a phone, existing AVD, normal CI or production. Explicit new-emulator comparisons retain the existing tap/deadline/assertions and all negatives; its scalar callback log is bounded and never records EditorInfo, connections or text. Alternate-IME passes cannot replace default-IME/full CI failures or establish a product fix.
+
 - [M5b3 DM author controls](docs/milestones/M5b3-direct-author-controls.md) extend the existing serialized DM actor with distinct AUTHOR markers, not room's separate jobs. Keep blocked/muted author deletion, ACK-before-GET quote redaction and ID-only uncertainty separate from SEND/READ/BLOCK consent. Original owner/peer/entry/canonical callbacks and explicit GET -> Review -> Save remain mandatory.
 
 - The [shared author dialog](docs/milestones/shared-author-dialog.md) is presentation/test-observation reuse only; canonical authorization, original requests and jobs remain feature-owned. Do not treat it as native DM editing or a keyboard fix.
