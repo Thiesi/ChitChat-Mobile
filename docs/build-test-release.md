@@ -70,6 +70,14 @@ The intentional M1 `targetSdk=36` declaration also has a narrowly scoped `OldTar
 
 Run focused tests per change and all required milestone checks before merge. Capture exact command/result/count and environment. Mock contract tests are not a real server integration; compilation is not a UX review. Do not add trivial tests merely mirroring layout constants.
 
+## Development merge gates
+
+On 2026-11-04 the maintainer approved the [development-only platform proposal](https://github.com/Thiesi/ChitChat-Mobile/pull/66#issuecomment-6637030821) and merged PR66. Non-release slices require complete current-head **unfiltered Linux/API36 native CI**, JVM tests, app lint, debug/release builds, conflict-free scope, and written exact-head Claude review plus requested re-review with impact-based dispositions. A new head requires current-head evidence.
+
+Windows failures in #55/#56/#65 and PR59/64 remain failed and preserved for investigation. An unexplained Windows-emulator-only discrepancy no longer by itself blocks development merges; a Windows full run is not a mandatory development merge gate. A demonstrated product, privacy, security or protocol defect still blocks on any platform. Keep every ordinary native test and strict input predicate enabled; never retry until green, force focus/IME, extend deadlines or weaken assertions.
+
+This changes development merge policy only. Physical-device/API26/current-Android, live integration, accessibility and release/signing/distribution acceptance remain mandatory where applicable. The diagnostic comparison did not reproduce the mismatch and establishes neither a root cause nor a keyboard/version correction. Earlier gate statements in historical milestone evidence describe the policy at that time; this dated decision supersedes their Windows-only blocking effect without rewriting results.
+
 ## Manual/device acceptance
 
 Use two accounts and representative staff/guest roles on a compatible non-production server. Exercise real room/DM/history/reconnect/block/edit/files/search/report/account/admin flows, password and configured MFA/provider paths, privacy disclosures and forced invalidation. Device review covers portrait/landscape, compact/expanded windows, font scaling, TalkBack, contrast, keyboard/focus, slow/intermittent network and app process death. Push acceptance needs two distributors and the optional embedded fallback as defined in [setup](firebase-setup.md#end-to-end-manual-test-once-implemented).

@@ -15,6 +15,7 @@ import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.notifications.NotificationPage
 import io.github.thiesi.chitchat.core.notifications.NotificationReadResult
 import io.github.thiesi.chitchat.core.mutations.validateEditedBody
+import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.time.ZonedDateTime
@@ -292,6 +293,28 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
             apiJson.encodeToString(DeleteMessageRequest(original.id)), csrf).require200()).message
         incompatibleUnless(mutation.deleted)
         return applyDirectMutation(original, mutation)
+    }
+
+    suspend fun setRoomReaction(original: RoomMessage, emoji: ReactionEmoji, selected: Boolean,
+        csrf: String, viewerId: Long): List<MessageReaction> {
+        require(viewerId > 0 && original.id > 0 && original.roomId > 0 && (!selected || !original.deleted))
+        return setMessageReaction("rooms", original.id, emoji, selected, csrf, viewerId)
+    }
+
+    suspend fun setDirectReaction(original: DirectMessage, emoji: ReactionEmoji, selected: Boolean,
+        csrf: String, viewerId: Long): List<MessageReaction> {
+        require(viewerId > 0 && original.id > 0 && original.sender.id > 0 && original.recipient.id > 0 &&
+            original.sender.id != original.recipient.id && viewerId in setOf(original.sender.id, original.recipient.id) &&
+            original.outgoing == (original.sender.id == viewerId) && (!selected || !original.deleted))
+        return setMessageReaction("direct-messages", original.id, emoji, selected, csrf, viewerId)
+    }
+
+    private suspend fun setMessageReaction(namespace: String, messageId: Long, emoji: ReactionEmoji,
+        selected: Boolean, csrf: String, viewerId: Long): List<MessageReaction> {
+        val endpoint = if (selected) "react.php" else "unreact.php"
+        val reply = decode<MessageReactionReply>(request("$namespace/$endpoint",
+            apiJson.encodeToString(MessageReactionRequest(messageId, emoji.value)), csrf).require200())
+        return validatedReactionSummary(reply.reactions, viewerId)
     }
 
     suspend fun readRoom(roomId: Long, messageId: Long, csrf: String): Long {

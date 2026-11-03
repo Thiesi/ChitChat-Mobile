@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[M5c1's reaction protocol](milestones/M5c1-reaction-protocol.md) supplies explicit scoped room/DM add/remove requests and viewer-correct summaries, not usable native reactions. Picker/chips, serialized uncertainty/review controls, guest behavior and live acceptance remain pending. Existing failed native gates remain failed and block merges; no keyboard correction or release waiver is implied.
+
 [M5b3 DM author controls](milestones/M5b3-direct-author-controls.md) have their own recorded verification gates, not supplied by PR58's shared-editor refactor. Proposals/unknown IDs are generation-scoped memory only; process death clears them and no POST is replayed. Off-window absence is not deletion proof. Live mutations/guest parity remain separate.
 
 The [shared-editor prerequisite](milestones/shared-author-dialog.md) is a refactor, not DM editing, a keyboard fix or live acceptance. PR57 room controls are delivered; its recorded local failures stay failed. New-source failures require their own assessment, not the old frozen evidence waiver.
