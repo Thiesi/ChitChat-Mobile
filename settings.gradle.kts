@@ -16,3 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "ChitChat"
 include(":app")
+// Separate opt-in test APK; never added to :app's ordinary connected suite.
+if (providers.gradleProperty("focusDiagnostic").orNull == "true") include(":focus-diagnostic")

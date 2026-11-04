@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[Issue65's standalone Compose focus diagnostic](milestones/compose-focus-diagnostic.md) investigates the Windows/Linux native mismatch. It adds no product parity or keyboard correction and does not waive the retained PR59/64 native failures. The ordinary app suite remains unfiltered; diagnostic results are separate.
+
 Current: PR49/54 merged, issue31 closed. [M5b2](milestones/M5b2-room-author-controls.md) has native author/layout/CI passes; Full159/163 retained as failed under maintainer-approved [#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56) extension for three exact IME failures. Other/new failures/current-head CI/reviews still gate delivery; no fix/release waiver. DM/live pending; older checkpoints historical.
 
 [Failure-only IME snapshots](milestones/native-ime-server-snapshot.md) are test observability only. Initial head2a8 passed local143 native/598 fresh JVM/build/lint but failed hosted142/143. The window expansion passed new builds/598 fresh JVM/lint0/eleven focused cases; full native/CI/reviews remain gates. No production fix, extra parity or waiver of PR49's failed gate is claimed.

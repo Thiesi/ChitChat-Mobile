@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[Issue65](milestones/compose-focus-diagnostic.md) tracks a bounded standalone Compose input comparison and failure-time OS focus categories while PR64 remains blocked. Its explicit opt-in APK is separate from the ordinary app suite and supplies neither a production fix nor native/release acceptance. Preserve both PR59/64 negatives and continue only within the declared finite comparison.
+
 PR54's independent main passed160 native/lint0. Finish [M5b2](milestones/M5b2-room-author-controls.md), then DM author controls without routine confirmation. Retain failed evidence/issue31 closure and the approved [#55](https://github.com/Thiesi/ChitChat-Mobile/issues/55)/[#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56) development exceptions; other/new failures/current-head CI/reviews still block. No fix/release waiver or new live/phone access.
 
 [System-routed keyboard test taps](milestones/system-native-taps.md) are an independently gated test-only slice before further native Reply/Copy integration. They do not change the production editor, add user parity, or waive PR49's original failed checks. Rebase/reverify dependent consumers on the delivered helper only after full local/native/CI and initial/fresh exact-head reviews pass; issue31 remains separate from a passing routing control. Backend/auth/push contracts are unchanged.

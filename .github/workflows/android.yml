@@ -27,6 +27,8 @@ jobs:
         run: python3 -B -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Build, unit tests and lint
         run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease --max-workers=2
+      - name: Compile the opt-in standalone diagnostic (no device invocation)
+        run: ./gradlew -PfocusDiagnostic=true :focus-diagnostic:assembleDebug --max-workers=2
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -36,6 +38,10 @@ jobs:
         with:
           name: chitchat-development-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: standalone-focus-diagnostic-apk
+          path: focus-diagnostic/build/outputs/apk/debug/*.apk
 
   journey:
     runs-on: ubuntu-latest
