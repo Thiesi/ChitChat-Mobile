@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.core.conversation
 
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
 import io.github.thiesi.chitchat.core.mutations.AuthorMessageActions
+import io.github.thiesi.chitchat.core.network.StrictJsonBoolean
 import io.github.thiesi.chitchat.core.session.SessionState
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.SerialName
@@ -34,7 +35,7 @@ import java.time.OffsetDateTime
 @Serializable class MessagePerson(val id: Long, val username: String?)
 @Serializable class MessageMention(@SerialName("user_id") val userId: Long, val username: String, val broadcast: Boolean)
 @Serializable class MessageReaction(val emoji: String, val users: List<MessagePerson>,
-    @SerialName("reacted_by_me") val reactedByMe: Boolean)
+    @SerialName("reacted_by_me") @Serializable(with = StrictJsonBoolean::class) val reactedByMe: Boolean)
 @Serializable class RoomPing(val id: Long, @SerialName("room_id") val roomId: Long,
     val sender: MessagePerson, val target: MessagePerson, val message: String,
     @SerialName("created_at") val createdAt: String)

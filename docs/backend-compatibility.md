@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5c1](milestones/M5c1-reaction-protocol.md) reuses existing room/DM `react.php`/`unreact.php`, exact six-emoji vocabulary and complete reactor lists. Explicit add/remove is not a safe POST replay guarantee: both services mutate before summary/event publication. DM blocking does not revoke reactions on readable history; remove differs from add's deleted/mute checks. Native controls/guests/live acceptance remain pending; no backend change is required.
+
 [M5b3](milestones/M5b3-direct-author-controls.md) consumes unchanged M5b1 DM edit/delete endpoints. Both commit before metadata; no server CAS or safe POST replay is assumed. Block/mute restricts edit, not otherwise-authorized own deletion. No backend source/API/event change or new dependency issue is required; native/live verification remains separately recorded.
 
 [M5b2](milestones/M5b2-room-author-controls.md), delivered in PR57, uses unchanged M5b1 APIs/capabilities, not server CAS. The [shared editor](milestones/shared-author-dialog.md) changes no contract or backend source. PR49 is merged; older open-gate narratives are historical. DM controls/live acceptance remain separate.
