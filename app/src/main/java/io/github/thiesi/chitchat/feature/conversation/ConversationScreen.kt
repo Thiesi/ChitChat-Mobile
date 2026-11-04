@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -572,7 +573,7 @@ private fun MessageContent(message: RoomMessage, context: ConversationContext?, 
         message.reactions.forEachIndexed { index, group ->
             val emoji = ReactionEmoji.fromValue(group.emoji)
             val label = if (emoji != null) reactionLabel(emoji) else group.emoji
-            val description = stringResource(R.string.reaction_chip_description, label, group.users.size)
+            val description = pluralStringResource(R.plurals.reaction_chip_description, group.users.size, label, group.users.size)
             FilterChip(selected = group.selectedBy(viewer), onClick = { onReactions?.invoke() }, enabled = canReact && onReactions != null,
                 label = { Text("${group.emoji} ${group.users.size}") },
                 modifier = Modifier.heightIn(min = 48.dp).testTag("room_reaction:${message.id}:$index")

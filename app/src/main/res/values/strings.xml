@@ -306,7 +306,10 @@
     <string name="reaction_add">Add %1$s %2$s · %3$d</string>
     <string name="reaction_remove">Remove %1$s %2$s · %3$d</string>
     <string name="reaction_count">%1$s · Reactions: %2$d</string>
-    <string name="reaction_chip_description">%1$s: %2$d reactions. Open reaction choices.</string>
+    <plurals name="reaction_chip_description">
+        <item quantity="one">%1$s: %2$d reaction. Open reaction choices.</item>
+        <item quantity="other">%1$s: %2$d reactions. Open reaction choices.</item>
+    </plurals>
     <string name="reaction_people">See who reacted</string>
     <string name="reaction_back">Back to choices</string>
     <string name="reaction_changing">Changing reaction…</string>
