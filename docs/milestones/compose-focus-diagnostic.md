@@ -40,4 +40,15 @@ Current-head full ordinary CI and actual complete-diff Claude review/re-review r
 
 Local verification passed656/656 JVM cases with no failures/errors/skips (including8 focus-parser cases), all19 Python wrapper/collector tests, app lint0, debug/shrunk unsigned release and standalone diagnostic APK builds. R8 executed in the first complete build; the final parser rebuild reused unchanged app/release outputs. Both APKs use the original configured debug signing identity. The generated projection matches its four originals, the diagnostic DEX contains its new fixture and no old app test classes, the172 ordinary native methods and production/native-test sources are unchanged, and273 relative-document links resolve. Prototype dependency/source-projection/task-selection build failures are retained separately; no device invocation occurred in them.
 
-The two planned device outcomes remain pending at this checkpoint. No diagnostic device condition or old full suite has been invoked for this issue.
+The fixed comparison at source head `8a817063ab355f34ec5c695998cc84263536a074` is complete:
+
+| Windows/API36 condition | Standalone cases | Outcome | Instrumentation duration |
+|---|---|---|---|
+| Stable37.2.12 / build16428233 | 1 invocation,1 case | Pass: one tap/focus/display/positive IME before complete multiline text | 26.336s |
+| Stable37.2.13 / build16740729 | 1 invocation,1 case | Pass: same predicates and exact APKs | 34.513s |
+
+These durations include instrumentation startup, not a controlled performance benchmark. Both used the same Google APIs image/configuration, Google Latin IME, APK hashes and original signing identity; raw IME identifiers were discarded. A local AOSP-only package-prefix setup guard initially stopped before instrumentation, restored settings and exited the guest. That verified setup-only attempt is archived. Recognizing the image-provided Google Latin IME changed no keyboard, tap, assertion or deadline. Total native invocations remain exactly2 (one per condition), old-suite invocations0, unlock events0. Both fixtures completed IME cleanup, their added packages were removed, captured settings restored and both guest process exits independently verified.
+
+**Result: not reproduced.** Basic Compose input works in both sampled environments; this neither identifies the original cause nor demonstrates a version correction. Failure capture was not naturally triggered on-device in these two passes; its privacy/unknown-state filtering has unit fixtures, and framework/setup failures remain explicitly limited. No more diagnostic conditions or acceptance replays are inferred from this result. PR59/64 remain blocked pending an explicit test-platform decision; #65 remains unresolved.
+
+Initial exact-head hosted [Android41866634840](https://github.com/Thiesi/ChitChat-Mobile/actions/runs/41866634840) passed its ordinary build/journey and separate diagnostic compile. [Claude41866634856](https://github.com/Thiesi/ChitChat-Mobile/actions/runs/41866634856) published a clean complete-diff review of `8a81706`, with actual Bash/StructuredOutput tools and complete-input audit verified. No findings were dismissed. The results-documentation revision requires its own current-head hosted checks and fresh review before any delivery decision. These reviews/checks do not waive the native holds.
