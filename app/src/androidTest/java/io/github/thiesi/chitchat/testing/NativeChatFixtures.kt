@@ -8,6 +8,8 @@ import io.github.thiesi.chitchat.core.rooms.RoomInfo
 import io.github.thiesi.chitchat.core.targets.*
 import io.github.thiesi.chitchat.core.mutations.AuthorMessageActions
 import io.github.thiesi.chitchat.core.mutations.MessageMutationOperations
+import io.github.thiesi.chitchat.core.reactions.MessageReactionOperations
+import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.feature.auth.TestSessions
 import io.github.thiesi.chitchat.feature.notifications.noticeIdentity
@@ -26,6 +28,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
     val notices = Notices()
     val lookups = Lookups()
     val authorChanges = AuthorChanges()
+    val reactions = Reactions()
 
     inner class Rooms : ConversationOperations {
         override val session = sessions.state
@@ -37,17 +40,20 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
         var sendGate: CompletableDeferred<Unit>? = null
         var ignoreSendCancellation = false
         val deleted = mutableSetOf<Pair<Long, Long>>()
+        val reactionSummaries = mutableMapOf<Pair<Long, Long>, List<MessageReaction>>()
         private val edited = mutableSetOf<Pair<Long, Long>>()
         private val posted = mutableMapOf<Long, MutableList<Triple<Long, String, Long?>>>()
         override suspend fun context(roomId: Long) = ConversationContext(RoomInfo(roomId, "room$roomId", "Room $roomId",
             "", "private", 0, 0, 7, "member", false, "none", 100, 0), checkNotNull(session.value.chatPolicy))
         private fun rows(room: Long) = (1L..100L).map {
             val removed = (room to it) in deleted
-            RoomMessage(it, room, 8, "Peer", "text", if (removed) null else "Room $room message $it", removed, timestamp)
+            RoomMessage(it, room, 8, "Peer", "text", if (removed) null else "Room $room message $it", removed, timestamp,
+                reactions = reactionSummaries[room to it].orEmpty())
         } + posted[room].orEmpty().map { (id, body, reply) ->
             val removed = (room to id) in deleted
             RoomMessage(id, room, 7, "Viewer", "text", body.takeUnless { removed }, removed, timestamp,
                 replyTo = reply?.takeUnless { removed }?.let { roomReply(room, it) },
+                reactions = reactionSummaries[room to id].orEmpty(),
                 editedAt = timestamp.takeIf { (room to id) in edited }, authorActions = AuthorMessageActions(!removed, !removed))
         }
         fun changeOwn(original: RoomMessage, body: String?, deleting: Boolean): RoomMessage {
@@ -90,6 +96,30 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
             return SendResult.Message(rows(roomId).first { it.id == id })
         }
         override suspend fun read(roomId: Long, messageId: Long): Long { reads += roomId; return messageId }
+    }
+
+    inner class Reactions : MessageReactionOperations {
+        val writes = java.util.concurrent.CopyOnWriteArrayList<Triple<Long, String, Boolean>>()
+        var failure: ApiFailure? = null
+        var gate: CompletableDeferred<Unit>? = null
+        override suspend fun setRoom(expected: SessionState, original: RoomMessage, emoji: ReactionEmoji,
+            selected: Boolean): List<MessageReaction> {
+            val viewer = checkNotNull(expected.user)
+            writes += Triple(original.id, emoji.value, selected)
+            gate?.await()
+            val key = original.roomId to original.id
+            check(!selected || key !in rooms.deleted)
+            val before = rooms.reactionSummaries[key].orEmpty()
+            val users = before.firstOrNull { it.emoji == emoji.value }?.users.orEmpty().filterNot { it.id == viewer.id } +
+                if (selected) listOf(MessagePerson(viewer.id, viewer.username)) else emptyList()
+            val summary = before.filterNot { it.emoji == emoji.value } +
+                if (users.isEmpty()) emptyList() else listOf(MessageReaction(emoji.value, users, false))
+            rooms.reactionSummaries[key] = summary
+            failure?.let { throw it } // Synthetic committed-but-unconfirmed result, never a production fallback.
+            return summary
+        }
+        override suspend fun setDirect(expected: SessionState, original: DirectMessage, emoji: ReactionEmoji,
+            selected: Boolean): List<MessageReaction> = error("DM reaction controls are a separate slice")
     }
 
     inner class AuthorChanges : MessageMutationOperations {

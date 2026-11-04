@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-[M5c1 reaction protocol](docs/milestones/M5c1-reaction-protocol.md) is delivered; [M5c2a](docs/milestones/M5c2a-room-reaction-state.md) adds serialized room choices and explicit unknown-outcome recovery state. Native reaction controls remain unavailable. Earlier native failures remain recorded under the approved development-only gate policy; device/live/release acceptance stays separate.
+[Native member room reactions](docs/milestones/M5c2b-native-room-reactions.md) add named Add/Remove choices, selected chips, people lists and explicit recovery after unconfirmed changes, using the delivered protocol/room actor. DM reactions and guest/live/device acceptance remain pending. Earlier native failures remain recorded under the approved development-only gate policy; release acceptance stays separate.
 
 [Reply/Copy PR49](https://github.com/Thiesi/ChitChat-Mobile/pull/49) and [input-observation PR54](https://github.com/Thiesi/ChitChat-Mobile/pull/54) are merged. PR54 passed600 fresh local JVM/lint0, CI160 native, both reviews and physical100cycles. Independent main passed160 native/lint0; JVM/R8 were cached. Local156/157 remains under the development-only [#55 exception](https://github.com/Thiesi/ChitChat-Mobile/issues/55), not a fix/release waiver. Preserve issue31 closure.
 

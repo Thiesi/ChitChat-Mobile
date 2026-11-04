@@ -1,6 +1,8 @@
 package io.github.thiesi.chitchat.feature.conversation
 
 import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
+import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
+import io.github.thiesi.chitchat.core.reactions.selectedBy
 
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.combinedClickable
@@ -8,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +34,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -144,6 +148,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         if (interactive() && actions == null && replyOptions == null && model.canUseMessage(displayedSession, roomId, message)) {
             focus.clearFocus(); actions = MessageActionSelection(message.id)
         }
+    }
+    fun openReactions(message: RoomMessage) {
+        if (interactive() && actions == null && replyOptions == null && model.beginReactions(displayedSession, roomId, message))
+            focus.clearFocus()
     }
     val selectedReply = state.composerReply
     val replyIsPing = selectedReply != null && isPrivatePingCommand(state.draft)
@@ -263,6 +271,14 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     Text(stringResource(R.string.author_check_history))
                 }
             }
+            if (state.reactionLimit || model.reactionCapacityFull()) Text(stringResource(R.string.reaction_limit))
+            state.reactionUnknown?.let { pending ->
+                Text(stringResource(R.string.reaction_unconfirmed, pending.messageId.toString()))
+                if (state.reactionDialog == null) TextButton(onClick = { close(); if (interactive()) model.checkReactionHistory(displayedSession, pending) },
+                    enabled = ready && !state.busy && !state.reading, modifier = Modifier.testTag("reaction_check_history")) {
+                    Text(stringResource(R.string.reaction_check_history))
+                }
+            }
             if (draftCount > 0) TextButton(onClick = { close(); model.showDrafts(displayedSession) }) {
                 Text(stringResource(R.string.room_drafts_count, draftCount))
             }
@@ -283,6 +299,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 "latest_reset" -> R.string.conversation_latest_reset
                 "author_edited" -> R.string.author_edited; "author_deleted" -> R.string.author_deleted
                 "author_checked" -> R.string.author_checked
+                "reaction_changed" -> R.string.reaction_changed; "reaction_checked" -> R.string.reaction_checked
                 else -> R.string.conversation_cancelled
             }), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
             if (!state.atLatest || !state.latestWindow) TextButton(onClick = { close(); model.latest() }, enabled = ready && !state.busy) {
@@ -361,7 +378,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                             coordinator.load(displayedSession, MessageTarget.RoomMessage(roomId, id))
                         }
                         Unit
-                    } }, onActions = { openActions(message) })
+                    } }, onActions = { openActions(message) }, viewer = displayedSession.user?.id ?: 0,
+                        onReactions = { openReactions(message) }, canReact = model.canBeginReactions(displayedSession, roomId, message))
                 }
             }
             item(key = "history_end") { Spacer(Modifier.height(1.dp)) }
@@ -420,7 +438,24 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             } }, canEdit = message?.let { model.canBeginAuthor(displayedSession, roomId, it, AuthorChangeKind.EDIT) } == true,
             onDelete = message?.takeIf { it.senderId == displayedSession.user?.id && it.authorActions?.canDelete == true }?.let { original -> {
                 if (actions === request && interactive() && model.beginAuthor(displayedSession, roomId, original, AuthorChangeKind.DELETE)) actions = null
-            } }, canDelete = message?.let { model.canBeginAuthor(displayedSession, roomId, it, AuthorChangeKind.DELETE) } == true)
+            } }, canDelete = message?.let { model.canBeginAuthor(displayedSession, roomId, it, AuthorChangeKind.DELETE) } == true,
+            onReactions = message?.let { original -> {
+                if (actions === request && interactive() && model.beginReactions(displayedSession, roomId, original)) {
+                    actions = null; focus.clearFocus()
+                }
+            } }, canReact = message?.let { model.canBeginReactions(displayedSession, roomId, it) } == true)
+    }
+    state.reactionDialog?.takeIf { paneInteractive() }?.let { dialog ->
+        val request = dialog.request
+        val pending = state.reactionUnknown?.takeIf { it.roomId == roomId && it.messageId == request.original.id }
+        RoomReactionPicker(dialog, model.reactionCurrentRow(request), displayedSession.user?.id ?: 0, state.busy,
+            pending, canCheck = ready && !state.busy && !state.reading, canReview = model.canReviewReactions(request),
+            error = state.error?.let { conversationError(it) },
+            canChoose = { emoji, selected -> model.canSetReaction(request, emoji, selected) },
+            onChoose = { emoji, selected -> if (paneInteractive()) model.setReaction(request, emoji, selected) },
+            onCheck = { if (paneInteractive() && pending != null) model.checkReactionHistory(request.expected, pending) },
+            onReview = { if (paneInteractive()) model.reviewReactions(request) },
+            onDismiss = { if (isCurrentEntry()) model.dismissReactions(request) })
     }
     state.authorDialog?.takeIf { paneInteractive() }?.let { dialog ->
         val request = dialog.request
@@ -507,7 +542,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
 
 @Composable
 private fun MessageContent(message: RoomMessage, context: ConversationContext?, onOpenReply: ((Long) -> Unit)? = null,
-    onActions: (() -> Unit)? = null) {
+    onActions: (() -> Unit)? = null, viewer: Long = 0, onReactions: (() -> Unit)? = null, canReact: Boolean = false) {
     val sender = message.username ?: stringResource(R.string.conversation_unknown_user)
     val actionsLabel = stringResource(R.string.message_actions)
     when {
@@ -533,7 +568,17 @@ private fun MessageContent(message: RoomMessage, context: ConversationContext?, 
             }
         }
     }
-    if (message.reactions.isNotEmpty()) Text(message.reactions.joinToString("  ") { "${it.emoji} ${it.users.size}" })
+    if (message.reactions.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        message.reactions.forEachIndexed { index, group ->
+            val emoji = ReactionEmoji.fromValue(group.emoji)
+            val label = if (emoji != null) reactionLabel(emoji) else group.emoji
+            val description = stringResource(R.string.reaction_chip_description, label, group.users.size)
+            FilterChip(selected = group.selectedBy(viewer), onClick = { onReactions?.invoke() }, enabled = canReact && onReactions != null,
+                label = { Text("${group.emoji} ${group.users.size}") },
+                modifier = Modifier.heightIn(min = 48.dp).testTag("room_reaction:${message.id}:$index")
+                    .semantics { contentDescription = description })
+        }
+    }
 }
 
 @Composable

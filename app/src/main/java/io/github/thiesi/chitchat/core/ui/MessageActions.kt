@@ -26,7 +26,8 @@ internal class MessageActionSelection(val messageId: Long)
 internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Boolean,
     onReply: () -> Unit, onCopy: () -> Unit, onDismiss: () -> Unit,
     onEdit: (() -> Unit)? = null, canEdit: Boolean = false,
-    onDelete: (() -> Unit)? = null, canDelete: Boolean = false) {
+    onDelete: (() -> Unit)? = null, canDelete: Boolean = false,
+    onReactions: (() -> Unit)? = null, canReact: Boolean = false) {
     AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("message_actions"),
         title = { Text(stringResource(R.string.message_actions)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -50,6 +51,12 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
                 TextButton(onClick = action, enabled = available && canDelete,
                     modifier = Modifier.fillMaxWidth().testTag("message_delete_action")) {
                     Text(stringResource(R.string.message_delete_action))
+                }
+            }
+            onReactions?.let { action ->
+                TextButton(onClick = action, enabled = available && canReact,
+                    modifier = Modifier.fillMaxWidth().testTag("message_reactions_action")) {
+                    Text(stringResource(R.string.room_reactions))
                 }
             }
         } },

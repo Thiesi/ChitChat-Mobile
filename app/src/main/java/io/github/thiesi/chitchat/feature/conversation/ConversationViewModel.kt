@@ -468,15 +468,30 @@ class ConversationViewModel internal constructor(private val operations: Convers
         }
     }
 
-    /** Explicit current-state review creates a new request; old callbacks never gain new authority. */
-    internal fun reviewReactions(request: RoomReactionRequest): Boolean {
+    internal fun reactionCapacityFull() = unknownReactions.size >= 100 && mutable.value.roomId !in unknownReactions
+
+    internal fun reactionCurrentRow(request: RoomReactionRequest): RoomMessage? {
+        val value = mutable.value
+        if (value.reactionDialog?.request !== request || !belongsTo(request.expected) || value.roomId != request.original.roomId) return null
+        val policy = session.value.chatPolicy ?: return null
+        return value.messages.firstOrNull { it.roomId == request.original.roomId && it.id == request.original.id &&
+            (it.senderId !in policy.ignoredUserIds || it.id in value.revealed) }
+    }
+
+    internal fun canReviewReactions(request: RoomReactionRequest): Boolean {
         val value = mutable.value
         val dialog = value.reactionDialog ?: return false
-        val row = value.messages.firstOrNull { it.id == request.original.id && it.roomId == request.original.roomId } ?: return false
+        val row = reactionCurrentRow(request) ?: return false
         val fresh = RoomReactionRequest(request.expected, row)
-        if (dialog.request !== request || !dialog.checked || value.busy || readJob?.isActive == true ||
-            unknownReactions[row.roomId] != null || unknownReactions.size >= 100 || !reactionRowCurrent(fresh)) return false
-        mutable.value = value.copy(reactionDialog = RoomReactionDialog(fresh))
+        return dialog.request === request && (dialog.checked || row !== request.original) && !value.busy && readJob?.isActive != true &&
+            unknownReactions[row.roomId] == null && unknownReactions.size < 100 && reactionRowCurrent(fresh)
+    }
+
+    /** Explicit review of a NEW canonical result, never automatic reauthorization of old callbacks. */
+    internal fun reviewReactions(request: RoomReactionRequest): Boolean {
+        if (!canReviewReactions(request)) return false
+        val row = reactionCurrentRow(request) ?: return false
+        mutable.value = mutable.value.copy(reactionDialog = RoomReactionDialog(RoomReactionRequest(request.expected, row)))
         return true
     }
 
