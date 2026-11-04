@@ -19,6 +19,9 @@ import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.mutations.MessageMutationOperations
 import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
 import io.github.thiesi.chitchat.core.mutations.validateEditedBody
+import io.github.thiesi.chitchat.core.reactions.MessageReactionOperations
+import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
+import io.github.thiesi.chitchat.core.reactions.selectedBy
 import io.github.thiesi.chitchat.core.realtime.PresencePhase
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
 import io.github.thiesi.chitchat.core.typing.TypingController
@@ -61,12 +64,15 @@ data class ConversationUiState(
     val composerReply: ComposerReply? = null,
     val authorDialog: RoomAuthorDialog? = null, val authorWriting: Boolean = false,
     val authorUnknown: RoomAuthorUnknown? = null, val authorLimit: Boolean = false,
+    val reactionDialog: RoomReactionDialog? = null, val reactionWriting: Boolean = false,
+    val reactionUnknown: RoomReactionUnknown? = null, val reactionLimit: Boolean = false,
 ) { override fun toString() = "ConversationUiState" }
 
 class ConversationViewModel internal constructor(private val operations: ConversationOperations,
     val realtime: RealtimeController? = null,
     val typing: TypingController? = null,
-    private val mutations: MessageMutationOperations? = null) : ViewModel() {
+    private val mutations: MessageMutationOperations? = null,
+    private val reactions: MessageReactionOperations? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(ConversationUiState())
     val state = mutable.asStateFlow()
@@ -88,9 +94,11 @@ class ConversationViewModel internal constructor(private val operations: Convers
     private var attemptedSync = 0L
     private var appliedSync = 0L
     private var deliberateSelection = false
-    private var authorJob: Job? = null
+    private var mutationJob: Job? = null
     private var authorPosting: RoomAuthorRequest? = null
     private val unknownAuthors = mutableMapOf<Long, RoomAuthorUnknown>()
+    private var reactionPosting: RoomReactionWrite? = null
+    private val unknownReactions = mutableMapOf<Long, RoomReactionUnknown>()
 
     init { viewModelScope.launch { session.collect { current ->
         if (current.identity() != identity) {
@@ -98,6 +106,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
             mutable.value = ConversationUiState()
             savedDrafts.value = emptyMap()
             unknownAuthors.clear()
+            unknownReactions.clear()
         } else {
             val value = mutable.value
             val context = value.context
@@ -117,6 +126,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
         if (roomId <= 0 || owner != session.value.identity()) return
         if (owner != identity) {
             retire(); identity = owner; savedDrafts.value = emptyMap(); unknownAuthors.clear(); mutable.value = ConversationUiState()
+            unknownReactions.clear()
         }
         if (mutable.value.roomId != roomId) {
             val wasForeground = foreground
@@ -125,7 +135,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
             val memo = savedDrafts.value[roomId]?.takeIf { it.matches(expected) }
             mutable.value = ConversationUiState(roomId = roomId, draft = memo?.body.orEmpty(),
                 uncertainSend = memo?.uncertain == true, composerReply = memo?.composerReply,
-                authorUnknown = unknownAuthors[roomId])
+                authorUnknown = unknownAuthors[roomId], reactionUnknown = unknownReactions[roomId])
         }
         if (interacted) deliberateSelection = true
         if (!mutable.value.loaded && !mutable.value.busy) loadEntry()
@@ -158,7 +168,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
     fun updateDraft(expected: SessionState, roomId: Long?, value: String): Boolean {
         if (roomId == null || roomId != mutable.value.roomId || expected.identity() == null ||
             expected.identity() != identity || expected.identity() != session.value.identity() || mutable.value.sending ||
-            mutable.value.authorDialog != null || mutable.value.authorWriting) return false
+            mutable.value.authorDialog != null || mutable.value.authorWriting || mutable.value.reactionDialog != null ||
+            mutable.value.reactionWriting) return false
         if (!canEditDraft() && value.isNotEmpty()) { mutable.value = mutable.value.copy(draftLimit = true); return false }
         mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false)
         rememberDraft(); return true
@@ -167,7 +178,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
         val value = mutable.value
         val context = value.context ?: return false
         return foreground && belongsTo(expected) && ready(session.value) && roomId != null && value.roomId == roomId &&
-            value.pingSelection == null && value.authorDialog == null && !value.authorWriting && message.roomId == roomId && message.id > 0 &&
+            value.pingSelection == null && value.authorDialog == null && !value.authorWriting && value.reactionDialog == null &&
+            !value.reactionWriting && message.roomId == roomId && message.id > 0 &&
             value.messages.any { it === message } && !message.deleted &&
             (message.senderId !in currentPolicy(context).policy.ignoredUserIds || message.id in value.revealed)
     }
@@ -235,7 +247,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     }
 
     fun canBeginAuthor(expected: SessionState, roomId: Long, message: RoomMessage, kind: AuthorChangeKind): Boolean =
-        roomId == mutable.value.roomId && mutable.value.authorDialog == null && !mutable.value.busy &&
+        roomId == mutable.value.roomId && mutable.value.authorDialog == null && mutable.value.reactionDialog == null && !mutable.value.busy &&
             readJob?.isActive != true && unknownAuthors[roomId] == null &&
             (roomId in unknownAuthors || unknownAuthors.size < 100) && authorRowCurrent(RoomAuthorRequest(expected, message, kind))
 
@@ -317,7 +329,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
                 mutable.value = value.copy(authorDialog = RoomAuthorDialog(request, body, invalid)); return
             }
         }
-        authorRequest(request.original.roomId) { current ->
+        mutationRequest(request.original.roomId) { current ->
             // Check the same canonical instance again after waiting for session readiness.
             if (!authorAvailable(request)) throw CancellationException("Author selection changed")
             authorPosting = request
@@ -347,7 +359,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
             unknownAuthors[original.roomId] !== original || mutable.value.busy || readJob?.isActive == true) return
         val editor = mutable.value.authorDialog?.takeIf { it.request.original.roomId == original.roomId &&
             it.request.original.id == original.messageId && it.request.kind == original.kind }
-        authorRequest(original.roomId) { current ->
+        mutationRequest(original.roomId) { current ->
             if (mutable.value.loaded) synchronizeWindow(mutable.value, sequence, current)
             else reload(current) // Does not grant uncertain-send consent.
             current()
@@ -368,13 +380,113 @@ class ConversationViewModel internal constructor(private val operations: Convers
         if (mutable.value.roomId == unknown.roomId) mutable.value = mutable.value.copy(authorUnknown = unknown)
     }
 
-    private fun authorRequest(roomId: Long, action: suspend (() -> Unit) -> Unit) {
+    private fun reactionRowCurrent(request: RoomReactionRequest): Boolean {
+        val value = mutable.value
+        val context = value.context ?: return false
+        val user = session.value.user ?: return false
+        val row = request.original
+        val policy = session.value.chatPolicy ?: return false
+        return reactions != null && foreground && belongsTo(request.expected) && ready(session.value) &&
+            session.value.phase == SessionPhase.AUTHENTICATED && !user.guest && value.loaded && !value.stale &&
+            value.roomId == row.roomId && value.pingSelection == null && context.room.isMember && row.id > 0 &&
+            value.messages.any { it === row } && (row.senderId !in policy.ignoredUserIds || row.id in value.revealed)
+    }
+
+    internal fun canBeginReactions(expected: SessionState, roomId: Long, row: RoomMessage): Boolean =
+        roomId == mutable.value.roomId && mutable.value.authorDialog == null && mutable.value.reactionDialog == null &&
+            !mutable.value.busy && readJob?.isActive != true && unknownReactions[roomId] == null &&
+            unknownReactions.size < 100 && reactionRowCurrent(RoomReactionRequest(expected, row))
+
+    internal fun beginReactions(expected: SessionState, roomId: Long, row: RoomMessage): Boolean {
+        if (!canBeginReactions(expected, roomId, row)) {
+            if (belongsTo(expected) && roomId == mutable.value.roomId && unknownReactions.size >= 100)
+                mutable.value = mutable.value.copy(reactionLimit = true)
+            return false
+        }
+        visibleNewest = null
+        mutable.value = mutable.value.copy(reactionDialog = RoomReactionDialog(RoomReactionRequest(expected, row)),
+            atLatest = false, reactionLimit = false)
+        return true
+    }
+
+    private fun reactionChoiceCurrent(request: RoomReactionRequest, emoji: ReactionEmoji, selected: Boolean): Boolean {
+        val value = mutable.value
+        val dialog = value.reactionDialog ?: return false
+        val viewer = session.value.user?.id ?: return false
+        return dialog.request === request && !dialog.checked &&
+            value.authorDialog == null && unknownReactions[request.original.roomId] == null && reactionRowCurrent(request) &&
+            (request.original.reactions.firstOrNull { it.emoji == emoji.value }?.selectedBy(viewer) == true) != selected &&
+            (!selected || (!request.original.deleted && value.context?.let { currentPolicy(it).mute } == null))
+    }
+
+    internal fun canSetReaction(request: RoomReactionRequest, emoji: ReactionEmoji, selected: Boolean) =
+        !mutable.value.busy && readJob?.isActive != true && reactionChoiceCurrent(request, emoji, selected)
+
+    internal fun setReaction(request: RoomReactionRequest, emoji: ReactionEmoji, selected: Boolean) {
+        if (!canSetReaction(request, emoji, selected)) return
+        mutationRequest(request.original.roomId) { current ->
+            if (!reactionChoiceCurrent(request, emoji, selected)) throw CancellationException("Reaction selection changed")
+            reactionPosting = RoomReactionWrite(request, emoji, selected)
+            mutable.value = mutable.value.copy(reactionWriting = true)
+            val result = checkNotNull(reactions).setRoom(request.expected, request.original, emoji, selected)
+            current()
+            // Confirm before any fallible canonical GET. An event may have invalidated this summary already.
+            reactionPosting = null
+            mutable.value = mutable.value.copy(messages = applyRoomReactionResult(mutable.value.messages, request.original, result),
+                reactionDialog = null, reactionWriting = false, stale = true, notice = "reaction_changed")
+            val revision = requestedSync
+            synchronizeWindow(mutable.value, sequence, current)
+            appliedSync = maxOf(appliedSync, revision); attemptedSync = maxOf(attemptedSync, revision)
+        }
+    }
+
+    internal fun dismissReactions(request: RoomReactionRequest) {
+        if (mutable.value.reactionDialog?.request === request && belongsTo(request.expected) && !mutable.value.busy)
+            mutable.value = mutable.value.copy(reactionDialog = null, atLatest = false)
+    }
+
+    private fun rememberUnknownReaction(write: RoomReactionWrite) {
+        val unknown = RoomReactionUnknown(write.request.original.roomId, write.request.original.id, write.emoji.value, write.selected)
+        unknownReactions[unknown.roomId] = unknown // One reserved slot per room, no eviction or replay.
+        if (mutable.value.roomId == unknown.roomId) mutable.value = mutable.value.copy(reactionUnknown = unknown)
+    }
+
+    internal fun checkReactionHistory(expected: SessionState, original: RoomReactionUnknown) {
+        if (!foreground || !belongsTo(expected) || mutable.value.roomId != original.roomId ||
+            unknownReactions[original.roomId] !== original || mutable.value.busy || readJob?.isActive == true ||
+            mutable.value.authorDialog != null) return
+        val dialog = mutable.value.reactionDialog
+        mutationRequest(original.roomId) { current ->
+            if (mutable.value.loaded) synchronizeWindow(mutable.value, sequence, current) else reload(current)
+            current()
+            if (unknownReactions[original.roomId] === original) {
+                unknownReactions.remove(original.roomId)
+                mutable.value = mutable.value.copy(reactionUnknown = null, reactionLimit = false, notice = "reaction_checked",
+                    reactionDialog = if (dialog != null && mutable.value.reactionDialog?.request === dialog.request)
+                        RoomReactionDialog(dialog.request, checked = true) else mutable.value.reactionDialog)
+            }
+        }
+    }
+
+    /** Explicit current-state review creates a new request; old callbacks never gain new authority. */
+    internal fun reviewReactions(request: RoomReactionRequest): Boolean {
+        val value = mutable.value
+        val dialog = value.reactionDialog ?: return false
+        val row = value.messages.firstOrNull { it.id == request.original.id && it.roomId == request.original.roomId } ?: return false
+        val fresh = RoomReactionRequest(request.expected, row)
+        if (dialog.request !== request || !dialog.checked || value.busy || readJob?.isActive == true ||
+            unknownReactions[row.roomId] != null || unknownReactions.size >= 100 || !reactionRowCurrent(fresh)) return false
+        mutable.value = value.copy(reactionDialog = RoomReactionDialog(fresh))
+        return true
+    }
+
+    private fun mutationRequest(roomId: Long, action: suspend (() -> Unit) -> Unit) {
         val expected = session.value.identity() ?: return
         if (mutable.value.busy || expected != identity) return
         stopSync()
         val attempt = ++sequence
         mutable.value = mutable.value.copy(busy = true, error = null)
-        authorJob = viewModelScope.launch {
+        mutationJob = viewModelScope.launch {
             try {
                 withTimeout(60_000) {
                     val currentSession = withTimeoutOrNull(30_000) { session.first { !it.busy || it.identity() != expected } }
@@ -388,7 +500,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: ApiFailure) {
                 if (isCurrent(expected, attempt, roomId)) {
-                    // Any exception after starting an author operation can follow its committed write.
+                    // Any exception after starting a mutation can follow its committed write.
                     if (failure.status in setOf(403, 404) && failure.code in setOf("room_forbidden", "room_not_found"))
                         clearUnauthorized(failure)
                     else mutable.value = mutable.value.copy(error = failure, stale = true)
@@ -396,10 +508,11 @@ class ConversationViewModel internal constructor(private val operations: Convers
             } finally {
                 if (isCurrent(expected, attempt, roomId)) {
                     authorPosting?.let(::rememberUnknownAuthor)
-                    authorPosting = null; authorJob = null
+                    reactionPosting?.let(::rememberUnknownReaction)
+                    authorPosting = null; reactionPosting = null; mutationJob = null
                     // On failure retain the foreground proposal until explicit close/background.
                     // Success already retired it before its fallible canonical GET.
-                    mutable.value = mutable.value.copy(busy = false, authorWriting = false)
+                    mutable.value = mutable.value.copy(busy = false, authorWriting = false, reactionWriting = false)
                     drainSync()
                 }
             }
@@ -416,7 +529,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     /** Reply navigation adopts in place. Notification entry preparation below needs no temporary latest window. */
     fun canAdoptTarget(snapshot: TargetSnapshot.RoomMessage): Boolean = foreground && ready(session.value) &&
         snapshot.matches(session.value) && snapshot.available && snapshot.context.room.id == mutable.value.roomId &&
-        !mutable.value.busy && mutable.value.authorDialog == null && !postInFlight && readJob?.isActive != true
+        !mutable.value.busy && mutable.value.authorDialog == null && mutable.value.reactionDialog == null && !postInFlight && readJob?.isActive != true
 
     fun belongsTo(expected: SessionState) = expected.identity() != null && expected.identity() == identity &&
         identity == session.value.identity()
@@ -436,8 +549,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
 
     /** Root must bind this to the actual original navigation entry and consume/navigate synchronously. */
     fun canPrepareTarget(snapshot: TargetSnapshot.RoomMessage): Boolean = ready(session.value) &&
-        snapshot.matches(session.value) && snapshot.available && !postInFlight && authorPosting == null &&
-        mutable.value.authorDialog == null && readJob?.isActive != true
+        snapshot.matches(session.value) && snapshot.available && !postInFlight && authorPosting == null && reactionPosting == null &&
+        mutable.value.authorDialog == null && mutable.value.reactionDialog == null && readJob?.isActive != true
 
     fun prepareTarget(snapshot: TargetSnapshot.RoomMessage): Boolean {
         val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.RoomMessage ?: return false
@@ -447,8 +560,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
     }
 
     fun canPrepareTarget(snapshot: TargetSnapshot.RoomPing): Boolean = ready(session.value) &&
-        snapshot.matches(session.value) && snapshot.available && !postInFlight && authorPosting == null &&
-        mutable.value.authorDialog == null && readJob?.isActive != true
+        snapshot.matches(session.value) && snapshot.available && !postInFlight && authorPosting == null && reactionPosting == null &&
+        mutable.value.authorDialog == null && mutable.value.reactionDialog == null && readJob?.isActive != true
 
     fun prepareTarget(snapshot: TargetSnapshot.RoomPing): Boolean {
         val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.RoomPing ?: return false
@@ -474,7 +587,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
             val memo = savedDrafts.value[roomId]?.takeIf { it.matches(expected) }
             mutable.value = ConversationUiState(roomId = roomId, draft = memo?.body.orEmpty(),
                 uncertainSend = memo?.uncertain == true, composerReply = memo?.composerReply,
-                authorUnknown = unknownAuthors[roomId])
+                authorUnknown = unknownAuthors[roomId], reactionUnknown = unknownReactions[roomId])
         }
         deliberateSelection = true
     }
@@ -600,7 +713,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
         val value = mutable.value
         val current = session.value
         val context = value.context ?: return false
-        return ready(current) && value.pingSelection == null && value.authorDialog == null && !value.authorWriting && canEditDraft() && !value.stale && !value.uncertainSend && activePresence() && context.room.isMember &&
+        return ready(current) && value.pingSelection == null && value.authorDialog == null && !value.authorWriting &&
+            value.reactionDialog == null && !value.reactionWriting && canEditDraft() && !value.stale && !value.uncertainSend && activePresence() && context.room.isMember &&
             (!current.user!!.guest || context.room.guestAccess == "write") && context.mute == null
     }
 
@@ -609,7 +723,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
         viewport = anchor
         visibleNewest = newestVisibleId
         val value = mutable.value
-        val edge = atEdge && value.latestWindow && value.pingSelection == null && value.authorDialog == null
+        val edge = atEdge && value.latestWindow && value.pingSelection == null && value.authorDialog == null && value.reactionDialog == null
         if (edge != value.atLatest) mutable.value = value.copy(atLatest = edge)
         val newest = value.messages.lastOrNull()?.id ?: return
         if (!foreground || !edge || newestVisibleId != newest || value.busy || value.stale || !activePresence() || readJob?.isActive == true ||
@@ -838,11 +952,13 @@ class ConversationViewModel internal constructor(private val operations: Convers
 
     private fun retire() {
         authorPosting?.let(::rememberUnknownAuthor)
-        authorPosting = null; authorJob?.cancel(); authorJob = null
+        reactionPosting?.let(::rememberUnknownReaction)
+        authorPosting = null; reactionPosting = null; mutationJob?.cancel(); mutationJob = null
         sequence++; readSequence++; job?.cancel(); readJob?.cancel(); readJob = null; syncJob?.cancel(); syncJob = null
         postInFlight = false; viewport = null; visibleNewest = null; attemptedRead = 0
         requestedSync = 0; attemptedSync = 0; appliedSync = 0; deliberateSelection = false
-        mutable.value = mutable.value.copy(syncing = false, reading = false, authorDialog = null, authorWriting = false)
+        mutable.value = mutable.value.copy(syncing = false, reading = false, authorDialog = null, authorWriting = false,
+            reactionDialog = null, reactionWriting = false)
     }
     private fun isReadCurrent(expected: Identity, attempt: Long, roomId: Long) = readSequence == attempt &&
         session.value.identity() == expected && mutable.value.roomId == roomId
@@ -860,8 +976,9 @@ class ConversationViewModel internal constructor(private val operations: Convers
         FailureKind.REDIRECT, FailureKind.INCOMPATIBLE, FailureKind.TOO_LARGE) || (status ?: 0) >= 500
     companion object {
         internal fun factory(operations: ConversationOperations, realtime: RealtimeController? = null,
-            typing: TypingController? = null, mutations: MessageMutationOperations? = null): ViewModelProvider.Factory = viewModelFactory {
-            initializer { ConversationViewModel(operations, realtime, typing, mutations) }
+            typing: TypingController? = null, mutations: MessageMutationOperations? = null,
+            reactions: MessageReactionOperations? = null): ViewModelProvider.Factory = viewModelFactory {
+            initializer { ConversationViewModel(operations, realtime, typing, mutations, reactions) }
         }
     }
 }

@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-[M5c1 reaction protocol](docs/milestones/M5c1-reaction-protocol.md) is the next independently verified prerequisite: existing room/DM add/remove contracts and scoped session handling. Native reaction controls remain unavailable. Earlier native failures and the separate diagnostic PRs retain their own gates; this work does not waive them.
+[M5c1 reaction protocol](docs/milestones/M5c1-reaction-protocol.md) is delivered; [M5c2a](docs/milestones/M5c2a-room-reaction-state.md) adds serialized room choices and explicit unknown-outcome recovery state. Native reaction controls remain unavailable. Earlier native failures remain recorded under the approved development-only gate policy; device/live/release acceptance stays separate.
 
 [Reply/Copy PR49](https://github.com/Thiesi/ChitChat-Mobile/pull/49) and [input-observation PR54](https://github.com/Thiesi/ChitChat-Mobile/pull/54) are merged. PR54 passed600 fresh local JVM/lint0, CI160 native, both reviews and physical100cycles. Independent main passed160 native/lint0; JVM/R8 were cached. Local156/157 remains under the development-only [#55 exception](https://github.com/Thiesi/ChitChat-Mobile/issues/55), not a fix/release waiver. Preserve issue31 closure.
 

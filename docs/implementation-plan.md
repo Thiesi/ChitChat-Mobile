@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5c2a](milestones/M5c2a-room-reaction-state.md) adds serialized room reaction state on merged PR64: original-scope/row choices, complete confirmed summaries and bounded unknown outcomes with explicit GET/Review. Native room controls, DM reaction state/controls, guests and live acceptance remain pending. Follow the dated development gate policy below; preserved Windows negatives are not relabeled as passing.
+
 [Issue65](milestones/compose-focus-diagnostic.md) tracks a bounded standalone Compose input comparison and failure-time OS focus categories whose bounded comparison is complete. Its explicit opt-in APK is separate from the ordinary app suite and supplies neither a production fix nor native/release acceptance. Preserve both PR59/64 negatives; the finite comparison did not reproduce the cause. The maintainer approved the [development-gate policy](build-test-release.md#development-merge-gates) after merging PR66.
 
 [M5c1](milestones/M5c1-reaction-protocol.md) prepares the existing room/DM reaction protocol on delivered PR59, independently of the unmerged IME diagnostic PRs. Native controls/state follow only after their prerequisite's delivery. Historical Windows negatives remain failed under that approved development-only policy. Keep every CI test enabled and complete the normal build/review cycle.
