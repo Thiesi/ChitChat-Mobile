@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [Issue65 Compose focus diagnostic](docs/milestones/compose-focus-diagnostic.md) is an opt-in standalone test APK, never part of the app's acceptance suite. Preserve its fixed two-condition ledger, one physical tap, strict5000ms focus/display/IME proof and before-cleanup failure-only scalar capture. No failed-suite replay, tracing, focus/IME repair, readiness polling or retrospective causal/acceptance claim. Missing/multiple/truncated focus metadata stays unknown. Existing PR59/64 negatives remain gating.
+
 - [M5b3 DM author controls](docs/milestones/M5b3-direct-author-controls.md) extend the existing serialized DM actor with distinct AUTHOR markers, not room's separate jobs. Keep blocked/muted author deletion, ACK-before-GET quote redaction and ID-only uncertainty separate from SEND/READ/BLOCK consent. Original owner/peer/entry/canonical callbacks and explicit GET -> Review -> Save remain mandatory.
 
 - The [shared author dialog](docs/milestones/shared-author-dialog.md) is presentation/test-observation reuse only; canonical authorization, original requests and jobs remain feature-owned. Do not treat it as native DM editing or a keyboard fix.
