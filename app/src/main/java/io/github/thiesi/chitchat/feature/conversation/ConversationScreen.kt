@@ -135,11 +135,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     var focusReply by remember { mutableStateOf<ComposerReply?>(null) }
     val composerFocus = remember { FocusRequester() }
     val androidContext = LocalContext.current
-    val composerDialog = actions != null || replyOptions != null || state.authorDialog != null
+    val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null
     fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !obscured &&
         !pingsOpen && model.state.value.pingSelection == null && !detailsOpen &&
         ignores?.state?.value?.target == null && !model.state.value.draftsOpen
-    fun interactive() = paneInteractive() && model.state.value.authorDialog == null
+    fun interactive() = paneInteractive() && model.state.value.authorDialog == null && model.state.value.reactionDialog == null
     fun openActions(message: RoomMessage) {
         if (interactive() && actions == null && replyOptions == null && model.canUseMessage(displayedSession, roomId, message)) {
             focus.clearFocus(); actions = MessageActionSelection(message.id)
