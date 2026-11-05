@@ -1,8 +1,10 @@
 # Independently verifiable implementation milestones
 
+[M5c3a](milestones/M5c3a-direct-reaction-state.md) adds serialized DM reaction state with original row/session/peer choices, complete confirmed summaries and bounded uncertainty recovered only through explicit GET/Review. Native DM controls, guests and live acceptance remain pending. The new post-merge main author-recovery failure is retained under [issue70](https://github.com/Thiesi/ChitChat-Mobile/issues/70) and must be resolved or receive a specific maintainer gate decision before another merge.
+
 [M5c2b](milestones/M5c2b-native-room-reactions.md) adds native room reaction actions/chips, named fixed choices, reactor lists and explicit uncertainty recovery on PR67's actor. DM reactions, guests and live/device/release acceptance remain pending. Keep the full old native suite enabled alongside the new native journeys and complete the standing current-head build/CI/review loop before delivery.
 
-[M5c2a](milestones/M5c2a-room-reaction-state.md), delivered in PR67 on merged PR64, supplies original-scope/row choices, complete confirmed summaries and bounded unknown outcomes with explicit GET/Review. M5c2b consumes that room actor; DM reaction state/controls, guests and live acceptance remain pending. Follow the dated development gate policy below; preserved Windows negatives are not relabeled as passing.
+[M5c2a](milestones/M5c2a-room-reaction-state.md), delivered in PR67 on merged PR64, supplies original-scope/row choices, complete confirmed summaries and bounded unknown outcomes with explicit GET/Review. M5c2b consumes that room actor; M5c3a supplies DM state only. Native DM controls, guests and live acceptance remain pending. Follow the dated development gate policy below; preserved Windows negatives are not relabeled as passing.
 
 [Issue65](milestones/compose-focus-diagnostic.md) tracks a bounded standalone Compose input comparison and failure-time OS focus categories whose bounded comparison is complete. Its explicit opt-in APK is separate from the ordinary app suite and supplies neither a production fix nor native/release acceptance. Preserve both PR59/64 negatives; the finite comparison did not reproduce the cause. The maintainer approved the [development-gate policy](build-test-release.md#development-merge-gates) after merging PR66.
 

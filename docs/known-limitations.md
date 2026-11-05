@@ -1,6 +1,8 @@
 # Current status and limitations
 
-[Native room reactions](milestones/M5c2b-native-room-reactions.md) add member choices/chips/reactor lists and explicit unknown-outcome recovery. DM reaction state/controls, guest behavior and live/device acceptance remain pending. Deleted messages can retain reaction counts/names; withdrawing an own reaction does not purge server history. Historical native negatives remain failed under the [dated development-only gate policy](build-test-release.md#development-merge-gates); no keyboard correction or release waiver is implied.
+[M5c3a DM reactions](milestones/M5c3a-direct-reaction-state.md) supplies serialized state only; native DM choices/chips/reactor lists and recovery controls remain unavailable. Reaction GET/Review preserves separate send/read/block/author uncertainty. The post-merge main author-recovery assertion in [issue70](https://github.com/Thiesi/ChitChat-Mobile/issues/70) holds further merges; the new state slice does not resolve it.
+
+[Native room reactions](milestones/M5c2b-native-room-reactions.md) add member choices/chips/reactor lists and explicit unknown-outcome recovery. Native DM controls, guest behavior and live/device acceptance remain pending. Deleted messages can retain reaction counts/names; withdrawing an own reaction does not purge server history. Historical native negatives remain failed under the [dated development-only gate policy](build-test-release.md#development-merge-gates); no keyboard correction or release waiver is implied.
 
 [M5b3 DM author controls](milestones/M5b3-direct-author-controls.md) have their own recorded verification gates, not supplied by PR58's shared-editor refactor. Proposals/unknown IDs are generation-scoped memory only; process death clears them and no POST is replayed. Off-window absence is not deletion proof. Live mutations/guest parity remain separate.
 

@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [M5c3a DM reaction state](docs/milestones/M5c3a-direct-reaction-state.md) uses a distinct REACTION marker in the existing serialized DM actor. Keep readable-history reactions separate from send/block/author permissions and room ignores. Original owner/peer/canonical callbacks, bounded ID-only uncertainty and explicit GET -> NEW Review -> fresh desired choice are mandatory. Reaction GETs preserve SEND/READ/BLOCK/AUTHOR uncertainty; native DM controls remain separate.
+
 - [M5c2b native room reactions](docs/milestones/M5c2b-native-room-reactions.md) consumes the room actor through original entry/session/request/canonical callbacks. Chips open explicit Add/Remove choices, never a toggle POST. Keep bounded unknown GET -> Review -> fresh choice, own tombstone removal without new adds, viewer-ID selection, people-list privacy and modal read/typing suppression. Preserve48dp targets, unchanged native tap/IME/deadline contracts and configuration-retained work. DM/guest/live/device/release acceptance stays separate.
 
 - [M5c2a room reaction state](docs/milestones/M5c2a-room-reaction-state.md) shares room mutation serialization, retains bounded ID/emoji/desired-choice uncertainty and requires explicit GET -> Review -> fresh choice. Never replay a POST or grant SEND/READ/author consent. Only the original canonical row can receive a confirmed summary; ACK precedes fallible refresh. Native controls/DM/guests/live acceptance remain separate.

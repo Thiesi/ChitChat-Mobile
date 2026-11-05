@@ -182,10 +182,10 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             var focusReply by remember { mutableStateOf<ComposerReply?>(null) }
             val composerFocus = remember { FocusRequester() }
             val androidContext = LocalContext.current
-            val composerDialog = actions != null || replyOptions != null || state.authorDialog != null
+            val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null
             fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
                 !obscured && !blockConfirm && !detailsOpen
-            fun interactive() = paneInteractive() && model.state.value.authorDialog == null
+            fun interactive() = paneInteractive() && model.state.value.authorDialog == null && model.state.value.reactionDialog == null
             val checkAuthorHistory: (DirectAuthorUnknown) -> Unit = { original ->
                 if (interactive()) model.checkAuthorHistory(displayedSession, original)
             }
@@ -209,12 +209,13 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     focus.clearFocus(); replyOptions = choice
                 }
             }
-            LaunchedEffect(state.composerReply, obscured, lifecycleState, state.authorDialog, state.busy) {
+            LaunchedEffect(state.composerReply, obscured, lifecycleState, state.authorDialog, state.reactionDialog, state.busy) {
                 if (replyOptions != null && replyOptions !== state.composerReply) replyOptions = null
                 if (obscured || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
                     actions = null; replyOptions = null; focusReply = null; detailsOpen = false; blockConfirm = false
                     // Navigation/background retires a private proposal, never an active POST.
                     model.state.value.authorDialog?.let { if (!model.state.value.busy) model.dismissAuthor(it.request) }
+                    model.state.value.reactionDialog?.let { if (!model.state.value.busy) model.dismissReactions(it.request) }
                 }
             }
             LaunchedEffect(focusReply, window.isWindowFocused, lifecycleState, obscured) {
