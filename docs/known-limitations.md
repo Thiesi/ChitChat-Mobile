@@ -1,6 +1,6 @@
 # Current status and limitations
 
-[M5c1's reaction protocol](milestones/M5c1-reaction-protocol.md) and [M5c2a room state](milestones/M5c2a-room-reaction-state.md) supply explicit scoped requests, viewer-correct summaries and serialized room uncertainty/review state. Native picker/chips/recovery controls, DM reaction state, guest behavior and live acceptance remain pending. Historical native negatives remain failed under the [dated development-only gate policy](build-test-release.md#development-merge-gates); no keyboard correction or release waiver is implied.
+[Native room reactions](milestones/M5c2b-native-room-reactions.md) add member choices/chips/reactor lists and explicit unknown-outcome recovery. DM reaction state/controls, guest behavior and live/device acceptance remain pending. Deleted messages can retain reaction counts/names; withdrawing an own reaction does not purge server history. Historical native negatives remain failed under the [dated development-only gate policy](build-test-release.md#development-merge-gates); no keyboard correction or release waiver is implied.
 
 [M5b3 DM author controls](milestones/M5b3-direct-author-controls.md) have their own recorded verification gates, not supplied by PR58's shared-editor refactor. Proposals/unknown IDs are generation-scoped memory only; process death clears them and no POST is replayed. Off-window absence is not deletion proof. Live mutations/guest parity remain separate.
 

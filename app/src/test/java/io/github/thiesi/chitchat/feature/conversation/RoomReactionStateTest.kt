@@ -162,7 +162,21 @@ class RoomReactionStateTest {
     @Test fun passiveCanonicalReplacementNeverReauthorizesOldReactionCallback() = runTest(dispatcher) {
         open(); val old = begin(); fake.rows[42] = listOf(message(body = "Remote replacement")); model.refresh(); runCurrent()
         model.setReaction(old, ReactionEmoji.HEART, true); runCurrent(); assertEquals(0, fake.writes)
-        model.dismissReactions(old); assertTrue(model.beginReactions(fake.session.value, 42, row()))
+        assertTrue(model.canReviewReactions(old)); assertTrue(model.reviewReactions(old))
+        val fresh = checkNotNull(model.state.value.reactionDialog).request
+        model.setReaction(old, ReactionEmoji.HEART, true); model.dismissReactions(old)
+        assertSame(fresh, model.state.value.reactionDialog?.request); assertEquals(0, fake.writes)
+        model.setReaction(fresh, ReactionEmoji.HEART, true); runCurrent(); assertEquals(1, fake.writes)
+    }
+
+    @Test fun anOpenPickerStopsExposingRowsWhenPolicyBecomesUnknownOrIgnored() = runTest(dispatcher) {
+        open(); val request = begin(); assertSame(row(), model.reactionCurrentRow(request))
+        fake.session.value = fake.session.value.copy(chatPolicy = policy(ignored = setOf(8))); runCurrent()
+        assertNull(model.reactionCurrentRow(request)); assertFalse(model.canReviewReactions(request))
+        assertFalse(model.canSetReaction(request, ReactionEmoji.HEART, true))
+        model.reveal(10); assertSame(row(), model.reactionCurrentRow(request))
+        fake.session.value = fake.session.value.copy(chatPolicy = null); runCurrent()
+        assertNull(model.reactionCurrentRow(request)); assertEquals(0, fake.writes)
     }
 
     @Test fun closingUnknownSelectionKeepsRecoveryAndCannotCloseSuccessor() = runTest(dispatcher) {
