@@ -48,9 +48,9 @@ def filtered_trace(raw: str) -> str:
     return "\n".join(records) + ("\n" if records else "")
 
 
-def main() -> int:
+def run_once(command: list[str], report: Path) -> int:
     try:
-        result = subprocess.run(GRADLE, cwd=ROOT, check=False)
+        result = subprocess.run(command, cwd=ROOT, check=False)
         status = result.returncode
     except OSError:
         print("Native gate could not start.", file=sys.stderr)
@@ -62,13 +62,17 @@ def main() -> int:
                                  encoding="utf-8", errors="replace", timeout=15, check=False)
         if capture.returncode != 0:
             raise OSError("diagnostic capture unavailable")
-        REPORT.parent.mkdir(parents=True, exist_ok=True)
-        REPORT.write_text(filtered_trace(capture.stdout), encoding="utf-8")
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(filtered_trace(capture.stdout), encoding="utf-8")
         print("Filtered IME lifecycle metadata saved with native test reports.")
     except (OSError, subprocess.TimeoutExpired):
         print("IME diagnostics unavailable; original native gate failure preserved.", file=sys.stderr)
     # Match shell convention for a child terminated by a signal. Never turn a failure green.
     return 128 - status if status < 0 else status
+
+
+def main() -> int:
+    return run_once(GRADLE, REPORT)
 
 
 if __name__ == "__main__":

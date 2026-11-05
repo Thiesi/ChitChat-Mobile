@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[Opt-in Linux native input observation](milestones/linux-native-input-observation.md) prepares a single bounded traced control for the recurring issue69 failure. Ordinary CI remains unfiltered/untraced; the separate manual diagnostic adds no parity or gate waiver. PR71 stays held by its native failure, and issue70 remains independent.
+
 [Failure-only DM author recovery observations](milestones/direct-author-recovery-observations.md) narrow the new [issue70](https://github.com/Thiesi/ChitChat-Mobile/issues/70) main assertion failure. They add no product parity or production fix. PR71's DM reaction state remains a separate slice; neither its results nor a diagnostic pass explain or waive this failed main gate.
 
 [M5c2b](milestones/M5c2b-native-room-reactions.md) adds native room reaction actions/chips, named fixed choices, reactor lists and explicit uncertainty recovery on PR67's actor. DM reactions, guests and live/device/release acceptance remain pending. Keep the full old native suite enabled alongside the new native journeys and complete the standing current-head build/CI/review loop before delivery.
