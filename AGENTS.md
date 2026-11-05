@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [DM author recovery observations](docs/milestones/direct-author-recovery-observations.md) wrap only issue70's existing failed terminal assertion. Success keeps the same semantics query; failure retains the cause and emits bounded post-assertion VM scalars with separate timestamps. No text/raw errors, tap delivery/deadline inference, additional wait, callback instrumentation, focus/IME action or retry. A later pass cannot resolve the original failure.
+
 - [M5c2b native room reactions](docs/milestones/M5c2b-native-room-reactions.md) consumes the room actor through original entry/session/request/canonical callbacks. Chips open explicit Add/Remove choices, never a toggle POST. Keep bounded unknown GET -> Review -> fresh choice, own tombstone removal without new adds, viewer-ID selection, people-list privacy and modal read/typing suppression. Preserve48dp targets, unchanged native tap/IME/deadline contracts and configuration-retained work. DM/guest/live/device/release acceptance stays separate.
 
 - [M5c2a room reaction state](docs/milestones/M5c2a-room-reaction-state.md) shares room mutation serialization, retains bounded ID/emoji/desired-choice uncertainty and requires explicit GET -> Review -> fresh choice. Never replay a POST or grant SEND/READ/author consent. Only the original canonical row can receive a confirmed summary; ACK precedes fallible refresh. Native controls/DM/guests/live acceptance remain separate.

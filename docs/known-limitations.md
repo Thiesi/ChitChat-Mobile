@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[Issue70](https://github.com/Thiesi/ChitChat-Mobile/issues/70) retains the new main DM author-recovery failure (177/178). [Failure-only observations](milestones/direct-author-recovery-observations.md) can narrow a future failure using bounded VM scalars; they do not explain or fix it. PR71's separate DM reaction state remains held pending diagnosis or a specific maintainer gate decision.
+
 [Native room reactions](milestones/M5c2b-native-room-reactions.md) add member choices/chips/reactor lists and explicit unknown-outcome recovery. DM reaction state/controls, guest behavior and live/device acceptance remain pending. Deleted messages can retain reaction counts/names; withdrawing an own reaction does not purge server history. Historical native negatives remain failed under the [dated development-only gate policy](build-test-release.md#development-merge-gates); no keyboard correction or release waiver is implied.
 
 [M5b3 DM author controls](milestones/M5b3-direct-author-controls.md) have their own recorded verification gates, not supplied by PR58's shared-editor refactor. Proposals/unknown IDs are generation-scoped memory only; process death clears them and no POST is replayed. Off-window absence is not deletion proof. Live mutations/guest parity remain separate.
