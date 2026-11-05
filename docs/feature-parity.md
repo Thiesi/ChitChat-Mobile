@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[DM author recovery observations](milestones/direct-author-recovery-observations.md) add failure-only test metadata for issue70, with no product parity, keyboard correction or resolution claim. DM reaction state remains separate in PR71; native DM controls are still pending.
+
 [Issue65's standalone Compose focus diagnostic](milestones/compose-focus-diagnostic.md) investigates the Windows/Linux native mismatch. It adds no product parity or keyboard correction and does not waive the retained PR59/64 native failures. The ordinary app suite remains unfiltered; diagnostic results are separate.
 
 Current: PR49/54 merged, issue31 closed. [M5b2](milestones/M5b2-room-author-controls.md) has native author/layout/CI passes; Full159/163 retained as failed under maintainer-approved [#56](https://github.com/Thiesi/ChitChat-Mobile/issues/56) extension for three exact IME failures. Other/new failures/current-head CI/reviews still gate delivery; no fix/release waiver. DM/live pending; older checkpoints historical.
