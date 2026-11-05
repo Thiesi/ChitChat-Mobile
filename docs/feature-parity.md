@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[Linux input observation](milestones/linux-native-input-observation.md) is a separate opt-in traced diagnostic, not user parity, a keyboard correction or a substitute for complete untraced native CI.
+
 [DM author recovery observations](milestones/direct-author-recovery-observations.md) add failure-only test metadata for issue70, with no product parity, keyboard correction or resolution claim. DM reaction state remains separate in PR71; native DM controls are still pending.
 
 [Issue65's standalone Compose focus diagnostic](milestones/compose-focus-diagnostic.md) investigates the Windows/Linux native mismatch. It adds no product parity or keyboard correction and does not waive the retained PR59/64 native failures. The ordinary app suite remains unfiltered; diagnostic results are separate.
