@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5e2](milestones/M5e2-message-search-state.md) prepares explicit-only scoped query/page/selection state on delivered PR77. Complete its own full gates/reviews/delivery, then consume it in native search screens with privacy disclosures and fresh exact-target/root navigation guards. State availability is not usable native search or live acceptance.
+
 [M5e1](milestones/M5e1-message-search-protocol.md) supplies the existing participant message-search protocol through the original session transport, without native controls or result adoption. After its own complete gates/reviews/delivery, continue with scoped in-memory query/page state and guarded native search/result routing as separate reviewable slices. Never apply PR76's one-head exception to a future head.
 
 [M5d3](milestones/M5d3-native-mention-highlighting.md) consumes existing server-authorized mention snapshots in native room/DM Text runs on delivered M5d2/PR75. It adds no resolution, notification, read or send action. Complete its own build/CI/current-head review cycle, then continue remaining completion/profile/media/search slices; manual/live/release acceptance stays separate.
