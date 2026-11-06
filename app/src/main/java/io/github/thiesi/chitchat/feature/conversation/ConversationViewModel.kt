@@ -735,6 +735,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
 
     /** UI reports actual layout visibility; merely fetching the history never acknowledges reads. */
     fun viewport(anchor: TimelineAnchor?, newestVisibleId: Long?, atEdge: Boolean) {
+        if (!foreground || !belongsTo(session.value) || mutable.value.roomId == null) return
         viewport = anchor
         visibleNewest = newestVisibleId
         val value = mutable.value

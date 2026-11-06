@@ -108,6 +108,24 @@ class ConversationRealtimeTest {
         assertTrue(api.windows.isNotEmpty()); assertTrue(api.windows.all { it.room == 43L && it.upper == 20L })
         model.viewport(TimelineAnchor(20, 0), 20, true); runCurrent(); assertEquals(0, api.reads)
     }
+    @Test fun inactiveViewportCannotReplaceTheRequestedOriginalBeforeFirstForeground() = runTest(dispatcher) {
+        api.rows = (1L..20).map { message(it) }
+        assertTrue(model.prepareTarget(target(20)))
+        model.viewport(TimelineAnchor(1, 0), 20, true) // An inactive/retiring pane is not this entry's viewport.
+        model.foreground(); runCurrent()
+        assertEquals(20L, model.state.value.anchor?.id)
+        assertEquals(20L, model.state.value.highlightedMessageId); assertEquals(20L, model.state.value.fixedUpper)
+        assertEquals(0, api.reads); assertFalse(model.state.value.latestWindow)
+    }
+    @Test fun viewportAfterBackgroundCannotOverwriteTheRetainedHistoricalAnchorOnResume() = runTest(dispatcher) {
+        api.rows = (1L..20).map { message(it) }
+        assertTrue(model.prepareTarget(target(20))); model.foreground(); runCurrent()
+        model.viewport(TimelineAnchor(20, 7), null, false)
+        model.background(); model.viewport(TimelineAnchor(1, 0), 20, true)
+        model.foreground(); runCurrent()
+        assertEquals(20L, model.state.value.anchor?.id); assertEquals(7, model.state.value.anchor?.offset)
+        assertEquals(0, api.reads); assertFalse(model.state.value.latestWindow)
+    }
     @Test fun notificationPreparationRetainsBothRoomsDraftsAndUnknownDeliveryWithoutResendConsent() = runTest(dispatcher) {
         open(); model.updateDraft("Unconfirmed old room draft"); api.sendFailure = ApiFailure(FailureKind.TIMEOUT)
         model.send(); runCurrent(); assertTrue(model.state.value.uncertainSend)

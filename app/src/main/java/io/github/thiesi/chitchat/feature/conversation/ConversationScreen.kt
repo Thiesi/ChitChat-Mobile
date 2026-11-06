@@ -194,6 +194,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val timeline = rememberLazyListState()
+    val placementAnchor = state.anchor
+    val placementMessages = state.messages
+    var placedAnchor by remember { mutableStateOf<TimelineAnchor?>(null) }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) {
         model.background(); ignores?.leaveRoom(session, roomId)
@@ -211,13 +214,19 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             timeline.scrollToItem(state.messages.size + 1)
         }
     }
-    LaunchedEffect(state.anchor) {
-        state.anchor?.let { anchor ->
-            val index = state.messages.indexOfFirst { it.id == anchor.id }
-            if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
+    LaunchedEffect(placementAnchor) {
+        try {
+            placementAnchor?.let { anchor ->
+                val index = placementMessages.indexOfFirst { it.id == anchor.id }
+                if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
+            }
+        } finally {
+            // A user gesture may cancel placement. Publish that actual viewport instead of
+            // replaying the scroll; a superseding anchor has a different revision.
+            placedAnchor = placementAnchor
         }
     }
-    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsVisible, detailsOpen, personDialog, state.draftsOpen, composerDialog, obscured, lifecycle,
+    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, placementAnchor, pingsVisible, detailsOpen, personDialog, state.draftsOpen, composerDialog, obscured, lifecycle,
         connection?.presencePhase, connection?.selectedRoomId, lifecycleState) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             snapshotFlow {
@@ -230,8 +239,18 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     timeline.layoutInfo.viewportStartOffset, timeline.layoutInfo.viewportEndOffset)
                 val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused,
                     !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured)
-                Triple(anchor, if (edgeVisible && readable) newest else null, !timeline.canScrollForward && readable)
-            }.collect { (anchor, newest, edge) -> model.viewport(anchor, newest, edge) }
+                Triple(placementAnchor, placementAnchor == null || placedAnchor == placementAnchor,
+                    Triple(anchor, if (edgeVisible && readable) newest else null, !timeline.canScrollForward && readable))
+            }.collect { (requested, positioned, observed) ->
+                val current = model.state.value
+                // Initial layout is not the requested position. A retiring pane or old anchor
+                // sample must not overwrite the successor's position or publish read proof.
+                if (positioned && isCurrentEntry() && model.belongsTo(displayedSession) &&
+                    current.roomId == roomId && current.anchor == requested) {
+                    val (anchor, newest, edge) = observed
+                    model.viewport(anchor, newest, edge)
+                }
+            }
         }
     }
     val ready = !session.busy && !session.refreshRequired && !session.storageWarning && now >= session.retryAtMillis
