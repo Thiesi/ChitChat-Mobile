@@ -31,7 +31,8 @@ internal object MessageFormatting {
             candidate.any { it <= '\u001f' || it in '\u007f'..'\u009f' || space(it) }) return null
         val url = candidate.toHttpUrlOrNull() ?: return null
         if (url.username.isNotEmpty() || url.password.isNotEmpty()) return null
-        return url.toString()
+        // Keep candidates inside the same limit after Unicode/percent normalization as on export.
+        return url.toString().takeIf { it.length <= MAX_INPUT_CHARS }
     }
 
     private fun literalMessage(text: String) = FormattedMessage(

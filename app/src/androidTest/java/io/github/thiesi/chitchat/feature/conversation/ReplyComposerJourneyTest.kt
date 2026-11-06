@@ -1,6 +1,9 @@
 package io.github.thiesi.chitchat.feature.conversation
 
 import android.content.ClipboardManager
+import android.content.Intent
+import android.app.Activity
+import android.app.Instrumentation
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -9,6 +12,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -134,6 +138,96 @@ class ReplyComposerJourneyTest {
         compose.onNodeWithTag(timeline).performScrollToNode(hasText(body))
         compose.onNode(hasText(body) and hasAnyAncestor(hasTestTag(timeline))).assertIsDisplayed().performTouchInput { longClick() }
         compose.onNodeWithTag("message_actions").assertIsDisplayed()
+    }
+    /** API26+ interception blocks fixture URLs before any other app receives them. */
+    private fun observeLinkExports(block: (java.util.concurrent.CopyOnWriteArrayList<Intent>) -> Unit) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val exported = java.util.concurrent.CopyOnWriteArrayList<Intent>()
+        val monitor = object : Instrumentation.ActivityMonitor() {
+            override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
+                if (intent.action != Intent.ACTION_VIEW) return null
+                exported += Intent(intent)
+                return Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
+            }
+        }
+        instrumentation.addMonitor(monitor)
+        try { block(exported) } finally { instrumentation.removeMonitor(monitor) }
+    }
+    private fun formattedMenu(isRoom: Boolean, line: String) {
+        val timeline = if (isRoom) "conversation_timeline" else "dm_timeline"
+        compose.onNodeWithTag(timeline).performScrollToNode(hasText(line))
+        compose.onNode(hasText(line) and hasAnyAncestor(hasTestTag(timeline))).assertIsDisplayed().performNativeTap()
+        compose.onNodeWithTag("message_actions").assertIsDisplayed()
+    }
+    private fun formattedLinksAndCopy(isRoom: Boolean) = observeLinkExports { exported ->
+        val scope = if (isRoom) "room" else "direct"
+        val url = "https://example.test/$scope"
+        val line = "Formatted bold italic literal_* $url"
+        val source = "Formatted *bold* _italic_ `literal_*` $url\n> quoted _passage_\n```\nhttps://example.test/code-only\n```"
+        if (isRoom) api.rooms.bodyOverrides[43L to 20L] = source else api.directs.bodyOverrides[9L to 20L] = source
+        root(); pane(isRoom)
+        compose.onNodeWithText("quoted passage", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("https://example.test/code-only", useUnmergedTree = true).assertIsDisplayed()
+        assertTrue(exported.isEmpty())
+        formattedMenu(isRoom, line)
+        dialogTag("message_link:0").performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithTag("message_link:1").assertDoesNotExist()
+        assertTrue(exported.isEmpty())
+        dialogTag("message_link:0").performNativeTap()
+        compose.runOnIdle {
+            val intent = exported.single()
+            assertEquals(url, intent.dataString)
+            assertEquals(Intent.ACTION_VIEW, intent.action)
+            assertTrue(intent.hasCategory(Intent.CATEGORY_BROWSABLE))
+            assertNull(intent.extras); assertNull(intent.clipData)
+            assertTrue(api.rooms.reads.isEmpty()); assertTrue(api.directs.reads.isEmpty())
+            assertEquals(0, api.rooms.sends + api.directs.sends); assertEquals(0, api.notices.posts)
+        }
+        // A blocked test launch leaves the existing modal suppressing reads and typing.
+        compose.onNodeWithTag("message_actions").assertIsDisplayed()
+        dialogTag("message_copy_action").performScrollTo().performNativeTap()
+        val clipboard = InstrumentationRegistry.getInstrumentation().targetContext.getSystemService(ClipboardManager::class.java)
+        assertEquals(source, clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals(1, exported.size)
+    }
+    @Test fun formattedRoomLinksRequireAChoiceAndCopyKeepsOriginalMarkup() = formattedLinksAndCopy(true)
+    @Test fun formattedDirectLinksRequireAChoiceAndCopyKeepsOriginalMarkup() = formattedLinksAndCopy(false)
+    private fun queuedLinkIsFenced(isRoom: Boolean) = observeLinkExports { exported ->
+        val overrides = if (isRoom) api.rooms.bodyOverrides else api.directs.bodyOverrides
+        val resource = if (isRoom) 43L else 9L
+        val source = "https://example.test/original"
+        overrides[resource to 20L] = source
+        root(); pane(isRoom); formattedMenu(isRoom, source)
+        dialogTag("message_link:0").performScrollTo()
+        val old = dialogTag("message_link:0").fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
+        compose.runOnIdle {
+            overrides[resource to 20L] = "https://example.test/replaced"
+            if (isRoom) room.refresh() else direct.refresh()
+        }
+        compose.waitUntil(5_000) { if (isRoom) !room.state.value.busy && room.state.value.messages.any { it.id == 20L && it.body == "https://example.test/replaced" }
+            else !direct.state.value.busy && direct.state.value.messages.any { it.id == 20L && it.body == "https://example.test/replaced" } }
+        compose.runOnIdle { old() }
+        assertTrue(exported.isEmpty())
+        val current = dialogTag("message_link:0").fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
+        compose.runOnIdle {
+            sessions.state.value = sessions.state.value.copy(generation = sessions.state.value.generation + 1,
+                user = SessionUser(8, "Other", listOf("member"), 1, false))
+        }
+        compose.waitUntil(5_000) { if (isRoom) room.state.value.messages.isEmpty() else direct.state.value.messages.isEmpty() }
+        compose.runOnIdle { current() }
+        assertTrue(exported.isEmpty()); assertEquals(0, api.rooms.sends + api.directs.sends)
+        compose.onNodeWithTag("message_link:0").assertDoesNotExist()
+    }
+    @Test fun queuedRoomLinkRejectsCanonicalReplacementAndOwnerChange() = queuedLinkIsFenced(true)
+    @Test fun queuedDirectLinkRejectsCanonicalReplacementAndOwnerChange() = queuedLinkIsFenced(false)
+    @Test fun roomEmotePrefixStaysLiteralAndItsBodyUsesInlineGrammar() = observeLinkExports { exported ->
+        api.rooms.typeOverrides[43L to 20L] = "emote"
+        api.rooms.bodyOverrides[43L to 20L] = "> _waves_\n```\nhttps://example.test/emote\n```"
+        root(); pane(true)
+        formattedMenu(true, "* Peer > waves\n```\nhttps://example.test/emote\n```")
+        dialogTag("message_link:0").performScrollTo().assertIsDisplayed()
+        assertTrue(exported.isEmpty())
+        dialog(R.string.cancel).performNativeTap()
     }
     private fun reply(isRoom: Boolean) {
         menu(isRoom); chooseReply(isRoom)

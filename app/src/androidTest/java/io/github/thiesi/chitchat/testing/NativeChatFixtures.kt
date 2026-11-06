@@ -40,6 +40,8 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
         var sendGate: CompletableDeferred<Unit>? = null
         var ignoreSendCancellation = false
         val deleted = mutableSetOf<Pair<Long, Long>>()
+        val bodyOverrides = mutableMapOf<Pair<Long, Long>, String>()
+        val typeOverrides = mutableMapOf<Pair<Long, Long>, String>()
         val reactionSummaries = mutableMapOf<Pair<Long, Long>, List<MessageReaction>>()
         private val edited = mutableSetOf<Pair<Long, Long>>()
         private val posted = mutableMapOf<Long, MutableList<Triple<Long, String, Long?>>>()
@@ -47,7 +49,8 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
             "", "private", 0, 0, 7, "member", false, "none", 100, 0), checkNotNull(session.value.chatPolicy))
         private fun rows(room: Long) = (1L..100L).map {
             val removed = (room to it) in deleted
-            RoomMessage(it, room, 8, "Peer", "text", if (removed) null else "Room $room message $it", removed, timestamp,
+            RoomMessage(it, room, 8, "Peer", typeOverrides[room to it] ?: "text",
+                if (removed) null else bodyOverrides[room to it] ?: "Room $room message $it", removed, timestamp,
                 reactions = reactionSummaries[room to it].orEmpty())
         } + posted[room].orEmpty().map { (id, body, reply) ->
             val removed = (room to id) in deleted
@@ -69,8 +72,8 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
             val own = posted[room].orEmpty().firstOrNull { it.first == id }
             val available = (room to id) !in deleted && (id in 1L..100L || own != null)
             return MessageReply("room", id, available, if (available) ReplyMessage(id,
-                MessagePerson(if (own == null) 8 else 7, if (own == null) "Peer" else "Viewer"), "text",
-                own?.second ?: "Room $room message $id", false) else null)
+                MessagePerson(if (own == null) 8 else 7, if (own == null) "Peer" else "Viewer"), typeOverrides[room to id] ?: "text",
+                own?.second ?: bodyOverrides[room to id] ?: "Room $room message $id", false) else null)
         }
         override suspend fun history(roomId: Long, beforeId: Long?, limit: Int): MessagePage {
             histories += Triple(roomId, beforeId, limit)
@@ -158,6 +161,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
         var sendGate: CompletableDeferred<Unit>? = null
         var ignoreSendCancellation = false
         val deleted = mutableSetOf<Pair<Long, Long>>()
+        val bodyOverrides = mutableMapOf<Pair<Long, Long>, String>()
         private val edited = mutableSetOf<Pair<Long, Long>>()
         private val posted = mutableMapOf<Long, MutableList<Triple<Long, String, Long?>>>()
         private val relationships = mutableMapOf<Long, DirectRelationship>()
@@ -166,7 +170,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
         private fun rows(peer: Long) = (1L..100L).map {
             val removed = (peer to it) in deleted
             DirectMessage(it, MessagePerson(peer, "Peer $peer"), MessagePerson(7, "Viewer"),
-                if (removed) null else "Direct $peer message $it", timestamp.takeIf { peer in readPeers }, timestamp, false, removed,
+                if (removed) null else bodyOverrides[peer to it] ?: "Direct $peer message $it", timestamp.takeIf { peer in readPeers }, timestamp, false, removed,
                 null, false, false, null, emptyList(), emptyList(), null)
         } + posted[peer].orEmpty().map { (id, body, reply) ->
             val removed = (peer to id) in deleted
@@ -189,7 +193,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
             val available = (peer to id) !in deleted && (id in 1L..100L || own != null)
             return DirectReply("direct", id, available, if (available) DirectReplyTarget(id,
                 MessagePerson(if (own == null) peer else 7, if (own == null) "Peer $peer" else "Viewer"),
-                own?.second ?: "Direct $peer message $id", false) else null)
+                own?.second ?: bodyOverrides[peer to id] ?: "Direct $peer message $id", false) else null)
         }
         override suspend fun history(peerId: Long, beforeId: Long?, limit: Int): DirectPage {
             val rows = rows(peerId).filter { beforeId == null || it.id < beforeId }.takeLast(limit)

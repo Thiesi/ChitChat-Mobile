@@ -1,6 +1,8 @@
 # ChitChat Android engineering
 
-- [M5d1 message formatting](docs/milestones/M5d1-message-format-parser.md) is a bounded pure parser prerequisite. Preserve literal fallback, inert mentions, conservative HTTP(S) candidates and content-safe debug strings. Native rendering/link activation remain separate; do not change input gates or replay PR71/issue69 diagnostics.
+- [M5d2 native formatting](docs/milestones/M5d2-native-message-formatting.md) uses the bounded parser only for transcript presentation. Keep emote prefixes/Copy/replies literal, mentions inert, code URLs non-interactive and explicit48dp link choices in the existing suppressing actions modal. Re-fence original selection/session/entry/canonical callbacks before an external intent; no automatic fetch, authenticated transport or notification browser fallback.
+
+- [M5d1 message formatting](docs/milestones/M5d1-message-format-parser.md) is a bounded pure parser prerequisite. Preserve literal fallback, inert mentions, conservative HTTP(S) candidates and content-safe debug strings. Native rendering/link activation belong to the separate M5d2 consumer; do not change input gates or replay PR71/issue69 diagnostics.
 
 - [Linux native input observation](docs/milestones/linux-native-input-observation.md) is manual, opt-in, one fixed100-cycle method and a separate artifact/concurrency group. Keep normal CI unfiltered/untraced; preserve the original failure and one-call status even if metadata capture fails. A traced subset/pass cannot replace a failed gate, prove earlier state or authorize PR71's merge. Follow the named one-dispatch issue69 plan without retries.
 

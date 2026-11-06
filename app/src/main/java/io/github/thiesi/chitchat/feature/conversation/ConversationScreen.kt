@@ -3,6 +3,9 @@ package io.github.thiesi.chitchat.feature.conversation
 import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
 import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
 import io.github.thiesi.chitchat.core.reactions.selectedBy
+import io.github.thiesi.chitchat.core.ui.MessageBody
+import io.github.thiesi.chitchat.core.ui.messageLinks
+import io.github.thiesi.chitchat.core.ui.openMessageLink
 
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.combinedClickable
@@ -423,6 +426,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     actions?.let { request ->
         val message = state.messages.firstOrNull { it.id == request.messageId }
         val available = message != null && model.canUseMessage(displayedSession, roomId, message)
+        val links = remember(message) { message?.body?.let { messageLinks(it, message.type == "emote") }.orEmpty() }
         MessageActions(available, message?.let { model.canReplyTo(displayedSession, roomId, it) } == true,
             !message?.body.isNullOrEmpty(), onReply = {
                 if (actions === request && interactive() && message != null && model.replyTo(displayedSession, roomId, message)) {
@@ -444,7 +448,14 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 if (actions === request && interactive() && model.beginReactions(displayedSession, roomId, original)) {
                     actions = null; focus.clearFocus()
                 }
-            } }, canReact = message?.let { model.canBeginReactions(displayedSession, roomId, it) } == true)
+            } }, canReact = message?.let { model.canBeginReactions(displayedSession, roomId, it) } == true,
+            links = links, onOpenLink = { target ->
+                if (actions === request && interactive() && message != null &&
+                    model.canUseMessage(displayedSession, roomId, message) && links.any { it.target == target }) {
+                    // Keep the modal suppression while the external Activity takes over.
+                    openMessageLink(androidContext, target)
+                }
+            })
     }
     state.reactionDialog?.takeIf { paneInteractive() }?.let { dialog ->
         val request = dialog.request
@@ -562,8 +573,9 @@ private fun MessageContent(message: RoomMessage, context: ConversationContext?, 
             Column(Modifier.fillMaxWidth().then(if (onActions != null) Modifier.heightIn(min = 48.dp)
                 .combinedClickable(onClickLabel = actionsLabel, onLongClickLabel = actionsLabel,
                     onClick = onActions, onLongClick = onActions) else Modifier)) {
-                if (message.type == "emote") Text(stringResource(R.string.conversation_emote, sender, message.body.orEmpty()))
-                else message.body?.let { Text(it) }
+                if (message.type == "emote") MessageBody(message.body.orEmpty(),
+                    emotePrefix = stringResource(R.string.conversation_emote, sender, ""))
+                else message.body?.let { MessageBody(it) }
                 message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }
                 if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
             }

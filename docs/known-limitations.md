@@ -1,6 +1,6 @@
 # Current status and limitations
 
-[M5d1 formatting](milestones/M5d1-message-format-parser.md) is parser groundwork only. Transcripts still use their existing plaintext presentation; native styling, link activation and accessibility/device acceptance remain pending. Oversized/complex input is retained whole as literal; mentions gain no authority.
+[M5d2 formatting](milestones/M5d2-native-message-formatting.md) adds room/DM styling and explicit link choices through message actions. Links open another app only after selection; Copy/reply excerpts retain original markup. Oversized/complex input stays whole and literal, and mentions gain no authority. Manual browser/API26/device/TalkBack/layout acceptance remains pending. The identical-tree independent main run after parser PR74 failed177/178 in the existing tracing self-test; [issue69 evidence](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6690203327) remains failed with no retry or waiver.
 
 [Issue69](https://github.com/Thiesi/ChitChat-Mobile/issues/69)'s strict IME failure recurred in PR71's first Linux native run. [Manual Linux observation](milestones/linux-native-input-observation.md) prepares one bounded traced control while keeping ordinary CI unchanged. Its outcome cannot waive PR71's failed gate or explain issue70's separate author assertion without further evidence.
 
