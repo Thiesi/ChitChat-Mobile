@@ -27,29 +27,36 @@ import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.formatting.MessageBlock
 import io.github.thiesi.chitchat.core.formatting.MessageFormatting
 import io.github.thiesi.chitchat.core.formatting.MessageInline
+import io.github.thiesi.chitchat.core.formatting.FormattedMessage
 
 /** Body presentation only. The enclosing48dp row opens canonical message actions, including links.
- * No inline browser launches, fetching, mention authority, saved state or content cache.
+ * No inline browser launches, fetching, inferred mention authority, saved state or global cache.
  */
 @Composable
-internal fun MessageBody(text: String, modifier: Modifier = Modifier, emotePrefix: String? = null) {
-    val blocks = remember(text, emotePrefix) {
-        if (emotePrefix != null) listOf(MessageBlock.Paragraph(MessageFormatting.parseInline(text).nodes))
-        else MessageFormatting.parseMessage(text).blocks
+internal fun MessageBody(text: String, modifier: Modifier = Modifier, emotePrefix: String? = null,
+    mentions: MessageMentions = MessageMentions.None) {
+    val parsed = remember(text, emotePrefix) {
+        if (emotePrefix != null) {
+            val inline = MessageFormatting.parseInline(text)
+            FormattedMessage(listOf(MessageBlock.Paragraph(inline.nodes)), inline.literalFallback)
+        } else MessageFormatting.parseMessage(text)
     }
+    val highlights = remember(parsed, mentions) { mentions.resolve(parsed) }
     val palette = MaterialTheme.colorScheme
+    val personal = SpanStyle(color = palette.onTertiaryContainer, background = palette.tertiaryContainer)
+    val broadcast = SpanStyle(color = palette.onPrimaryContainer, background = palette.primaryContainer, fontWeight = FontWeight.Bold)
+    fun inline(nodes: List<MessageInline>, prefix: String = "") = messageInlineText(nodes, palette.primary,
+        palette.onSecondaryContainer, palette.secondaryContainer, prefix, highlights, personal, broadcast)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        blocks.forEach { block ->
+        parsed.blocks.forEach { block ->
             when (block) {
-                is MessageBlock.Paragraph -> Text(messageInlineText(block.children, palette.primary,
-                    palette.onSecondaryContainer, palette.secondaryContainer, emotePrefix.orEmpty()))
+                is MessageBlock.Paragraph -> Text(inline(block.children, emotePrefix.orEmpty()))
                 is MessageBlock.Quote -> {
                     val label = stringResource(R.string.message_formatted_quote)
                     Surface(shape = MaterialTheme.shapes.small, color = palette.surfaceContainer,
                         border = BorderStroke(1.dp, palette.outlineVariant),
                         modifier = Modifier.semantics { stateDescription = label }) {
-                        Text(messageInlineText(block.children, palette.primary, palette.onSecondaryContainer,
-                            palette.secondaryContainer), Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                        Text(inline(block.children), Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
                 }
                 is MessageBlock.CodeBlock -> {
@@ -66,11 +73,29 @@ internal fun MessageBody(text: String, modifier: Modifier = Modifier, emotePrefi
 }
 
 internal fun messageInlineText(nodes: List<MessageInline>, linkColor: Color, codeColor: Color,
-    codeBackground: Color, prefix: String = ""): AnnotatedString = buildAnnotatedString {
+    codeBackground: Color, prefix: String = "", highlights: MentionHighlights = MentionHighlights.None,
+    personalStyle: SpanStyle = SpanStyle(), broadcastStyle: SpanStyle = SpanStyle()): AnnotatedString = buildAnnotatedString {
     append(prefix) // Emote author/prefix stays literal, separate from the body grammar.
+    fun appendText(value: String) {
+        if (highlights === MentionHighlights.None) append(value) else {
+            var cursor = 0
+            messageMentionToken.findAll(value).forEach { token ->
+                append(value.substring(cursor, token.range.first))
+                val kind = highlights.kind(token.groupValues[1])
+                if (kind == null) append(token.value) else {
+                    pushStyle(if (kind == MentionHighlights.Kind.BROADCAST) broadcastStyle else personalStyle)
+                    pushStringAnnotation(MESSAGE_MENTION_ANNOTATION, if (kind == MentionHighlights.Kind.BROADCAST) "broadcast" else "personal")
+                    append(token.value)
+                    pop(); pop()
+                }
+                cursor = token.range.last + 1
+            }
+            append(value.substring(cursor))
+        }
+    }
     fun appendNodes(values: List<MessageInline>) {
         values.forEach { node -> when (node) {
-            is MessageInline.Text -> append(node.text)
+            is MessageInline.Text -> appendText(node.text)
             is MessageInline.Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace,
                 color = codeColor, background = codeBackground)) { append(node.text) }
             is MessageInline.Link -> withStyle(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)) { append(node.text) }

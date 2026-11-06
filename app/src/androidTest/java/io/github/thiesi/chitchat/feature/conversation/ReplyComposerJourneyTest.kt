@@ -12,6 +12,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.*
@@ -27,6 +28,8 @@ import io.github.thiesi.chitchat.core.server.*
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.settings.*
 import io.github.thiesi.chitchat.core.typing.TypingTarget
+import io.github.thiesi.chitchat.core.ui.MESSAGE_MENTION_ANNOTATION
+import io.github.thiesi.chitchat.core.direct.DirectMention
 import io.github.thiesi.chitchat.feature.account.TestChitChatApp
 import io.github.thiesi.chitchat.feature.auth.*
 import io.github.thiesi.chitchat.feature.direct.*
@@ -228,6 +231,57 @@ class ReplyComposerJourneyTest {
         dialogTag("message_link:0").performScrollTo().assertIsDisplayed()
         assertTrue(exported.isEmpty())
         dialog(R.string.cancel).performNativeTap()
+    }
+    private fun visibleBody(value: String): AnnotatedString = compose.onNodeWithText(value, useUnmergedTree = true)
+        .assertIsDisplayed().fetchSemanticsNode().config[SemanticsProperties.Text].single()
+    private fun mentionMarks(value: AnnotatedString) = value.getStringAnnotations(MESSAGE_MENTION_ANNOTATION, 0, value.length)
+    @Test fun roomMentionsUseServerSnapshotsAndIgnoredBodiesRemainHidden() {
+        val source = "_Hi @Viewer_ @Other @room @here\n> quote @Viewer\n`code @Viewer` https://example.test/@Viewer\n```\nfenced @Viewer\n```"
+        val line = "Hi @Viewer @Other @room @here"
+        api.rooms.bodyOverrides[43L to 20L] = source
+        api.rooms.mentionOverrides[43L to 20L] = listOf(MessageMention(7, "Viewer", false), MessageMention(99, "OtherMember", true))
+        root(); pane(true)
+        val body = visibleBody(line)
+        assertEquals(listOf("personal", "broadcast", "broadcast"), mentionMarks(body).map { it.item })
+        assertEquals(listOf("@Viewer", "@room", "@here"), mentionMarks(body).map { body.text.substring(it.start, it.end) })
+        assertEquals(1, mentionMarks(visibleBody("quote @Viewer")).size)
+        assertTrue(mentionMarks(visibleBody("code @Viewer https://example.test/@Viewer")).isEmpty())
+        assertTrue(mentionMarks(visibleBody("fenced @Viewer")).isEmpty())
+        formattedMenu(true, line); dialogTag("message_copy_action").performNativeTap()
+        val clipboard = InstrumentationRegistry.getInstrumentation().targetContext.getSystemService(ClipboardManager::class.java)
+        assertEquals(source, clipboard.primaryClip!!.getItemAt(0).text.toString())
+        compose.runOnIdle { sessions.state.value = sessions.state.value.copy(chatPolicy = ChatPolicy(setOf(8), null, api.policy.display)) }
+        compose.onNodeWithText(line, useUnmergedTree = true).assertDoesNotExist()
+        assertEquals(0, api.rooms.sends); assertEquals(0, api.notices.posts); assertEquals(0, typing.requests.get())
+    }
+    @Test fun directMentionsNeverInferRoomBroadcastsOrDecorateCodeAndLinks() {
+        val source = "Direct @Viewer @room @here @Other `code @Viewer` https://example.test/@Viewer"
+        val line = "Direct @Viewer @room @here @Other code @Viewer https://example.test/@Viewer"
+        api.directs.bodyOverrides[9L to 20L] = source
+        api.directs.mentionOverrides[9L to 20L] = listOf(DirectMention(7, "Viewer"))
+        root(); pane(false)
+        val body = visibleBody(line)
+        val mark = mentionMarks(body).single()
+        assertEquals("personal", mark.item); assertEquals(7, mark.start); assertEquals(14, mark.end)
+        formattedMenu(false, line); dialogTag("message_copy_action").performNativeTap()
+        val clipboard = InstrumentationRegistry.getInstrumentation().targetContext.getSystemService(ClipboardManager::class.java)
+        assertEquals(source, clipboard.primaryClip!!.getItemAt(0).text.toString())
+        assertEquals(0, api.directs.sends); assertEquals(0, api.notices.posts); assertEquals(0, typing.requests.get())
+    }
+    @Test fun complexEmoteFallbackIsUndecoratedAndOwnerRetirementClearsTheBody() {
+        val source = "@Viewer " + "*a ".repeat(1_000)
+        api.rooms.bodyOverrides[43L to 20L] = source
+        api.rooms.typeOverrides[43L to 20L] = "emote"
+        api.rooms.mentionOverrides[43L to 20L] = listOf(MessageMention(7, "Viewer", true))
+        root(); pane(true)
+        val body = visibleBody("* Peer $source")
+        assertTrue(mentionMarks(body).isEmpty())
+        assertEquals("* Peer $source", body.text)
+        compose.runOnIdle { sessions.state.value = sessions.state.value.copy(generation = sessions.state.value.generation + 1,
+            user = SessionUser(8, "Other", listOf("member"), 1, false)) }
+        compose.waitUntil(5_000) { room.state.value.messages.isEmpty() }
+        compose.onNodeWithText("* Peer $source", useUnmergedTree = true).assertDoesNotExist()
+        assertEquals(0, api.rooms.sends); assertEquals(0, api.notices.posts)
     }
     private fun reply(isRoom: Boolean) {
         menu(isRoom); chooseReply(isRoom)

@@ -42,6 +42,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
         val deleted = mutableSetOf<Pair<Long, Long>>()
         val bodyOverrides = mutableMapOf<Pair<Long, Long>, String>()
         val typeOverrides = mutableMapOf<Pair<Long, Long>, String>()
+        val mentionOverrides = mutableMapOf<Pair<Long, Long>, List<MessageMention>>()
         val reactionSummaries = mutableMapOf<Pair<Long, Long>, List<MessageReaction>>()
         private val edited = mutableSetOf<Pair<Long, Long>>()
         private val posted = mutableMapOf<Long, MutableList<Triple<Long, String, Long?>>>()
@@ -51,7 +52,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
             val removed = (room to it) in deleted
             RoomMessage(it, room, 8, "Peer", typeOverrides[room to it] ?: "text",
                 if (removed) null else bodyOverrides[room to it] ?: "Room $room message $it", removed, timestamp,
-                reactions = reactionSummaries[room to it].orEmpty())
+                reactions = reactionSummaries[room to it].orEmpty(), mentions = mentionOverrides[room to it].orEmpty())
         } + posted[room].orEmpty().map { (id, body, reply) ->
             val removed = (room to id) in deleted
             RoomMessage(id, room, 7, "Viewer", "text", body.takeUnless { removed }, removed, timestamp,
@@ -162,6 +163,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
         var ignoreSendCancellation = false
         val deleted = mutableSetOf<Pair<Long, Long>>()
         val bodyOverrides = mutableMapOf<Pair<Long, Long>, String>()
+        val mentionOverrides = mutableMapOf<Pair<Long, Long>, List<DirectMention>>()
         private val edited = mutableSetOf<Pair<Long, Long>>()
         private val posted = mutableMapOf<Long, MutableList<Triple<Long, String, Long?>>>()
         private val relationships = mutableMapOf<Long, DirectRelationship>()
@@ -171,7 +173,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
             val removed = (peer to it) in deleted
             DirectMessage(it, MessagePerson(peer, "Peer $peer"), MessagePerson(7, "Viewer"),
                 if (removed) null else bodyOverrides[peer to it] ?: "Direct $peer message $it", timestamp.takeIf { peer in readPeers }, timestamp, false, removed,
-                null, false, false, null, emptyList(), emptyList(), null)
+                null, false, false, null, mentionOverrides[peer to it].orEmpty(), emptyList(), null)
         } + posted[peer].orEmpty().map { (id, body, reply) ->
             val removed = (peer to id) in deleted
             DirectMessage(id, MessagePerson(7, "Viewer"), MessagePerson(peer, "Peer $peer"), body.takeUnless { removed }, null, timestamp, true, removed,
