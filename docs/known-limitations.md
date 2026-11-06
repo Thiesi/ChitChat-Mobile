@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[M5e2 search state](milestones/M5e2-message-search-state.md) adds private in-memory explicit search/pagination/selection state, not native controls. One25-row page keeps memory bounded while allowing the endpoint's offset range; edited input is separate from completed results. Background clears private data, and foreground/session changes never repeat a search POST. Native search/disclosures/exact-result navigation and live/device acceptance remain pending.
+
 [M5e1 participant search](milestones/M5e1-message-search-protocol.md) supplies typed CSRF POST requests and plain-text, namespace-specific result hints only. Native search/query state and exact-result navigation remain unimplemented. Server query validation/authorization, bounded offsets and original-session fences do not grant read/send consent. No live/device search acceptance is claimed.
 
 [M5d3](milestones/M5d3-native-mention-highlighting.md) adds passive mention highlighting only from supplied server snapshots. Names absent from the snapshot stay plain after edits; existing broadcast recipients can also receive personal-name decoration, matching the browser. Room broadcasts are separate from DM hints. Code, links, literal fallback, emote prefixes and reply excerpts gain no mention decoration. Completion/profile navigation, device/TalkBack/contrast/layout and live acceptance remain pending. Existing read/send/typing/notification and canonical owner guards are unchanged.
