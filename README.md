@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-[M5d1 formatting groundwork](docs/milestones/M5d1-message-format-parser.md) adds a bounded browser-compatible parser with golden grammar fixtures. Native transcript rendering and link actions remain pending; existing plaintext presentation and availability disclosures are unchanged.
+[Native message formatting](docs/milestones/M5d2-native-message-formatting.md) adds room/DM emphasis, code, quotes and explicit link choices in message actions, using the delivered [bounded parser](docs/milestones/M5d1-message-format-parser.md). Copy and reply excerpts stay literal; mention highlighting/completion and manual device/browser/accessibility acceptance remain pending.
 
 [Native member room reactions](docs/milestones/M5c2b-native-room-reactions.md) add named Add/Remove choices, selected chips, people lists and explicit recovery after unconfirmed changes, using the delivered protocol/room actor. DM reactions and guest/live/device acceptance remain pending. Earlier native failures remain recorded under the approved development-only gate policy; release acceptance stays separate.
 
