@@ -35,6 +35,7 @@ import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
 import io.github.thiesi.chitchat.feature.auth.AuthViewModel
 import io.github.thiesi.chitchat.feature.auth.TestSessions
 import io.github.thiesi.chitchat.testing.NativeChatFixtures
+import io.github.thiesi.chitchat.testing.nativeInputWindow
 import io.github.thiesi.chitchat.testing.performNativeTap
 import io.github.thiesi.chitchat.testing.tapNativeInput
 import java.util.concurrent.CopyOnWriteArrayList
@@ -112,12 +113,25 @@ class MessageSearchJourneyTest {
         compose.waitUntil(5_000) { model.state.value.results != null && !model.state.value.busy }
     }
     @After fun close() {
-        Espresso.closeSoftKeyboard()
-        compose.activityRule.scenario.onActivity {
-            api.gates.values.forEach { gate -> gate.complete(Unit) }
-            if (::model.isInitialized) model.state.value.entry?.let(model::background)
-            store.clear()
-            registry = null
+        try {
+            // Activity recreation can already retire the IME. Never request another hide when
+            // both observations prove it hidden; otherwise preserve a single hide's failure.
+            compose.waitForIdle()
+            val before = ime
+            val window = nativeInputWindow()
+            if (before > 0 || window.imeVisible != false) try { Espresso.closeSoftKeyboard() }
+            catch (failure: RuntimeException) {
+                throw AssertionError("Search IME cleanup: before=$before, after=$ime, beforeWindow=$window, afterWindow=${nativeInputWindow()}", failure)
+            }
+            compose.waitUntil(5_000) { ime == 0 }
+            assertEquals("Search cleanup must confirm native IME hidden", false, nativeInputWindow().imeVisible)
+        } finally {
+            compose.activityRule.scenario.onActivity {
+                api.gates.values.forEach { gate -> gate.complete(Unit) }
+                if (::model.isInitialized) model.state.value.entry?.let(model::background)
+                store.clear()
+                registry = null
+            }
         }
     }
 
