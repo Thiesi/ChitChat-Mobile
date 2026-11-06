@@ -87,11 +87,30 @@ class MessageMentionsTest {
         val value = messageInlineText(quoted, Color.Blue, Color.Black, Color.Gray, highlights = hints)
         assertEquals(1, marks(value).size)
     }
-    @Test fun editedInNamesDoNotResolveOrNotifyAndRemovedNamesLeaveNoHighlight() {
+    @Test fun editedInNamesAbsentFromTheSnapshotAndRemovedNamesStayPlain() {
         val snapshot = room(member("Alice"))
         assertTrue(marks(render("Edit now mentions @Mallory", snapshot)).isEmpty())
         assertTrue(marks(render("All mentions removed", snapshot)).isEmpty())
         assertNull(snapshot.resolve(MessageFormatting.parseMessage("@Mallory")).kind("Alice"))
+    }
+    /** Cases executed against the pinned browser renderer (blob64a91b4), not inferred trimming rules. */
+    @Test fun exactTokensAndMidwordMentionsFollowThePinnedBrowserContract() {
+        val snapshot = room(member("Alice"))
+        assertTrue(marks(render("Thanks @Alice.", snapshot)).isEmpty())
+        assertTrue(marks(render("@Alice-", snapshot)).isEmpty())
+        val distinct = render("@Alice @Alice-", snapshot)
+        assertEquals(listOf("@Alice"), marks(distinct).map { distinct.text.substring(it.start, it.end) })
+        val fullName = render("@Alice-", room(member("Alice-")))
+        assertEquals("@Alice-", fullName.text.substring(marks(fullName).single().start, marks(fullName).single().end))
+        val adjacent = render("foo@Alice", snapshot)
+        assertEquals(3, marks(adjacent).single().start); assertEquals(9, marks(adjacent).single().end)
+    }
+    @Test fun anExistingBroadcastRecipientCanAlsoHavePersonalDecorationWithoutNewResolution() {
+        val snapshot = room(member("Bob", true))
+        val original = render("@Bob @room", snapshot)
+        assertEquals(listOf("personal", "broadcast"), marks(original).map { it.item })
+        assertEquals(listOf("personal"), marks(render("@Bob", snapshot)).map { it.item })
+        assertTrue(marks(render("@Mallory", snapshot)).isEmpty())
     }
     @Test fun complexityAndLengthFallbackStayWholeAndUndecorated() {
         val source = "@Alice " + "*a ".repeat(1_000)
