@@ -8,11 +8,11 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-[Native participant search](docs/milestones/M5e3a-native-message-search.md) offers explicit All/Rooms/Direct queries, plain excerpts and bounded page navigation, with current-server DM privacy disclosures and private in-memory input. Opening the original message remains unavailable pending its separate guarded consumer.
+[Native participant search](docs/milestones/M5e3a-native-message-search.md) offers explicit All/Rooms/Direct queries, plain excerpts and bounded page navigation, with current-server DM privacy disclosures and private in-memory input. [Guarded original-message opening](docs/milestones/M5e3b-open-search-results.md) uses fresh exact-target lookup, current authorization and historical navigation without marking newer chat read.
 
-[Participant search state](docs/milestones/M5e2-message-search-state.md) supplies the private scoped query/page/selection actor now consumed by the native search screen. Foreground/session emissions never repeat a POST; exact-result opening remains separate.
+[Participant search state](docs/milestones/M5e2-message-search-state.md) supplies the private scoped query/page/selection actor now consumed by the native search screen. Foreground/session emissions never repeat a POST; exact-result opening binds the original selection to one fresh lookup request.
 
-[Participant message-search protocol](docs/milestones/M5e1-message-search-protocol.md) supplies typed private POST queries and bounded room/DM result hints through the existing session transport. Native controls use the same contracts; original-message navigation and live acceptance remain separate.
+[Participant message-search protocol](docs/milestones/M5e1-message-search-protocol.md) supplies typed private POST queries and bounded room/DM result hints through the existing session transport. Native controls use the same contracts; original-message navigation reuses fresh target authorization; live acceptance remains separate.
 
 [Native mention highlighting](docs/milestones/M5d3-native-mention-highlighting.md) uses the server’s existing room/DM snapshots, with separate room broadcast styling. Unresolved names, code, links and literal fallback gain no mention decoration. Completion/profile navigation and manual/live acceptance remain pending.
 
@@ -42,7 +42,7 @@ The [native notification center](docs/milestones/M4c4c2-native-notification-cent
 
 The independent merged-main native run then failed 112/113 on the known focused-but-hidden keyboard condition. [IME diagnostics](docs/milestones/native-ime-diagnostics.md) records that failure and the added test-only window/filtered-CI evidence (local 531 JVM/115 native tests passed); issue31 remains open. A later green run is not a production keyboard fix.
 
-Room and DM reply previews open the exact original as a marked historical window, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Search remains pending. See [reply-target scope](docs/milestones/M4c4b2-native-reply-targets.md).
+Room and DM reply previews open the exact original as a marked historical window, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Search results use their own guarded [original-message consumer](docs/milestones/M5e3b-open-search-results.md). See [reply-target scope](docs/milestones/M4c4b2-native-reply-targets.md).
 
 [Native Reply/Copy](docs/milestones/M5a-reply-composition.md) adds room/DM preview/removal and scoped reply-only drafts. Unknown sends stay guarded; copied plaintext may outlive logout. See the separate gate/acceptance limits.
 

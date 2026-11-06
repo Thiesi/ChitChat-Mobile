@@ -56,7 +56,9 @@ private fun SearchLifecycle(model: MessageSearchViewModel, expected: SessionStat
 
 @Composable
 internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: SessionState, navigationEntryId: String,
-    refreshSession: () -> Unit, isCurrentEntry: () -> Boolean) {
+    refreshSession: () -> Unit,
+    onOpen: ((MessageSearchEntry, MessageSearchResults, MessageSearchHit) -> Unit)? = null,
+    isCurrentEntry: () -> Boolean) {
     SearchLifecycle(model, expected, navigationEntryId, isCurrentEntry)
     val observed by model.state.collectAsStateWithLifecycle()
     val entry = observed.entry?.takeIf { it.navigationEntryId == navigationEntryId && it.matches(expected) }
@@ -121,7 +123,7 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
                             Text(stringResource(R.string.refresh_session))
                         }
                         Text(stringResource(R.string.message_search_limit))
-                        Text(stringResource(R.string.message_search_open_pending))
+                        Text(stringResource(if (onOpen == null) R.string.message_search_open_pending else R.string.message_search_open_notice))
                     })
             }
             if (value.inputTooLong) Text(stringResource(R.string.message_search_input_limit), color = MaterialTheme.colorScheme.error)
@@ -141,6 +143,7 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
                             InlineError(stringResource(when {
                                 failure.status == 400 -> R.string.message_search_validation
                                 failure.status == 429 -> R.string.message_search_rate
+                                failure.status in setOf(403, 404) && failure.code != "csrf_failed" -> R.string.message_search_access_lost
                                 failure.kind == FailureKind.INCOMPATIBLE -> R.string.message_search_incompatible
                                 else -> R.string.message_search_error
                             }))
@@ -159,8 +162,10 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
                             if (visible.attempt.request.scope != MessageSearchScope.ROOMS && privacy != null)
                                 Text(stringResource(R.string.dm_privacy_short, privacy.direct.retention), style = MaterialTheme.typography.bodySmall)
                             Text(stringResource(R.string.message_search_moving), style = MaterialTheme.typography.bodySmall)
-                            Text(stringResource(R.string.message_search_open_pending), style = MaterialTheme.typography.bodySmall)
-                            if (visible.page.results.isEmpty()) Text(stringResource(R.string.message_search_empty))
+                            Text(stringResource(if (onOpen == null) R.string.message_search_open_pending else R.string.message_search_open_notice),
+                                style = MaterialTheme.typography.bodySmall)
+                            if (visible.page.results.isEmpty()) Text(stringResource(if (visible.accessFiltered)
+                                R.string.message_search_removed_page else R.string.message_search_empty))
                             if (visible.page.hasMore && !visible.page.canLoadMore) Text(stringResource(R.string.message_search_ceiling))
                         } else Text(stringResource(if (result != null) R.string.message_search_privacy_missing else R.string.message_search_hint))
                     }
@@ -176,6 +181,12 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
                             Text(row.sender?.username ?: stringResource(R.string.message_search_sender_unknown), style = MaterialTheme.typography.bodySmall)
                             Text(messageTime(row.createdAt, expected.chatPolicy?.display) +
                                 if (row.editedAt != null) stringResource(R.string.message_search_edited) else "", style = MaterialTheme.typography.bodySmall)
+                            if (onOpen != null) TextButton(onClick = {
+                                if (permitted(visible.attempt.request.scope)) onOpen(entry, visible, row)
+                            }, enabled = ready && !value.busy && value.targetBinding == null,
+                                modifier = Modifier.heightIn(min = 48.dp).testTag("message_search_open:${if (row is MessageSearchHit.Room) "room" else "direct"}:${row.messageId}")) {
+                                Text(stringResource(R.string.message_search_open_original))
+                            }
                         } }
                     }
                 }

@@ -7,6 +7,8 @@ import io.github.thiesi.chitchat.core.server.AddressResult
 import io.github.thiesi.chitchat.core.server.ServerAddress
 import io.github.thiesi.chitchat.core.session.*
 import io.github.thiesi.chitchat.core.targets.MessageTarget
+import io.github.thiesi.chitchat.core.targets.TargetRequest
+import io.github.thiesi.chitchat.core.direct.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.*
@@ -269,6 +271,133 @@ class MessageSearchViewModelTest {
             for (privateText in listOf("SensitiveQuery", "Private excerpt", "PrivateUser"))
                 assertFalse(value.toString(), value.toString().contains(privateText))
     }
+    private fun roomChoice(entry: MessageSearchEntry): MessageSearchSelection {
+        model.scope(entry, MessageSearchScope.ROOMS); search(entry); dispatcher.scheduler.runCurrent()
+        return selection(entry)
+    }
+    private fun bind(choice: MessageSearchSelection, released: MutableList<TargetRequest>): MessageSearchTargetBinding {
+        val request = TargetRequest(choice.results.attempt.entry.original, choice.target)
+        return checkNotNull(model.bindTarget(choice, request) { released += it })
+    }
+    @Test fun targetBindingRequiresTheOriginalSessionObjectExactKindAndIdsAndCurrentChoice() = runTest(dispatcher) {
+        val entry = open(); val choice = roomChoice(entry); val released = mutableListOf<TargetRequest>()
+        for (request in listOf(TargetRequest(entry.original.copy(), choice.target),
+            TargetRequest(entry.original, MessageTarget.RoomMessage(43, 1)),
+            TargetRequest(entry.original, MessageTarget.RoomMessage(42, 2)),
+            TargetRequest(entry.original, MessageTarget.DirectMessage(9, 1)),
+            TargetRequest(entry.original, MessageTarget.RoomPing(42, 1))))
+            assertNull(model.bindTarget(choice, request) { fail("An unbound request must not be released") })
+        val binding = bind(choice, released)
+        assertSame(binding, model.bindTarget(choice, binding.request) { fail("Original release must stay bound") })
+        assertFalse(model.adoptTarget(binding, TargetRequest(entry.original, choice.target)) { fail("Equal fields are not the request"); true })
+        assertTrue(released.isEmpty()); assertSame(binding, model.state.value.targetBinding)
+    }
+    @Test fun busyOrRejectingTargetConsumerRetainsTheOriginalBindingUntilAtomicAcceptance() = runTest(dispatcher) {
+        val entry = open(); val choice = roomChoice(entry); val released = mutableListOf<TargetRequest>()
+        val binding = bind(choice, released)
+        assertFalse(model.adoptTarget(binding, binding.request) { false })
+        operations.session.value = operations.session.value.copy(busy = true)
+        assertFalse(model.adoptTarget(binding, binding.request) { fail("Busy must not navigate"); true })
+        operations.session.value = operations.session.value.copy(busy = false)
+        assertSame(choice, model.state.value.selection); assertSame(binding, model.state.value.targetBinding)
+        assertTrue(model.adoptTarget(binding, binding.request) { true })
+        assertEquals(listOf(binding.request), released); assertNull(model.state.value.targetBinding)
+        assertNull(model.state.value.selection); assertEquals(1, operations.calls.size)
+        assertFalse(model.adoptTarget(binding, binding.request) { fail("Already consumed"); true })
+    }
+    @Test fun sameIdSuccessorCannotBeCancelledOrAdoptedByAnOldBinding() = runTest(dispatcher) {
+        val entry = open(); val released = mutableListOf<TargetRequest>(); val old = bind(roomChoice(entry), released)
+        val nextChoice = selection(entry); val next = bind(nextChoice, released)
+        assertEquals(old.request.target, next.request.target); assertNotSame(old.request, next.request)
+        assertEquals(listOf(old.request), released)
+        model.cancelTarget(old); model.cancelSelection(old.selection)
+        assertFalse(model.adoptTarget(old, old.request) { fail("Stale request"); true })
+        assertSame(next, model.state.value.targetBinding)
+        model.cancelTarget(next); model.cancelTarget(next)
+        assertEquals(listOf(old.request, next.request), released)
+    }
+    @Test fun eachPrivateIntentRetirementReleasesOnlyItsOwnedGetOnce() = runTest(dispatcher) {
+        val actions: List<(MessageSearchEntry) -> Unit> = listOf(
+            { model.query(it, "changed") }, { model.query(it, "x".repeat(MessageSearchViewModel.MAX_QUERY_UNITS + 1)) },
+            { model.scope(it, MessageSearchScope.DIRECT) }, { model.search(it) },
+            { model.next(it, results()) }, { model.background(it) }, { model.close(it) })
+        for ((index, action) in actions.withIndex()) {
+            val entry = open("retire$index"); val released = mutableListOf<TargetRequest>()
+            val binding = bind(roomChoice(entry), released)
+            action(entry); model.cancelTarget(binding); runCurrent()
+            assertEquals(listOf(binding.request), released); assertNull(model.state.value.targetBinding)
+        }
+    }
+    @Test fun recreationRetainsBindingButReplacementEntryOwnerAndClearRetireIt() = runTest(dispatcher) {
+        val released = mutableListOf<TargetRequest>(); val entry = open(); val old = bind(roomChoice(entry), released)
+        assertSame(entry, open()); assertSame(old, model.state.value.targetBinding); assertTrue(released.isEmpty())
+        val replacement = open("replacement"); assertEquals(listOf(old.request), released)
+        val second = bind(roomChoice(replacement), released)
+        operations.session.value = operations.session.value.copy(generation = 2)
+        assertFalse(model.adoptTarget(second, second.request) { fail("Replaced owner"); true }); runCurrent()
+        assertEquals(listOf(old.request, second.request), released)
+        val third = bind(roomChoice(open("third")), released); store.clear(); runCurrent()
+        assertEquals(listOf(old.request, second.request, third.request), released); assertNull(model.state.value.targetBinding)
+    }
+    @Test fun acceptanceThatCreatesANewBindingCannotRetireThatSuccessor() = runTest(dispatcher) {
+        val entry = open(); val released = mutableListOf<TargetRequest>(); val old = bind(roomChoice(entry), released)
+        var next: MessageSearchTargetBinding? = null
+        assertTrue(model.adoptTarget(old, old.request) { next = bind(selection(entry), released); true })
+        assertSame(next, model.state.value.targetBinding); assertEquals(listOf(old.request), released)
+        model.cancelTarget(old); assertSame(next, model.state.value.targetBinding)
+    }
+    @Test fun allScopeTargetBindingAndAdoptionRecheckCurrentDmDisclosures() = runTest(dispatcher) {
+        val entry = open(); search(entry); runCurrent(); val choice = selection(entry)
+        val request = TargetRequest(entry.original, choice.target); val released = mutableListOf<TargetRequest>()
+        assertNull(model.bindTarget(choice, request) { released += it })
+        val valid = MessagePrivacy(DirectPrivacy(false, false, "admin", "permanently", 0),
+            RevisionPrivacy(false, "super_admin", true, true, false))
+        operations.session.value = operations.session.value.copy(privacy = valid); runCurrent()
+        val binding = checkNotNull(model.bindTarget(choice, request) { released += it })
+        operations.session.value = operations.session.value.copy(privacy = null)
+        assertFalse(model.adoptTarget(binding, request) { fail("Unknown privacy"); true })
+        assertTrue(released.isEmpty()); assertSame(binding, model.state.value.targetBinding)
+        operations.session.value = operations.session.value.copy(privacy = valid)
+        assertTrue(model.adoptTarget(binding, request) { true }); assertEquals(listOf(request), released)
+    }
+    @Test fun resourceDenialRemovesOnlyItsExcerptsAndKeepsTheRawPageBoundaryAndOtherRows() = runTest(dispatcher) {
+        operations.otherRoom = true
+        val entry = open(); val released = mutableListOf<TargetRequest>(); val binding = bind(roomChoice(entry), released)
+        val old = results(); val unrelated = old.page.results.last()
+        for (failure in listOf(ApiFailure(FailureKind.HTTP, 403, "csrf_failed"),
+            ApiFailure(FailureKind.NETWORK), ApiFailure(FailureKind.HTTP, 429))) {
+            model.targetDenied(binding, binding.request, failure)
+            assertSame(old, results()); assertTrue(released.isEmpty())
+        }
+        val denial = ApiFailure(FailureKind.HTTP, 403, "forbidden")
+        model.targetDenied(binding, binding.request, denial)
+        assertNotSame(old, results()); assertEquals(listOf(unrelated), results().page.results)
+        assertTrue(results().accessFiltered); assertTrue(results().page.hasMore); assertEquals(25, results().page.nextOffset)
+        assertEquals("original query", model.state.value.query); assertEquals(listOf(binding.request), released)
+        assertNull(model.state.value.targetBinding); assertNull(model.select(entry, old, unrelated))
+        val next = checkNotNull(model.select(entry, results(), unrelated)); val current = bind(next, released)
+        model.targetDenied(binding, binding.request, denial)
+        assertSame(current, model.state.value.targetBinding); assertEquals(listOf(unrelated), results().page.results)
+    }
+    @Test fun directResourceDenialRetiresItsPrivatePageWithoutFabricatingExhaustionOrRetryConsent() = runTest(dispatcher) {
+        val valid = MessagePrivacy(DirectPrivacy(false, false, "admin", "permanently", 0),
+            RevisionPrivacy(false, "super_admin", true, true, false))
+        operations.session.value = operations.session.value.copy(privacy = valid)
+        val entry = open(); model.scope(entry, MessageSearchScope.DIRECT); search(entry); runCurrent()
+        val released = mutableListOf<TargetRequest>(); val binding = bind(selection(entry), released)
+        model.targetDenied(binding, binding.request, ApiFailure(FailureKind.HTTP, 404, "not_found"))
+        assertTrue(results().page.results.isEmpty()); assertTrue(results().page.canLoadMore)
+        assertEquals(25, results().page.nextOffset); assertNull(model.state.value.failedAttempt)
+        assertNull(model.state.value.selection); assertEquals(1, operations.calls.size)
+        assertNotNull(model.next(entry, results())); runCurrent()
+        assertFalse(results().accessFiltered); assertEquals(2, operations.calls.size)
+    }
+    @Test fun targetBindingDebugStringDoesNotExposeQueryOrResultContents() = runTest(dispatcher) {
+        val binding = bind(roomChoice(open()), mutableListOf())
+        for (text in listOf("original query", "Private excerpt", "PrivateUser", "Private room"))
+            assertFalse(binding.toString().contains(text))
+        assertEquals("MessageSearchState", model.state.value.toString())
+    }
     private class Operations : MessageSearchOperations {
         override val session = MutableStateFlow(SessionState(
             server = (ServerAddress.parse("https://fixture.example.test") as AddressResult.Valid).address,
@@ -281,6 +410,7 @@ class MessageSearchViewModelTest {
         var cancel = false
         var more = true
         var empty = false
+        var otherRoom = false
         fun row(id: Long, direct: Boolean = false): MessageSearchHit = if (direct)
             MessageSearchHit.Direct(id, "Private excerpt", SearchParticipant(7, "PrivateUser"),
                 SearchParticipant(9, "Peer"), true, "2026-11-06T12:00:00Z", null)
@@ -291,7 +421,11 @@ class MessageSearchViewModelTest {
             gates[index]?.let { gate -> if (ignoreCancellation) withContext(NonCancellable) { gate.await() } else gate.await() }
             if (cancel) throw CancellationException("Fixture cancellation")
             failure?.let { throw it }
-            val rows = if (empty) emptyList() else (1L..request.limit.toLong()).map { row(it, request.scope == MessageSearchScope.DIRECT) }
+            val rows = if (empty) emptyList() else (1L..request.limit.toLong()).map {
+                if (otherRoom && it == request.limit.toLong()) MessageSearchHit.Room(it, "Other excerpt", null,
+                    SearchRoom(99, "other", "Other room"), "2026-11-06T12:00:00Z", null)
+                else row(it, request.scope == MessageSearchScope.DIRECT)
+            }
             return MessageSearchPage(rows, more && !empty, if (more && !empty) request.offset + rows.size else null)
         }
     }

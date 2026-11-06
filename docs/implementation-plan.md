@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5e3b](milestones/M5e3b-open-search-results.md) consumes delivered PR79 search through guarded exact-original lookup and historical room/DM navigation. Complete its own full gates/reviews/delivery, then continue the remaining M5 completion/profile/media slices. Search opening grants no read/send/typing consent; manual/live/release gates remain separate.
+
 [M5e3a](milestones/M5e3a-native-message-search.md) consumes delivered PR77/78 through a real member search screen, explicit scopes/pages and current DM disclosures. Complete its own full gates/reviews/delivery, then add M5e3b exact-result lookup/root navigation with original selection/request binding, existing target actors and preserved drafts/unknown-send/read guards. Search excerpts do not themselves open or mark original messages.
 
 [M5e2](milestones/M5e2-message-search-state.md) prepares explicit-only scoped query/page/selection state on delivered PR77. Complete its own full gates/reviews/delivery, then consume it in native search screens with privacy disclosures and fresh exact-target/root navigation guards. State availability is not usable native search or live acceptance.

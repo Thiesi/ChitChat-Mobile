@@ -1,8 +1,8 @@
 # Current status and limitations
 
-[M5e3a native search](milestones/M5e3a-native-message-search.md) adds member All/Rooms/Direct terms, plain excerpts and explicit bounded pages on the existing state/protocol. All/Direct requires validated current DM privacy; unknown policy leaves Rooms independent. Opening originals, live search and manual device/API26/TalkBack/large-font/landscape acceptance remain pending. No search grants read/send consent.
+[M5e3a native search](milestones/M5e3a-native-message-search.md) adds member All/Rooms/Direct terms, plain excerpts and explicit bounded pages on the existing state/protocol. All/Direct requires validated current DM privacy; unknown policy leaves Rooms independent. [M5e3b](milestones/M5e3b-open-search-results.md) adds guarded original opening; live search and manual device/API26/TalkBack/large-font/landscape acceptance remain pending. No search grants read/send consent.
 
-[M5e2 search state](milestones/M5e2-message-search-state.md) supplies the private in-memory actor consumed by M5e3a. One25-row page keeps memory bounded while allowing the endpoint's offset range; edited input is separate from completed results. Background clears private data, and foreground/session changes never repeat a search POST. Exact-result navigation and live/device acceptance remain pending.
+[M5e2 search state](milestones/M5e2-message-search-state.md) supplies the private in-memory actor consumed by M5e3a. One25-row page keeps memory bounded while allowing the endpoint's offset range; edited input is separate from completed results. Background clears private data, and foreground/session changes never repeat a search POST. M5e3b consumes exact selections for guarded navigation; live/device acceptance remains pending.
 
 [M5e1 participant search](milestones/M5e1-message-search-protocol.md) supplies typed CSRF POST requests and plain-text, namespace-specific result hints, now used by native controls/state. Server query validation/authorization, bounded offsets and original-session fences do not grant read/send consent. No live/device search acceptance is claimed.
 
