@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[M5d1 formatting](milestones/M5d1-message-format-parser.md) is parser groundwork only. Transcripts still use their existing plaintext presentation; native styling, link activation and accessibility/device acceptance remain pending. Oversized/complex input is retained whole as literal; mentions gain no authority.
+
 [Issue69](https://github.com/Thiesi/ChitChat-Mobile/issues/69)'s strict IME failure recurred in PR71's first Linux native run. [Manual Linux observation](milestones/linux-native-input-observation.md) prepares one bounded traced control while keeping ordinary CI unchanged. Its outcome cannot waive PR71's failed gate or explain issue70's separate author assertion without further evidence.
 
 [Issue70](https://github.com/Thiesi/ChitChat-Mobile/issues/70) retains the new main DM author-recovery failure (177/178). [Failure-only observations](milestones/direct-author-recovery-observations.md) can narrow a future failure using bounded VM scalars; they do not explain or fix it. PR71's separate DM reaction state remains held pending diagnosis or a specific maintainer gate decision.
