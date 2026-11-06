@@ -490,7 +490,7 @@ private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, on
 }
 
 @Composable
-private fun DirectPrivacyNotice(privacy: MessagePrivacy?, title: Int = R.string.dm_privacy, compact: Boolean = false,
+internal fun DirectPrivacyNotice(privacy: MessagePrivacy?, title: Int = R.string.dm_privacy, compact: Boolean = false,
     needsAttention: Boolean = false,
     expanded: Boolean, onExpandedChange: (Boolean) -> Unit,
     actions: @Composable (() -> Unit) -> Unit = {}) {
