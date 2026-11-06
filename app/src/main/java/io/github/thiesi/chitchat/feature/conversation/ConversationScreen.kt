@@ -4,6 +4,7 @@ import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
 import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
 import io.github.thiesi.chitchat.core.reactions.selectedBy
 import io.github.thiesi.chitchat.core.ui.MessageBody
+import io.github.thiesi.chitchat.core.ui.MessageMentions
 import io.github.thiesi.chitchat.core.ui.messageLinks
 import io.github.thiesi.chitchat.core.ui.openMessageLink
 
@@ -556,6 +557,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
 private fun MessageContent(message: RoomMessage, context: ConversationContext?, onOpenReply: ((Long) -> Unit)? = null,
     onActions: (() -> Unit)? = null, viewer: Long = 0, onReactions: (() -> Unit)? = null, canReact: Boolean = false) {
     val sender = message.username ?: stringResource(R.string.conversation_unknown_user)
+    val mentionHints = remember(message.mentions) { MessageMentions.room(message.mentions) }
     val actionsLabel = stringResource(R.string.message_actions)
     when {
         message.deleted -> Text(stringResource(R.string.conversation_deleted), style = MaterialTheme.typography.bodyMedium)
@@ -574,8 +576,8 @@ private fun MessageContent(message: RoomMessage, context: ConversationContext?, 
                 .combinedClickable(onClickLabel = actionsLabel, onLongClickLabel = actionsLabel,
                     onClick = onActions, onLongClick = onActions) else Modifier)) {
                 if (message.type == "emote") MessageBody(message.body.orEmpty(),
-                    emotePrefix = stringResource(R.string.conversation_emote, sender, ""))
-                else message.body?.let { MessageBody(it) }
+                    emotePrefix = stringResource(R.string.conversation_emote, sender, ""), mentions = mentionHints)
+                else message.body?.let { MessageBody(it, mentions = mentionHints) }
                 message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }
                 if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
             }

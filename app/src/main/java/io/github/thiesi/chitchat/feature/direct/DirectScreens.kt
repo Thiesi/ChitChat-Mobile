@@ -44,6 +44,7 @@ import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.ui.InlineError
 import io.github.thiesi.chitchat.core.ui.MessageBody
+import io.github.thiesi.chitchat.core.ui.MessageMentions
 import io.github.thiesi.chitchat.core.ui.messageLinks
 import io.github.thiesi.chitchat.core.ui.openMessageLink
 import io.github.thiesi.chitchat.core.ui.messageTime
@@ -454,6 +455,7 @@ private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadStat
 private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, onOpenReply: ((Long) -> Unit)? = null,
     onActions: (() -> Unit)? = null) {
     val actionsLabel = stringResource(R.string.message_actions)
+    val mentionHints = remember(message.mentions) { MessageMentions.direct(message.mentions) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (message.outgoing) Alignment.End else Alignment.Start) {
     val tint = if (message.outgoing) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
     Surface(Modifier.widthIn(max = 560.dp), shape = MaterialTheme.shapes.medium,
@@ -475,7 +477,7 @@ private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, on
             Column(Modifier.then(if (onActions != null) Modifier.heightIn(min = 48.dp)
                 .combinedClickable(onClickLabel = actionsLabel, onLongClickLabel = actionsLabel,
                     onClick = onActions, onLongClick = onActions) else Modifier)) {
-                message.body?.let { MessageBody(it) }
+                message.body?.let { MessageBody(it, mentions = mentionHints) }
                 message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }
                 if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
             }

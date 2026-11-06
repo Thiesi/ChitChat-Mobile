@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[M5d3](milestones/M5d3-native-mention-highlighting.md) adds passive mention highlighting only from supplied server snapshots. Unknown/edited-in names stay plain; room broadcasts are separate from DM hints. Code, links, literal fallback, emote prefixes and reply excerpts gain no mention decoration. Completion/profile navigation, device/TalkBack/contrast/layout and live acceptance remain pending. Existing read/send/typing/notification and canonical owner guards are unchanged.
+
 [M5d2 formatting](milestones/M5d2-native-message-formatting.md) adds room/DM styling and explicit link choices through message actions. Links open another app only after selection; Copy/reply excerpts retain original markup. Oversized/complex input stays whole and literal, and mentions gain no authority. Manual browser/API26/device/TalkBack/layout acceptance remains pending. The identical-tree independent main run after parser PR74 failed177/178 in the existing tracing self-test; [issue69 evidence](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6690203327) remains failed with no retry or waiver.
 
 [Issue69](https://github.com/Thiesi/ChitChat-Mobile/issues/69)'s strict IME failure recurred in PR71's first Linux native run. [Manual Linux observation](milestones/linux-native-input-observation.md) prepares one bounded traced control while keeping ordinary CI unchanged. Its outcome cannot waive PR71's failed gate or explain issue70's separate author assertion without further evidence.
