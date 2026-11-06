@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5e1](milestones/M5e1-message-search-protocol.md) supplies the existing participant message-search protocol through the original session transport, without native controls or result adoption. After its own complete gates/reviews/delivery, continue with scoped in-memory query/page state and guarded native search/result routing as separate reviewable slices. Never apply PR76's one-head exception to a future head.
+
 [M5d3](milestones/M5d3-native-mention-highlighting.md) consumes existing server-authorized mention snapshots in native room/DM Text runs on delivered M5d2/PR75. It adds no resolution, notification, read or send action. Complete its own build/CI/current-head review cycle, then continue remaining completion/profile/media/search slices; manual/live/release acceptance stays separate.
 
 [M5d1](milestones/M5d1-message-format-parser.md) delivered bounded formatting data and browser-derived grammar fixtures in PR74. [M5d2](milestones/M5d2-native-message-formatting.md) consumes it through real room/DM styling and canonical explicit link choices, with its own complete build/CI/review cycle. It does not depend on or waive PR71; native input tests remain unchanged. Continue remaining M5 mentions/completion, media and search after delivery; manual/live/release acceptance stays separate.

@@ -8,6 +8,8 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
+[Participant message-search protocol](docs/milestones/M5e1-message-search-protocol.md) prepares typed private POST queries and bounded room/DM result hints. Native search controls, query/result state and exact-result navigation remain pending; this prerequisite changes no in-app availability.
+
 [Native mention highlighting](docs/milestones/M5d3-native-mention-highlighting.md) uses the server’s existing room/DM snapshots, with separate room broadcast styling. Unresolved names, code, links and literal fallback gain no mention decoration. Completion/profile navigation and manual/live acceptance remain pending.
 
 [Native message formatting](docs/milestones/M5d2-native-message-formatting.md) adds room/DM emphasis, code, quotes and explicit link choices in message actions, using the delivered [bounded parser](docs/milestones/M5d1-message-format-parser.md). Copy and reply excerpts stay literal; mention completion/profile navigation and manual device/browser/accessibility acceptance remain pending.

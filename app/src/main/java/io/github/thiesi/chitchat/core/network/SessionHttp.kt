@@ -14,6 +14,8 @@ import io.github.thiesi.chitchat.core.realtime.PresenceUser
 import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.notifications.NotificationPage
 import io.github.thiesi.chitchat.core.notifications.NotificationReadResult
+import io.github.thiesi.chitchat.core.search.MessageSearchPage
+import io.github.thiesi.chitchat.core.search.MessageSearchRequest
 import io.github.thiesi.chitchat.core.mutations.validateEditedBody
 import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
 import java.io.IOException
@@ -120,6 +122,14 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
             is TypingTarget.Direct -> apiJson.encodeToString(DirectTypingRequest(target.peer))
         }
         return decode<TypingSignalReply>(request("typing.php", body, csrf).require200()).signalled
+    }
+
+    suspend fun searchMessages(search: MessageSearchRequest, viewer: Long, csrf: String): MessageSearchPage {
+        if (search.limit !in 1..50 || search.offset !in 0..5000)
+            throw ApiFailure(FailureKind.HTTP, 400, "validation_error")
+        val body = MessageSearchBody(search.query, search.scope.wireValue, search.limit, search.offset)
+        return decode<MessageSearchReply>(request("search/messages.php", apiJson.encodeToString(body), csrf)
+            .require200()).page(search, viewer)
     }
 
     suspend fun notifications(beforeId: Long?, limit: Int): NotificationPage {

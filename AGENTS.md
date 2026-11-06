@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [M5e1 participant search](docs/milestones/M5e1-message-search-protocol.md) is protocol only: original-session CSRF POST, private immutable query and literal excerpts, namespace/perspective validation, relevance order and exact bounded offset evidence. Server owns query normalization/authorization. No replay, saved query, canonical adoption or read/send consent; native controls/state/result routing follow separately. PR76's approved exception applies only to its exact reviewed head, not future slices.
+
 - [M5d3 mention highlighting](docs/milestones/M5d3-native-mention-highlighting.md) decorates only actual server snapshot hints in parsed Text nodes. Never infer authorization from syntax, resolve edited-in names, invent DM broadcasts or add notification/profile/read/send actions. Preserve code/link/prefix/reply exclusions, complete literal fallback, canonical owner/ignore redaction and content-safe debug strings; metadata lists remain complete.
 
 - [M5d2 native formatting](docs/milestones/M5d2-native-message-formatting.md) uses the bounded parser only for transcript presentation. Keep emote prefixes/Copy/replies literal, mentions inert, code URLs non-interactive and explicit48dp link choices in the existing suppressing actions modal. Key link buttons by destination so an edited URL retires the old node/press. Re-fence original selection/session/entry/canonical callbacks before an external intent; no automatic fetch, authenticated transport or notification browser fallback.
