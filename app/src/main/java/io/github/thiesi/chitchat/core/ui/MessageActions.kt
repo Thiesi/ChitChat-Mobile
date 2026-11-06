@@ -15,6 +15,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -66,9 +67,13 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
             if (available && links.isNotEmpty() && onOpenLink != null) {
                 Text(stringResource(R.string.message_links_disclosure))
                 links.forEachIndexed { index, link ->
-                    TextButton(onClick = { onOpenLink(link.target) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("message_link:$index")) {
-                        Text(stringResource(R.string.message_open_link, link.target))
+                    // A changed destination retires its pointer/semantics node, rather than
+                    // updating the handler underneath a press on the previous address.
+                    key(link.target) {
+                        TextButton(onClick = { onOpenLink(link.target) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("message_link:$index")) {
+                            Text(stringResource(R.string.message_open_link, link.target))
+                        }
                     }
                 }
             }
