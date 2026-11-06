@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5d1](milestones/M5d1-message-format-parser.md) independently prepares bounded formatting data and browser-derived grammar fixtures. Deliver its own build/CI/current-head review cycle, then implement the native renderer and explicit link interaction separately. It does not depend on or waive PR71; native input tests remain unchanged.
+
 [Opt-in Linux native input observation](milestones/linux-native-input-observation.md) prepares a single bounded traced control for the recurring issue69 failure. Ordinary CI remains unfiltered/untraced; the separate manual diagnostic adds no parity or gate waiver. PR71 stays held by its native failure, and issue70 remains independent.
 
 [Failure-only DM author recovery observations](milestones/direct-author-recovery-observations.md) narrow the new [issue70](https://github.com/Thiesi/ChitChat-Mobile/issues/70) main assertion failure. They add no product parity or production fix. PR71's DM reaction state remains a separate slice; neither its results nor a diagnostic pass explain or waive this failed main gate.
