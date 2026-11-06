@@ -8,6 +8,10 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.*
+import kotlinx.serialization.encodeToString
+import java.util.concurrent.CountDownLatch
+import mockwebserver3.Dispatcher
+import mockwebserver3.RecordedRequest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.OkHttpClient
@@ -29,7 +33,13 @@ class MessageSearchProtocolTest {
     private val anonymous = "a".repeat(64)
     private val authenticated = "b".repeat(64)
     private val empty = """{"results":[],"has_more":false,"next_offset":null}"""
-    private val query = MessageSearchRequest("private fixture")
+    private val query = MessageSearchRequest("private fixture", MessageSearchScope.ROOMS)
+    private val privacy = """{"direct_messages":{"end_to_end_encrypted":false,"admin_inspection_enabled":true,"admin_inspection_role":"admin","retention":"Fixture retention","retention_days":30},"message_revisions":{"admin_review_enabled":true,"admin_review_role":"admin","reason_required":true,"audit_each_review":true,"participant_notification":false}}"""
+    private fun privacyBootstrap(policy: String) =
+        """{"csrf_token":"$authenticated","user":${apiJson.encodeToString(sessions.state.value.user)},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false},"privacy":$policy}"""
+    private suspend fun refreshPrivacy(policy: String = privacy) {
+        server.enqueue(json(privacyBootstrap(policy))); sessions.refresh(); take()
+    }
     @Before fun start() {
         val certificate = HeldCertificate.Builder().addSubjectAlternativeName("localhost").build()
         val tls = HandshakeCertificates.Builder().heldCertificate(certificate).build()
@@ -61,7 +71,7 @@ class MessageSearchProtocolTest {
     }
 
     @Test fun termsStayInTheExactCsrfProtectedPostBodyUsingTheOriginalCookie() = runTest {
-        val original = login()
+        val original = login(); refreshPrivacy()
         val terms = "  😀 \"deployment rehearsal\"\t-rollback\n@Alice  "
         for (scope in MessageSearchScope.entries) {
             server.enqueue(json(empty))
@@ -76,12 +86,12 @@ class MessageSearchProtocolTest {
             assertEquals(50, body.getValue("limit").jsonPrimitive.int)
             assertEquals(5000, body.getValue("offset").jsonPrimitive.int)
         }
-        assertEquals(5, server.requestCount) // No bootstrap, read, send, metadata or notification request.
+        assertEquals(6, server.requestCount) // Explicit privacy GET, then exactly three search POSTs; no chat read/send.
     }
     @Test fun invalidLocalPageBoundsNeverReachTheServer() = runTest {
         val original = login(); val count = server.requestCount
-        for (request in listOf(MessageSearchRequest("fixture", limit = 0), MessageSearchRequest("fixture", limit = 51),
-            MessageSearchRequest("fixture", offset = -1), MessageSearchRequest("fixture", offset = 5001)))
+        for (request in listOf(MessageSearchRequest("fixture", MessageSearchScope.ROOMS, limit = 0), MessageSearchRequest("fixture", MessageSearchScope.ROOMS, limit = 51),
+            MessageSearchRequest("fixture", MessageSearchScope.ROOMS, offset = -1), MessageSearchRequest("fixture", MessageSearchScope.ROOMS, offset = 5001)))
             assertEquals(400, failure { repository.search(original, request) }.status)
         assertEquals(count, server.requestCount)
     }
@@ -89,7 +99,7 @@ class MessageSearchProtocolTest {
         val original = login()
         for (terms in listOf("", "-", "a".repeat(201))) {
             server.enqueue(errorResponse("validation_error", 400))
-            val bad = failure { repository.search(original, MessageSearchRequest(terms)) }
+            val bad = failure { repository.search(original, MessageSearchRequest(terms, MessageSearchScope.ROOMS)) }
             assertEquals(400, bad.status); assertEquals("validation_error", bad.code)
             assertFalse(bad.toString().contains("Private fixture"))
             assertEquals(terms, apiJson.parseToJsonElement(take().body!!.utf8()).jsonObject.getValue("query").jsonPrimitive.content)
@@ -166,7 +176,7 @@ class MessageSearchProtocolTest {
         val original = login(); server.enqueue(json(empty, delay = 500))
         val pending = async { repository.search(original, query) }; withContext(Dispatchers.IO) { take() }
         pending.cancelAndJoin(); assertEquals(3, server.requestCount)
-        server.enqueue(json(empty)); repository.search(original, MessageSearchRequest("new explicit fixture")); take()
+        server.enqueue(json(empty)); repository.search(original, MessageSearchRequest("new explicit fixture", MessageSearchScope.ROOMS)); take()
         assertEquals(4, server.requestCount)
     }
     @Test fun guestAndAnonymousStatesNeverOpenAMemberSearchCapability() = runTest {
@@ -178,6 +188,36 @@ class MessageSearchProtocolTest {
         sessions.connect((ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address); take()
         assertEquals(SessionPhase.ANONYMOUS, sessions.state.value.phase)
         failure { repository.search(sessions.state.value, query) }; assertEquals(2, server.requestCount)
+    }
+    @Test fun missingOrUnsupportedPrivacyNeverDefaultsToDmPermissionAndRoomsRemainIndependent() = runTest {
+        val original = login()
+        for (scope in listOf(MessageSearchScope.ALL, MessageSearchScope.DIRECT))
+            assertEquals(FailureKind.INCOMPATIBLE, failure { repository.search(original, MessageSearchRequest("fixture", scope)) }.kind)
+        assertEquals(2, server.requestCount)
+        server.enqueue(json(empty)); repository.search(original, query); take()
+        refreshPrivacy(privacy.replace(""""end_to_end_encrypted":false""", """"end_to_end_encrypted":true"""))
+        for (scope in listOf(MessageSearchScope.ALL, MessageSearchScope.DIRECT))
+            assertEquals(FailureKind.INCOMPATIBLE, failure { repository.search(original, MessageSearchRequest("fixture", scope)) }.kind)
+        assertEquals(4, server.requestCount)
+    }
+    @Test fun disclosureIsRecheckedAfterTheSearchAwaitBeforePrivateResultsReturn() = runTest {
+        val original = login(); refreshPrivacy()
+        val release = CountDownLatch(1)
+        val incompatible = privacyBootstrap(privacy.replace(""""end_to_end_encrypted":false""", """"end_to_end_encrypted":true"""))
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse =
+                if (request.url.encodedPath.endsWith("/search/messages.php")) {
+                    check(release.await(10, TimeUnit.SECONDS)); json(empty)
+                } else json(incompatible)
+        }
+        try {
+            val pending = async { runCatching { repository.search(original, MessageSearchRequest("fixture")) } }
+            withContext(Dispatchers.IO) { take() }
+            sessions.refresh(); take()
+            release.countDown()
+            assertEquals(FailureKind.INCOMPATIBLE, (pending.await().exceptionOrNull() as ApiFailure).kind)
+            assertEquals(5, server.requestCount)
+        } finally { release.countDown() }
     }
     private class Vault : SessionVault {
         var saved: SavedSession? = null

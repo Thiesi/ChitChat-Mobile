@@ -19,7 +19,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /** Root navigation/lifecycle owns entry creation; screen callbacks keep this exact reference. */
-class MessageSearchEntry internal constructor(internal val original: SessionState, val navigationEntryId: String)
+class MessageSearchEntry internal constructor(internal val original: SessionState, val navigationEntryId: String) {
+    fun matches(current: SessionState) = original.searchOwner() != null && original.searchOwner() == current.searchOwner()
+}
 class MessageSearchAttempt internal constructor(val entry: MessageSearchEntry, val request: MessageSearchRequest)
 class MessageSearchResults internal constructor(val attempt: MessageSearchAttempt, val page: MessageSearchPage)
 class MessageSearchSelection internal constructor(val results: MessageSearchResults, val hit: MessageSearchHit) {

@@ -8,9 +8,11 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-[Participant search state](docs/milestones/M5e2-message-search-state.md) adds private scoped query/page/selection state with explicit Search/Next/Previous and no automatic POST replay. Native search screens, disclosures and exact-result navigation remain pending; no in-app availability changes yet.
+[Native participant search](docs/milestones/M5e3a-native-message-search.md) offers explicit All/Rooms/Direct queries, plain excerpts and bounded page navigation, with current-server DM privacy disclosures and private in-memory input. Opening the original message remains unavailable pending its separate guarded consumer.
 
-[Participant message-search protocol](docs/milestones/M5e1-message-search-protocol.md) prepares typed private POST queries and bounded room/DM result hints. Native search controls, query/result state and exact-result navigation remain pending; this prerequisite changes no in-app availability.
+[Participant search state](docs/milestones/M5e2-message-search-state.md) supplies the private scoped query/page/selection actor now consumed by the native search screen. Foreground/session emissions never repeat a POST; exact-result opening remains separate.
+
+[Participant message-search protocol](docs/milestones/M5e1-message-search-protocol.md) supplies typed private POST queries and bounded room/DM result hints through the existing session transport. Native controls use the same contracts; original-message navigation and live acceptance remain separate.
 
 [Native mention highlighting](docs/milestones/M5d3-native-mention-highlighting.md) uses the server’s existing room/DM snapshots, with separate room broadcast styling. Unresolved names, code, links and literal fallback gain no mention decoration. Completion/profile navigation and manual/live acceptance remain pending.
 

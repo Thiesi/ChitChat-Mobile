@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5e3a](milestones/M5e3a-native-message-search.md) consumes delivered PR77/78 through a real member search screen, explicit scopes/pages and current DM disclosures. Complete its own full gates/reviews/delivery, then add M5e3b exact-result lookup/root navigation with original selection/request binding, existing target actors and preserved drafts/unknown-send/read guards. Search excerpts do not themselves open or mark original messages.
+
 [M5e2](milestones/M5e2-message-search-state.md) prepares explicit-only scoped query/page/selection state on delivered PR77. Complete its own full gates/reviews/delivery, then consume it in native search screens with privacy disclosures and fresh exact-target/root navigation guards. State availability is not usable native search or live acceptance.
 
 [M5e1](milestones/M5e1-message-search-protocol.md) supplies the existing participant message-search protocol through the original session transport, without native controls or result adoption. After its own complete gates/reviews/delivery, continue with scoped in-memory query/page state and guarded native search/result routing as separate reviewable slices. Never apply PR76's one-head exception to a future head.
