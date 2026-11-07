@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Activity</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}.unread{background:rgba(240,106,59,0.07)}.unread .name::before{content:"";display:inline-block;width:8px;height:8px;border-radius:4px;background:var(--persimmon);margin-right:8px;vertical-align:middle}</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div class="appbar">
+    <h1 class="display">Activity</h1>
+    <button class="btn text sm">Mark all read</button>
+  </div>
+  <div class="section"><span>NEW · 2</span></div>
+  <div class="row unread">
+    <div style="position: relative;"><span class="av h-lime">J</span>
+      <span style="position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; border-radius: 11px; background: var(--honey); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px var(--bg); font-size: 12px; font-weight: 800; color: var(--ink);">@</span></div>
+    <div class="main"><div class="name" style="font-size: 15px;">Jonas mentioned you</div><div class="line">Kitchen · "can you bring the big pot on Sunday?"</div></div>
+    <div class="side">18:04</div>
+  </div>
+  <div class="row unread">
+    <div style="position: relative;"><span class="av h-rose">L</span>
+      <span style="position: absolute; right: -4px; bottom: -4px; width: 22px; height: 22px; border-radius: 11px; background: var(--persimmon); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px var(--bg);"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 13px; height: 13px; stroke: var(--ink); stroke-width: 2.6;"><path d="M4 12l16-7-7 16-2-7z"></path></svg></span></div>
+    <div class="main"><div class="name" style="font-size: 15px;">Lena pinged you</div><div class="line">Travel 2027 · private ping</div></div>
+    <div class="side">17:30</div>
+  </div>
+  <div class="section"><span>EARLIER</span></div>
+  <div class="row">
+    <div class="tile sm h-lilac" style="width: 44px; height: 44px;">B</div>
+    <div class="main"><div class="name" style="font-size: 15px;">You were invited to Board games</div><div class="line">From Tomasz</div></div>
+    <div class="side">Mon</div>
+  </div>
+  <div class="row">
+    <div style="width: 44px; height: 44px; border-radius: 50%; background: var(--raised); display: flex; align-items: center; justify-content: center; flex: none;"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--text-2);"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></div>
+    <div class="main"><div class="name" style="font-size: 15px;">New sign-in to your account</div><div class="line">Android app · Sun 21:14</div></div>
+    <div class="side">Sun</div>
+  </div>
+  <div style="padding: 20px 24px; font-size: 13px; color: var(--text-2); text-align: center;">Reading an item here doesn't mark the chat as read. Open the chat for that.</div>
+  <span class="spacer"></span>
+  <nav class="navbar" aria-label="Main">
+    <a class="tab" href="Home.dc.html"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="13" rx="6"></rect><circle cx="19" cy="20" r="1.8"></circle></svg></span>Rooms<span class="dot">15</span></a>
+    <a class="tab" href="DirectInbox.dc.html"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4.5 20a7.5 7.5 0 0 1 15 0"></path></svg></span>Direct<span class="dot">5</span></a>
+    <a class="tab on" href="Activity.dc.html" aria-current="page"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20.5a2 2 0 0 0 4 0"></path></svg></span>Activity</a>
+    <a class="tab" href="AdminHome.dc.html"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="10" r="3"></circle><path d="M6.5 18.2a6.5 6.5 0 0 1 11 0"></path></svg></span>You</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

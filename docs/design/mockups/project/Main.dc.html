@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Welcome</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="ccm dark" style="padding: 0 28px 32px;">
+  <div class="inset"></div>
+  <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; gap: 28px;">
+    <svg width="132" height="112" viewBox="0 0 132 112" role="img" aria-label="ChitChat lantern mark">
+      <defs>
+        <radialGradient id="g" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FFB547" stop-opacity="0.55"></stop><stop offset="100%" stop-color="#FFB547" stop-opacity="0"></stop></radialGradient>
+      </defs>
+      <circle cx="58" cy="50" r="56" fill="url(#g)"></circle>
+      <rect x="14" y="10" width="88" height="72" rx="30" fill="#F06A3B"></rect>
+      <circle cx="108" cy="92" r="11" fill="#F06A3B"></circle>
+      <circle cx="42" cy="46" r="6" fill="#14111C"></circle>
+      <circle cx="74" cy="46" r="6" fill="#14111C"></circle>
+    </svg>
+    <h1 class="display" style="margin: 0; font-size: 44px; line-height: 1.02; font-weight: 800;">Come in.<br>The lights<br>are on.</h1>
+    <p style="margin: 0; font-size: 17px; color: var(--text-2); max-width: 300px;">ChitChat lives on a server run by your community. Bring its address and we'll take you there.</p>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <a class="btn" href="OnboardServer.dc.html">Get started</a>
+    <a class="btn ghost" href="OnboardServer.dc.html">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><path d="M14 14h3v3M21 14v0M14 21h7v-4"></path></svg>
+      Scan an invite code
+    </a>
+    <p style="margin: 8px 0 0; font-size: 13px; color: var(--text-2); text-align: center;">Your community runs the server. No ChitChat company sits in between.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
