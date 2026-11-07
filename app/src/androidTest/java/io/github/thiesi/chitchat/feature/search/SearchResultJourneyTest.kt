@@ -30,6 +30,7 @@ import io.github.thiesi.chitchat.feature.account.*
 import io.github.thiesi.chitchat.feature.auth.*
 import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
 import io.github.thiesi.chitchat.feature.direct.*
+import io.github.thiesi.chitchat.feature.notifications.NotificationCenterViewModel
 import io.github.thiesi.chitchat.feature.realtime.NativeTypingHarness
 import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
 import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
@@ -54,6 +55,7 @@ class SearchResultJourneyTest {
     private lateinit var room: ConversationViewModel
     private lateinit var direct: DirectThreadViewModel
     private lateinit var inbox: DirectInboxViewModel
+    private lateinit var notices: NotificationCenterViewModel
     @Volatile private var ime = 0
     private val settingsStore = object : SettingsStore {
         override val settings = MutableStateFlow(AppSettings(server =
@@ -72,13 +74,14 @@ class SearchResultJourneyTest {
         room = keep(activity) { ConversationViewModel(api.rooms, typing = typing.controller) }
         direct = keep(activity) { DirectThreadViewModel(api.directs, typing = typing.controller) }
         inbox = keep(activity) { DirectInboxViewModel(api.directs) }
+        notices = keep(activity) { NotificationCenterViewModel(api.notices) }
         search = keep(activity) { MessageSearchViewModel(searchApi) }
         targets = keep(activity) { MessageTargetViewModel(api.lookups) }
         activity.setContent {
             val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
             SideEffect { ime = bottom }
             Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, account, directory, room,
-                directInbox = inbox, directThread = direct, messageTargets = targets, search = search) }
+                directInbox = inbox, directThread = direct, messageTargets = targets, notifications = notices, search = search) }
         }
     }
     @Before fun configuration() {
@@ -125,6 +128,7 @@ class SearchResultJourneyTest {
                 if (::room.isInitialized) room.cancel()
                 if (::direct.isInitialized) direct.background()
                 if (::inbox.isInitialized) inbox.background()
+                if (::notices.isInitialized) notices.background()
                 typing.close()
             }
         }
