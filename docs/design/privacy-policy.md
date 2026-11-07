@@ -2,8 +2,8 @@
 
 Status: **draft for maintainer approval**, requested by the technical lead (issue #1 and PR #108).
 It is built from the approved data safety facts (`play-readiness.md` §4) and the existing
-in-app disclosures. It is host-neutral: where it will be published, and the contact address,
-are open. Every factual statement must be re-verified against the shipped app before
+in-app disclosures. It will be published at **https://ChitChat.NetWorkXXIII.de/app/privacy** (maintainer
+decision, 2026-11-08). Publisher name and contact address are still open. Every factual statement must be re-verified against the shipped app before
 publication. Placeholders are written as **[PLACEHOLDER]**.
 
 Editorial notes for reviewers are in *italic brackets* and aren't part of the published text.
@@ -58,10 +58,9 @@ entered, and doesn't follow redirects.
 ChitChat doesn't run in the background. It uses UnifiedPush: a separate delivery app you choose
 receives notifications from your server and wakes ChitChat. The notification content is
 **encrypted** between your server and this app (Web Push encryption, RFC 8291), so the delivery
-service can't read it. If you choose a delivery method based on Google's Firebase Cloud
-Messaging, Google transports these encrypted messages. *[Reviewer note: keep this sentence if
-the optional embedded FCM distributor ships; otherwise say "If your delivery app uses a
-third-party service, that service transports the encrypted messages."]*
+service can't read it. If no UnifiedPush delivery app is installed, ChitChat falls back to
+Google's Firebase Cloud Messaging, and Google then transports these encrypted messages. The app
+doesn't include Google's Firebase software; it uses UnifiedPush's standard Web Push delivery.
 
 **To anyone else:** nothing. The app contains no analytics, advertising or crash-reporting
 software, and it doesn't sell or share your data.
@@ -130,6 +129,6 @@ Questions about your account or messages: the operator of your ChitChat server.
       (`allowBackup=false`, data extraction rules).
 - [ ] Photo location removal ships as specified in `files-media.md`.
 - [ ] Drafts and images aren't written to disk, and share copies are deleted.
-- [ ] Whether the optional embedded FCM distributor ships (the FCM sentence).
-- [ ] Publisher name, contact and publication URL filled in.
+- [x] Embedded FCM distributor ships (maintainer, 2026-11-08); the FCM sentence is final. Verify it's used only when no UnifiedPush distributor is installed.
+- [ ] Publisher name and contact filled in (URL: https://ChitChat.NetWorkXXIII.de/app/privacy).
 - [ ] Wording consistent with the data safety form answers.
