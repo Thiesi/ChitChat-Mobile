@@ -276,6 +276,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                 } }
                 val headerLimit = maxHeight * 0.3f
                 val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
+                val inlineCompletion=maxHeight>=360.dp && androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.3f && selectedReply==null
                 val completionSource=profileDetailsToken
                 val completionPeerName=state.context?.peer?.username.orEmpty()
                 fun completionAllowed(): Boolean {
@@ -293,8 +294,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     canEdit={ fromDetails -> if (fromDetails) completionAllowed() && detailsOpen && completionSource!=null && profileDetailsToken===completionSource
                         else interactive() && actions==null && replyOptions==null },canOffer=::completionAllowed,
                     write={ model.updateDraft(displayedSession,peer,it) },
-                    onTextChanged={ model.typing?.input(displayedSession,TypingTarget.Direct(peer),hasTypingContent(it)) })
-                val inlineCompletion=maxHeight>=360.dp && androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.3f && selectedReply==null
+                    onTextChanged={ model.typing?.input(displayedSession,TypingTarget.Direct(peer),hasTypingContent(it)) },inlineChoices=inlineCompletion && !detailsOpen)
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (!compact) Column(Modifier.fillMaxWidth().heightIn(max = headerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
                         SessionNotice(session, now, onRefreshSession)

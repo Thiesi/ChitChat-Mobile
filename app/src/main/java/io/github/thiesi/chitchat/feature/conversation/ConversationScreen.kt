@@ -274,6 +274,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     } }
     val headerLimit = maxHeight * 0.3f
     val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
+    val inlineCompletion=maxHeight>=360.dp && androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.3f && selectedReply==null
     val detailsSource = completionDetailsToken
     fun completionAllowed(): Boolean {
         val current=model.state.value; val owner=model.session.value
@@ -294,8 +295,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             model.typing?.input(displayedSession,TypingTarget.Room(roomId),hasTypingContent(it)) },
         localNames={ model.state.value.messages.asReversed().filter { it.senderId!=displayedSession.user?.id }.mapNotNull { it.username } +
             model.realtime?.state?.value?.takeIf { it.generation==displayedSession.generation && it.selectedRoomId==roomId }
-                ?.users.orEmpty().filter { it.id!=displayedSession.user?.id }.map { it.username } })
-    val inlineCompletion=maxHeight>=360.dp && androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.3f && selectedReply==null
+                ?.users.orEmpty().filter { it.id!=displayedSession.user?.id }.map { it.username } },inlineChoices=inlineCompletion && !detailsOpen)
     val header: @Composable (Boolean,() -> Unit) -> Unit = { inDetails,close ->
             if (inDetails && completionComposer.choice!=null) {
                 Text(stringResource(R.string.completion_title))

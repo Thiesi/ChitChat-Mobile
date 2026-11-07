@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
@@ -24,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -49,7 +53,8 @@ internal class CompletionEditor(body: String) {
 internal class ComposerCompletion internal constructor(private val editor: CompletionEditor,
     private val model: CompletionViewModel?, private val pane: CompletionPane?, private val rendered: CompletionState?,
     private val currentBody: () -> String?, private val canEdit: (Boolean) -> Boolean, private val canOffer: () -> Boolean,
-    private val write: (String) -> Boolean, private val onTextChanged: (String) -> Unit, private val localNames: () -> List<String>) {
+    private val write: (String) -> Boolean, private val onTextChanged: (String) -> Unit, private val localNames: () -> List<String>,
+    private val inlineChoices: Boolean=true) {
     val value get()=editor.value
     val choice: CompletionSelection? get()=rendered?.selection?.takeIf {
         it.pane===pane && it.edit.same(editor.snapshot()) && currentBody()==value.text && canOffer()
@@ -86,9 +91,13 @@ internal class ComposerCompletion internal constructor(private val editor: Compl
         if (model==null || pane==null || event.type!=KeyEventType.KeyDown || event.isShiftPressed ||
             event.isCtrlPressed || event.isAltPressed || event.isMetaPressed || !canEdit(false) || !canOffer() ||
             value.composition!=null || currentBody()!=value.text) return false
-        val original=choice
+        val pending=choice
+        val original=pending?.takeIf { inlineChoices }
         return when(event.key) {
             Key.Tab -> {
+                // Hidden Details choices must not consume Enter/arrows or select an unseen
+                // hint on Tab. The separate local IRC cycle remains available.
+                if (!inlineChoices && pending!=null) model.quiet(pane)
                 val edit=editor.snapshot()
                 model.tab(pane,edit,localNames()) { accept(it,edit,false) }
             }
@@ -109,7 +118,8 @@ internal class ComposerCompletion internal constructor(private val editor: Compl
 @Composable
 internal fun rememberComposerCompletion(model: CompletionViewModel?, expected: SessionState, target: CompletionTarget,
     entryId: String, body: String, currentBody: () -> String?, canEdit: (Boolean) -> Boolean, canOffer: () -> Boolean,
-    write: (String) -> Boolean, onTextChanged: (String) -> Unit, localNames: () -> List<String> = { emptyList() }): ComposerCompletion {
+    write: (String) -> Boolean, onTextChanged: (String) -> Unit, localNames: () -> List<String> = { emptyList() },
+    inlineChoices: Boolean=true): ComposerCompletion {
     val editor=remember(expected.server,expected.generation,expected.user?.id,expected.user?.sessionVersion,
         entryId,target is CompletionTarget.Direct,target.id,(target as? CompletionTarget.Direct)?.username) { CompletionEditor(body) }
     val state=model?.state?.collectAsStateWithLifecycle()?.value
@@ -132,34 +142,41 @@ internal fun rememberComposerCompletion(model: CompletionViewModel?, expected: S
             if (!offer) model.quiet(pane)
         }
     }
-    return ComposerCompletion(editor,model,pane,state,currentBody,canEdit,canOffer,write,onTextChanged,localNames)
+    return ComposerCompletion(editor,model,pane,state,currentBody,canEdit,canOffer,write,onTextChanged,localNames,inlineChoices)
 }
 
 @Composable
 internal fun CompletionSuggestions(composer: ComposerCompletion, fromDetails: Boolean=false, onAccepted: () -> Unit = {}) {
     val original=composer.choice ?: return
     val palette=if (MaterialTheme.colorScheme.background.luminance()<0.5f) Lantern.dark else Lantern.light
+    val identitySize=Lantern.badge*LocalDensity.current.fontScale.coerceAtLeast(1f)
+    key(original) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val limit=maxWidth.coerceAtLeast(Lantern.target)
     Row(Modifier.heightIn(min=Lantern.target).horizontalScroll(rememberScrollState()).testTag("completion_choices"),
         horizontalArrangement=Arrangement.spacedBy(Lantern.gap), verticalAlignment=Alignment.CenterVertically) {
         composer.candidates.forEachIndexed { index,candidate ->
+            key(candidate) {
             val label=stringResource(if (candidate is CompletionCandidate.Broadcast) R.string.completion_broadcast else R.string.completion_person,
                 candidate.username)
             val selected=index==composer.highlighted
+            val bring=remember { BringIntoViewRequester() }
+            var placed by remember { mutableStateOf(false) }
+            LaunchedEffect(selected,placed) { if (selected && placed) bring.bringIntoView() }
             TextButton(onClick={ if (composer.choose(original,candidate,fromDetails)) onAccepted() },
-                modifier=Modifier.heightIn(min=Lantern.target).widthIn(min=Lantern.target,max=limit).testTag("completion_candidate:$index")
+                modifier=Modifier.heightIn(min=Lantern.target).widthIn(min=Lantern.target,max=limit).bringIntoViewRequester(bring).onPlaced { placed=true }.testTag("completion_candidate:$index")
                     .semantics { this.selected=selected;contentDescription=label },
                 shape=Lantern.pill, border=BorderStroke(if (selected) Lantern.selectedEdge else Lantern.quietEdge,palette.boundary),
                 colors=ButtonDefaults.textButtonColors(containerColor=palette.raised,contentColor=palette.text),
                 contentPadding=PaddingValues(horizontal=Lantern.inset,vertical=Lantern.gap)) {
                 val person=candidate as? CompletionCandidate.Person
-                Box(Modifier.size(Lantern.badge).background(Lantern.identity(person?.id ?: original.pane.target.id),
+                Box(Modifier.size(identitySize).background(Lantern.identity(person?.id ?: original.pane.target.id),
                     if (person!=null) Lantern.person else Lantern.room).clearAndSetSemantics {},contentAlignment=Alignment.Center) {
-                    Text(if (person==null) "@" else candidate.username.take(1),color=Lantern.ink,style=MaterialTheme.typography.labelSmall)
+                    Text(if (person==null) "@" else candidate.username.take(candidate.username.offsetByCodePoints(0,1)),color=Lantern.ink,style=MaterialTheme.typography.labelSmall)
                 }
                 Text(label,modifier=Modifier.weight(1f,fill=false).padding(start=Lantern.gap).clearAndSetSemantics {},maxLines=1,overflow=TextOverflow.Ellipsis,
                     fontWeight=if (selected) FontWeight.Bold else FontWeight.Normal)
+            }
             }
         }
         if (composer.loading) Text(stringResource(R.string.completion_loading),Modifier.widthIn(max=limit),color=palette.muted)
@@ -174,6 +191,7 @@ internal fun CompletionSuggestions(composer: ComposerCompletion, fromDetails: Bo
             colors=ButtonDefaults.textButtonColors(contentColor=palette.actionText)) {
             Text(stringResource(R.string.completion_dismiss))
         }
+    }
     }
     }
 }

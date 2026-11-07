@@ -68,8 +68,11 @@ jobs:
             adb shell settings put secure show_ime_with_hard_keyboard 1
             native_status=0
             python3 -B .github/scripts/native_journeys.py || native_status=$?
-            mkdir -p app/build/reports/androidTests/completion-presentation
-            adb pull /sdcard/Android/data/io.github.thiesi.chitchat.debug/files/ccm-completion-presentation/. app/build/reports/androidTests/completion-presentation/ || echo 'Presentation captures unavailable; original native status retained.'
+            if mkdir -p app/build/reports/androidTests/completion-presentation; then
+              adb pull /sdcard/Android/data/io.github.thiesi.chitchat.debug/files/ccm-completion-presentation/. app/build/reports/androidTests/completion-presentation/ || echo 'Presentation captures unavailable; original native status retained.'
+            else
+              echo 'Presentation destination unavailable; original native status retained.'
+            fi
             exit "$native_status"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()

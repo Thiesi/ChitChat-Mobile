@@ -1,6 +1,6 @@
 # Current status and limitations
 
-[Completion state](milestones/M5d4b-completion-state.md) is implemented but native completion controls are not available yet. This head corrects premature availability copy and prepares M5d4c. Basic profiles remain available; device/live/guest/accessibility/release acceptance remains separate.
+[Native completion](milestones/M5d4c-native-mention-completion.md) implements scoped room and peer-only direct-message suggestions, constrained Details controls and local hardware Tab cycling on delivered M5d4b state. This head still requires its own complete development gates and presentation-lead judgment review. Device/live/guest/TalkBack/release acceptance remains separate; no keyboard fix or earlier-head waiver is claimed.
 
 [M5d4a](milestones/M5d4a-room-mention-protocol.md) is room candidate metadata only; native completion, DM/local providers, reserved broadcast choices and IRC Tab behavior remain pending. Existing underscore matching can return broader names (#152). Send-time authorization is server-owned; guest/live/device/release acceptance remains separate.
 

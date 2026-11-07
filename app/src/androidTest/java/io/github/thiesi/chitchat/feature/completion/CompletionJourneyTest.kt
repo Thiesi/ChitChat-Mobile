@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -24,6 +28,7 @@ import io.github.thiesi.chitchat.core.network.*
 import io.github.thiesi.chitchat.core.server.*
 import io.github.thiesi.chitchat.core.session.*
 import io.github.thiesi.chitchat.core.settings.*
+import io.github.thiesi.chitchat.core.ui.MessageInput
 import io.github.thiesi.chitchat.feature.account.TestChitChatApp
 import io.github.thiesi.chitchat.feature.auth.*
 import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
@@ -210,6 +215,46 @@ class CompletionJourneyTest {
         compose.onNodeWithTag("conversation_composer").assertIsNotFocused()
         compose.runOnIdle { assertEquals("NoMatch",room.state.value.draft);assertEquals(0,api.rooms.sends) }
     }
+    @Test fun hiddenSuggestionsLeaveEnterAvailableForANewline() {
+        compose.runOnIdle { constrained.value=true };enter();type("@An");loaded()
+        compose.onAllNodesWithTag("completion_choices").assertCountEquals(0)
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_ENTER)
+        compose.waitForIdle()
+        assertEquals("@An\n",characters("conversation_composer"))
+        compose.runOnIdle { assertEquals("@An\n",room.state.value.draft);assertNull(model.state.value.selection);assertEquals(0,api.rooms.sends) }
+    }
+    @Test fun visibleComponentKeysSelectAndDismissWithoutSending() {
+        // An explicitly inline component fixture covers key routing independently of the
+        // room's adaptive Details layout. This is not full-screen/layout acceptance.
+        val draft=mutableStateOf("")
+        compose.runOnIdle { runBlocking { sessions.signIn("Viewer","fixture-password") } }
+        compose.activityRule.scenario.onActivity { activity -> activity.setContent {
+            val density=LocalDensity.current
+            val bottom=WindowInsets.ime.getBottom(density);SideEffect { ime=bottom }
+            LaunchedEffect(Unit) { model.foreground();model.navigate("hardware-component") }
+            androidx.compose.material3.MaterialTheme {
+                val composer=rememberComposerCompletion(model,sessions.state.value,CompletionTarget.Room(43),"hardware-component",draft.value,
+                    currentBody={draft.value},canEdit={true},canOffer={true},write={draft.value=it;true},onTextChanged={})
+                Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
+                    CompletionSuggestions(composer)
+                    MessageInput(composer.value,composer::input,true,"Message",false,
+                        Modifier.fillMaxWidth().onPreviewKeyEvent(composer::key).testTag("completion_component_composer"))
+                }
+            }
+        } }
+        compose.waitUntil(5_000) { model.state.value.pane?.entryId=="hardware-component" }
+        val input=compose.tapNativeInput("completion_component_composer",{ime})
+        input.performTextInput("@An");loaded()
+        val instrumentation=InstrumentationRegistry.getInstrumentation()
+        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_DOWN);compose.waitForIdle()
+        compose.onNodeWithTag("completion_candidate:1").assertIsDisplayed().assertIsSelected()
+        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_ENTER);compose.waitForIdle()
+        assertEquals("@Andy ",characters("completion_component_composer"))
+        input.assertIsFocused().performTextClearance();input.performTextInput("@An");loaded()
+        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_ESCAPE);compose.waitForIdle()
+        assertEquals("@An",characters("completion_component_composer"))
+        compose.runOnIdle { assertNull(model.state.value.selection);assertEquals(0,api.rooms.sends) }
+    }
     @Test fun genuineBackgroundRetiresLateCandidatesWithoutReplayingThePrefixOnResume() {
         mentions.gate=CompletableDeferred();mentions.ignoreCancellation=true;enter();type("@An")
         compose.waitUntil(5_000) { mentions.calls.any { it.second.limit==8 && it.second.prefix=="An" } }
@@ -253,13 +298,25 @@ class CompletionJourneyTest {
         compose.onNode(hasTestTag("completion_candidate:0") and hasAnyAncestor(isDialog()))
             .assertIsDisplayed().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
         capture("$label-after-details")
+        compose.onNode(hasText(text(R.string.rooms_close)) and hasAnyAncestor(isDialog())).assertIsDisplayed().performNativeTap()
     }
     private fun capture(label: String) {
+        // The pinned Compose library supports Dialog window capture from API28.
+        // API26/27 still execute every behavior assertion; no capture/visual pass is claimed.
+        if (android.os.Build.VERSION.SDK_INT<28) return
         compose.waitForIdle()
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val folder=java.io.File(checkNotNull(context.getExternalFilesDir(null)),"ccm-completion-presentation")
         check(folder.isDirectory || folder.mkdirs())
-        val bitmap=checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
+        val target=if (label.endsWith("after-details")) compose.onNode(isDialog()) else compose.onRoot()
+        // captureToImage uses PixelCopy for these ordinary Activity/Dialog roots. Its
+        // popup fallback takes a whole-display screenshot, so reject that ancestry.
+        var ancestor: SemanticsNode?=target.fetchSemanticsNode()
+        while (ancestor!=null) {
+            check(!ancestor.config.contains(SemanticsProperties.IsPopup)) { "Capture requires an owned Activity or Dialog window" }
+            ancestor=ancestor.parent
+        }
+        val bitmap=target.captureToImage().asAndroidBitmap()
         try {
             java.io.File(folder,"$label.png").outputStream().use {
                 check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it))
