@@ -30,6 +30,7 @@ a substitute.
 | [theme-foundation.md](theme-foundation.md) | Implementation spec for the first slice: tokens, Material mapping, wrappers, font, settings, window, icon |
 | [amoled-black.md](amoled-black.md) | The true-black dark variant required before going live |
 | [acceptance.md](acceptance.md) | Accessibility and readability floors, plus numbered, testable presentation requirements |
+| [accessibility-verification.md](accessibility-verification.md) | How each A-* floor is proven: test layers, shared assertions, configuration matrix, TalkBack scripts |
 | [mockups/](mockups/) | Source of the mockup canvas: 21 phone screens (onboarding, everyday use, situations, AMOLED black, invite codes) and a vocabulary sheet |
 
 The mockups are also published as a private design canvas for the maintainer. The files
