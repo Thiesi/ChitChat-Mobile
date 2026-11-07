@@ -45,8 +45,9 @@ What reconnection does and does not imply:
 - Reconnecting refreshes what is shown. It never sends anything on the person's behalf.
   Drafts that were waiting stay drafts until the person presses Send.
 - Content loaded before the drop stays visible while offline, with a quiet marker at the
-  live edge: "Loaded at 17:58. Newer messages appear when you reconnect." Do not blank the
-  screen or show a spinner over readable content.
+  live edge: "Newer messages appear when you reconnect." Prefix "Loaded at 17:58." only
+  where the screen already records its last load time. Do not blank the screen or show a
+  spinner over readable content. Implementation: [status-presentation.md](status-presentation.md).
 - Presence and typing are unknown while offline. Show "Who's here is unknown while
   offline" rather than a stale count.
 
