@@ -2,10 +2,10 @@
 
 Status: **approved direction, 2026-11-07.** The maintainer approved decisions D1–D7 as
 recommended (see below). This folder is the presentation contract for new UI work. The
-project coordinator decides when and in which slices existing screens are restyled;
+technical lead (the coordinator role; see issue #1) decides when and in which slices existing screens are restyled;
 implementers should not restyle screens outside a planned slice.
 
-Owner: the presentation lead (a Claude session; see issue #1). The project coordinator
+Owner: the presentation lead (a Claude session; see issue #1). The technical lead (coordinator)
 plans integration into the roadmap. Codex and other implementers build it. A change to an
 approved contract goes through a PR that updates these files; personal agent memory is not
 a substitute.

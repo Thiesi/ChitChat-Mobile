@@ -179,6 +179,18 @@ Replace the teal `ic_chitchat` with an adaptive icon (`mipmap-anydpi-v26`, since
 The vector paths follow the mark in visual-vocabulary.md. The app name and application ID
 are unchanged; final public identity remains the maintainer's decision.
 
+## Also in this slice (technical lead decisions, 2026-11-07)
+
+- **Pseudo-locales for debug builds only** (`isPseudoLocalesEnabled = true` in the debug build
+  type), so the RTL (`ar-XB`) and long-text (`en-XA`) checks in
+  [accessibility-verification.md](accessibility-verification.md) can run. Release builds are
+  unaffected.
+- **Adaptive launcher, themed and notification icons** from [app-mark.md](app-mark.md) and
+  `docs/design/assets/`.
+- **Accessibility Test Framework** checks enabled on this slice's new and restyled tests only.
+- No screenshot-testing library. The PR attaches emulator captures as listed under Tests and
+  evidence.
+
 ## Out of scope for this slice
 
 Layout, spacing and copy changes, navigation (D3), bubble and chit rendering, room and

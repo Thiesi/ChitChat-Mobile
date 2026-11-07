@@ -34,18 +34,18 @@ reusable assertions, so each slice tests the floors the same way:
 - `assertNotFocusableDecoration()`: the chit, glow and illustrations are hidden from
   accessibility.
 
-Optional: Compose's Accessibility Test Framework integration (`enableAccessibilityChecks()`
-on the compose test rule) catches contrast, label and target issues automatically. It is a
-test dependency, so the coordinator decides whether to adopt it. If adopted, it runs in
-the normal suite and its findings fail the test. No suppressions without a written reason
-in the test.
+**Accessibility Test Framework (decided, technical lead, 2026-11-07):** adopt Compose's
+`enableAccessibilityChecks()` **per slice**, on new and restyled presentation tests only.
+It is not blanket-enabled across the existing suite in one step, so that no unrelated new
+failures land on top of the known IME issues (#69). Its findings fail the test.
+Suppressions need a written reason in the test.
 
 ## L3: configuration matrix
 
 | Configuration | How | Notes |
 |---|---|---|
 | 200% font scale, 360×640dp | Dedicated emulator, the existing `expectedFontScale` instrumentation argument and recorded/restored font scale (`build-test-release.md`) | The composer, Send and each screen's primary action stay reachable; nothing overlaps or clips |
-| RTL | Enable pseudo-locales for **debug builds only** (`isPseudoLocalesEnabled = true`) and run with `ar-XB` | Build change: coordinator. The chit and bubble sides mirror, and icons with direction (back, send) flip |
+| RTL | Pseudo-locales for **debug builds only** (`isPseudoLocalesEnabled = true`; **decided**, landing with the theme foundation) and run with `ar-XB` | The chit and bubble sides mirror, and icons with direction (back, send) flip |
 | Long text | Pseudo-locale `en-XA` (expanded strings) | Labels wrap, and buttons grow rather than truncate essential words |
 | Landscape | Existing landscape gate procedure | The bottom bar hides at compact heights, and the transcript width is capped |
 | Animations off | Existing CI setup (animations disabled) | Every transition completes with no stuck intermediate state |
