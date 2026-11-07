@@ -142,6 +142,27 @@
       "w": 390,
       "h": 844,
       "title": "Scan an invite code, rejected code (dark)"
+    },
+    "ServerProblem.dc.html": {
+      "x": 1880,
+      "y": 1300,
+      "w": 390,
+      "h": 844,
+      "title": "2b Server address problem"
+    },
+    "SignIn.dc.html": {
+      "x": 2350,
+      "y": 1300,
+      "w": 390,
+      "h": 844,
+      "title": "4a Sign in"
+    },
+    "CreateAccount.dc.html": {
+      "x": 2820,
+      "y": 1300,
+      "w": 390,
+      "h": 844,
+      "title": "4b Create account (anti-bot check running)"
     }
   },
   "order": [
@@ -163,7 +184,10 @@
     "AmoledRoom.dc.html",
     "AmoledInbox.dc.html",
     "Invite.dc.html",
-    "Scan.dc.html"
+    "Scan.dc.html",
+    "ServerProblem.dc.html",
+    "SignIn.dc.html",
+    "CreateAccount.dc.html"
   ],
   "notes": {
     "tOnboard": {
@@ -171,7 +195,7 @@
       "y": 1020,
       "text": "First run: server first, people second",
       "kind": "title1",
-      "maxW": 1800
+      "maxW": 3210
     },
     "tDaily": {
       "x": 0,
@@ -188,7 +212,7 @@
       "maxW": 1800
     },
     "status": {
-      "x": 1900,
+      "x": 3290,
       "y": 1300,
       "w": 380,
       "size": "m",

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sign in</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div class="appbar">
+    <a class="icon-btn" href="OnboardFound.dc.html" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <span style="display: inline-flex; gap: 8px; align-items: center; background: var(--raised); border-radius: 18px; padding: 4px 12px 4px 4px; font-size: 14px;">
+      <span class="tile sm h-sea" style="width: 28px; height: 28px; border-radius: 10px; font-size: 13px;">S</span>chat.schmidt.family</span>
+  </div>
+  <div style="padding: 12px 24px 0; display: flex; flex-direction: column; gap: 18px; flex-grow: 1;">
+    <h1 class="display" style="margin: 0; font-size: 34px; line-height: 1.08; font-weight: 800;">Welcome back</h1>
+    <div>
+      <label class="label" for="u">Username</label>
+      <input id="u" class="input" value="mara" autocomplete="username">
+    </div>
+    <div>
+      <label class="label" for="p">Password</label>
+      <div style="position: relative;">
+        <input id="p" class="input focus" type="password" value="hunter2hunter2" autocomplete="current-password" style="padding-right: 56px;">
+        <button class="icon-btn" aria-label="Show password" style="position: absolute; right: 4px; top: 4px;"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+      </div>
+    </div>
+    <div class="hint" style="margin: 0;">Forgot your password? Ask the person who runs the server.</div>
+    <span class="spacer"></span>
+  </div>
+  <div style="padding: 0 24px 28px; display: flex; flex-direction: column; gap: 8px;">
+    <a class="btn" href="Home.dc.html" style="width: 100%;">Sign in</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
