@@ -104,24 +104,28 @@ import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
 import io.github.thiesi.chitchat.feature.targets.ReplyPreview
 import io.github.thiesi.chitchat.feature.targets.RequestedMessageMarker
 import kotlinx.coroutines.delay
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import io.github.thiesi.chitchat.feature.completion.*
 
 @Composable
 fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
     ignores: IgnorePersonViewModel? = null, targets: MessageTargetViewModel? = null, obscured: Boolean = false,
     onStopped: (() -> Unit)? = null, onProfile: ((Long) -> Boolean)? = null,
+    completion: CompletionViewModel? = null, completionEntryId: String = "",
     isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     key(roomId, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
         LaunchedEffect(roomId) { model.open(roomId, expected = displayedSession) }
-        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, onStopped, onProfile, isCurrentEntry)
+        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, onStopped, onProfile, completion, completionEntryId, isCurrentEntry)
     }
 }
 
 @Composable
 private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
     ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean,
-    onStopped: (() -> Unit)?, onProfile: ((Long) -> Boolean)?, isCurrentEntry: () -> Boolean) {
+    onStopped: (() -> Unit)?, onProfile: ((Long) -> Boolean)?, completion: CompletionViewModel?, completionEntryId: String,
+    isCurrentEntry: () -> Boolean) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session // Freeze callback origin; delegated Flow values can change before recomposition.
@@ -142,6 +146,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     var pingsOpen by remember { mutableStateOf(false) }
     val pingsVisible = pingsOpen || state.pingSelection != null
     var detailsOpen by remember { mutableStateOf(false) }
+    var completionDetailsToken by remember { mutableStateOf<Any?>(null) }
     var actions by remember { mutableStateOf<MessageActionSelection?>(null) }
     var replyOptions by remember { mutableStateOf<ComposerReply?>(null) }
     var focusReply by remember { mutableStateOf<ComposerReply?>(null) }
@@ -269,7 +274,33 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     } }
     val headerLimit = maxHeight * 0.3f
     val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
-    val header: @Composable (() -> Unit) -> Unit = { close ->
+    val detailsSource = completionDetailsToken
+    fun completionAllowed(): Boolean {
+        val current=model.state.value; val owner=model.session.value
+        return isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+            (window.isWindowFocused || detailsOpen && detailsSource!=null && completionDetailsToken===detailsSource) &&
+            !obscured && !pingsOpen && current.pingSelection==null && !current.draftsOpen && ignores?.state?.value?.target==null &&
+            actions==null && replyOptions==null && model.belongsTo(displayedSession) && current.roomId==roomId &&
+            current.loaded && !current.busy && !current.stale && !current.sending && current.authorDialog==null &&
+            !current.authorWriting && current.reactionDialog==null && !current.reactionWriting && model.canEditDraft() &&
+            !owner.busy && !owner.refreshRequired && !owner.storageWarning && System.currentTimeMillis()>=owner.retryAtMillis
+    }
+    val completionComposer=rememberComposerCompletion(completion,displayedSession,CompletionTarget.Room(roomId),completionEntryId,state.draft,
+        currentBody={ model.state.value.takeIf { model.belongsTo(displayedSession) && it.roomId==roomId }?.draft },
+        canEdit={ fromDetails -> if (fromDetails) completionAllowed() && detailsOpen && detailsSource!=null && completionDetailsToken===detailsSource
+            else interactive() && actions==null && replyOptions==null }, canOffer=::completionAllowed,
+        write={ model.updateDraft(displayedSession,roomId,it) },
+        onTextChanged={ if (model.state.value.pingSelection==null)
+            model.typing?.input(displayedSession,TypingTarget.Room(roomId),hasTypingContent(it)) },
+        localNames={ model.state.value.messages.asReversed().filter { it.senderId!=displayedSession.user?.id }.mapNotNull { it.username } +
+            model.realtime?.state?.value?.takeIf { it.generation==displayedSession.generation && it.selectedRoomId==roomId }
+                ?.users.orEmpty().filter { it.id!=displayedSession.user?.id }.map { it.username } })
+    val inlineCompletion=maxHeight>=360.dp && androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.3f && selectedReply==null
+    val header: @Composable (Boolean,() -> Unit) -> Unit = { inDetails,close ->
+            if (inDetails && completionComposer.choice!=null) {
+                Text(stringResource(R.string.completion_title))
+                CompletionSuggestions(completionComposer,fromDetails=true,onAccepted=close)
+            }
             Text(state.context?.room?.name ?: stringResource(R.string.conversation_title), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(if (model.realtime == null) R.string.conversation_manual else R.string.conversation_realtime),
                 style = MaterialTheme.typography.bodySmall)
@@ -362,7 +393,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (!compact) Column(Modifier.fillMaxWidth().heightIn(max = headerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-            header {}
+            header(false) {}
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("conversation_timeline"), state = timeline,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -425,31 +456,30 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             viewing = state.loaded && !state.stale && state.context != null && !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured,
             publishing = ready && !state.busy && !composerDialog && !obscured && model.canSend())
         if (!replyInline) replyControl(false)
+        if (inlineCompletion && !detailsOpen) CompletionSuggestions(completionComposer)
         Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
             run {
-                val label = stringResource(R.string.conversation_details)
+                val label = stringResource(if (completionComposer.choice!=null) R.string.completion_details else R.string.conversation_details)
                 val blocked = !ready || state.busy || !model.canSend()
                 val status = stringResource(if (blocked) R.string.conversation_send_unavailable_details else R.string.conversation_details_attention)
-                val attention = state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend || state.authorUnknown != null || state.authorLimit ||
+                val attention = completionComposer.choice!=null || state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend || state.authorUnknown != null || state.authorLimit ||
                     state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
                     state.notice != null || blocked || connection?.takeIf { it.generation == session.generation }?.let {
                         it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null || it.roomId == roomId }
                     } == true
                 BadgedBox(badge = { if (attention) Badge() }) {
-                    IconButton(onClick = { detailsOpen = true }, modifier = Modifier.semantics {
+                    IconButton(onClick = { completionDetailsToken=Any(); detailsOpen = true }, modifier = Modifier.semantics {
                         contentDescription = label
                         if (attention) stateDescription = status
                     }) { Text("\u22ee") }
                 }
             }
             if (replyInline) replyControl(true)
-            MessageInput(state.draft, { value ->
-                if (interactive() && actions == null && replyOptions == null && model.updateDraft(displayedSession, roomId, value) && model.state.value.pingSelection == null)
-                    model.typing?.input(displayedSession, TypingTarget.Room(roomId), hasTypingContent(value)) },
+            MessageInput(completionComposer.value, completionComposer::input,
                 !state.sending && model.canEditDraft() && !composerDialog && !obscured,
                 stringResource(R.string.conversation_message), compact,
-                Modifier.weight(1f).focusRequester(composerFocus).testTag("conversation_composer"))
+                Modifier.weight(1f).onPreviewKeyEvent(completionComposer::key).focusRequester(composerFocus).testTag("conversation_composer"))
             MessageSendButton(stringResource(if (state.sending) R.string.conversation_sending else R.string.conversation_send),
                 onClick = { if (interactive() && actions == null && replyOptions == null) model.send(displayedSession, roomId) },
                 enabled = ready && !state.busy && !composerDialog && !obscured && model.canSend() && state.draft.phpTrim().isNotEmpty(),
@@ -533,16 +563,16 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 }
             }, onDismiss = { if (replyOptions === choice) replyOptions = null })
     }
-    if (detailsOpen) AlertDialog(onDismissRequest = { detailsOpen = false },
+    if (detailsOpen) AlertDialog(onDismissRequest = { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } },
         title = { Text(stringResource(R.string.conversation_details)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
             connection?.takeIf { it.generation == session.generation }?.let {
                 val realtime = model.realtime
                 RealtimeStatus(it, realtime::retry, realtime::dismissBroadcast, roomId)
             }
-            header { detailsOpen = false }
+            header(true) { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } }
         } },
-        confirmButton = { TextButton(onClick = { detailsOpen = false }) { Text(stringResource(R.string.rooms_close)) } })
+        confirmButton = { TextButton(onClick = { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } }) { Text(stringResource(R.string.rooms_close)) } })
     }
     if (pingsVisible) {
         val choice = state.pingSelection // Freeze the close callback's original selection, not a delegated live value.

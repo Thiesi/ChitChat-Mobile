@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -160,6 +161,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
 @Composable
 fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSession: () -> Unit,
     targets: MessageTargetViewModel? = null, obscured: Boolean = false, onProfile: ((Long) -> Boolean)? = null,
+    completion: io.github.thiesi.chitchat.feature.completion.CompletionViewModel? = null, completionEntryId: String = "",
     isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
@@ -274,6 +276,25 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                 } }
                 val headerLimit = maxHeight * 0.3f
                 val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
+                val completionSource=profileDetailsToken
+                val completionPeerName=state.context?.peer?.username.orEmpty()
+                fun completionAllowed(): Boolean {
+                    val current=model.state.value;val owner=model.session.value
+                    return isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+                        (window.isWindowFocused || detailsOpen && completionSource!=null && profileDetailsToken===completionSource) &&
+                        !obscured && !blockConfirm && actions==null && replyOptions==null && model.belongsTo(displayedSession) &&
+                        current.peerId==peer && current.context?.peer?.username==completionPeerName && current.loaded &&
+                        !current.busy && !current.stale && !current.sending && current.authorDialog==null && current.reactionDialog==null &&
+                        model.canEditDraft() && !owner.busy && !owner.refreshRequired && !owner.storageWarning && System.currentTimeMillis()>=owner.retryAtMillis
+                }
+                val completionComposer=io.github.thiesi.chitchat.feature.completion.rememberComposerCompletion(completion,displayedSession,
+                    io.github.thiesi.chitchat.feature.completion.CompletionTarget.Direct(peer,completionPeerName),completionEntryId,state.draft,
+                    currentBody={ model.state.value.takeIf { model.belongsTo(displayedSession) && it.peerId==peer }?.draft },
+                    canEdit={ fromDetails -> if (fromDetails) completionAllowed() && detailsOpen && completionSource!=null && profileDetailsToken===completionSource
+                        else interactive() && actions==null && replyOptions==null },canOffer=::completionAllowed,
+                    write={ model.updateDraft(displayedSession,peer,it) },
+                    onTextChanged={ model.typing?.input(displayedSession,TypingTarget.Direct(peer),hasTypingContent(it)) })
+                val inlineCompletion=maxHeight>=360.dp && androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.3f && selectedReply==null
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (!compact) Column(Modifier.fillMaxWidth().heightIn(max = headerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
                         SessionNotice(session, now, onRefreshSession)
@@ -318,18 +339,19 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         viewing = state.loaded && !state.stale && !blockConfirm && !detailsOpen && !composerDialog && !obscured && state.context?.relationship?.messagingAvailable == true,
                         publishing = ready && !composerDialog && !detailsOpen && !blockConfirm && !obscured && model.canSend())
                     if (!replyInline) replyControl(false)
+                    if (inlineCompletion && !detailsOpen) io.github.thiesi.chitchat.feature.completion.CompletionSuggestions(completionComposer)
                     Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 12.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                         run {
                             val context = state.context
                             val profileSource = profileDetailsToken
-                            DirectPrivacyNotice(context?.privacy, R.string.dm_details, compact = true,
+                            DirectPrivacyNotice(context?.privacy, if (completionComposer.choice!=null) R.string.completion_details else R.string.dm_details, compact = true,
                                 expanded = detailsOpen, onExpandedChange = {
                                     if (it && !detailsOpen) profileDetailsToken = Any()
                                     if (!it) profileDetailsToken = null
                                     detailsOpen = it
                                 },
-                                needsAttention = state.stale || state.error != null || state.validation != null || state.newerAvailable ||
+                                needsAttention = completionComposer.choice!=null || state.stale || state.error != null || state.validation != null || state.newerAvailable ||
                                     state.uncertainSend || state.uncertainRead || state.readError != null || state.uncertainBlock ||
                                     state.authorUnknown != null || state.authorLimit || state.authorNotice != null ||
                                     state.reactionUnknown != null || state.reactionLimit || state.reactionNotice != null ||
@@ -339,6 +361,12 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 if (connection != null)
                                     RealtimeStatus(connection, model.realtime::retry, model.realtime::dismissBroadcast, roomId = null)
                                 Text(context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleMedium)
+                                if (completionComposer.choice!=null) {
+                                    Text(stringResource(R.string.completion_title))
+                                    io.github.thiesi.chitchat.feature.completion.CompletionSuggestions(completionComposer,fromDetails=true,onAccepted={
+                                        if (detailsOpen && profileSource!=null && profileDetailsToken===profileSource) dismiss()
+                                    })
+                                }
                                 SessionNotice(session, now, onRefreshSession)
                                 ThreadFeedback(model, state, attention[peer], ready, true, dismiss, checkAuthorHistory, checkReactionHistory)
                                 if (onProfile != null && context != null) TextButton(onClick = {
@@ -361,11 +389,9 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             }
                         }
                         if (replyInline) replyControl(true)
-                        MessageInput(state.draft, { value ->
-                            if (interactive() && actions == null && replyOptions == null && model.updateDraft(displayedSession, peer, value))
-                                model.typing?.input(displayedSession, TypingTarget.Direct(peer), hasTypingContent(value)) },
+                        MessageInput(completionComposer.value, completionComposer::input,
                             !state.sending && model.canEditDraft() && !composerDialog && !obscured,
-                            stringResource(R.string.dm_message), compact, Modifier.weight(1f).focusRequester(composerFocus).testTag("dm_composer"))
+                            stringResource(R.string.dm_message), compact, Modifier.weight(1f).onPreviewKeyEvent(completionComposer::key).focusRequester(composerFocus).testTag("dm_composer"))
                         MessageSendButton(stringResource(if (state.sending) R.string.conversation_sending else R.string.dm_send),
                             onClick = { if (interactive() && actions == null && replyOptions == null) model.send(displayedSession, peer) },
                             enabled = ready && !composerDialog && !detailsOpen && !blockConfirm && !obscured && model.canSend() && state.draft.phpTrim().isNotEmpty(),
