@@ -205,6 +205,13 @@
       "w": 390,
       "h": 844,
       "title": "Image viewer"
+    },
+    "ReportMessage.dc.html": {
+      "x": 1410,
+      "y": 7550,
+      "w": 390,
+      "h": 844,
+      "title": "Report a message (form dialog)"
     }
   },
   "order": [
@@ -235,7 +242,8 @@
     "NotificationSettings.dc.html",
     "RoomFiles.dc.html",
     "ShareIn.dc.html",
-    "ImageViewer.dc.html"
+    "ImageViewer.dc.html",
+    "ReportMessage.dc.html"
   ],
   "notes": {
     "tOnboard": {
@@ -323,9 +331,9 @@
     "tFiles": {
       "x": 0,
       "y": 7270,
-      "text": "Files and sharing (M5)",
+      "text": "Files, sharing and reporting (M5)",
       "kind": "title1",
-      "maxW": 1330
+      "maxW": 1800
     }
   },
   "designSystems": []
