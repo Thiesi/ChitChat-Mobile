@@ -107,6 +107,16 @@ At most one card shows, chosen as today (the first matching broadcast).
 Pressing Send while `RealtimePhase.OFFLINE` doesn't start a request. It marks the
 conversation's current draft **waiting to send**:
 
+- **Only clean drafts can wait.** Pressing Send offline marks a draft waiting **only** if
+  that conversation has no send in progress and its draft carries **no** delivery-unknown
+  (uncertain-send) state, pending reconciliation or pending duplicate-risk choice. For any of
+  those, Send keeps today's behavior: the existing Check history and duplicate-risk flow, which
+  needs an online GET reconciliation first. It is never queued, because an automatic send
+  could post a message that may already have arrived, skipping that explicit consent.
+- **Waiting is not an attempt.** A waiting draft has not been sent and has no delivery state.
+  It becomes a send attempt only at the moment the single automatic attempt actually starts.
+  Cancel and dropping the flag only remove the waiting mark. They never create, clear or
+  change a draft's delivery-unknown state or consent.
 - **One per conversation.** It reuses the existing room or DM draft slot, which already holds
   one text plus its reply reference. While a draft waits, the field shows its text
   read-only. Above the composer, a notice reads **"Will send when you're back online."**
@@ -210,6 +220,9 @@ Other offline composer rules:
   - polite announcement once per change;
   - the Back online timer cancels on leaving and on `ON_STOP`;
   - Send while offline marks the draft waiting; Cancel restores it;
+  - Send while offline on an uncertain, busy or consent-pending draft is not marked waiting
+    and keeps the existing Check history and duplicate-risk flow;
+  - Cancel or dropping the flag never changes uncertain-send state or consent;
   - exactly one automatic attempt, and only after session revalidation and that
     conversation's reconciliation have completed (never on bare `LIVE`);
   - policy changed during the offline period (muted, blocked, removed, or reply target
@@ -229,6 +242,6 @@ Other offline composer rules:
 | P-100 | Each signed-in screen shows at most one status notice, chosen by the precedence table. `LIVE` alone shows nothing. | U, C |
 | P-101 | Copy, levels and actions match the table. Retry and Refresh session call the existing actions with their existing gating. | C |
 | P-102 | Back online appears only after a recovery and dismisses after about 2 s, with a lifecycle-bound timer. | C |
-| P-103 | Send when back online: one waiting draft per conversation, made only by pressing Send. At most one automatic attempt, only after reconnect, completed session revalidation and that conversation's post-reconnect reconciliation, while the app is visible, through the ordinary guarded send path with policy re-read after the last await. Never retried; ambiguous results use the existing uncertain-send flow; the waiting flag is dropped on background, sign-out, generation change or process death. No background work. | U, C (fakes), existing unknown-send tests |
+| P-103 | Send when back online: one waiting draft per conversation, made only by pressing Send on a clean draft (never on an uncertain, busy or consent-pending one; waiting is not an attempt and never touches delivery-unknown state). At most one automatic attempt, only after reconnect, completed session revalidation and that conversation's post-reconnect reconciliation, while the app is visible, through the ordinary guarded send path with policy re-read after the last await. Never retried; ambiguous results use the existing uncertain-send flow; the waiting flag is dropped on background, sign-out, generation change or process death. No background work. | U, C (fakes), existing unknown-send tests |
 | P-104 | Announcements render as one dismissible steward-edged card, separate from status. | C, S |
 | P-105 | No new polling, timers beyond P-102 and P-25, or background work. Connectivity comes from the existing callback. | R |
