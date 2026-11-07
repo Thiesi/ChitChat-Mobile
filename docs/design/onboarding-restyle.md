@@ -94,7 +94,7 @@ then transcript (bubbles and chit), then lists, as input for the coordinator's p
 - Server chip at the top (lantern plus host, not interactive), display title "Welcome back",
   username and password fields (56dp, labels above, password visibility toggle with the label
   "Show password"), full-width **Sign in**, and a text button "Forgot your password? Ask the
-  person who runs the server." (static text: only administrators can reset passwords, so there is no member reset flow).
+  person who runs the server." (static text: today only administrators can reset a forgotten password). When the server offers self-service reset ([ChitChat#155](https://github.com/Thiesi/ChitChat/issues/155)), replace it with a **Forgot password?** button leading to that flow.
 - Existing rules stay: the password lives only in composition memory, is cleared on
   `ON_STOP` and is never saved in bundles. `contentType` hints for autofill remain.
   Rate-limit countdown (`retryAtMillis`) shows as a level-1 line under the button:
