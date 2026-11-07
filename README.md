@@ -1,5 +1,7 @@
 # ChitChat Mobile
 
+[M5d4a](docs/milestones/M5d4a-room-mention-protocol.md) adds original-session bounded room mention-candidate metadata. Native suggestions, caret/draft integration, DM/local and IRC completion remain pending; candidate hints grant no send/notification or policy consent.
+
 [M5f2 native basic profiles](docs/milestones/M5f2-native-basic-profiles.md) adds guarded read-only room-author and DM-peer cards, explicit refresh, member/guest date meaning and Unicode placeholders. Avatar transfer/management, guest-session and live/device/release acceptance remain separate.
 
 [Basic profile protocol](docs/milestones/M5f1-basic-profile-protocol.md) adds an original-session read-only metadata boundary after delivered native DM reactions/PR81. It validates exact account targets, guest visit facts and nullable avatar metadata without downloading images, applying policy hints or authorizing management. Native profile cards, avatar transfer/management and guest/live/device acceptance remain separate; current in-app profile-pending copy stays accurate.

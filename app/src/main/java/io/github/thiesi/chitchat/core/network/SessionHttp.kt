@@ -18,6 +18,9 @@ import io.github.thiesi.chitchat.core.search.MessageSearchPage
 import io.github.thiesi.chitchat.core.search.MessageSearchRequest
 import io.github.thiesi.chitchat.core.profile.ProfileSnapshot
 import io.github.thiesi.chitchat.core.profile.validateProfileTarget
+import io.github.thiesi.chitchat.core.mentions.ROOM_MENTION_LIMIT
+import io.github.thiesi.chitchat.core.mentions.RoomMentionUser
+import io.github.thiesi.chitchat.core.mentions.normalizedRoomMentionPrefix
 import io.github.thiesi.chitchat.core.mutations.validateEditedBody
 import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
 import java.io.IOException
@@ -132,6 +135,13 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         val body = MessageSearchBody(search.query, search.scope.wireValue, search.limit, search.offset)
         return decode<MessageSearchReply>(request("search/messages.php", apiJson.encodeToString(body), csrf)
             .require200()).page(search, viewer)
+    }
+
+    suspend fun roomMentionUsers(roomId: Long, prefix: String, viewer: Long): List<RoomMentionUser> {
+        val normalized = normalizedRoomMentionPrefix(roomId,prefix)
+        val query = origin.newBuilder().addQueryParameter("room_id","$roomId")
+            .addQueryParameter("search",normalized).addQueryParameter("limit","$ROOM_MENTION_LIMIT").build().encodedQuery!!
+        return decode<RoomMentionReply>(request("rooms/mentionable-users.php?$query").require200()).validUsers(viewer)
     }
 
     suspend fun profile(userId: Long, roomId: Long?): ProfileSnapshot {
