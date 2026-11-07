@@ -19,7 +19,7 @@ review on the canvas sizes, **M** manual check on a device or emulator, **R** co
 | ID | Requirement | Verify |
 |---|---|---|
 | A-01 | Text contrast at least 4.5:1 against its actual background in both themes, including muted text, captions and text on bubbles, badges and strips. Large text (at least 24sp, or 19sp bold) at least 3:1. | U (token pair test), S |
-| A-02 | Component boundaries and meaningful icons at least 3:1 against adjacent colors (fields, outlined buttons, selected chips, the unknown-delivery outline). Persimmon fills on paper (2.9:1) must not be the only cue (see visual-vocabulary). | U, S |
+| A-02 | Component boundaries and meaningful icons at least 3:1 against adjacent colors (fields, outlined buttons, selected chips, the `unsureLine` unknown-delivery outline). Persimmon fills on paper (2.9:1) must not be the only cue (see visual-vocabulary). | U, S |
 | A-03 | Every interactive element has a touch target of at least 48×48dp, even when drawn smaller. Existing 48dp contracts stay. | C (`assertTouchHeightIsEqualTo`/width at least 48dp), R |
 | A-04 | At 200% system font scale, on a 360×640dp window: no text is clipped or overlaps, the message input and Send stay visible together above the keyboard, and the primary action of every screen stays reachable by scrolling. | C with font-scale configuration, M |
 | A-05 | Never color alone. Unread, mention, presence, delivery state, role and errors each have text, a number, a shape or an icon besides color. | R, S (grayscale check) |
@@ -60,7 +60,7 @@ review on the canvas sizes, **M** manual check on a device or emulator, **R** co
 |---|---|---|
 | P-20 | Connectivity notices follow the table in [communication.md](communication.md): state names, copy intent, precedence, and the about-2-second "Back online" confirmation. One notice at a time. | C (fake connectivity source), S |
 | P-21 | Offline: Send is disabled with an accessible reason, the draft remains, loaded content stays visible with the "Loaded at" marker, and nothing is sent automatically on reconnect. | C |
-| P-22 | Delivery states render exactly as specified: Sending, Sent, Not sure (honey outline plus Check), Failed (text restored). The duplicate-risk dialog appears only after an explicit Check that did not find the message. | C, existing unknown-send tests |
+| P-22 | Delivery states render exactly as specified: Sending, Sent, Not sure (`unsureLine` outline plus Check), Failed (text restored). The duplicate-risk dialog appears only after an explicit Check that did not find the message. | C, existing unknown-send tests |
 | P-23 | No snackbar or toast carries information needed later. Errors name what happened, what was affected and what the person can do. | R |
 | P-24 | Required disclosures in communication.md stay visible without scrolling past the first screen of their surface. | S |
 | P-25 | Status presentation adds no polling, wake locks or background work. The short UI timers the spec calls for (about 2 s "Back online" dismissal, about 5 s reconnect escalation, about 2 s placeholder animation limit) are bound to the composition or lifecycle that shows them and cancelled when it leaves or the app goes to the background. Animations run only while visible in the foreground and none loops indefinitely. | R, U where practical |

@@ -13,11 +13,11 @@
 .ccm *, .ccm *::before, .ccm *::after { box-sizing: border-box; }
 .ccm.light { --bg: var(--paper); --surface: #FFFFFF; --raised: var(--paper-2); --line: var(--paper-line);
   --text: var(--ink); --text-2: #5E566B; --field-line: #8C8299; --accent-text: var(--persimmon-text);
-  --out: var(--apricot); --out-text: var(--ink); --link: var(--dusk); --err: var(--rose); --mention: var(--honey-wash);
+  --out: var(--apricot); --out-text: var(--ink); --link: var(--dusk); --err: var(--rose); --mention: var(--honey-wash); --unsure: #8F5B00;
   background: var(--bg); color: var(--text); }
 .ccm.dark { --bg: var(--ink); --surface: var(--ink-2); --raised: var(--ink-3); --line: var(--ink-line);
   --text: #F2EDF7; --text-2: #A79FB4; --field-line: #7D7490; --accent-text: var(--persimmon);
-  --out: var(--ember); --out-text: #F2EDF7; --link: var(--dusk-dark); --err: var(--rose-dark); --mention: #4A3A1C;
+  --out: var(--ember); --out-text: #F2EDF7; --link: var(--dusk-dark); --err: var(--rose-dark); --mention: #4A3A1C; --unsure: var(--honey);
   background: var(--bg); color: var(--text); }
 
 /* AMOLED black: overrides four dark tokens only (docs/design/amoled-black.md). */
@@ -99,10 +99,10 @@
 .strip.warn { background: var(--honey-wash); color: var(--ink); }
 .state { font-size: 12px; display: flex; gap: 6px; align-items: center; justify-content: flex-end; margin: 2px 4px 6px 0; }
 .state.unknown { color: var(--text); }
-.state.unknown .pill { border: 1.5px solid var(--honey); border-radius: 14px; padding: 6px 12px; font-weight: 600; min-height: 32px; display: inline-flex; align-items: center; gap: 6px; }
+.state.unknown .pill { border: 1.5px solid var(--unsure); border-radius: 14px; padding: 6px 12px; font-weight: 600; min-height: 32px; display: inline-flex; align-items: center; gap: 6px; }
 .state.failed { color: var(--err); font-weight: 600; }
 .bubble.pending { opacity: 0.72; }
-.bubble.unsure { box-shadow: inset 0 0 0 2px var(--honey); }
+.bubble.unsure { box-shadow: inset 0 0 0 2px var(--unsure); }
 
 /* Composer: input and Send pinned together. */
 .composer { display: flex; align-items: flex-end; gap: 8px; padding: 8px 10px 12px; flex: none; }
