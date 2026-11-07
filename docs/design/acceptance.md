@@ -41,7 +41,7 @@ review on the canvas sizes, **M** manual check on a device or emulator, **R** co
 | P-02 | A JVM test computes the contrast of every token pair listed in visual-vocabulary.md for every palette and fails below its threshold. | U |
 | P-03 | Dynamic color is off (D4). | R |
 | P-04 | The theme respects the saved System/Light/Dark preference (existing M1 behavior) and the system bars match the ground color. | C, M |
-| P-05 | An AMOLED black appearance (true-black ground, tokens in visual-vocabulary.md) is selectable before the first public release. | C, R |
+| P-05–P-08 | AMOLED black (required before the first public release): the Pure black switch, exact tokens, edges instead of shadows, and no light flash. Defined in [amoled-black.md](amoled-black.md). | See that document |
 
 ### Signatures
 
