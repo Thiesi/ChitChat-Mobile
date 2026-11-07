@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5f2 native basic profiles](milestones/M5f2-native-basic-profiles.md) consumes existing M5f1 GET facts without another endpoint, transport, image URL, policy or management mutation. Original session/target/context and runtime fences remain authoritative; native controls never turn server hints into permissions.
+
 [M5f1 basic profiles](milestones/M5f1-basic-profile-protocol.md) consumes existing `GET users/profile.php?user_id=...` with optional numeric room context, the current PHP session cookie and unchanged chosen-origin transport. GET carries no mutation CSRF header. Exact target/schema checks preserve guest visit meaning, nullable badge/version and legitimate avatar version0. Ignore/moderation enrichment and avatar/removal hints grant no mutation or policy authority. Native cards/images/management, guests and live acceptance remain separate; no backend change is required.
 
 [M5c3a DM reaction state](milestones/M5c3a-direct-reaction-state.md) consumes the same original-session `react.php`/`unreact.php` protocol inside the serialized DM actor. Readable history remains distinct from send/block/author permissions and room ignores; no backend/API/SSE change is introduced. Native controls consume that actor in [M5c3b](milestones/M5c3b-native-direct-reactions.md); guest/live acceptance remains separate.

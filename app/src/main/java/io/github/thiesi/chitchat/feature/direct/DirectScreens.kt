@@ -159,7 +159,8 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
 
 @Composable
 fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSession: () -> Unit,
-    targets: MessageTargetViewModel? = null, obscured: Boolean = false, isCurrentEntry: () -> Boolean = { true }) {
+    targets: MessageTargetViewModel? = null, obscured: Boolean = false, onProfile: ((Long) -> Boolean)? = null,
+    isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     val connection = model.realtime?.state?.collectAsStateWithLifecycle()?.value?.takeIf { it.generation == session.generation }
@@ -175,6 +176,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             val timeline = rememberLazyListState()
             var blockConfirm by remember { mutableStateOf(false) }
             var detailsOpen by remember { mutableStateOf(false) }
+            var profileDetailsToken by remember { mutableStateOf<Any?>(null) }
             LaunchedEffect(state.scrollRequest) {
                 if (state.scrollRequest > 0 && state.messages.isNotEmpty()) timeline.scrollToItem(state.messages.size + 1)
             }
@@ -320,8 +322,13 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                         run {
                             val context = state.context
+                            val profileSource = profileDetailsToken
                             DirectPrivacyNotice(context?.privacy, R.string.dm_details, compact = true,
-                                expanded = detailsOpen, onExpandedChange = { detailsOpen = it },
+                                expanded = detailsOpen, onExpandedChange = {
+                                    if (it && !detailsOpen) profileDetailsToken = Any()
+                                    if (!it) profileDetailsToken = null
+                                    detailsOpen = it
+                                },
                                 needsAttention = state.stale || state.error != null || state.validation != null || state.newerAvailable ||
                                     state.uncertainSend || state.uncertainRead || state.readError != null || state.uncertainBlock ||
                                     state.authorUnknown != null || state.authorLimit || state.authorNotice != null ||
@@ -334,6 +341,20 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 Text(context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleMedium)
                                 SessionNotice(session, now, onRefreshSession)
                                 ThreadFeedback(model, state, attention[peer], ready, true, dismiss, checkAuthorHistory, checkReactionHistory)
+                                if (onProfile != null && context != null) TextButton(onClick = {
+                                    val current = model.state.value
+                                    // Details is the producer modal. Keep it until the root accepts the exact peer.
+                                    if (detailsOpen && profileSource != null && profileDetailsToken === profileSource &&
+                                        isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+                                        !obscured && model.belongsTo(displayedSession) && current.peerId == peer &&
+                                        current.context === context && !current.busy && !current.stale &&
+                                        current.authorDialog == null && current.reactionDialog == null && onProfile(peer)) {
+                                        dismiss(); focus.clearFocus()
+                                    }
+                                }, enabled = ready && !state.busy && !state.stale && !obscured,
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag("dm_profile")) {
+                                    Text(stringResource(R.string.profile_open))
+                                }
                                 if (context != null) TextButton(onClick = { dismiss(); blockConfirm = true }, enabled = ready && !state.busy && !state.uncertainBlock) {
                                     Text(stringResource(if (context.relationship.blockedByMe) R.string.dm_unblock else R.string.dm_block))
                                 }

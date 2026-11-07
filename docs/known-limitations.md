@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[M5f2](milestones/M5f2-native-basic-profiles.md) adds read-only basic member-accessed profile cards. Avatar image transfer/management, guest-session consumers and live/device/accessibility/release acceptance remain pending. MemberSince means guest visit start for guest targets; metadata/removal hints never grant an action. No profile polling, saved-state content or implicit retry.
+
 [M5f1 basic profile protocol](milestones/M5f1-basic-profile-protocol.md) supplies read-only facts only. Native profile cards/navigation/initials, avatar image transfer and management are not implemented by this slice. No profile GET changes ignore/moderation policy, grants a removal action or supplies chat-read/send consent. Guest/live/device/release acceptance remains separate, and every new head requires its own complete development gates/reviews.
 
 [M5c3b native DM reactions](milestones/M5c3b-native-direct-reactions.md) adds choices/chips/people lists and recovery controls on delivered PR71/main2cba7cc. Reaction GET/Review preserves separate send/read/block/author uncertainty. Guests, live/device/accessibility/release acceptance remain pending. This consumer requires its own full development gates/reviews; original609a2d1/ceefb8a failures stay retained and no exact-head exception is inherited.

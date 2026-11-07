@@ -68,6 +68,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavBackStackEntry
+import io.github.thiesi.chitchat.feature.profile.ProfileViewModel
+import io.github.thiesi.chitchat.feature.profile.ProfileDialog
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import io.github.thiesi.chitchat.R
@@ -122,13 +125,15 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     messageTargets: MessageTargetViewModel? = null,
     notifications: NotificationCenterViewModel? = null,
     search: MessageSearchViewModel? = null,
+    profiles: ProfileViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session = auth.state.collectAsStateWithLifecycle().value
     val displayedSession = session
     val targetState = messageTargets?.state?.collectAsStateWithLifecycle()?.value
     val searchState = search?.state?.collectAsStateWithLifecycle()?.value
-    val targetObscured = targetState?.request?.matches(session) == true
+    val profileState = profiles?.state?.collectAsStateWithLifecycle()?.value
+    val targetObscured = targetState?.request?.matches(session) == true || profileState?.selection?.matches(session) == true
     LaunchedEffect(searchState?.targetBinding, targetState?.request) {
         val binding = searchState?.targetBinding
         if (binding != null && messageTargets?.state?.value?.request !== binding.request) search.cancelTarget(binding)
@@ -165,6 +170,25 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         }
         val entry = nav.currentBackStackEntryAsState().value
         val entryStarted = entry?.lifecycle?.currentStateAsState()?.value?.isAtLeast(Lifecycle.State.STARTED) == true
+        LifecycleEventEffect(Lifecycle.Event.ON_START) { profiles?.foreground() }
+        LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+            if (activity?.isChangingConfigurations != true) profiles?.background()
+        }
+        LaunchedEffect(entry, entryStarted, profileState?.selection) {
+            // NavHost must first restore an actual STARTED entry; transient null is not navigation.
+            val choice = profileState?.selection
+            if (choice != null && entryStarted && entry.id != choice.sourceEntryId)
+                profiles.close(choice)
+        }
+        fun profileOpener(source: NavBackStackEntry, roomId: Long? = null): ((Long) -> Boolean)? = profiles?.let { coordinator ->
+            { userId ->
+                if (nav.currentBackStackEntry === source && source.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+                    coordinator.state.value.selection == null && messageTargets?.state?.value?.request == null &&
+                    !conversations.state.value.draftsOpen)
+                    coordinator.open(displayedSession, userId, roomId, source.id) != null
+                else false
+            }
+        }
         val notificationState = notifications?.state?.collectAsStateWithLifecycle()?.value
             ?.takeIf { notifications.belongsTo(displayedSession) } ?: NotificationCenterState()
         val noticeArgs = entry?.arguments
@@ -445,6 +469,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             val id = destination.arguments?.getLong("roomId") ?: 0L
                             if (session.phase == SessionPhase.AUTHENTICATED && id > 0)
                                 ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured,
+                                    onProfile = profileOpener(destination, id),
                                     onStopped = { if (nav.currentBackStackEntry === destination) conversations.background()
                                         else conversations.leavePane() }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
@@ -456,6 +481,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             if (id > 0 && args != null && matchesNotificationScope(session, args.getLong("generation", -1),
                                 args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
                                 ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured,
+                                    onProfile = profileOpener(destination, id),
                                     onStopped = { if (nav.currentBackStackEntry === destination) conversations.background()
                                         else conversations.leavePane() }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
@@ -471,7 +497,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             val peer = args?.getLong("peerId", -1) ?: -1
                             if (directThread != null && args != null && peer > 0 && peer != session.user?.id && matchesDirectScope(session,
                                 args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
-                                DirectThreadScreen(directThread, peer, auth::refresh, messageTargets, targetObscured) {
+                                DirectThreadScreen(directThread, peer, auth::refresh, messageTargets, targetObscured,
+                                    onProfile = profileOpener(destination)) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
                         }
                     }
@@ -480,6 +507,18 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         }
         }
         RoomDraftsDialog(conversations, session, openRoom)
+        val profileChoice = profileState?.selection
+        if (profiles != null && profileChoice != null && profileChoice.matches(displayedSession) &&
+            !displayedSession.storageWarning && entryStarted && entry?.id == profileChoice.sourceEntryId) {
+            val origin = entry
+            fun current() = nav.currentBackStackEntry === origin &&
+                origin.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+                profileChoice.matches(auth.state.value) && profiles.state.value.selection === profileChoice
+            ProfileDialog(profileState, !displayedSession.busy && !displayedSession.refreshRequired &&
+                !displayedSession.storageWarning,
+                onRefresh = { if (current()) profiles.refresh(profileChoice) },
+                onClose = { if (current()) profiles.close(profileChoice) })
+        }
         if (messageTargets != null && targetState != null) {
             val route = entry?.destination?.route
             val args = entry?.arguments
