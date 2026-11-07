@@ -74,10 +74,13 @@ keeps the dialog window type and the native input and IME rules.
   `other`, the hint encourages details, but the server doesn't require them, so the field stays
   optional.
 - **Who will see it**, plain text above the buttons:
-  - room: "The moderators of **{room}** will see this message's text, its time and your report.
-    They won't see other messages.";
-  - DM: "The server's administrators will see this message and your report. They won't see
+  - room: "**{room}**'s owners and moderators, and the server's moderation team, will see
+    this message's text, its time and your report. They won't see other messages.";
+  - DM: "The server's moderation team will see this message and your report. They won't see
     the rest of your conversation."
+  - "The server's moderation team" means the global roles that review reports
+    (Super-Administrator, Administrator, Chat Admin, Global Moderator). Its exact meaning may be
+    offered behind a small "Who is this?" link.
   - If the message has an attachment: "They'll see the file's name, not the file itself."
 - **Buttons:** **Cancel** (text) and **Send report** (`primary` text button, enabled once a
   category is chosen). Not `error`-colored: reporting isn't destructive.
@@ -89,7 +92,7 @@ keeps the dialog window type and the native input and IME rules.
 
 | Result | Shows | Then |
 |---|---|---|
-| 201 | The dialog closes. The level-1 confirmation "Thanks. Your report was sent to the {room} moderators." (DM: "…to the server's administrators") | A follow-up sheet offers existing actions: rooms: **Ignore {name}** (existing M4c3 ignore), DMs: **Block {name}** (existing block confirmation). Plus **Done**. Nothing applies automatically |
+| 201 | The dialog closes. The level-1 confirmation "Thanks. Your report was sent to {room}'s moderators and the server's moderation team." (DM: "Thanks. Your report was sent to the server's moderation team.") | A follow-up sheet offers existing actions: rooms: **Ignore {name}** (existing M4c3 ignore), DMs: **Block {name}** (existing block confirmation). Plus **Done**. Nothing applies automatically |
 | `message_already_reported` | "You've already reported this message." Treated as success (the report exists) | Same follow-up sheet |
 | `message_not_reportable` | "This message can't be reported anymore. It may have been deleted." | Close |
 | `message_not_found` or `report_recipient_required` | "You can't report this message." | Close |
