@@ -74,3 +74,5 @@ invitations stay a server feature (M7) and are separate.
   not choose.
 - Autofill or store passwords outside the system password manager. Synthetic test fixtures
   follow the autofill rules in `AGENTS.md`.
+- Open a browser or another app with the contents of a scanned code, or connect to a
+  scanned server before step 3 is shown (see [invite-codes.md](invite-codes.md)).
