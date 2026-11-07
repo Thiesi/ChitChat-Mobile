@@ -99,6 +99,12 @@ Built with `NotificationCompat`:
 
 - Signing out, switching account or a session-generation change cancels that account's posted
   notifications immediately, and later pushes for it are dropped silently (M6 contract).
+- **The server doesn't remove subscriptions at sign-out** (push-architecture.md). So sign-out
+  first unsubscribes this device (`POST push/unsubscribe.php` with its own endpoint, while the
+  session is still valid) and unregisters the distributor connection. If that can't complete,
+  for example offline, the local drop rule above still keeps the account's pushes hidden.
+  This device's entry then remains in the account's device list until it is removed from
+  another device. Sign-out copy doesn't claim otherwise.
 - A push for an account that isn't the signed-in one is never shown.
 
 ## When the app is open
@@ -128,11 +134,29 @@ The screen shows:
 
   Battery-optimization exemptions belong to the distributor, not CCM. CCM never asks for one
   for itself.
-- **What you get:** toggles for mentions and for pings (the existing server preferences).
-  Quiet hours as start and end times with the account timezone. Copy: "Quiet hours are applied
-  by your server, on all your devices."
-- **Devices:** the existing server device list, read-only names, each with "Remove", and
-  copy that doesn't invent transport labels the API doesn't provide.
+- **What you get:** toggles for **mentions** and **pings**, the only mutable server
+  preferences (`mentioned_push_enabled`, `pinged_push_enabled`). Under them, a fixed line:
+  "Account, security and moderation notices always arrive while notifications are on." Those
+  kinds are not optional on the server.
+- **Quiet hours:**
+  - **whole hours** (0–23) for start and end, plus a time zone. The time zone defaults to the
+    device's IANA zone and can be changed;
+  - overnight windows are allowed ("22:00 – 07:00");
+  - **Off** clears the window (all three fields `null`);
+  - the three values are always sent together (server rule);
+  - copy: "Quiet hours are applied by your server, on all your devices."
+- **Devices** (from `GET push/preferences.php`): one row per subscription, newest first.
+  - Label: the stored `user_agent` string, shortened for display. A simple browser/OS summary
+    such as "Firefox on Linux" may be used only when the string clearly contains both;
+    otherwise show the raw string truncated.
+  - Secondary line: "Added {date} · last used {date}".
+  - **Remove** (decision dialog) calls `POST push/revoke-device.php` with the row's ID.
+  - **The API can't identify which row is this phone** (no endpoint in the list). So no row is
+    labelled "This phone". Removing this phone's own subscription is done with **Turn off**,
+    which unsubscribes by endpoint.
+  - Engineering note: sending a recognizable User-Agent from the push registration request
+    (for example including "ChitChat Android") makes the rows readable. That is an
+    engineering choice, not a presentation requirement.
 - **Honesty line:** "Notifications can arrive a minute or so after the message. Open the app to
   see everything."
 
@@ -163,3 +187,4 @@ The screen shows:
 | P-123 | Lock-screen visibility is private with a generic public version. | U, M |
 | P-124 | Sign-out, account switch and generation change cancel that account's notifications and drop later pushes. | C |
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
+| P-126 | Settings offer only the mention and ping toggles plus whole-hour quiet hours with a time zone. No device row is labelled as this phone; Remove revokes by ID. Sign-out unsubscribes this device before the session ends. | C, R |

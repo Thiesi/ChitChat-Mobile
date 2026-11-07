@@ -92,6 +92,7 @@ review on the canvas sizes, **M** manual check on a device or emulator, **R** co
   still apply.
 - The presentation lead reviews J-* standards and may request changes. A disagreement about
   a J-* standard that affects product direction goes to the maintainer.
-- Screenshot tests (for example Roborazzi or Compose Preview screenshot testing) are
-  recommended but are a dependency decision for the coordinator. They do not replace
-  device checks of A-04 and A-06.
+- Screenshot testing (Roborazzi or Compose Preview screenshot tests): **not adopted for now**
+  (technical lead, 2026-11-07). Presentation PRs attach emulator captures (Light, Dark, Pure
+  black; default and 200% font) as above. Revisit at M8. Screenshots never replace device
+  checks of A-04 and A-06.

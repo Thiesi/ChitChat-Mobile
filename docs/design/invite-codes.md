@@ -107,14 +107,16 @@ Rules:
   carries the same information, so the QR code is never the only way to share.
 - **Type the address instead** is always visible on Scan, so nobody depends on the camera.
 
-## Implementation notes for the coordinator
+## Implementation notes
 
 - Decoding and encoding need a QR library. Recommendation: ZXing core (Apache-2.0, pure
   Java, no Google Play services) for encoding and for decoding frames and picked images,
   with CameraX for the preview. Google's ML Kit and Code Scanner depend on Play services,
-  which conflicts with the no-GMS push stance, so they are not recommended. Choosing and
-  reviewing the dependency set is the coordinator's call (see `AGENTS.md` on compatible
-  dependency sets). Report the APK size impact in the implementing PR.
+  which conflicts with the no-GMS push stance, so they are not recommended. **ZXing core plus
+  CameraX is approved in principle** (technical lead, 2026-11-07). The final compatible
+  dependency-set review happens in the implementing slice, scheduled after the onboarding
+  restyle (see `AGENTS.md` on compatible dependency sets). Report the APK size impact in the
+  implementing PR.
 - No new permissions besides `CAMERA`, requested at runtime only. The camera must be
   declared optional (`android:required="false"`) so devices without one can still install
   CCM.
