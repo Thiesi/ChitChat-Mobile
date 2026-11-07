@@ -79,7 +79,9 @@ class CompletionJourneyTest {
             val density=LocalDensity.current
             val bottom=WindowInsets.ime.getBottom(density);SideEffect { ime=bottom }
             CompositionLocalProvider(LocalDensity provides Density(density.density,if (largeFont.value) 2f else density.fontScale)) {
-                Box(if (constrained.value) Modifier.fillMaxWidth().height(240.dp) else Modifier.fillMaxSize()) {
+                // This bounds the whole component viewport, including production IME padding.
+                // A240dp total height could be consumed entirely by a normal phone keyboard.
+                Box(if (constrained.value) Modifier.widthIn(max=360.dp).fillMaxWidth().height(640.dp) else Modifier.fillMaxSize()) {
                     TestChitChatApp(settings,auth,conversationModel=room,directInbox=inbox,directThread=thread,
                         notifications=notices,messageTargets=targets,completion=if (completionEnabled.value) model else null)
                 }
@@ -216,7 +218,7 @@ class CompletionJourneyTest {
         compose.runOnIdle { assertEquals("NoMatch",room.state.value.draft);assertEquals(0,api.rooms.sends) }
     }
     @Test fun hiddenSuggestionsLeaveEnterAvailableForANewline() {
-        compose.runOnIdle { constrained.value=true };enter();type("@An");loaded()
+        compose.runOnIdle { constrained.value=true;largeFont.value=true };enter();type("@An");loaded()
         compose.onAllNodesWithTag("completion_choices").assertCountEquals(0)
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_ENTER)
         compose.waitForIdle()
@@ -233,7 +235,8 @@ class CompletionJourneyTest {
             val bottom=WindowInsets.ime.getBottom(density);SideEffect { ime=bottom }
             LaunchedEffect(Unit) { model.foreground();model.navigate("hardware-component") }
             androidx.compose.material3.MaterialTheme {
-                val composer=rememberComposerCompletion(model,sessions.state.value,CompletionTarget.Room(43),"hardware-component",draft.value,
+                val owner by sessions.state.collectAsState()
+                val composer=rememberComposerCompletion(model,owner,CompletionTarget.Room(43),"hardware-component",draft.value,
                     currentBody={draft.value},canEdit={true},canOffer={true},write={draft.value=it;true},onTextChanged={})
                 Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
                     CompletionSuggestions(composer)
