@@ -248,6 +248,14 @@
       "size": "m",
       "fill": "gray",
       "text": "The code is just the server's https address, so any phone camera opens the web client and CCM's scanner fills the address. It grants no access. Scanning always leads to step 3 'Server found' before credentials. The QR code shown is an illustration and is not scannable. Spec: docs/design/invite-codes.md."
+    },
+    "homeNote": {
+      "x": 0,
+      "y": 3434,
+      "w": 390,
+      "size": "s",
+      "fill": "gray",
+      "text": "Home is a target picture. The mention card, the '@' badge and '4 here now' have no data source yet (summary mode carries no bodies; backend issues #153 and #154). See docs/design/lists-restyle.md."
     }
   },
   "designSystems": []

@@ -20,6 +20,7 @@ a substitute.
 | [onboarding.md](onboarding.md) | First launch to first message |
 | [onboarding-restyle.md](onboarding-restyle.md) | Implementation spec mapping onboarding onto today's code, copy and tests |
 | [invite-codes.md](invite-codes.md) | Sharing and scanning the server address as a QR code or link (D5) |
+| [lists-restyle.md](lists-restyle.md) | Implementation spec for the room directory, DM inbox, Activity and search lists |
 | [transcript-restyle.md](transcript-restyle.md) | Implementation spec for room and DM transcripts and composers: runs, bubbles, chit, actions, composer delivery states |
 | [navigation-shell.md](navigation-shell.md) | Implementation spec for D3: bottom bar, You hub, tab and Back behavior under existing navigation contracts |
 | [theme-foundation.md](theme-foundation.md) | Implementation spec for the first slice: tokens, Material mapping, wrappers, font, settings, window, icon |
