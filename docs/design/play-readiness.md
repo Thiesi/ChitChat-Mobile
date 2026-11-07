@@ -112,9 +112,13 @@ words people look for: **"Delete account"**.
      them. Moderation and security records are kept under the server's policies."
    - **Export my data first** (existing export flow; a text button).
    - **Continue** (`error` text button) and **Cancel**.
-3. **Step-up:** the existing password prompt (form dialog).
-4. **Final decision dialog:** title "Delete your account?"; body "You'll be signed out now. You
-   can restore it for 14 days."; buttons **Cancel** and **Delete account** (`error`).
+3. **Decision dialog, before any request:** title "Delete your account?"; body "You'll be
+   signed out now. You can restore it for 14 days."; buttons **Cancel** and **Delete account**
+   (`error`). Only **Delete account** sends `POST account/close.php`.
+4. **Step-up, only if the server asks:** the request goes through the existing `withStepUp`
+   wrapper. The password prompt (the existing step-up form dialog) appears only when the
+   server answers `403 step_up_required`, followed by its one retry. If recent step-up is
+   already valid, no prompt appears.
 5. **After success:** the person is signed out (the server destroyed the session) and sees a
    confirmation screen: "Your account is scheduled for deletion. You can restore it until
    {date}." Use the server's deadline if the response provides one; otherwise "for 14 days".
@@ -124,8 +128,13 @@ words people look for: **"Delete account"**.
 - the last Super-Administrator gets the server's refusal in plain words: "You're the last
   Super-Administrator. Give the role to someone else first.";
 - an unknown result after the request was sent reads "We're not sure your request went
-  through." with **Check**. Check is an ordinary sign-in attempt or restore check that reveals
-  the state. **Never resend automatically.**
+  through." with **Check**. Check is the existing **session revalidation GET** (no POST):
+  - if the session is no longer authenticated, closure is treated as having taken effect, and
+    the after-success confirmation is shown with "for 14 days";
+  - if the session is still authenticated, nothing changed: "Your account wasn't deleted."
+    The person may start the flow again explicitly.
+
+  **Never resend automatically.**
 
 ## 3. Deletion web resource (content for a CCM page)
 
@@ -196,6 +205,6 @@ maintainer's decision.
 |---|---|---|
 | P-170 | No write action is possible before the guidelines are accepted for the current version, server and account. Acceptance is stored locally and versioned. | C |
 | P-171 | Server rules, server privacy and re-acceptance appear only once #160 exists, marked as a dependency until then. | R |
-| P-172 | Delete account is reachable from You → Privacy and security. It discloses the per-server scope, the 14-day restoration, finalization and what is kept, uses step-up and a destructive decision dialog, and never resends automatically. | C |
+| P-172 | Delete account is reachable from You → Privacy and security. It discloses the per-server scope, the 14-day restoration, finalization and what is kept, shows the destructive decision dialog before the request, uses step-up only on 403 step_up_required, checks unknown results with a session GET, and never resends automatically. | C |
 | P-173 | Privacy links and disclosures appear at every surface in the table, with wording consistent with the existing DM disclosures. | R, S |
 | P-174 | The guidelines text, privacy policy, deletion page and data safety answers are published only after maintainer approval. | R |
