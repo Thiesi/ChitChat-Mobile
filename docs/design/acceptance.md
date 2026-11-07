@@ -27,7 +27,7 @@ review on the canvas sizes, **M** manual check on a device or emulator, **R** co
 | A-07 | Level 2 notices are polite live regions; level 3 decisions move accessibility focus to their title. | C |
 | A-08 | System "Remove animations" (animator duration scale 0) produces instant transitions with no stuck intermediate state. | C, M |
 | A-09 | Layouts mirror correctly in RTL locales, including the chit side and bubble alignment. | S (RTL pseudo-locale), C |
-| A-10 | Light, dark and high-contrast palettes all pass A-01 and A-02. | U |
+| A-10 | Light, dark, AMOLED black and high-contrast palettes all pass A-01 and A-02. | U |
 | A-11 | Message text uses the system font and honors the device font family and size. The display face never renders message bodies. | R |
 | A-12 | Landscape and large-screen windows keep a readable transcript width (bubbles never wider than about 600dp) and keep the existing landscape gates. | S, existing landscape tests |
 
@@ -39,8 +39,9 @@ review on the canvas sizes, **M** manual check on a device or emulator, **R** co
 |---|---|---|
 | P-01 | One theme module defines every color, shape, type and spacing token from [visual-vocabulary.md](visual-vocabulary.md). Feature code under `feature/` and `core/ui/` contains no literal `Color(0x…)`, `RoundedCornerShape(<literal>)` values for identity shapes, or font families. | U (source scan test), R |
 | P-02 | A JVM test computes the contrast of every token pair listed in visual-vocabulary.md for every palette and fails below its threshold. | U |
-| P-03 | Dynamic color is off unless decision D4 changes. | R |
+| P-03 | Dynamic color is off (D4). | R |
 | P-04 | The theme respects the saved System/Light/Dark preference (existing M1 behavior) and the system bars match the ground color. | C, M |
+| P-05 | An AMOLED black appearance (true-black ground, tokens in visual-vocabulary.md) is selectable before the first public release. | C, R |
 
 ### Signatures
 
@@ -68,7 +69,7 @@ review on the canvas sizes, **M** manual check on a device or emulator, **R** co
 
 | ID | Requirement | Verify |
 |---|---|---|
-| P-30 | Navigation follows decision D3 once approved. Each destination keeps its own scroll position and back stack across tab switches and configuration changes. | C |
+| P-30 | Navigation is the bottom bar Rooms · Direct · Activity · You (D3). Each destination keeps its own scroll position and back stack across tab switches and configuration changes. | C |
 | P-31 | Every list and transcript has a designed empty state with a next step (see mockups `RoomEmpty`, `FirstRooms`). No bare "No items". | S |
 | P-32 | Onboarding follows [onboarding.md](onboarding.md): server first, server identity confirmed before credentials, no permission request before it is needed, input preserved across every failure state. | C, M |
 | P-33 | Suggestion chips insert text into the composer; they never send. | C |

@@ -39,8 +39,26 @@ Rules:
 - Honey means "people" or "attention, not danger". Rose means "something failed or will be
   destroyed". Never swap them.
 - Dark is not an inversion. Dark mode keeps warm ink grounds (violet-black), never neutral
-  gray or pure black. The web's high-contrast black theme can be offered as an accessibility
-  palette (D6).
+  gray. Pure black exists only in the separate AMOLED black theme below. The web's
+  high-contrast theme can be offered as an accessibility palette (D6).
+
+### AMOLED black theme (required before going live, D6)
+
+A third appearance choice next to Light and Dark, for OLED screens. It changes only these
+dark tokens; every other dark token stays as listed above.
+
+| Token | AMOLED black | Check |
+|---|---|---|
+| `ground` | `#000000` | `text` 18.2:1, `textMuted` 8.3:1, persimmon 6.8:1, honey 12.0:1 |
+| `surface` | `#110E17` | `fieldLine` 4.3:1 |
+| `raised` | `#1F1B29` | `text` 14.6:1, `textMuted` 6.6:1 |
+| `line` | `#2E2938` | Decorative only |
+
+- Large areas (ground, transcript, lists) are true black. Surfaces stay a hair above black
+  so sheets, fields and the bottom bar remain distinguishable without borders everywhere.
+- The glow keeps its ground-colored gap, which is now black, so it still reads as a ring.
+- The setting is local like the existing System/Light/Dark preference: *System* follows the
+  device dark mode and uses regular Dark unless the person picked AMOLED black.
 
 ### Identity hues (rooms and people)
 
@@ -80,7 +98,7 @@ bubble's bottom-right, mirrored for RTL.
 - Static. It never pulses, breathes or animates, because of the battery and because
   motion attracts attention that people did not ask for.
 - Only shown where presence is actually known. Today that is the current room's header,
-  after entry. Lists need decision D7.
+  after entry. Lists show it once the server provides a presence summary (D7).
 
 ## Typography
 
@@ -96,8 +114,8 @@ bubble's bottom-right, mirrored for RTL.
 - Message text is never in the display face. It must follow the user's device font and size.
 - All sizes are `sp` and scale with the system font size. See the floors in
   [acceptance.md](acceptance.md).
-- If D2 is declined, display roles fall back to the system sans at the same weights, and the
-  identity leans harder on shape and color.
+- Bricolage Grotesque is bundled (D2), subset to Latin plus Latin Extended. Scripts it does
+  not cover fall back to the system sans at the same weights.
 
 ## Iconography
 

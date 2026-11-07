@@ -58,7 +58,7 @@ Returning users who sign in skip step 5 and land on Rooms.
 | Registration closed | "Sign-up is closed on this server. Ask the person who runs it for an invite." |
 | Wrong credentials | Existing M2a copy, never revealing whether the username exists |
 
-## Invite codes (proposed, D5)
+## Invite codes (approved, D5)
 
 A QR code or link that contains *only* the server origin, in a CCM-specific format, so
 that scanning fills step 2 and goes straight to step 3. It carries no credentials, tokens,

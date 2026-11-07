@@ -1,9 +1,9 @@
 # ChitChat Mobile presentation direction ("Lantern")
 
-Status: **proposed, 2026-11-07.** Nothing in this folder is an approved contract until the
-maintainer has approved the decisions listed below. Until then, implementation agents must
-not restyle production screens from these documents. They may use them for planning,
-estimates and questions.
+Status: **approved direction, 2026-11-07.** The maintainer approved decisions D1–D7 as
+recommended (see below). This folder is the presentation contract for new UI work. The
+project coordinator decides when and in which slices existing screens are restyled;
+implementers should not restyle screens outside a planned slice.
 
 Owner: the presentation lead (a Claude session; see issue #1). The project coordinator
 plans integration into the roadmap. Codex and other implementers build it. A change to an
@@ -42,22 +42,19 @@ rather than fake it:
 - Room previews or recency ordering in the room list: the directory API has no last-message
   summary. Room rows show the room's info line instead.
 - Admin "Looking after this server" card, guest visits and moderation actions: M7.
-- Invite QR codes: a proposed client-only feature (decision D5).
-- Display font: needs decision D2.
+- Invite QR codes: approved (D5), not yet implemented or scheduled.
 
-## Decisions requested from the maintainer
+## Approved decisions (maintainer, 2026-11-07)
 
-These are consequential product decisions. The presentation lead recommends the first option
-in each case.
+| ID | Decision | What was approved |
+|---|---|---|
+| D1 | Signature color | CCM's identity moves from the current teal (#32675B, shared with the web default; teal-green sits in WhatsApp's territory) to **Persimmon on Night ink/Paper**. |
+| D2 | Display font | Bundle **Bricolage Grotesque** (SIL OFL, variable, subset to Latin plus Latin Extended) for display text only; message and UI text stays on the system font. Measure and report the APK size cost in the implementing PR (estimate 100–200 KB). Keep the OFL license text with the other licenses. |
+| D3 | Navigation | Bottom bar **Rooms · Direct · Activity · You**, replacing the current Home hub. |
+| D4 | Material You dynamic color | **Off.** |
+| D5 | Invite codes | A client-only QR/link format carrying only the server origin (no credentials, tokens, usernames or room IDs), scanned during onboarding; server confirmation (onboarding step 3) is always shown. |
+| D6 | Palettes | Lantern is the default. When account palettes arrive (M6), an account palette may replace the hue tokens while shapes, chit, type and status language stay. High-contrast stays available. **An "AMOLED black" theme must exist before CCM goes live** (see visual-vocabulary.md). |
+| D7 | Backend data | File backend issues proposing a directory presence count and last-activity time per joined room. Until the server provides them, room lists show neither. |
 
-| ID | Decision | Recommendation | Alternatives |
-|---|---|---|---|
-| D1 | Signature color | Move CCM's default identity from the current teal (#32675B, shared with the web default) to **Persimmon on Night ink/Paper**. Teal-green sits in WhatsApp's territory and cannot be "equally distinct". | Keep teal and rely on shape alone; or a violet identity (crowded by Viber/Discord) |
-| D2 | Bundle a display font | Bundle **Bricolage Grotesque** (SIL OFL, variable, subset to Latin plus Latin Extended) for display text only; message and UI text stays on the system font. Expected APK cost: roughly 100–200 KB after subsetting, to be measured. | System font only (cheaper, much less recognizable) |
-| D3 | Navigation | Bottom bar: **Rooms · Direct · Activity · You**, replacing the current Home hub. | Keep the hub screen; or one merged chat list (not possible honestly without room recency data) |
-| D4 | Material You dynamic color | **Off.** Wallpaper-derived colors would erase the identity. | Offer it as an opt-in appearance choice later |
-| D5 | Invite codes | Add a client-only QR/link format that carries only the server address (no credentials, no tokens), scanned during onboarding. | Typed address only |
-| D6 | Web palettes on Android | CCM ships Lantern as its default. When account palettes arrive (M6), the account palette may replace the hue tokens, but the shapes, chit, type and status language stay. High-contrast stays available. | Lantern only; or full web parity without a CCM default |
-| D7 | Backend data for liveliness and previews | File backend issues proposing a directory presence count and last-activity time per joined room. | Leave room lists without liveliness |
-
-Ask before deciding any similar question that is not listed here.
+Ask the maintainer before deciding any similar consequential question that is not listed
+here.
