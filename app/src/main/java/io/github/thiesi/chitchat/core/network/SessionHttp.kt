@@ -16,6 +16,8 @@ import io.github.thiesi.chitchat.core.notifications.NotificationPage
 import io.github.thiesi.chitchat.core.notifications.NotificationReadResult
 import io.github.thiesi.chitchat.core.search.MessageSearchPage
 import io.github.thiesi.chitchat.core.search.MessageSearchRequest
+import io.github.thiesi.chitchat.core.profile.ProfileSnapshot
+import io.github.thiesi.chitchat.core.profile.validateProfileTarget
 import io.github.thiesi.chitchat.core.mutations.validateEditedBody
 import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
 import java.io.IOException
@@ -130,6 +132,12 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         val body = MessageSearchBody(search.query, search.scope.wireValue, search.limit, search.offset)
         return decode<MessageSearchReply>(request("search/messages.php", apiJson.encodeToString(body), csrf)
             .require200()).page(search, viewer)
+    }
+
+    suspend fun profile(userId: Long, roomId: Long?): ProfileSnapshot {
+        validateProfileTarget(userId, roomId)
+        val path = "users/profile.php?user_id=$userId" + (roomId?.let { "&room_id=$it" } ?: "")
+        return decode<ProfileReply>(request(path).require200()).snapshot(userId, roomId)
     }
 
     suspend fun notifications(beforeId: Long?, limit: Int): NotificationPage {

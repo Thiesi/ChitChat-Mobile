@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[M5f1 basic profile protocol](milestones/M5f1-basic-profile-protocol.md) supplies read-only facts only. Native profile cards/navigation/initials, avatar image transfer and management are not implemented by this slice. No profile GET changes ignore/moderation policy, grants a removal action or supplies chat-read/send consent. Guest/live/device/release acceptance remains separate, and every new head requires its own complete development gates/reviews.
+
 [M5c3b native DM reactions](milestones/M5c3b-native-direct-reactions.md) adds choices/chips/people lists and recovery controls on delivered PR71/main2cba7cc. Reaction GET/Review preserves separate send/read/block/author uncertainty. Guests, live/device/accessibility/release acceptance remain pending. This consumer requires its own full development gates/reviews; original609a2d1/ceefb8a failures stay retained and no exact-head exception is inherited.
 
 [M5e3a native search](milestones/M5e3a-native-message-search.md) adds member All/Rooms/Direct terms, plain excerpts and explicit bounded pages on the existing state/protocol. All/Direct requires validated current DM privacy; unknown policy leaves Rooms independent. [M5e3b](milestones/M5e3b-open-search-results.md) adds guarded original opening; live search and manual device/API26/TalkBack/large-font/landscape acceptance remain pending. No search grants read/send consent.
