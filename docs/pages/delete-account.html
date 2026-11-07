@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delete your ChitChat account</title>
+<!-- Publishable version of the deletion web resource text in docs/design/play-readiness.md §3
+     (approved by the maintainer, 2026-11-07). Re-verify every factual line against the shipped app
+     before publishing. Constraints: self-contained, no scripts, no external resources. -->
+<style>
+:root { --bg: #FBF7F1; --surface: #FFFFFF; --text: #14111C; --muted: #5E566B; --line: #E6DCCF; --link: #3D52C4; --accent: #B5401A; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14111C; --surface: #1C1826; --text: #F2EDF7; --muted: #A79FB4; --line: #3A3347; --link: #A9B6FF; --accent: #F06A3B; }
+}
+html { background: var(--bg); color: var(--text); }
+body { margin: 0; font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 42rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+h1 { font-size: 2rem; line-height: 1.15; margin: 0 0 1rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.2rem; margin: 2rem 0 .4rem; }
+.steps { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 1rem 1.25rem; }
+a { color: var(--link); }
+strong { font-weight: 650; }
+.mark { display: inline-block; width: .9rem; height: .9rem; border-radius: 50%; background: var(--accent); vertical-align: -0.05rem; margin-right: .4rem; }
+footer { color: var(--muted); font-size: .9rem; margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+</style>
+</head>
+<body>
+<main>
+<h1><span class="mark" aria-hidden="true"></span>Delete your ChitChat account</h1>
+<p>ChitChat is an app for self-hosted chat servers. Your account doesn't belong to the app maker: it lives on the ChitChat server you signed up with, run by that server's operators.</p>
+
+<h2>In the app</h2>
+<div class="steps">
+<p style="margin:0">Open ChitChat, go to <strong>You → Privacy and security → Delete account</strong>, and follow the steps. This deletes your account on that server only.</p>
+</div>
+
+<h2>Without the app</h2>
+<p>Sign in to your server's website and use its account closure option, or contact the people who run your server.</p>
+
+<h2>What happens</h2>
+<p>You're signed out right away. For 14 days you can restore the account by signing in with <em>Restore a closed account</em>. After that, your name is replaced with "Closed account", your personal details are cleared and your username is freed. Messages and files you sent stay visible to the people who received them, under that server's retention policies, as do moderation and security records.</p>
+
+<h2>What the app maker has</h2>
+<p>Nothing to delete. The app talks to the server you chose, and to the notification delivery app you choose if you turn notifications on. It has no analytics or advertising.</p>
+
+<p>More about how the app handles data: <a href="/app/privacy">Privacy policy</a>.</p>
+
+<footer>ChitChat for Android</footer>
+</main>
+</body>
+</html>
