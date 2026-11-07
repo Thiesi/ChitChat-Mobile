@@ -112,11 +112,28 @@ conversation's current draft **waiting to send**:
   read-only. Above the composer, a notice reads **"Will send when you're back online."**
   with **Cancel**, which returns the text to an editable draft. Send shows a small clock and
   the accessible label "Waiting to send".
-- **One automatic attempt, foreground only.**
-  - When the realtime phase next becomes `LIVE` while that conversation's draft is still
-    waiting, the app is visible and the session generation and conversation scope are
-    unchanged, the ViewModel starts exactly one send through the ordinary send path, with
-    all of its existing guards (permissions, mute, block, rate limit, reply validity).
+- **One automatic attempt, foreground only, after fresh state.** `LIVE` alone is **not**
+  the trigger: a connected stream doesn't mean policy and history are current. After a long
+  offline period the person may have been muted, blocked or removed, or the reply target may
+  be gone. The single attempt starts only when all of these hold, in this order:
+  1. The network is back and the realtime phase has reached `LIVE`.
+  2. The **session's post-reconnect revalidation** for the current generation has
+     **completed** (bootstrap and fresh policy: ignores, mutes, display). Unknown policy is
+     not empty: if revalidation fails or is still pending, wait (while visible) or drop the
+     flag (on background).
+  3. **That conversation's state has been reconciled after the reconnect**, using the same
+     fresh-context reads its send path relies on today: room or peer access, the
+     mute/block/author state, and the reply target's validity. For an open conversation,
+     its normal post-reconnect reconciliation counts. For a conversation that isn't open, run
+     that conversation's existing context GET first. That is a GET only, never part of the
+     send.
+  4. **Policy and target are re-read after the last await**, immediately before the send.
+  5. The app is still visible, and the session generation and conversation scope are
+     unchanged.
+
+  Then the ViewModel starts exactly one send through the ordinary send path, with all of its
+  existing guards (permissions, mute, block, rate limit, reply validity). The server's own
+  authorization remains the final check.
   - "Visible" means the app is in the foreground, on any screen. The person doesn't need to be
     in that conversation.
   - Nothing runs while the app is backgrounded. No WorkManager, alarms or wake-ups.
@@ -193,7 +210,10 @@ Other offline composer rules:
   - polite announcement once per change;
   - the Back online timer cancels on leaving and on `ON_STOP`;
   - Send while offline marks the draft waiting; Cancel restores it;
-  - exactly one automatic attempt on `LIVE` while visible;
+  - exactly one automatic attempt, and only after session revalidation and that
+    conversation's reconciliation have completed (never on bare `LIVE`);
+  - policy changed during the offline period (muted, blocked, removed, or reply target
+    deleted): no send, and the draft stays editable with that guard's message;
   - no attempt after background or process death;
   - an ambiguous result enters the standard uncertain state with no second attempt;
   - several waiting conversations send in press order;
@@ -209,6 +229,6 @@ Other offline composer rules:
 | P-100 | Each signed-in screen shows at most one status notice, chosen by the precedence table. `LIVE` alone shows nothing. | U, C |
 | P-101 | Copy, levels and actions match the table. Retry and Refresh session call the existing actions with their existing gating. | C |
 | P-102 | Back online appears only after a recovery and dismisses after about 2 s, with a lifecycle-bound timer. | C |
-| P-103 | Send when back online: one waiting draft per conversation, made only by pressing Send. At most one automatic attempt, only on reconnect while the app is visible, through the ordinary guarded send path. Never retried; ambiguous results use the existing uncertain-send flow; the waiting flag is dropped on background, sign-out, generation change or process death. No background work. | U, C (fakes), existing unknown-send tests |
+| P-103 | Send when back online: one waiting draft per conversation, made only by pressing Send. At most one automatic attempt, only after reconnect, completed session revalidation and that conversation's post-reconnect reconciliation, while the app is visible, through the ordinary guarded send path with policy re-read after the last await. Never retried; ambiguous results use the existing uncertain-send flow; the waiting flag is dropped on background, sign-out, generation change or process death. No background work. | U, C (fakes), existing unknown-send tests |
 | P-104 | Announcements render as one dismissible steward-edged card, separate from status. | C, S |
 | P-105 | No new polling, timers beyond P-102 and P-25, or background work. Connectivity comes from the existing callback. | R |
