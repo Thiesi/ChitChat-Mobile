@@ -68,7 +68,7 @@ class ComposerCompletionUiTest {
         advanceTimeBy(500);runCurrent()
         assertEquals(value,editor.value);assertEquals("@An",body);assertEquals(1,writes);assertEquals(1,typingInputs)
         assertNull(model.state.value.selection);assertTrue(api.requests.none { it.limit==8 })
-        assertFalse(bridge().tab());assertEquals(0,traversals)
+        assertFalse(bridge().tab());assertFalse(bridge().traverseTab());assertEquals(0,traversals)
         bridge().input(TextFieldValue("@An",TextRange(3)));advanceTimeBy(150);runCurrent()
         assertEquals("An",original().token.prefix);assertEquals(1,writes);assertEquals(1,typingInputs)
     }
@@ -89,11 +89,12 @@ class ComposerCompletionUiTest {
         offer();val old=bridge();val choice=original();val candidate=model.state.value.candidates.first()
         api.session.value=api.session.value.copy(user=SessionUser(9,"Other",listOf("member"),1,false),generation=2)
         assertFalse(old.choose(choice,candidate,false));assertEquals("@An",body);assertEquals(0,writes)
-        assertFalse(old.tab());assertEquals(0,traversals)
+        assertFalse(old.tab());assertFalse(old.traverseTab());assertEquals(0,traversals)
     }
-    @Test fun unmatchedTabTraversesWithoutEditingTheDraftOrPublishingTyping()=runTest(dispatcher) {
+    @Test fun unmatchedTabDefersTraversalUntilThePostImeHandlerWithoutEditingOrTyping()=runTest(dispatcher) {
         offer("NoMatch")
-        assertTrue(bridge().tab());assertEquals("NoMatch",body)
+        assertFalse(bridge().tab());assertEquals(0,traversals)
+        assertTrue(bridge().traverseTab());assertEquals("NoMatch",body)
         assertEquals(1,traversals);assertEquals(0,writes);assertEquals(0,typingInputs)
     }
     @Test fun matchingTabUsesTheScopedLocalSeedWithoutMovingFocus()=runTest(dispatcher) {

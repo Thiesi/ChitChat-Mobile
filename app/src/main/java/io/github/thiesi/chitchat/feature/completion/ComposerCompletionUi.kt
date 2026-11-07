@@ -106,16 +106,27 @@ internal class ComposerCompletion internal constructor(private val editor: Compl
             else -> false
         }
     }
-    internal fun tab(): Boolean {
+    fun navigationKey(event: KeyEvent): Boolean {
+        if (event.type!=KeyEventType.KeyDown || event.key!=Key.Tab || event.isShiftPressed ||
+            event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) return false
+        return traverseTab()
+    }
+    private fun canTab(): Boolean {
         if (!canEdit(false) || value.composition!=null || currentBody()!=value.text) return false
-        if (model!=null && (pane==null || model.state.value.pane!==pane || !pane.matches(model.session.value))) return false
+        return model==null || pane!=null && model.state.value.pane===pane && pane.matches(model.session.value)
+    }
+    internal fun tab(): Boolean {
+        if (!canTab()) return false
         if (model!=null && pane!=null && canOffer()) {
             if (!inlineChoices && choice!=null) model.quiet(pane)
             val edit=editor.snapshot()
-            if (model.tab(pane,edit,localNames()) { accept(it,edit,false) }) return true
+            return model.tab(pane,edit,localNames()) { accept(it,edit,false) }
         }
-        // This is an explicit hardware Tab navigation action, never tap/focus repair.
-        // Returning false would let a multiline BasicTextField insert a literal tab.
+        return false
+    }
+    internal fun traverseTab(): Boolean {
+        if (!canTab()) return false
+        // Post-IME only: Android has performed its normal touch-to-keyboard transition.
         nextField()
         return true
     }

@@ -105,6 +105,7 @@ import io.github.thiesi.chitchat.feature.targets.ReplyPreview
 import io.github.thiesi.chitchat.feature.targets.RequestedMessageMarker
 import kotlinx.coroutines.delay
 import androidx.compose.ui.input.key.onPreInterceptKeyBeforeSoftKeyboard
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import io.github.thiesi.chitchat.feature.completion.*
 
 @Composable
@@ -479,7 +480,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             MessageInput(completionComposer.value, completionComposer::input,
                 !state.sending && model.canEditDraft() && !composerDialog && !obscured,
                 stringResource(R.string.conversation_message), compact,
-                Modifier.weight(1f).onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).focusRequester(composerFocus).testTag("conversation_composer"))
+                Modifier.weight(1f).onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("conversation_composer"))
             MessageSendButton(stringResource(if (state.sending) R.string.conversation_sending else R.string.conversation_send),
                 onClick = { if (interactive() && actions == null && replyOptions == null) model.send(displayedSession, roomId) },
                 enabled = ready && !state.busy && !composerDialog && !obscured && model.canSend() && state.draft.phpTrim().isNotEmpty(),

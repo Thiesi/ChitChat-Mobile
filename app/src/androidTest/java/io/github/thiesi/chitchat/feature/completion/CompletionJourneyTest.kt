@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.onPreInterceptKeyBeforeSoftKeyboard
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
@@ -252,7 +253,7 @@ class CompletionJourneyTest {
                 Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
                     CompletionSuggestions(composer)
                     MessageInput(composer.value,composer::input,true,"Message",false,
-                        Modifier.fillMaxWidth().onPreInterceptKeyBeforeSoftKeyboard(composer::key).testTag("completion_component_composer"))
+                        Modifier.fillMaxWidth().onPreInterceptKeyBeforeSoftKeyboard(composer::key).onPreviewKeyEvent(composer::navigationKey).testTag("completion_component_composer"))
                 }
             }
         } }

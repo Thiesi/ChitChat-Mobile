@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.input.key.onPreInterceptKeyBeforeSoftKeyboard
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -391,7 +392,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         if (replyInline) replyControl(true)
                         MessageInput(completionComposer.value, completionComposer::input,
                             !state.sending && model.canEditDraft() && !composerDialog && !obscured,
-                            stringResource(R.string.dm_message), compact, Modifier.weight(1f).onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).focusRequester(composerFocus).testTag("dm_composer"))
+                            stringResource(R.string.dm_message), compact, Modifier.weight(1f).onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("dm_composer"))
                         MessageSendButton(stringResource(if (state.sending) R.string.conversation_sending else R.string.dm_send),
                             onClick = { if (interactive() && actions == null && replyOptions == null) model.send(displayedSession, peer) },
                             enabled = ready && !composerDialog && !detailsOpen && !blockConfirm && !obscured && model.canSend() && state.draft.phpTrim().isNotEmpty(),
