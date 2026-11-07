@@ -66,7 +66,7 @@ rather than fake it:
 | D3 | Navigation | Bottom bar **Rooms · Direct · Activity · You**, replacing the current Home hub. |
 | D4 | Material You dynamic color | **Off.** |
 | D5 | Invite codes | A client-only QR/link carrying only the server origin (no credentials, tokens, usernames or room IDs), scanned during onboarding; server confirmation (onboarding step 3) is always shown. Specified in [invite-codes.md](invite-codes.md) as the plain HTTPS origin, so the same code also opens the web client for people without the app. |
-| D6 | Palettes | Lantern is the default. When account palettes arrive (M6), an account palette may replace the hue tokens while shapes, chit, type and status language stay. High-contrast stays available. **An "AMOLED black" theme must exist before CCM goes live** (see visual-vocabulary.md). |
+| D6 | Palettes | Lantern is the default. **The backend has no account-level theme or palette** (the web client stores its six palettes per device, in the browser; backend audit, issue #1). So CCM's appearance is a local device setting, like the web's. If CCM later offers additional palettes, they may replace the hue tokens while shapes, chit, type and status language stay. High-contrast stays available as a local option. **An "AMOLED black" theme must exist before CCM goes live** (see visual-vocabulary.md). |
 | D7 | Backend data | Backend issues filed: [presence count #153](https://github.com/Thiesi/ChitChat/issues/153) and [last activity time #154](https://github.com/Thiesi/ChitChat/issues/154) per joined room. Until the server provides them, room lists show neither. |
 
 Ask the maintainer before deciding any similar consequential question that is not listed
