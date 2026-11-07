@@ -109,8 +109,8 @@ summary requests.
 | Tab | Badge | Source |
 |---|---|---|
 | Activity | `CountBadge` with the unread count, "99+" capped; a plain dot when the count is stale (`countStale`) | The existing notification summary count used on `home` today: refreshed on foreground, navigation and manual refresh (M4c4c2), `limit=1` summary mode while the Activity tab is not showing |
-| Rooms | None in this slice | Dependency: the room directory loads only on entry. A badge needs a defined summary refresh policy (coordinator decision). Don't keep directory results around just for a badge |
-| Direct | None in this slice | Same dependency: DM inbox state is backgrounded on departure by contract |
+| Rooms | None | **Decided** (technical lead, 2026-11-07): no badge, no new polling or summary requests, and no directory results retained just to feed one. Revisit when the backend provides a summary (ChitChat#153/#154) |
+| Direct | None | **Decided**, same as Rooms. DM inbox state is backgrounded on departure by contract |
 | You | Steward-colored dot when moderation work is waiting | Dependency: M7 |
 
 ## Behavior rules
@@ -191,6 +191,6 @@ Extends P-30:
 | P-71 | A tab switch applies exactly today's departure rules for the destination being left. Navigation never cancels or replays a POST. | C (fakes), R |
 | P-72 | Saved stacks restore routes and non-private UI state only. A stale-scope entry resets its tab to the root without being shown. | C |
 | P-73 | Back and reselection behave as specified. Leaving from the Rooms root goes through the genuine-background path. | C |
-| P-74 | The Activity badge uses only the existing summary count and modes. Rooms and Direct show no badge until a summary policy is decided. No new polling or background requests. | C, R |
+| P-74 | The Activity badge uses only the existing summary count and modes. Rooms and Direct show no badge (decided; revisit with ChitChat#153/#154). No new polling or background requests. | C, R |
 | P-75 | You contains every control from the old hub, `account` and `settings`, with unchanged behavior. Sign out is not persimmon-filled. | C, R |
 | P-76 | Pushed destinations use an icon back button described "Back". Tab roots have none. | C |

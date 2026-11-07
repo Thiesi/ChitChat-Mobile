@@ -72,8 +72,9 @@ against the mockups: a new screen should look like it belongs on the same canvas
 
 ## What this is not
 
-- Not a restyle of the web client. The web app keeps its own six palettes. CCM may later
-  honor an account palette (decision D6), but its shapes and voice remain CCM's.
+- Not a restyle of the web client. The web app keeps its own six palettes, stored per device
+  in the browser; there is no account-level palette to sync (D6). CCM may later offer extra
+  local palettes, but its shapes and voice remain CCM's.
 - Not permission to change behavior. See the [README](README.md) for precedence.
 - Not final. The layout is explicitly open, and the maintainer approves consequential
   decisions.
