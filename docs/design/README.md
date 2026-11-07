@@ -20,6 +20,7 @@ a substitute.
 | [onboarding.md](onboarding.md) | First launch to first message |
 | [onboarding-restyle.md](onboarding-restyle.md) | Implementation spec mapping onboarding onto today's code, copy and tests |
 | [invite-codes.md](invite-codes.md) | Sharing and scanning the server address as a QR code or link (D5) |
+| [navigation-shell.md](navigation-shell.md) | Implementation spec for D3: bottom bar, You hub, tab and Back behavior under existing navigation contracts |
 | [theme-foundation.md](theme-foundation.md) | Implementation spec for the first slice: tokens, Material mapping, wrappers, font, settings, window, icon |
 | [amoled-black.md](amoled-black.md) | The true-black dark variant required before going live |
 | [acceptance.md](acceptance.md) | Accessibility and readability floors, plus numbered, testable presentation requirements |
