@@ -126,6 +126,12 @@ class CompletionJourneyTest {
         compose.onNode(isDialog()).assertDoesNotExist()
     }
     private fun characters(tag: String)=compose.onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.EditableText].text
+    private fun hardwareType(body: String) {
+        compose.tapNativeInput("conversation_composer",{ime}).assertHeightIsAtLeast(48.dp)
+        assertEquals("",characters("conversation_composer"))
+        InstrumentationRegistry.getInstrumentation().sendStringSync(body)
+        compose.waitForIdle();assertEquals(body,characters("conversation_composer"))
+    }
     private fun tab(shift: Boolean=false) {
         val instrumentation=InstrumentationRegistry.getInstrumentation()
         if (!shift) instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_TAB)
@@ -207,18 +213,18 @@ class CompletionJourneyTest {
         choose();assertEquals("@${longName} ",characters("conversation_composer"))
     }
     @Test fun hardwareTabCyclesLocalNamesWithoutQueryingOrSendingTheDraft() {
-        enter();type("An");tab();assertEquals("Ann: ",characters("conversation_composer"))
+        enter();hardwareType("An");tab();assertEquals("Ann: ",characters("conversation_composer"))
         tab();assertEquals("Andy: ",characters("conversation_composer"))
         tab();assertEquals("Ann: ",characters("conversation_composer"))
         compose.runOnIdle { assertTrue(mentions.calls.none { it.second.limit==8 });assertEquals(0,api.rooms.sends) }
     }
     @Test fun shiftTabLeavesAMatchingPrefixUntouchedAndKeepsNormalFocusTraversal() {
-        enter();type("An");tab(true);assertEquals("An",characters("conversation_composer"))
+        enter();hardwareType("An");tab(true);assertEquals("An",characters("conversation_composer"))
         compose.onNodeWithTag("conversation_composer").assertIsNotFocused()
         compose.runOnIdle { assertEquals("An",room.state.value.draft);assertEquals(0,api.rooms.sends);assertNull(model.state.value.selection) }
     }
     @Test fun anUnmatchedTabKeepsTheDraftAndItsNormalFocusTraversal() {
-        enter();type("NoMatch");tab();assertEquals("NoMatch",characters("conversation_composer"))
+        enter();hardwareType("NoMatch");tab();assertEquals("NoMatch",characters("conversation_composer"))
         compose.onNodeWithTag("conversation_composer").assertIsNotFocused()
         compose.runOnIdle { assertEquals("NoMatch",room.state.value.draft);assertEquals(0,api.rooms.sends) }
     }
@@ -314,7 +320,9 @@ class CompletionJourneyTest {
         if (android.os.Build.VERSION.SDK_INT<28) return
         compose.waitForIdle()
         val context=InstrumentationRegistry.getInstrumentation().targetContext
-        val folder=java.io.File(checkNotNull(context.getExternalFilesDir(null)),"ccm-completion-presentation")
+        val output=InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }
+            ?: checkNotNull(context.getExternalFilesDir(null))
+        val folder=java.io.File(output,"ccm-completion-presentation")
         check(folder.isDirectory || folder.mkdirs())
         val target=if (label.endsWith("after-details")) compose.onNode(isDialog()) else compose.onRoot()
         // captureToImage uses PixelCopy for these ordinary Activity/Dialog roots. Its
