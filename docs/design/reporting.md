@@ -99,6 +99,32 @@ keeps the dialog window type and the native input and IME rules.
 The message itself is **unchanged** after a report: no badge, no hiding, no "reported" mark. The
 API exposes no per-viewer report state to drive one, and a local mark would be lost on reload.
 
+## Report a person (Dependency: ChitChat#159, not built yet)
+
+Context: CCM is going on Google Play (maintainer, issue #1). Play's user-generated-content
+policy expects in-app reporting of objectionable **users** as well as content. Message
+reporting above works today. Reporting a person (an offensive username, profile picture, or a
+pattern not tied to one message) needs the API proposed in ChitChat#159. **Leave it out of the
+build until that API exists.** This section only fixes the presentation, so the slice is ready
+when the API lands.
+
+- **Entry:** the profile card sheet (modals spec) gains **Report {name}…** below Refresh. It is
+  shown only when the API exists and the server allows it for that person: not for yourself,
+  and guests reportable only if the API says so.
+- **Form:** the same form dialog pattern as message reporting: title "Report {name}", context
+  line with pebble and username, the same category list (with "Pretending to be someone" and
+  "Something else" especially relevant), and optional details (same bound if the API keeps
+  1,000 characters).
+  - "Who will see it" copy depends on the API's routing (room context or global). Write it
+    when the API is final, following the same rule: say exactly who sees what, never more.
+  - A room context, when the report is opened from a room, is passed only if the API defines
+    it.
+- **Outcomes:** the same table pattern as messages. An "already reported" equivalent counts as
+  success if the API provides it. Unknown results offer an explicit Send again only if the API
+  makes repeats safe; otherwise the unknown flow needs its own decision when the API lands.
+- **Follow-up:** the same sheet (ignore or block offered, never applied).
+- Acceptance for this part is added when the API exists.
+
 ## Guests (M7)
 
 Guests may report room messages. The same flow applies, with the room copy, once guest
