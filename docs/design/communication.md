@@ -65,7 +65,7 @@ states.
 |---|---|---|---|
 | Sending | Bubble at reduced emphasis, small clock icon | "Sending" | none |
 | Sent (server confirmed) | Normal bubble | Time only; "Sent" under the latest one if useful | none |
-| Not sure it arrived (ambiguous result) | Bubble keeps full emphasis with a 2dp honey inset outline | Pill: "Not sure this arrived · Check" | **Check** runs the explicit history check. If the message is found, it becomes Sent. If not, a level-3 decision follows: "Send again? We checked and couldn't find it. Sending again may post it twice." with **Keep as draft** and **Send again**. |
+| Not sure it arrived (ambiguous result) | Bubble keeps full emphasis with a 2dp `unsureLine` inset outline (honey in dark, dark amber in light) | Pill: "Not sure this arrived · Check" | **Check** runs the explicit history check. If the message is found, it becomes Sent. If not, a level-3 decision follows: "Send again? We checked and couldn't find it. Sending again may post it twice." with **Keep as draft** and **Send again**. |
 | Failed before delivery (definitely not sent) | No bubble; notice above composer | "Couldn't send '…'. Nothing was delivered. Your text is back in the box." | The text is restored to the composer |
 
 These map exactly to the existing unknown-delivery contracts: automatic entry or reconnect
