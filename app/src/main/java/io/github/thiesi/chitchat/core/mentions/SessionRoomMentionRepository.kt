@@ -8,9 +8,10 @@ internal class SessionRoomMentionRepository(private val sessions: SessionReposit
 
     override suspend fun suggestions(expected: SessionState, request: RoomMentionRequest): RoomMentionBatch {
         val room = request.roomId
-        val prefix = normalizedRoomMentionPrefix(room,request.prefix)
+        val limit = request.limit
+        val prefix = normalizedRoomMentionPrefix(room,request.prefix,limit)
         val access = sessions.openAccess(expected)
-        val users = sessions.authorized(access) { roomMentionUsers(room,prefix,access.userId) }
+        val users = sessions.authorized(access) { roomMentionUsers(room,prefix,access.userId,limit) }
         return RoomMentionBatch(request,prefix,users)
     }
 }
