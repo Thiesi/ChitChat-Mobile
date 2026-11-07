@@ -112,10 +112,11 @@ A source-scan unit test (P-01) fails on:
   (release gate, not this slice).
 - **No downloadable fonts.** Google Play services font providers are not used (no-GMS
   stance).
-- **Mapping:** `displayLarge` through `headlineSmall` and `titleLarge` use Bricolage
-  Grotesque, weight 700 for `title*`/`headline*` and 800 for `display*`, letter spacing
-  −0.01em. `titleMedium`, `titleSmall`, `body*` and `label*` stay on `FontFamily.Default`,
-  keeping Material default sizes. Names in list rows use weight 600 when later slices restyle
+- **Mapping:** exactly these roles use Bricolage Grotesque: `displayLarge`, `displayMedium`,
+  `displaySmall` (weight 800), `headlineLarge`, `headlineMedium`, `headlineSmall` and
+  `titleLarge` (weight 700), all with letter spacing −0.01em. Every other role (`titleMedium`,
+  `titleSmall`, `body*`, `label*`) stays on `FontFamily.Default` with Material's default
+  weights and sizes. Names in list rows use weight 600 when later slices restyle
   lists. Sizes stay at Material defaults in this slice; display sizes are tuned by the slices
   that use them.
 - All sizes stay in `sp` (A-04). Message text is never Bricolage (A-11). Today messages use
@@ -146,6 +147,19 @@ Structure) and are not part of Material `Shapes`.
 - On API 31+, mirror the in-app Theme choice into `UiModeManager.setApplicationNightMode`
   (`MODE_NIGHT_AUTO` for System, `MODE_NIGHT_NO` for Light, `MODE_NIGHT_YES` for Dark), so
   the cold-start window already uses the right resources. This needs no new permission.
+  - **Timing:** the call can recreate the Activity when the effective night mode changes.
+    So it is **never made while the person is looking at the app**. A Theme change applies
+    live through `ChitChatTheme` state, without recreation (amoled-black.md P-05). The
+    system-side sync runs only on a genuine background (`ON_STOP` with
+    `isChangingConfigurations == false`), and only when the stored application night mode
+    differs from the current choice.
+  - **Recreation:** any recreation it triggers then happens off-screen. It goes through the
+    ordinary configuration-recreation path, which existing contracts already require to
+    retain drafts, pending operations and unknown-send guards. It is not a navigation or
+    background event.
+  - **Process death:** if the process dies before a background sync, the next cold start may
+    use the previous night mode for its first frame, and the sync happens at the next genuine
+    background.
 - **Known limit, API 26–30:** when the in-app choice differs from the device mode (for
   example app Dark on a light device), the first frame before Compose draws can still use the
   device's window background. Accept this there. On API 31+, P-08 applies in full.
@@ -202,6 +216,6 @@ This slice satisfies P-01 to P-08 and A-01, A-02, A-10 and A-11, plus:
 | P-60 | No layout, copy, navigation or behavior change. Only tokens, wrappers, settings, window resources and the launcher icon differ. Existing tests pass unchanged in meaning. | R, existing tests |
 | P-61 | All Material color roles map exactly as in the table, in all three palettes, and every mapped foreground/background pair passes its contrast floor. | U |
 | P-62 | Primary filled actions use `PrimaryButton` (persimmon with ink in every palette). Count badges use `CountBadge` (never `error`). | U (source scan), S |
-| P-63 | Bricolage Grotesque is bundled, subset, OFL-licensed in `docs/licenses/`, and used only for the display and title-large roles. | R, S |
-| P-64 | On API 31+, cold start uses the window background matching the in-app Theme choice. | M |
+| P-63 | Bricolage Grotesque is bundled, subset, OFL-licensed in `docs/licenses/`, and used only for the `display*`, `headline*` and `titleLarge` roles, with the weights listed under Typography. | R, S |
+| P-64 | On API 31+, cold start uses the window background matching the in-app Theme choice as last synced. Changing Theme or Pure black in the foreground never recreates the Activity, and the system sync happens only on genuine background. | C (no recreation on change), M |
 | P-65 | The launcher icon is adaptive with a monochrome layer and renders the Lantern mark. | M |
