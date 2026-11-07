@@ -187,3 +187,4 @@ The screen shows:
 | P-123 | Lock-screen visibility is private with a generic public version. | U, M |
 | P-124 | Sign-out, account switch and generation change cancel that account's notifications and drop later pushes. | C |
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
+| P-126 | Settings offer only the mention and ping toggles plus whole-hour quiet hours with a time zone. No device row is labelled as this phone; Remove revokes by ID. Sign-out unsubscribes this device before the session ends. | C, R |
