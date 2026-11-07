@@ -20,6 +20,7 @@ import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
 import io.github.thiesi.chitchat.feature.notifications.NotificationCenterViewModel
 import io.github.thiesi.chitchat.feature.search.MessageSearchViewModel
+import io.github.thiesi.chitchat.feature.profile.ProfileViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,9 +53,11 @@ class MainActivity : ComponentActivity() {
                 (application as ChitChatApplication).notifications))
             val search: MessageSearchViewModel = viewModel(factory = MessageSearchViewModel.factory(
                 (application as ChitChatApplication).messageSearch))
+            val profiles: ProfileViewModel = viewModel(factory = ProfileViewModel.factory(
+                (application as ChitChatApplication).profiles))
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
-                notifications = notifications, search = search, onThemeChanged = { dark ->
+                notifications = notifications, search = search, profiles = profiles, onThemeChanged = { dark ->
                 enableEdgeToEdge(
                     statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
                     navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },

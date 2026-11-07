@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5f2 native basic profiles](milestones/M5f2-native-basic-profiles.md) consumes delivered PR82/main2b42d95. Complete this head's own full gates/review/delivery, then continue mention completion, authenticated files/media/sharing and reporting. Exact4a808b9 development exception and later main208/208 transfer no future-head waiver.
+
 [M5f1 basic profile protocol](milestones/M5f1-basic-profile-protocol.md) follows delivered PR81/main2fdb024. Complete its own full build/JVM/lint/native/review gates, then add scoped native read-only profile display before mention completion, files/media/sharing and reporting. Avatar metadata is not image delivery or management; guest/live/device/release acceptance remains separate.
 
 [M5c3b native DM reactions](milestones/M5c3b-native-direct-reactions.md) consumes delivered PR71/main2cba7cc. Complete its own full gates/reviews, then continue basic profiles, mention completion, authenticated files/media/sharing and reporting in the accepted order below. Native reaction controls do not grant guest/live/device/release acceptance or waive old failures.

@@ -108,20 +108,20 @@ import kotlinx.coroutines.delay
 @Composable
 fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
     ignores: IgnorePersonViewModel? = null, targets: MessageTargetViewModel? = null, obscured: Boolean = false,
-    onStopped: (() -> Unit)? = null,
+    onStopped: (() -> Unit)? = null, onProfile: ((Long) -> Boolean)? = null,
     isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     key(roomId, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
         LaunchedEffect(roomId) { model.open(roomId, expected = displayedSession) }
-        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, onStopped, isCurrentEntry)
+        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, onStopped, onProfile, isCurrentEntry)
     }
 }
 
 @Composable
 private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
     ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean,
-    onStopped: (() -> Unit)?, isCurrentEntry: () -> Boolean) {
+    onStopped: (() -> Unit)?, onProfile: ((Long) -> Boolean)?, isCurrentEntry: () -> Boolean) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session // Freeze callback origin; delegated Flow values can change before recomposition.
@@ -385,7 +385,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     if (state.unreadDividerId == message.id) {
                         HorizontalDivider(); Text(stringResource(R.string.conversation_unread), style = MaterialTheme.typography.labelMedium)
                     }
-                    if (!ignored || ignores != null) {
+                    if (!ignored || ignores != null || onProfile != null) {
                         val sender = message.username ?: stringResource(R.string.conversation_unknown_user)
                         val author = stringResource(R.string.conversation_author_time, sender, displayTime(message.createdAt, state.context))
                         if (ignores != null && message.senderId != null && message.senderId != session.user?.id &&
@@ -397,6 +397,15 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                                 Text(author, style = MaterialTheme.typography.labelMedium)
                             }
                         } else Text(author, style = MaterialTheme.typography.labelMedium)
+                    }
+                    if (onProfile != null && message.senderId != null) TextButton(onClick = {
+                        val current = model.state.value
+                        if (interactive() && actions == null && replyOptions == null && model.belongsTo(displayedSession) &&
+                            current.roomId == roomId && !current.busy && !current.reading && !current.stale &&
+                            current.messages.any { it === message } && onProfile(message.senderId)) focus.clearFocus()
+                    }, enabled = ready && !state.busy && !state.reading && !state.stale && !obscured,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("room_profile:${message.id}")) {
+                        Text(stringResource(R.string.profile_open))
                     }
                     if (ignored && message.id !in state.revealed) TextButton(onClick = { model.reveal(message.id) }) {
                         Text(stringResource(R.string.conversation_ignored))
