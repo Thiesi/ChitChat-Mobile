@@ -107,18 +107,20 @@ import kotlinx.coroutines.delay
 @Composable
 fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
     ignores: IgnorePersonViewModel? = null, targets: MessageTargetViewModel? = null, obscured: Boolean = false,
+    onStopped: (() -> Unit)? = null,
     isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     key(roomId, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
         LaunchedEffect(roomId) { model.open(roomId, expected = displayedSession) }
-        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, isCurrentEntry)
+        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, onStopped, isCurrentEntry)
     }
 }
 
 @Composable
 private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
-    ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean, isCurrentEntry: () -> Boolean) {
+    ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean,
+    onStopped: (() -> Unit)?, isCurrentEntry: () -> Boolean) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session // Freeze callback origin; delegated Flow values can change before recomposition.
@@ -199,7 +201,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     var placedAnchor by remember { mutableStateOf<TimelineAnchor?>(null) }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) {
-        model.background(); ignores?.leaveRoom(session, roomId)
+        if (onStopped == null) model.background() else onStopped()
+        ignores?.leaveRoom(session, roomId)
     } }
     LaunchedEffect(session.retryAtMillis, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {

@@ -228,6 +228,30 @@ class SearchResultJourneyTest {
         roomTarget()
         compose.runOnIdle { assertEquals(1, api.rooms.sends); assertNull(search.state.value.targetBinding) }
     }
+    @Test fun genuineBackgroundInSearchRetiresThePausedRoomSendAndPreservesItsUnknownDraft() {
+        root(); query(); open("room"); roomTarget(); type("conversation_composer", "Background pending room send")
+        compose.runOnIdle { api.rooms.sendGate = CompletableDeferred() }
+        compose.onNodeWithTag("conversation_send").assertIsEnabled().performNativeTap()
+        compose.waitUntil(5_000) { api.rooms.sends == 1 }
+        backToSearch()
+        compose.runOnIdle {
+            assertTrue(room.state.value.sending); assertFalse(room.state.value.uncertainSend)
+            assertFalse(api.rooms.sendGate!!.isCompleted)
+        }
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        compose.activityRule.scenario.onActivity {
+            assertFalse(room.state.value.busy); assertTrue(room.state.value.uncertainSend)
+            api.rooms.sendGate!!.complete(Unit)
+        }
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        compose.onNodeWithTag("message_search_query").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals("Background pending room send", room.state.value.draft)
+            assertTrue(room.state.value.uncertainSend); assertFalse(room.state.value.reconciledAfterUncertain)
+            assertEquals(1, api.rooms.sends); assertEquals("", search.state.value.query)
+            assertNull(targets.state.value.request)
+        }
+    }
     @Test fun actualRecreationRetainsTheExactSelectionAndPendingLookupWithoutReposting() {
         val target = MessageTarget.RoomMessage(43, 20); api.lookups.gates[target] = CompletableDeferred()
         root(); query("private recreation query"); open("room")

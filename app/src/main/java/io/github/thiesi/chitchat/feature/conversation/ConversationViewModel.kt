@@ -155,6 +155,21 @@ class ConversationViewModel internal constructor(private val operations: Convers
     }
     fun cancel() { background(); realtime?.selectRoom(null, false) }
 
+    /** Navigation must not turn an already authorized write into unknown delivery. */
+    fun leavePane() {
+        val value = mutable.value
+        if (!belongsTo(session.value) || (!postInFlight && !value.sending && !value.authorWriting && !value.reactionWriting &&
+            authorPosting == null && reactionPosting == null && readJob?.isActive != true)) {
+            cancel()
+            return
+        }
+        foreground = false
+        visibleNewest = null
+        mutable.value = value.copy(revealed = emptySet(), atLatest = false, anchor = viewport, draftsOpen = false)
+        realtime?.selectRoom(null, false)
+        // Keep original operation/sequence markers until ACK/failure. Real background still retires them.
+    }
+
     fun cancelRequest() {
         val uncertain = mutable.value.uncertainSend || postInFlight
         retire()

@@ -1,5 +1,6 @@
 package io.github.thiesi.chitchat.app
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -153,6 +154,15 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     )
     MaterialTheme(colorScheme = colors) {
         val nav = rememberNavController()
+        val activity = LocalActivity.current
+        LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+            // A paused room operation can outlive its pane while search is visible. Genuine app
+            // background still retires it; configuration recreation retains the original operation.
+            val route = nav.currentBackStackEntry?.destination?.route
+            if (activity?.isChangingConfigurations != true &&
+                route?.startsWith("conversation/") != true && route != NOTIFICATION_ROOM_ROUTE)
+                conversations.background()
+        }
         val entry = nav.currentBackStackEntryAsState().value
         val entryStarted = entry?.lifecycle?.currentStateAsState()?.value?.isAtLeast(Lifecycle.State.STARTED) == true
         val notificationState = notifications?.state?.collectAsStateWithLifecycle()?.value
@@ -210,7 +220,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             if (conversation && session.phase != SessionPhase.AUTHENTICATED) {
                 nav.popBackStack("home", false)
                 conversations.cancel()
-            } else if (entry?.destination?.route != null && !conversation) conversations.cancel()
+            } else if (entry?.destination?.route != null && !conversation) conversations.leavePane()
             val direct = entry?.destination?.route?.startsWith("direct") == true
             val args = entry?.arguments
             val sameScope = args != null && matchesDirectScope(session, args.getLong("generation", -1),
@@ -434,7 +444,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         composable("conversation/{roomId}", arguments = listOf(navArgument("roomId") { type = NavType.LongType })) { destination ->
                             val id = destination.arguments?.getLong("roomId") ?: 0L
                             if (session.phase == SessionPhase.AUTHENTICATED && id > 0)
-                                ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured) {
+                                ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured,
+                                    onStopped = { if (nav.currentBackStackEntry === destination) conversations.background()
+                                        else conversations.leavePane() }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
                         }
                         composable(NOTIFICATION_ROOM_ROUTE, arguments = notificationArguments() +
@@ -443,7 +455,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             val id = args?.getLong("roomId", -1) ?: -1
                             if (id > 0 && args != null && matchesNotificationScope(session, args.getLong("generation", -1),
                                 args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
-                                ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured) {
+                                ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured,
+                                    onStopped = { if (nav.currentBackStackEntry === destination) conversations.background()
+                                        else conversations.leavePane() }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
                         }
                         composable(DIRECT_INBOX_ROUTE, arguments = directArguments()) { destination ->
