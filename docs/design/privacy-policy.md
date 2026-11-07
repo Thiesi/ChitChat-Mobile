@@ -3,7 +3,8 @@
 Status: **draft for maintainer approval**, requested by the technical lead (issue #1 and PR #108).
 It is built from the approved data safety facts (`play-readiness.md` §4) and the existing
 in-app disclosures. It will be published at **https://ChitChat.NetWorkXXIII.de/app/privacy** (maintainer
-decision, 2026-11-08). Publisher name and contact address are still open. Every factual statement must be re-verified against the shipped app before
+decision, 2026-11-08). Publisher (NetWork XXIII) and contact
+(chitchat@NetWorkXXIII.de) are set; only the publication date remains, set at approval. Every factual statement must be re-verified against the shipped app before
 publication. Placeholders are written as **[PLACEHOLDER]**.
 
 Editorial notes for reviewers are in *italic brackets* and aren't part of the published text.
@@ -59,8 +60,10 @@ ChitChat doesn't run in the background. It uses UnifiedPush: a separate delivery
 receives notifications from your server and wakes ChitChat. The notification content is
 **encrypted** between your server and this app (Web Push encryption, RFC 8291), so the delivery
 service can't read it. If no UnifiedPush delivery app is installed, ChitChat falls back to
-Google's Firebase Cloud Messaging, and Google then transports these encrypted messages. The app
-doesn't include Google's Firebase software; it uses UnifiedPush's standard Web Push delivery.
+Google's Firebase Cloud Messaging, and Google then transports these encrypted messages. Google
+can see that a notification was delivered to your device and when, but not what it says. The
+app doesn't include Google's Firebase software; it uses UnifiedPush's standard Web Push
+delivery.
 
 **To anyone else:** nothing. The app contains no analytics, advertising or crash-reporting
 software, and it doesn't sell or share your data.
