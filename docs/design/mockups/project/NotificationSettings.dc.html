@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Notification settings</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}
+.sw{width:52px;height:32px;border-radius:16px;background:var(--persimmon);position:relative;flex:none;border:0;padding:0}
+.sw::after{content:"";position:absolute;right:4px;top:4px;width:24px;height:24px;border-radius:12px;background:var(--ink)}
+.sw.off{background:var(--raised);border:2px solid var(--field-line)}
+.sw.off::after{right:auto;left:4px;background:var(--field-line);top:2px}
+.set{display:flex;gap:14px;align-items:center;min-height:56px;padding:6px 0}
+</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div class="appbar" style="padding-left: 4px; gap: 8px;">
+    <a class="icon-btn" href="AdminHome.dc.html" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <h1 class="display" style="font-size: 24px;">Notifications</h1>
+  </div>
+  <div style="padding: 4px 20px 0; display: flex; flex-direction: column; gap: 16px;">
+    <div class="card" style="display: flex; gap: 14px; align-items: center;">
+      <div style="width: 44px; height: 44px; border-radius: 22px; background: var(--honey-wash); display: flex; align-items: center; justify-content: center; flex: none;">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--ink);"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20.5a2 2 0 0 0 4 0"></path></svg></div>
+      <div style="flex-grow: 1;"><b>On, delivered by ntfy</b><div class="hint" style="margin-top: 2px;">ChitChat doesn't run in the background. Your delivery app wakes it when something arrives.</div></div>
+    </div>
+
+    <div>
+      <div class="section" style="padding: 0 0 4px;"><span>WHAT YOU GET</span></div>
+      <div class="set"><div style="flex-grow: 1;"><label for="m" style="font-weight: 600;">Mentions</label><div class="hint" style="margin-top: 2px;">When someone writes @you</div></div><button id="m" class="sw" role="switch" aria-checked="true" aria-label="Mentions"></button></div>
+      <div class="set"><div style="flex-grow: 1;"><label for="p" style="font-weight: 600;">Pings</label><div class="hint" style="margin-top: 2px;">Private nudges in rooms</div></div><button id="p" class="sw off" role="switch" aria-checked="false" aria-label="Pings"></button></div>
+    </div>
+
+    <div>
+      <div class="section" style="padding: 0 0 4px;"><span>QUIET HOURS</span></div>
+      <div class="set"><div style="flex-grow: 1;"><b>22:00 – 07:00</b><div class="hint" style="margin-top: 2px;">Europe/Berlin · applied by your server, on all your devices</div></div><button class="btn text sm">Change</button></div>
+    </div>
+
+    <div>
+      <div class="section" style="padding: 0 0 4px;"><span>DEVICES</span></div>
+      <div class="set"><div style="flex-grow: 1;"><b>Android phone</b><div class="hint" style="margin-top: 2px;">This phone</div></div></div>
+      <div class="set"><div style="flex-grow: 1;"><b>Firefox on Linux</b></div><button class="btn text sm">Remove</button></div>
+    </div>
+    <div class="hint">Notifications can arrive a minute or so after the message. On the lock screen, ChitChat shows only that something arrived, unless your phone is set to show all notification content.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
