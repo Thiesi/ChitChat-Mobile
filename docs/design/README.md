@@ -19,6 +19,7 @@ a substitute.
 | [communication.md](communication.md) | How CCM tells people what is happening: status ladder, connectivity, delivery, voice |
 | [onboarding.md](onboarding.md) | First launch to first message |
 | [invite-codes.md](invite-codes.md) | Sharing and scanning the server address as a QR code or link (D5) |
+| [theme-foundation.md](theme-foundation.md) | Implementation spec for the first slice: tokens, Material mapping, wrappers, font, settings, window, icon |
 | [amoled-black.md](amoled-black.md) | The true-black dark variant required before going live |
 | [acceptance.md](acceptance.md) | Accessibility and readability floors, plus numbered, testable presentation requirements |
 | [mockups/](mockups/) | Source of the mockup canvas: 13 phone screens and a vocabulary sheet |

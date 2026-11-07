@@ -91,7 +91,7 @@ These extend [acceptance.md](acceptance.md):
 | P-05 | The Pure black switch exists in Appearance with the supporting text above. It applies whenever the app is dark (Dark, or System while the device is dark), immediately, without restarting the Activity, and survives process death. | C, U (settings decoding, missing value means off) |
 | P-06 | With Pure black on and the app dark, `ground` is exactly `#000000` on every screen, including the system bar areas, and the other three overridden tokens match the table. No other token differs from Dark. | U (theme token test), S |
 | P-07 | Sheets, dialogs and the bottom bar have a visible 1dp `line` edge against black. No surface relies on a shadow for separation in this theme. | S |
-| P-08 | No light flash at cold start or on Activity recreation while the app is dark, in either dark variant. | M |
+| P-08 | No light flash at cold start or on Activity recreation while the app is dark, in either dark variant. On API 26–30, this holds when the in-app Theme matches the device mode. See the known limit in [theme-foundation.md](theme-foundation.md). | M |
 | A-10 | (existing) The AMOLED palette passes A-01 and A-02, as covered by the token contrast test. | U |
 
 Judgment: placed beside the Dark mockups, AMOLED screens must read as the same product at
