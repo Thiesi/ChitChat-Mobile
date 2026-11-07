@@ -20,6 +20,7 @@ a substitute.
 | [onboarding.md](onboarding.md) | First launch to first message |
 | [onboarding-restyle.md](onboarding-restyle.md) | Implementation spec mapping onboarding onto today's code, copy and tests |
 | [invite-codes.md](invite-codes.md) | Sharing and scanning the server address as a QR code or link (D5) |
+| [room-presence.md](room-presence.md) | Implementation spec for the room header, presence and inactivity moments, the people sheet and room details |
 | [push-presentation.md](push-presentation.md) | M6 design for background notifications: channels, layout, grouping, lock screen, settings |
 | [modals-restyle.md](modals-restyle.md) | Implementation spec classifying every modal as choice sheet, decision dialog or form dialog |
 | [status-presentation.md](status-presentation.md) | Implementation spec for the status slot, connectivity notices, announcements and offline Send gating |
