@@ -160,6 +160,14 @@ Structure) and are not part of Material `Shapes`.
   - **Process death:** if the process dies before a background sync, the next cold start may
     use the previous night mode for its first frame, and the sync happens at the next genuine
     background.
+- **Resolving System (technical lead decision, issue #1, 2026-11-07):** once a per-app night
+  override exists, `isSystemInDarkTheme()` reports that override, not the device. So System
+  resolves from the device's global night state, re-read on every `ON_START` and on
+  configuration broadcasts, with no polling. One resolved `dark` value feeds the palette,
+  Pure black and `onThemeChanged(dark)`. Nothing else reads `isSystemInDarkTheme()`. The same
+  path serves API 26–30. Known limit: while a stale app override is still active, platform-drawn
+  View surfaces (window background, platform dialogs) can keep the old night resources until
+  the next background sync; Compose surfaces follow immediately.
 - **Known limit, API 26–30:** when the in-app choice differs from the device mode (for
   example app Dark on a light device), the first frame before Compose draws can still use the
   device's window background. Accept this there. On API 31+, P-08 applies in full.
