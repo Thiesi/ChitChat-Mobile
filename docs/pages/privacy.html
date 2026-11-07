@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy · ChitChat for Android</title>
+<!-- Publishable version of docs/design/privacy-policy.md. DRAFT until the maintainer approves it:
+     fill every [BRACKETED] placeholder and run that document's verification checklist first.
+     Constraints: self-contained, no scripts, no external resources (CSP default-src 'none'). -->
+<style>
+:root { --bg: #FBF7F1; --surface: #FFFFFF; --text: #14111C; --muted: #5E566B; --line: #E6DCCF; --link: #3D52C4; --accent: #B5401A; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14111C; --surface: #1C1826; --text: #F2EDF7; --muted: #A79FB4; --line: #3A3347; --link: #A9B6FF; --accent: #F06A3B; }
+}
+html { background: var(--bg); color: var(--text); }
+body { margin: 0; font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 42rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+h1 { font-size: 2rem; line-height: 1.15; margin: 0 0 .25rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.25rem; margin: 2.25rem 0 .5rem; }
+.updated { color: var(--muted); margin: 0 0 1.5rem; }
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 1rem 1.25rem; }
+.summary ul { margin: .25rem 0; padding-left: 1.2rem; }
+a { color: var(--link); }
+strong { font-weight: 650; }
+.mark { display: inline-block; width: .9rem; height: .9rem; border-radius: 50%; background: var(--accent); vertical-align: -0.05rem; margin-right: .4rem; }
+footer { color: var(--muted); font-size: .9rem; margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+</style>
+</head>
+<body>
+<main>
+<h1><span class="mark" aria-hidden="true"></span>Privacy policy</h1>
+<p class="updated">ChitChat for Android · Last updated: [DATE OF PUBLICATION]</p>
+
+<section class="summary" aria-label="The short version">
+<h2 style="margin-top:0">The short version</h2>
+<ul>
+<li>ChitChat is an app for <strong>self-hosted</strong> chat servers. Your account and your messages live on the server you choose, run by that server's operators. The people who make this app don't run your server and don't receive your messages or account data.</li>
+<li>The app sends your data <strong>only</strong> to the server you chose, and, if you turn on notifications, encrypted notification payloads through the delivery app you chose.</li>
+<li>The app has <strong>no analytics, no advertising and no crash-reporting services</strong>.</li>
+<li><strong>Messages aren't end-to-end encrypted.</strong> Your server's operators can technically access what is stored on their server.</li>
+</ul>
+</section>
+
+<h2>Who is responsible for your data</h2>
+<p>ChitChat servers are run independently by their operators, for example a family, club or company. <strong>The operator of your server decides how your data is stored, kept and used, and is responsible for it</strong> (in GDPR terms, the operator is the controller for the data on their server). Questions or requests about your account and messages go to them.</p>
+<p>The makers of this app ([APP PUBLISHER NAME]) provide the app only. We don't operate servers for you and don't receive your account or message data.</p>
+
+<h2>What the app sends, and where</h2>
+<p><strong>To the server you choose:</strong></p>
+<ul>
+<li><strong>Account details:</strong> your username and password when you sign in or register, and an optional birth date, which the server uses for age-restricted rooms.</li>
+<li><strong>What you create:</strong> messages, replies, reactions, edits and deletions; files and photos you send; reports you submit about messages.</li>
+<li><strong>Session data:</strong> cookies and security tokens the server uses to keep you signed in.</li>
+<li><strong>Notification settings:</strong> if you turn notifications on, the delivery address and encryption keys the server needs to send you notifications.</li>
+</ul>
+<p>Before a photo is uploaded, the app <strong>removes location information</strong> (GPS data) from it by default. All connections to your server use <strong>HTTPS</strong>. The app connects only to the server address you entered, and doesn't follow redirects.</p>
+<p><strong>To the notification delivery app you choose</strong> (only if you turn notifications on): ChitChat doesn't run in the background. It uses UnifiedPush: a separate delivery app you choose receives notifications from your server and wakes ChitChat. The notification content is <strong>encrypted</strong> between your server and this app (Web Push encryption, RFC 8291), so the delivery service can't read it. <!-- Keep the next sentence only if the optional embedded FCM distributor ships; otherwise use: "If your delivery app uses a third-party service, that service transports the encrypted messages." -->If you choose a delivery method based on Google's Firebase Cloud Messaging, Google transports these encrypted messages.</p>
+<p><strong>To anyone else:</strong> nothing. The app contains no analytics, advertising or crash-reporting software, and it doesn't sell or share your data.</p>
+
+<h2>What the app stores on your phone</h2>
+<ul>
+<li><strong>Your sign-in session</strong>, encrypted with a key held in Android's secure hardware-backed keystore. The key can't be exported.</li>
+<li><strong>App settings:</strong> the server address, appearance (light, dark, pure black) and similar preferences.</li>
+<li><strong>Unsent drafts and temporary display data</strong> (for example images you opened) are kept <strong>in memory only</strong> while the app runs. They aren't saved to storage.</li>
+<li>When you <strong>share</strong> a file to another app, a temporary copy is made for that app and deleted afterwards.</li>
+<li>Files you <strong>save</strong> or <strong>export</strong> go to a location you choose, and stay there under your control. Exports aren't encrypted, and the app tells you so.</li>
+<li>The app <strong>turns off Android cloud backup</strong> for its data.</li>
+</ul>
+<p>Signing out removes your session from the phone.</p>
+
+<h2>Your server's own rules and practices</h2>
+<p>What happens to your data <strong>on the server</strong> (how long messages are kept, who can moderate, and whether administrators can inspect direct messages) is decided by your server's operator. The app shows what the server reports, for example the direct-message retention period and whether inspection is enabled, under <strong>Direct → What this means</strong>.</p>
+<p>Editing or deleting a message doesn't necessarily erase earlier versions that the server keeps.</p>
+
+<h2>Your choices and rights</h2>
+<ul>
+<li><strong>Export your data:</strong> <em>You → Export my data</em> saves a copy of your account data from your server to a file you choose.</li>
+<li><strong>Delete your account:</strong> <em>You → Privacy and security → Delete account</em> closes your account on that server. You can restore it for 14 days. After that, your name is replaced with "Closed account" and your personal details are cleared. Messages you sent stay visible to the people who received them, under that server's retention policies. See <a href="/app/delete-account">Delete your ChitChat account</a>.</li>
+<li><strong>Notifications:</strong> turn them off at any time in <em>You → Notifications</em> or in Android's settings.</li>
+<li><strong>Other requests</strong> (access, correction, erasure beyond the above) go to <strong>your server's operator</strong>, who holds the data. The app makers can't fulfil them, because we don't have your data.</li>
+</ul>
+
+<h2>Children</h2>
+<p>The app isn't directed at children. Each server's operator decides who may join and may restrict rooms by age.</p>
+
+<h2>Changes to this policy</h2>
+<p>If this policy changes, we'll publish the new version on this page with a new date, and point to it from the app.</p>
+
+<h2>Contact</h2>
+<p>Questions about the app: [CONTACT EMAIL OR ADDRESS]<br>Questions about your account or messages: the operator of your ChitChat server.</p>
+
+<footer>ChitChat for Android</footer>
+</main>
+</body>
+</html>
