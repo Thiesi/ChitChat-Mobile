@@ -60,12 +60,11 @@ Returning users who sign in skip step 5 and land on Rooms.
 
 ## Invite codes (approved, D5)
 
-A QR code or link that contains *only* the server origin, in a CCM-specific format, so
-that scanning fills step 2 and goes straight to step 3. It carries no credentials, tokens,
-usernames or room IDs, needs no backend change, and still shows step 3, so the person sees
-and confirms where they are going. Anyone with the app can generate one from You → "Invite
-someone", which shows a QR code and a share sheet. Room invitations stay a server feature
-(M7) and are separate.
+An invite code is the installation's plain HTTPS origin as a QR code or link. Scanning it
+fills step 2 and goes straight to step 3, which is always shown. It carries no credentials,
+tokens, usernames or room IDs, and it needs no backend change. Anyone signed in can share one
+from You → "Invite someone". Full specification: [invite-codes.md](invite-codes.md). Room
+invitations stay a server feature (M7) and are separate.
 
 ## What onboarding must not do
 

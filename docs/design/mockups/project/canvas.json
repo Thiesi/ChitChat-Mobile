@@ -128,6 +128,20 @@
       "w": 390,
       "h": 844,
       "title": "Lots of DMs (AMOLED black)"
+    },
+    "Invite.dc.html": {
+      "x": 0,
+      "y": 6300,
+      "w": 390,
+      "h": 844,
+      "title": "Invite someone (light)"
+    },
+    "Scan.dc.html": {
+      "x": 470,
+      "y": 6300,
+      "w": 390,
+      "h": 844,
+      "title": "Scan an invite code, rejected code (dark)"
     }
   },
   "order": [
@@ -147,7 +161,9 @@
     "Activity.dc.html",
     "Appearance.dc.html",
     "AmoledRoom.dc.html",
-    "AmoledInbox.dc.html"
+    "AmoledInbox.dc.html",
+    "Invite.dc.html",
+    "Scan.dc.html"
   ],
   "notes": {
     "tOnboard": {
@@ -193,6 +209,21 @@
       "size": "m",
       "fill": "gray",
       "text": "Same content as 'Crowded room' and 'Lots of DMs' above, for side-by-side comparison with Night ink. Only ground, surface, raised and line change. Sheets and the bottom bar get a 1dp edge instead of shadows. Spec: docs/design/amoled-black.md."
+    },
+    "tInvite": {
+      "x": 0,
+      "y": 6020,
+      "text": "Invite codes (D5)",
+      "kind": "title1",
+      "maxW": 860
+    },
+    "inviteNote": {
+      "x": 940,
+      "y": 6300,
+      "w": 380,
+      "size": "m",
+      "fill": "gray",
+      "text": "The code is just the server's https address, so any phone camera opens the web client and CCM's scanner fills the address. It grants no access. Scanning always leads to step 3 'Server found' before credentials. The QR code shown is an illustration and is not scannable. Spec: docs/design/invite-codes.md."
     }
   },
   "designSystems": []
