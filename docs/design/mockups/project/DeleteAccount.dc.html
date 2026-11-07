@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Delete account</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}.step{display:flex;gap:12px;align-items:flex-start;font-size:14px}.step b{display:block;font-size:15px;margin-bottom:2px}.dot{width:28px;height:28px;border-radius:14px;background:var(--raised);display:flex;align-items:center;justify-content:center;flex:none;font-size:12px;font-weight:700}</style>
+</helmet>
+<div class="ccm dark">
+  <div class="inset"></div>
+  <div class="appbar" style="padding-left: 4px; gap: 8px;">
+    <a class="icon-btn" href="AdminHome.dc.html" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+  </div>
+  <div style="padding: 0 22px; display: flex; flex-direction: column; gap: 16px; flex-grow: 1;">
+    <h1 class="display" style="margin: 0; font-size: 26px; font-weight: 800; line-height: 1.15;">Delete your account on Schmidt Family Chat</h1>
+    <p style="margin: 0; font-size: 14px; color: var(--text-2);">This deletes your account on this server only. Accounts on other servers aren't affected.</p>
+    <div class="step"><span class="dot">1</span><div><b>Right away</b>You're signed out everywhere, and you can't sign in normally.</div></div>
+    <div class="step"><span class="dot">14</span><div><b>For 14 days</b>You can change your mind: choose “Restore a closed account” when signing in.</div></div>
+    <div class="step"><span class="dot">✓</span><div><b>After 14 days</b>Your name becomes “Closed account”, your personal details are cleared and your username is freed.</div></div>
+    <div class="card" style="font-size: 14px;"><b>What stays</b><br><span style="color: var(--text-2);">Messages and files you sent stay visible to the people who received them, shown as “Closed account”, for as long as this server keeps them. Moderation and security records are kept under the server's policies.</span></div>
+    <button class="btn text sm" style="align-self: flex-start; padding: 0;">Export my data first</button>
+    <span class="spacer"></span>
+  </div>
+  <div style="padding: 0 22px 28px; display: flex; gap: 10px; justify-content: flex-end;">
+    <button class="btn text" style="color: var(--text);">Cancel</button>
+    <button class="btn text" style="color: var(--rose-dark);">Continue</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

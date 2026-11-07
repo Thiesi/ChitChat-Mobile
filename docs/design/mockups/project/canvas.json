@@ -212,6 +212,20 @@
       "w": 390,
       "h": 844,
       "title": "Report a message (form dialog)"
+    },
+    "Guidelines.dc.html": {
+      "x": 0,
+      "y": 8800,
+      "w": 390,
+      "h": 844,
+      "title": "Community guidelines (before first write)"
+    },
+    "DeleteAccount.dc.html": {
+      "x": 470,
+      "y": 8800,
+      "w": 390,
+      "h": 844,
+      "title": "Delete account (dark)"
     }
   },
   "order": [
@@ -243,7 +257,9 @@
     "RoomFiles.dc.html",
     "ShareIn.dc.html",
     "ImageViewer.dc.html",
-    "ReportMessage.dc.html"
+    "ReportMessage.dc.html",
+    "Guidelines.dc.html",
+    "DeleteAccount.dc.html"
   ],
   "notes": {
     "tOnboard": {
@@ -334,6 +350,21 @@
       "text": "Files, sharing and reporting (M5)",
       "kind": "title1",
       "maxW": 1800
+    },
+    "tPlay": {
+      "x": 0,
+      "y": 8520,
+      "text": "Play readiness",
+      "kind": "title1",
+      "maxW": 860
+    },
+    "playNote": {
+      "x": 940,
+      "y": 8800,
+      "w": 380,
+      "size": "m",
+      "fill": "gray",
+      "text": "Policy texts are drafts that need maintainer approval. Server rules, server privacy links and re-acceptance depend on ChitChat#160. Spec: docs/design/play-readiness.md."
     }
   },
   "designSystems": []
