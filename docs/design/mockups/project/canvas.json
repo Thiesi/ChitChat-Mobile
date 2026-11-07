@@ -177,10 +177,18 @@
       "w": 390,
       "h": 844,
       "title": "You → Notifications (M6)"
+    },
+    "AppMark.dc.html": {
+      "x": 1920,
+      "y": 0,
+      "w": 1400,
+      "h": 560,
+      "title": "App mark and icons"
     }
   },
   "order": [
     "Vocabulary.dc.html",
+    "AppMark.dc.html",
     "Main.dc.html",
     "OnboardServer.dc.html",
     "OnboardFound.dc.html",

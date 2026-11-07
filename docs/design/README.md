@@ -31,6 +31,7 @@ a substitute.
 | [amoled-black.md](amoled-black.md) | The true-black dark variant required before going live |
 | [acceptance.md](acceptance.md) | Accessibility and readability floors, plus numbered, testable presentation requirements |
 | [accessibility-verification.md](accessibility-verification.md) | How each A-* floor is proven: test layers, shared assertions, configuration matrix, TalkBack scripts |
+| [app-mark.md](app-mark.md) and [assets/](assets/) | Final mark geometry and ready-to-copy launcher, themed and notification icons |
 | [mockups/](mockups/) | Source of the mockup canvas: 21 phone screens (onboarding, everyday use, situations, AMOLED black, invite codes) and a vocabulary sheet |
 
 The mockups are also published as a private design canvas for the maintainer. The files
