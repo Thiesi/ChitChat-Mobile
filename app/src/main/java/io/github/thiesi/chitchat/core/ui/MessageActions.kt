@@ -60,7 +60,7 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
             }
             onReactions?.let { action ->
                 TextButton(onClick = action, enabled = available && canReact,
-                    modifier = Modifier.fillMaxWidth().testTag("message_reactions_action")) {
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("message_reactions_action")) {
                     Text(stringResource(R.string.room_reactions))
                 }
             }

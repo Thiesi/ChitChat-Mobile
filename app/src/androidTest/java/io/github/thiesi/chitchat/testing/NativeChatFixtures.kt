@@ -104,6 +104,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
 
     inner class Reactions : MessageReactionOperations {
         val writes = java.util.concurrent.CopyOnWriteArrayList<Triple<Long, String, Boolean>>()
+        val directWrites = java.util.concurrent.CopyOnWriteArrayList<Triple<Long, String, Boolean>>()
         var failure: ApiFailure? = null
         var gate: CompletableDeferred<Unit>? = null
         override suspend fun setRoom(expected: SessionState, original: RoomMessage, emoji: ReactionEmoji,
@@ -123,7 +124,22 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
             return summary
         }
         override suspend fun setDirect(expected: SessionState, original: DirectMessage, emoji: ReactionEmoji,
-            selected: Boolean): List<MessageReaction> = error("DM reaction controls are a separate slice")
+            selected: Boolean): List<MessageReaction> {
+            val viewer = checkNotNull(expected.user)
+            directWrites += Triple(original.id, emoji.value, selected)
+            gate?.await()
+            val peer = if (original.outgoing) original.recipient.id else original.sender.id
+            val key = peer to original.id
+            check(!selected || key !in directs.deleted)
+            val before = directs.reactionSummaries[key].orEmpty()
+            val users = before.firstOrNull { it.emoji == emoji.value }?.users.orEmpty().filterNot { it.id == viewer.id } +
+                if (selected) listOf(MessagePerson(viewer.id, viewer.username)) else emptyList()
+            val summary = before.filterNot { it.emoji == emoji.value } +
+                if (users.isEmpty()) emptyList() else listOf(MessageReaction(emoji.value, users, false))
+            directs.reactionSummaries[key] = summary
+            failure?.let { throw it } // Synthetic committed-but-unconfirmed result, never production behavior.
+            return summary
+        }
     }
 
     inner class AuthorChanges : MessageMutationOperations {
@@ -164,6 +180,7 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
         val deleted = mutableSetOf<Pair<Long, Long>>()
         val bodyOverrides = mutableMapOf<Pair<Long, Long>, String>()
         val mentionOverrides = mutableMapOf<Pair<Long, Long>, List<DirectMention>>()
+        val reactionSummaries = mutableMapOf<Pair<Long, Long>, List<MessageReaction>>()
         private val edited = mutableSetOf<Pair<Long, Long>>()
         private val posted = mutableMapOf<Long, MutableList<Triple<Long, String, Long?>>>()
         private val relationships = mutableMapOf<Long, DirectRelationship>()
@@ -173,12 +190,12 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
             val removed = (peer to it) in deleted
             DirectMessage(it, MessagePerson(peer, "Peer $peer"), MessagePerson(7, "Viewer"),
                 if (removed) null else bodyOverrides[peer to it] ?: "Direct $peer message $it", timestamp.takeIf { peer in readPeers }, timestamp, false, removed,
-                null, false, false, null, mentionOverrides[peer to it].orEmpty(), emptyList(), null)
+                null, false, false, null, mentionOverrides[peer to it].orEmpty(), reactionSummaries[peer to it].orEmpty(), null)
         } + posted[peer].orEmpty().map { (id, body, reply) ->
             val removed = (peer to id) in deleted
             DirectMessage(id, MessagePerson(7, "Viewer"), MessagePerson(peer, "Peer $peer"), body.takeUnless { removed }, null, timestamp, true, removed,
                 timestamp.takeIf { (peer to id) in edited }, !removed && relationships[peer]?.messagingAvailable != false,
-                !removed, reply?.takeUnless { removed }?.let { directReply(peer, it) }, emptyList(), emptyList(), null)
+                !removed, reply?.takeUnless { removed }?.let { directReply(peer, it) }, emptyList(), reactionSummaries[peer to id].orEmpty(), null)
         }
         fun changeOwn(original: DirectMessage, body: String?, deleting: Boolean): DirectMessage {
             val peer = original.recipient.id

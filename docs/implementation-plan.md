@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5c3b native DM reactions](milestones/M5c3b-native-direct-reactions.md) consumes delivered PR71/main2cba7cc. Complete its own full gates/reviews, then continue basic profiles, mention completion, authenticated files/media/sharing and reporting in the accepted order below. Native reaction controls do not grant guest/live/device/release acceptance or waive old failures.
+
 Current accepted delivery order (2026-11-07): PR80 delivered -> current-base PR71 state -> native DM reaction controls -> profiles -> mention completion -> files/media/sharing -> reporting -> separate CI maintenance/bounded IME work -> M6 -> M7 -> M8. See [current tracker](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6701668219). The milestone handoffs below retain their historical context; they do not revive completed diagnostics or waive later-head gates.
 
 [M5c3a](milestones/M5c3a-direct-reaction-state.md) integrates serialized DM reaction state on delivered PR80/main4f4d24a with original row/session/peer choices, complete confirmed summaries and bounded uncertainty recovered through explicit GET/NEW Review. Native DM controls follow as the next separate slice after this state delivery; guests/live/device/release acceptance stay separate. The original609a2d1 control failure remains failed, issue70 remains maintainer-closed, and PR80's exact-head exception grants no waiver to this integration.
