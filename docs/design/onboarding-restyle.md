@@ -14,9 +14,9 @@ the secret-handling rules in `AGENTS.md` and the native input contracts all stay
 The **theme foundation** must land first: Lantern tokens, the bundled display font (D2),
 shapes, dynamic color off (D4) and the System/Light/Dark + Pure black settings (see
 [amoled-black.md](amoled-black.md)), without layout changes (P-01 to P-08). The technical
-lead's sequence (issue #1, comment 6713206073) is: theme foundation → files/media →
-onboarding restyle → navigation shell → reporting → transcript, lists, status and modals →
-Send when back online.
+lead's sequence (issue #1; push moved up by maintainer decision, 2026-11-07) is: theme
+foundation → files/media → push (M6) → onboarding restyle → navigation shell → reporting →
+transcript, lists, status and modals → Send when back online.
 
 ## Today's flow (as of 2026-11-07)
 
