@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5d4b completion state](milestones/M5d4b-completion-state.md) provides scoped caret/query/choice/IRC state, not native controls. The app disclosure now accurately says completion remains pending; M5d4c must make it usable under separate complete gates.
+
 [M5f2 native basic profiles](milestones/M5f2-native-basic-profiles.md) adds read-only member-accessed room-author/DM-peer cards and explicit refresh after M5f1. Profile pictures/management, guest-session and live/device/release acceptance remain separate.
 
 [Linux input observation](milestones/linux-native-input-observation.md) is a separate opt-in traced diagnostic, not user parity, a keyboard correction or a substitute for complete untraced native CI.

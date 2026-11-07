@@ -188,6 +188,32 @@ class RoomMentionProtocolTest {
         }
         assertEquals(4,server.requestCount)
     }
+    @Test fun nativeIrcSeedUsesTheExisting25MemberBoundAndOriginalCapability() = runTest {
+        val original=login();val request=RoomMentionRequest(43,"",25)
+        server.enqueue(json(mentionBody((8L..32L).map { it to "Member$it" })))
+        val result=repository.suggestions(original,request);val get=take()
+        assertEquals(25,result.users.size);assertSame(request,result.request)
+        assertEquals("GET",get.method);assertEquals("25",get.url.queryParameter("limit"));assertEquals("",get.url.queryParameter("search"))
+        assertEquals("43",get.url.queryParameter("room_id"));assertNull(get.headers["X-CSRF-Token"])
+        assertEquals("SITE=auth7",get.headers["Cookie"]);assertEquals(3,server.requestCount)
+    }
+    @Test fun invalidMemberBoundsAreRejectedBeforeAnyHttpOrSessionWait() = runTest {
+        val original=login()
+        for (limit in listOf(-1,0,26,Int.MAX_VALUE)) {
+            val problem=failure { repository.suggestions(original,RoomMentionRequest(43,"A",limit)) }
+            assertEquals(400,problem.status);assertEquals("validation_error",problem.code)
+        }
+        assertEquals(2,server.requestCount)
+    }
+    @Test fun eachResponseMustRespectItsOriginalRequestedBoundIncludingThe25MemberSeed() = runTest {
+        val original=login()
+        for (limit in listOf(1,25)) {
+            server.enqueue(json(mentionBody((8L..(8L+limit)).map { it to "Member$it" })))
+            assertEquals(FailureKind.INCOMPATIBLE,failure { repository.suggestions(original,RoomMentionRequest(43,"",limit)) }.kind)
+            assertEquals(limit.toString(),take().url.queryParameter("limit"))
+        }
+        assertEquals(4,server.requestCount)
+    }
     private class Vault : SessionVault {
         var saved: SavedSession? = null
         override suspend fun read() = saved

@@ -137,11 +137,11 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
             .require200()).page(search, viewer)
     }
 
-    suspend fun roomMentionUsers(roomId: Long, prefix: String, viewer: Long): List<RoomMentionUser> {
-        val normalized = normalizedRoomMentionPrefix(roomId,prefix)
+    suspend fun roomMentionUsers(roomId: Long, prefix: String, viewer: Long, limit: Int = ROOM_MENTION_LIMIT): List<RoomMentionUser> {
+        val normalized = normalizedRoomMentionPrefix(roomId,prefix,limit)
         val query = origin.newBuilder().addQueryParameter("room_id","$roomId")
-            .addQueryParameter("search",normalized).addQueryParameter("limit","$ROOM_MENTION_LIMIT").build().encodedQuery!!
-        return decode<RoomMentionReply>(request("rooms/mentionable-users.php?$query").require200()).validUsers(viewer)
+            .addQueryParameter("search",normalized).addQueryParameter("limit","$limit").build().encodedQuery!!
+        return decode<RoomMentionReply>(request("rooms/mentionable-users.php?$query").require200()).validUsers(viewer,limit)
     }
 
     suspend fun profile(userId: Long, roomId: Long?): ProfileSnapshot {

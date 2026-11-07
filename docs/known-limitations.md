@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[Completion state](milestones/M5d4b-completion-state.md) is implemented but native completion controls are not available yet. This head corrects premature availability copy and prepares M5d4c. Basic profiles remain available; device/live/guest/accessibility/release acceptance remains separate.
+
 [M5d4a](milestones/M5d4a-room-mention-protocol.md) is room candidate metadata only; native completion, DM/local providers, reserved broadcast choices and IRC Tab behavior remain pending. Existing underscore matching can return broader names (#152). Send-time authorization is server-owned; guest/live/device/release acceptance remains separate.
 
 [M5f2](milestones/M5f2-native-basic-profiles.md) adds read-only basic member-accessed profile cards. Avatar image transfer/management, guest-session consumers and live/device/accessibility/release acceptance remain pending. MemberSince means guest visit start for guest targets; metadata/removal hints never grant an action. No profile polling, saved-state content or implicit retry.

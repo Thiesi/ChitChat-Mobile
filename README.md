@@ -1,5 +1,7 @@
 # ChitChat Mobile
 
+[Scoped mention-completion state](docs/milestones/M5d4b-completion-state.md) adds original-pane/caret rules and bounded room/DM hints on PR84. Native controls follow separately; completion is explicitly unavailable in the current app. This head requires its own complete development gates.
+
 [M5d4a](docs/milestones/M5d4a-room-mention-protocol.md) adds original-session bounded room mention-candidate metadata. Native suggestions, caret/draft integration, DM/local and IRC completion remain pending; candidate hints grant no send/notification or policy consent.
 
 [M5f2 native basic profiles](docs/milestones/M5f2-native-basic-profiles.md) adds guarded read-only room-author and DM-peer cards, explicit refresh, member/guest date meaning and Unicode placeholders. Avatar transfer/management, guest-session and live/device/release acceptance remain separate.

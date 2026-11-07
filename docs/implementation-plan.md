@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5d4b completion state](milestones/M5d4b-completion-state.md) follows delivered PR84/main915e430. The full native consumer measured143713 bytes above the126000-byte complete-review budget and is preserved. Finish state/parser/25-member seed/disclosure gates and delivery, then restore the native M5d4c consumer against merged main without routine confirmation; continue files/media/sharing/reporting afterward.
+
 [M5d4a](milestones/M5d4a-room-mention-protocol.md) follows delivered PR83/mainbf443d0 with the existing bounded room candidate protocol. Complete this head's own local/full215 native/written review gates, then add scoped draft/caret state/native suggestion consumers and appropriate local DM/IRC completion. Candidate lookup never resolves mentions or grants send/read/typing/duplicate-risk consent.
 
 [M5f2 native basic profiles](milestones/M5f2-native-basic-profiles.md) consumes delivered PR82/main2b42d95. Complete this head's own full gates/review/delivery, then continue mention completion, authenticated files/media/sharing and reporting. Exact4a808b9 development exception and later main208/208 transfer no future-head waiver.
