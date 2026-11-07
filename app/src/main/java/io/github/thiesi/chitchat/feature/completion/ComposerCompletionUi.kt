@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
@@ -54,7 +56,7 @@ internal class ComposerCompletion internal constructor(private val editor: Compl
     private val model: CompletionViewModel?, private val pane: CompletionPane?, private val rendered: CompletionState?,
     private val currentBody: () -> String?, private val canEdit: (Boolean) -> Boolean, private val canOffer: () -> Boolean,
     private val write: (String) -> Boolean, private val onTextChanged: (String) -> Unit, private val localNames: () -> List<String>,
-    private val inlineChoices: Boolean=true) {
+    private val inlineChoices: Boolean=true, private val nextField: () -> Unit = {}) {
     val value get()=editor.value
     val choice: CompletionSelection? get()=rendered?.selection?.takeIf {
         it.pane===pane && it.edit.same(editor.snapshot()) && currentBody()==value.text && canOffer()
@@ -88,19 +90,14 @@ internal class ComposerCompletion internal constructor(private val editor: Compl
         if (original===choice && canEdit(fromDetails)) model?.dismiss(original)
     }
     fun key(event: KeyEvent): Boolean {
-        if (model==null || pane==null || event.type!=KeyEventType.KeyDown || event.isShiftPressed ||
-            event.isCtrlPressed || event.isAltPressed || event.isMetaPressed || !canEdit(false) || !canOffer() ||
+        if (event.type!=KeyEventType.KeyDown || event.isShiftPressed ||
+            event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) return false
+        if (event.key==Key.Tab) return tab()
+        if (model==null || pane==null || !canEdit(false) || !canOffer() ||
             value.composition!=null || currentBody()!=value.text) return false
         val pending=choice
         val original=pending?.takeIf { inlineChoices }
         return when(event.key) {
-            Key.Tab -> {
-                // Hidden Details choices must not consume Enter/arrows or select an unseen
-                // hint on Tab. The separate local IRC cycle remains available.
-                if (!inlineChoices && pending!=null) model.quiet(pane)
-                val edit=editor.snapshot()
-                model.tab(pane,edit,localNames()) { accept(it,edit,false) }
-            }
             Key.Enter -> if (original!=null && rendered!!.candidates.isNotEmpty())
                 choose(original,rendered.candidates[rendered.highlighted],false) else false
             Key.DirectionDown -> original?.let { model.move(it,1) } ?: false
@@ -108,6 +105,19 @@ internal class ComposerCompletion internal constructor(private val editor: Compl
             Key.Escape -> if (original!=null) { model.dismiss(original);true } else false
             else -> false
         }
+    }
+    internal fun tab(): Boolean {
+        if (!canEdit(false) || value.composition!=null || currentBody()!=value.text) return false
+        if (model!=null && (pane==null || model.state.value.pane!==pane || !pane.matches(model.session.value))) return false
+        if (model!=null && pane!=null && canOffer()) {
+            if (!inlineChoices && choice!=null) model.quiet(pane)
+            val edit=editor.snapshot()
+            if (model.tab(pane,edit,localNames()) { accept(it,edit,false) }) return true
+        }
+        // This is an explicit hardware Tab navigation action, never tap/focus repair.
+        // Returning false would let a multiline BasicTextField insert a literal tab.
+        nextField()
+        return true
     }
     internal val candidates get()=rendered?.candidates.orEmpty()
     internal val loading get()=rendered?.loading==true
@@ -122,6 +132,7 @@ internal fun rememberComposerCompletion(model: CompletionViewModel?, expected: S
     inlineChoices: Boolean=true): ComposerCompletion {
     val editor=remember(expected.server,expected.generation,expected.user?.id,expected.user?.sessionVersion,
         entryId,target is CompletionTarget.Direct,target.id,(target as? CompletionTarget.Direct)?.username) { CompletionEditor(body) }
+    val focus=LocalFocusManager.current
     val state=model?.state?.collectAsStateWithLifecycle()?.value
     val pane=state?.pane?.takeIf { it.matches(expected) && it.entryId==entryId && when {
         it.target is CompletionTarget.Room && target is CompletionTarget.Room -> it.target.id==target.id
@@ -142,7 +153,8 @@ internal fun rememberComposerCompletion(model: CompletionViewModel?, expected: S
             if (!offer) model.quiet(pane)
         }
     }
-    return ComposerCompletion(editor,model,pane,state,currentBody,canEdit,canOffer,write,onTextChanged,localNames,inlineChoices)
+    return ComposerCompletion(editor,model,pane,state,currentBody,canEdit,canOffer,write,onTextChanged,localNames,inlineChoices,
+        nextField={ focus.moveFocus(FocusDirection.Next) })
 }
 
 @Composable

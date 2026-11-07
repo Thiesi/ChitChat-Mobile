@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.onPreInterceptKeyBeforeSoftKeyboard
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
@@ -163,11 +163,16 @@ class CompletionJourneyTest {
         }
         assertEquals("@Peer 8 ",characters("dm_composer"))
     }
-    @Test fun completionKeepsUnknownDirectDeliveryAndDoesNotGrantDuplicateRiskConsent() {
+    @Test fun completionKeepsUnknownDirectDeliveryAfterPassiveRefreshWithoutConsent() {
         enter(false);compose.runOnIdle {
             thread.updateDraft("Unconfirmed fixture");api.directs.sendFailure=ApiFailure(FailureKind.NETWORK);thread.send(sessions.state.value,8)
         }
         compose.waitUntil(5_000) { thread.state.value.let { it.uncertainSend && !it.busy } }
+        // The failed POST intentionally leaves data stale. A passive invalidation GET
+        // refreshes the pane without granting the explicit history-check consent.
+        compose.runOnIdle { thread.invalidate() }
+        compose.waitUntil(5_000) { thread.state.value.let { it.loaded && !it.stale && !it.busy } }
+        compose.runOnIdle { assertTrue(thread.state.value.uncertainSend);assertFalse(thread.state.value.checkedUnknown) }
         type("@PeTAIL",false,3);loaded();details();choose()
         compose.runOnIdle {
             assertEquals("@Peer 8 TAIL",thread.state.value.draft);assertTrue(thread.state.value.uncertainSend)
@@ -241,7 +246,7 @@ class CompletionJourneyTest {
                 Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
                     CompletionSuggestions(composer)
                     MessageInput(composer.value,composer::input,true,"Message",false,
-                        Modifier.fillMaxWidth().onPreviewKeyEvent(composer::key).testTag("completion_component_composer"))
+                        Modifier.fillMaxWidth().onPreInterceptKeyBeforeSoftKeyboard(composer::key).testTag("completion_component_composer"))
                 }
             }
         } }

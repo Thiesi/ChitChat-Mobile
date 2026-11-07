@@ -25,6 +25,7 @@ class ComposerCompletionUiTest {
     private var body=""
     private var writes=0
     private var typingInputs=0
+    private var traversals=0
     private var allowEdit=true
     private var details: Any?=null
     @Before fun setup() {
@@ -37,7 +38,7 @@ class ComposerCompletionUiTest {
         val source=details
         return ComposerCompletion(editor,model,pane,model.state.value,{body},
             { fromDetails -> allowEdit && if (fromDetails) source!=null && details===source else details==null },{true},
-            { body=it;writes++;true },{typingInputs++},{emptyList()})
+            { body=it;writes++;true },{typingInputs++},{emptyList()},nextField={traversals++})
     }
     private fun original()=checkNotNull(model.state.value.selection)
     private suspend fun TestScope.offer(text: String="@An",caret: Int=text.length) {
@@ -67,6 +68,7 @@ class ComposerCompletionUiTest {
         advanceTimeBy(500);runCurrent()
         assertEquals(value,editor.value);assertEquals("@An",body);assertEquals(1,writes);assertEquals(1,typingInputs)
         assertNull(model.state.value.selection);assertTrue(api.requests.none { it.limit==8 })
+        assertFalse(bridge().tab());assertEquals(0,traversals)
         bridge().input(TextFieldValue("@An",TextRange(3)));advanceTimeBy(150);runCurrent()
         assertEquals("An",original().token.prefix);assertEquals(1,writes);assertEquals(1,typingInputs)
     }
@@ -87,6 +89,17 @@ class ComposerCompletionUiTest {
         offer();val old=bridge();val choice=original();val candidate=model.state.value.candidates.first()
         api.session.value=api.session.value.copy(user=SessionUser(9,"Other",listOf("member"),1,false),generation=2)
         assertFalse(old.choose(choice,candidate,false));assertEquals("@An",body);assertEquals(0,writes)
+        assertFalse(old.tab());assertEquals(0,traversals)
+    }
+    @Test fun unmatchedTabTraversesWithoutEditingTheDraftOrPublishingTyping()=runTest(dispatcher) {
+        offer("NoMatch")
+        assertTrue(bridge().tab());assertEquals("NoMatch",body)
+        assertEquals(1,traversals);assertEquals(0,writes);assertEquals(0,typingInputs)
+    }
+    @Test fun matchingTabUsesTheScopedLocalSeedWithoutMovingFocus()=runTest(dispatcher) {
+        offer("An")
+        assertTrue(bridge().tab());assertEquals("Ann: ",body)
+        assertEquals(0,traversals);assertEquals(1,writes);assertEquals(1,typingInputs)
     }
     private class Operations: RoomMentionOperations {
         override val session=MutableStateFlow(SessionState(server=(ServerAddress.parse("chat.example.test") as AddressResult.Valid).address,
