@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Server address problem</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div class="appbar">
+    <a class="icon-btn" href="Main.dc.html" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <span style="flex-grow: 1;"></span>
+    <span class="sub" style="padding-right: 12px;">Step 1 of 2</span>
+  </div>
+  <div style="padding: 8px 24px 0; display: flex; flex-direction: column; gap: 20px; flex-grow: 1;">
+    <h1 class="display" style="margin: 0; font-size: 34px; line-height: 1.08; font-weight: 800;">Where do you chat?</h1>
+    <div class="strip warn" role="status" style="border-radius: 16px; align-items: flex-start;">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="flex: none;"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 8v5M12 16v.01"></path></svg>
+      <span><b>chat.schmidt.famly doesn't look like a ChitChat server.</b> Ask the person who invited you for the exact address.</span>
+    </div>
+    <div>
+      <label class="label" for="srv">Server address</label>
+      <input id="srv" class="input" value="chat.schmidt.famly" autocomplete="url">
+      <div class="hint">Whoever invited you knows it. It looks like a website address.</div>
+    </div>
+    <span class="spacer"></span>
+  </div>
+  <div style="padding: 0 24px 28px;">
+    <a class="btn" href="OnboardFound.dc.html" style="width: 100%;">Continue</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
