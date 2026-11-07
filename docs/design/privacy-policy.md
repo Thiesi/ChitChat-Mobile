@@ -32,7 +32,7 @@ company. **The operator of your server decides how your data is stored, kept and
 responsible for it** (in GDPR terms, the operator is the controller for the data on their
 server). Questions or requests about your account and messages go to them.
 
-The makers of this app (**[APP PUBLISHER NAME]**) provide the app only. We don't operate
+The makers of this app (**NetWork XXIII**) provide the app only. We don't operate
 servers for you and don't receive your account or message data. *[Reviewer note: if the
 publisher also runs a public ChitChat server, that server needs its own privacy policy. This
 document covers the app.]*
@@ -117,7 +117,7 @@ the app.
 
 ### Contact
 
-Questions about the app: **[CONTACT EMAIL OR ADDRESS]**.
+Questions about the app: **chitchat@NetWorkXXIII.de**.
 Questions about your account or messages: the operator of your ChitChat server.
 
 ---
@@ -130,5 +130,5 @@ Questions about your account or messages: the operator of your ChitChat server.
 - [ ] Photo location removal ships as specified in `files-media.md`.
 - [ ] Drafts and images aren't written to disk, and share copies are deleted.
 - [x] Embedded FCM distributor ships (maintainer, 2026-11-08); the FCM sentence is final. Verify it's used only when no UnifiedPush distributor is installed.
-- [ ] Publisher name and contact filled in (URL: https://ChitChat.NetWorkXXIII.de/app/privacy).
+- [x] Publisher (NetWork XXIII) and contact (chitchat@NetWorkXXIII.de) filled in; confirm the mail alias works before publishing. URL: https://ChitChat.NetWorkXXIII.de/app/privacy.
 - [ ] Wording consistent with the data safety form answers.
