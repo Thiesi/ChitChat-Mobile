@@ -2,9 +2,10 @@
 
 Status: presentation spec for the Google Play requirements the technical lead listed (issue #1,
 comments 6713519327 and 6713603503; the maintainer confirmed Play distribution on
-2026-11-07). It designs the user-facing flows. **The policy texts in this document are drafts
-that need the maintainer's approval**, and the data safety answers stay the maintainer's
-decision. Application ID, signing and listing remain maintainer decisions. Mockups:
+2026-11-07). It designs the user-facing flows. **The maintainer approved the guidelines text
+(§1), the deletion web resource text (§3) and the data safety facts (§4) as written on
+2026-11-07 (recorded on PR #108).** The app privacy policy is drafted separately. Mapping the
+facts onto the form's answers stays the maintainer's decision. Application ID, signing and listing remain maintainer decisions. Mockups:
 `Guidelines` and `DeleteAccount` on the canvas.
 
 CCM is a client for self-hosted ChitChat servers. The app maker runs no server and receives
@@ -38,7 +39,7 @@ server's own rules later.
 - Nobody can write before acceptance: the screen sits between sign-in and the shell. Back
   leaves the app; it doesn't skip the screen.
 
-**Draft guidelines text** (maintainer approval required):
+**Guidelines text** (approved by the maintainer, 2026-11-07):
 
 > **Be kind, be real, be safe.** Don't harass, threaten or bully anyone. No hate based on
 > who people are. No sexual content involving minors, ever. No spam, scams or malware. Don't
@@ -144,8 +145,9 @@ words people look for: **"Delete account"**.
 ## 3. Deletion web resource (content for a CCM page)
 
 Play listings must link to a web page explaining how to delete an account. CCM doesn't host
-accounts, so the page explains per-server deletion. **Content only. Hosting and URL are a later
-maintainer decision. Verify every factual line against the shipped app before publishing.**
+accounts, so the page explains per-server deletion. **Text approved by the maintainer
+(2026-11-07).** Hosting and URL are a later decision. Re-verify every factual line, especially
+"What the app maker has", against the shipped app before publishing.
 
 > **Delete your ChitChat account**
 >
@@ -187,8 +189,8 @@ Where privacy information appears, so the app and the data safety form say the s
 
 ### Facts for the data safety form (for the maintainer)
 
-These are facts about the current design. How they map to the form's answers is the
-maintainer's decision.
+These facts were approved by the maintainer (2026-11-07). They describe the current design;
+re-verify them at release. How they map to the form's answers is the maintainer's decision.
 
 - **Leaves the device, to the server the person chose:**
   - account details (username, password at sign-in, optional birth date);
@@ -212,4 +214,4 @@ maintainer's decision.
 | P-171 | Server rules, server privacy and re-acceptance appear only once #160 exists, marked as a dependency until then. | R |
 | P-172 | Delete account is reachable from You → Privacy and security. It discloses the per-server scope, the 14-day restoration, finalization and what is kept, shows the destructive decision dialog before the request, uses step-up only on 403 step_up_required, checks unknown results with a session GET, and never resends automatically. | C |
 | P-173 | Privacy links and disclosures appear at every surface in the table, with wording consistent with the existing DM disclosures. | R, S |
-| P-174 | The guidelines text, privacy policy, deletion page and data safety answers are published only after maintainer approval. | R |
+| P-174 | The guidelines text, deletion page and data safety facts are used as approved (2026-11-07). The privacy policy is published only after its own approval. Factual lines are re-verified against the shipped app before release. | R |
