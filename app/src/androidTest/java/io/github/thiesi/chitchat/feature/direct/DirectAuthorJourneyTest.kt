@@ -110,6 +110,41 @@ class DirectAuthorJourneyTest {
         compose.waitUntil(5_000) { ime == 0 && (compose.onAllNodesWithTag("author_edit_body").fetchSemanticsNodes().isEmpty() || compose.nativeAuthorImeBottom() == 0) }
         assertEquals(false, nativeInputWindow().imeVisible)
     }
+    /** Failure-only, post-assertion VM observation; never tap delivery or deadline proof. */
+    private fun assertUnchangedValidation() {
+        try { dialogText(R.string.author_unchanged).assertExists() }
+        catch (failure: AssertionError) {
+            val failedAt = android.os.SystemClock.elapsedRealtime()
+            var snapshot = "unavailable"
+            try {
+                compose.runOnIdle {
+                    val sampledAt = android.os.SystemClock.elapsedRealtime()
+                    val state = thread.state.value
+                    val dialog = state.authorDialog
+                    val request = dialog?.request
+                    val canonical = state.messages.firstOrNull { it.id == 101L }
+                    val validation = when (dialog?.validation) {
+                        null -> "none"
+                        "message_unchanged" -> "unchanged"
+                        "empty_message" -> "empty"
+                        else -> "other"
+                    }
+                    // Scalars only: never emit proposal/canonical bodies, people or failure text.
+                    snapshot = "sampleElapsedMs=$sampledAt, peerMatches=${state.peerId == 8L}, loaded=${state.loaded}, " +
+                        "busy=${state.busy}, stale=${state.stale}, dialog=${dialog != null}, checked=${dialog?.checked}, " +
+                        "unknown=${state.authorUnknown != null}, canonical=${canonical != null}, " +
+                        "originalIsCanonical=${request != null && request.original === canonical}, " +
+                        "proposalEqualsOriginal=${dialog != null && dialog.body.phpTrim() == request?.original?.body}, " +
+                        "proposalEqualsCanonical=${dialog != null && dialog.body.phpTrim() == canonical?.body}, " +
+                        "available=${request?.let(thread::authorAvailable)}, reviewable=${request?.let(thread::canReviewAuthor)}, " +
+                        "validation=$validation, error=${state.error != null}, writes=${api.authorChanges.directWrites.size}, " +
+                        "uncertainSend=${state.uncertainSend}, sending=${state.sending}"
+                }
+            } catch (observationFailure: Throwable) { failure.addSuppressed(observationFailure) }
+            throw AssertionError("Unchanged validation absent: failureElapsedMs=$failedAt; post-assertion snapshot: $snapshot. " +
+                "Separate timestamps; this does not prove state at the tap or assertion deadline.", failure)
+        }
+    }
     private fun confirm(kind: AuthorChangeKind = AuthorChangeKind.EDIT) {
         val choice = checkNotNull(thread.state.value.authorDialog)
         val body = choice.body.phpTrim(); val id = choice.request.original.id
@@ -186,7 +221,7 @@ class DirectAuthorJourneyTest {
         compose.onNodeWithTag("author_change_confirm").assertIsDisplayed().performNativeTap() // Review is not POST.
         compose.runOnIdle { assertEquals(1, api.authorChanges.directWrites.size) }
         compose.onNodeWithTag("author_change_confirm").assertIsDisplayed().performNativeTap() // Unchanged validation, not replay.
-        dialogText(R.string.author_unchanged).assertExists()
+        assertUnchangedValidation()
         compose.runOnIdle { assertEquals(1, api.authorChanges.directWrites.size) }
         dialogText(R.string.cancel).performNativeTap()
     }

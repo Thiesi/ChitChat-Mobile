@@ -3,6 +3,10 @@ package io.github.thiesi.chitchat.feature.conversation
 import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
 import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
 import io.github.thiesi.chitchat.core.reactions.selectedBy
+import io.github.thiesi.chitchat.core.ui.MessageBody
+import io.github.thiesi.chitchat.core.ui.MessageMentions
+import io.github.thiesi.chitchat.core.ui.messageLinks
+import io.github.thiesi.chitchat.core.ui.openMessageLink
 
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.combinedClickable
@@ -103,18 +107,20 @@ import kotlinx.coroutines.delay
 @Composable
 fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
     ignores: IgnorePersonViewModel? = null, targets: MessageTargetViewModel? = null, obscured: Boolean = false,
+    onStopped: (() -> Unit)? = null,
     isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     key(roomId, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
         LaunchedEffect(roomId) { model.open(roomId, expected = displayedSession) }
-        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, isCurrentEntry)
+        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, onStopped, isCurrentEntry)
     }
 }
 
 @Composable
 private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
-    ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean, isCurrentEntry: () -> Boolean) {
+    ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean,
+    onStopped: (() -> Unit)?, isCurrentEntry: () -> Boolean) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session // Freeze callback origin; delegated Flow values can change before recomposition.
@@ -190,9 +196,13 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val timeline = rememberLazyListState()
+    val placementAnchor = state.anchor
+    val placementMessages = state.messages
+    var placedAnchor by remember { mutableStateOf<TimelineAnchor?>(null) }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) {
-        model.background(); ignores?.leaveRoom(session, roomId)
+        if (onStopped == null) model.background() else onStopped()
+        ignores?.leaveRoom(session, roomId)
     } }
     LaunchedEffect(session.retryAtMillis, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -207,13 +217,19 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             timeline.scrollToItem(state.messages.size + 1)
         }
     }
-    LaunchedEffect(state.anchor) {
-        state.anchor?.let { anchor ->
-            val index = state.messages.indexOfFirst { it.id == anchor.id }
-            if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
+    LaunchedEffect(placementAnchor) {
+        try {
+            placementAnchor?.let { anchor ->
+                val index = placementMessages.indexOfFirst { it.id == anchor.id }
+                if (index >= 0) timeline.scrollToItem(index + 1, anchor.offset)
+            }
+        } finally {
+            // A user gesture may cancel placement. Publish that actual viewport instead of
+            // replaying the scroll; a superseding anchor has a different revision.
+            placedAnchor = placementAnchor
         }
     }
-    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, pingsVisible, detailsOpen, personDialog, state.draftsOpen, composerDialog, obscured, lifecycle,
+    LaunchedEffect(state.messages, state.busy, state.stale, state.latestWindow, placementAnchor, pingsVisible, detailsOpen, personDialog, state.draftsOpen, composerDialog, obscured, lifecycle,
         connection?.presencePhase, connection?.selectedRoomId, lifecycleState) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             snapshotFlow {
@@ -226,8 +242,18 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     timeline.layoutInfo.viewportStartOffset, timeline.layoutInfo.viewportEndOffset)
                 val readable = canAcknowledgeVisibleRead(lifecycleState, window.isWindowFocused,
                     !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured)
-                Triple(anchor, if (edgeVisible && readable) newest else null, !timeline.canScrollForward && readable)
-            }.collect { (anchor, newest, edge) -> model.viewport(anchor, newest, edge) }
+                Triple(placementAnchor, placementAnchor == null || placedAnchor == placementAnchor,
+                    Triple(anchor, if (edgeVisible && readable) newest else null, !timeline.canScrollForward && readable))
+            }.collect { (requested, positioned, observed) ->
+                val current = model.state.value
+                // Initial layout is not the requested position. A retiring pane or old anchor
+                // sample must not overwrite the successor's position or publish read proof.
+                if (positioned && isCurrentEntry() && model.belongsTo(displayedSession) &&
+                    current.roomId == roomId && current.anchor == requested) {
+                    val (anchor, newest, edge) = observed
+                    model.viewport(anchor, newest, edge)
+                }
+            }
         }
     }
     val ready = !session.busy && !session.refreshRequired && !session.storageWarning && now >= session.retryAtMillis
@@ -423,6 +449,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     actions?.let { request ->
         val message = state.messages.firstOrNull { it.id == request.messageId }
         val available = message != null && model.canUseMessage(displayedSession, roomId, message)
+        val links = remember(message) { message?.body?.let { messageLinks(it, message.type == "emote") }.orEmpty() }
         MessageActions(available, message?.let { model.canReplyTo(displayedSession, roomId, it) } == true,
             !message?.body.isNullOrEmpty(), onReply = {
                 if (actions === request && interactive() && message != null && model.replyTo(displayedSession, roomId, message)) {
@@ -444,7 +471,14 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 if (actions === request && interactive() && model.beginReactions(displayedSession, roomId, original)) {
                     actions = null; focus.clearFocus()
                 }
-            } }, canReact = message?.let { model.canBeginReactions(displayedSession, roomId, it) } == true)
+            } }, canReact = message?.let { model.canBeginReactions(displayedSession, roomId, it) } == true,
+            links = links, onOpenLink = { target ->
+                if (actions === request && interactive() && message != null &&
+                    model.canUseMessage(displayedSession, roomId, message) && links.any { it.target == target }) {
+                    // Keep the modal suppression while the external Activity takes over.
+                    openMessageLink(androidContext, target)
+                }
+            })
     }
     state.reactionDialog?.takeIf { paneInteractive() }?.let { dialog ->
         val request = dialog.request
@@ -545,6 +579,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
 private fun MessageContent(message: RoomMessage, context: ConversationContext?, onOpenReply: ((Long) -> Unit)? = null,
     onActions: (() -> Unit)? = null, viewer: Long = 0, onReactions: (() -> Unit)? = null, canReact: Boolean = false) {
     val sender = message.username ?: stringResource(R.string.conversation_unknown_user)
+    val mentionHints = remember(message.mentions) { MessageMentions.room(message.mentions) }
     val actionsLabel = stringResource(R.string.message_actions)
     when {
         message.deleted -> Text(stringResource(R.string.conversation_deleted), style = MaterialTheme.typography.bodyMedium)
@@ -562,8 +597,9 @@ private fun MessageContent(message: RoomMessage, context: ConversationContext?, 
             Column(Modifier.fillMaxWidth().then(if (onActions != null) Modifier.heightIn(min = 48.dp)
                 .combinedClickable(onClickLabel = actionsLabel, onLongClickLabel = actionsLabel,
                     onClick = onActions, onLongClick = onActions) else Modifier)) {
-                if (message.type == "emote") Text(stringResource(R.string.conversation_emote, sender, message.body.orEmpty()))
-                else message.body?.let { Text(it) }
+                if (message.type == "emote") MessageBody(message.body.orEmpty(),
+                    emotePrefix = stringResource(R.string.conversation_emote, sender, ""), mentions = mentionHints)
+                else message.body?.let { MessageBody(it, mentions = mentionHints) }
                 message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }
                 if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
             }

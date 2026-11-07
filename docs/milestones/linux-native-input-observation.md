@@ -1,0 +1,17 @@
+# Opt-in Linux native input observation
+
+[Issue69](https://github.com/Thiesi/ChitChat-Mobile/issues/69) retains strict IME failures in the existing production-input100-cycle control: PR68's first native gate failed at cycle67; PR71's first gate failed at cycle22. Both executed178 tests with177 passing. The separate [issue70 observation](direct-author-recovery-observations.md) does not explain these failures. No production fix or development exception is inferred.
+
+## Fixed diagnostic and normal gate separation
+
+The manually dispatched `Native input observation (not a merge gate)` workflow runs exactly one fixed method: `NativeInputDialogJourneyTest#hundredNativeInputDialogCyclesPreserveBodyWithoutInventingEdits`. Its existing100-cycle protocol, OS taps, full-body/no-invented-edit checks and5-second focus/IME assertions remain unchanged. Explicit `traceNativeInput=true` installs the existing bounded public input-session observer, delegating each session/connection once. It retains scalar lifecycle metadata, not connections, text, people, credentials, Views or raw window dumps. Interception itself can change timing; a diagnostic pass is not the ordinary native gate or root-cause proof.
+
+Use the same credential-free Linux/API36 Google APIs/x86_64/KVM and disabled system-animation setup as ordinary CI. The workflow has read-only contents permission, no secrets, no arbitrary class/command inputs, no production server access and no automatic trigger. Its concurrency group is separate from Android CI and never cancels an in-flight ordinary gate. A dedicated artifact name prevents confusion with full-suite reports. One method is one instrumentation test containing100cycles, not100 independent full tests. Preserve either outcome; there is no retry loop, `continue-on-error`, focus/IME repair or deadline change.
+
+The normal Android workflow and its full unfiltered/untraced command are unchanged. Both entry points reuse the same single-attempt runner and failure-only allowlisted lifecycle capture; the observation passes a new command list and distinct report path without modifying ordinary globals. Existing launch/signal/capture/write/privacy regression tests remain enabled. Added tests verify isolation and one-call failure propagation. No live tests or `.env.integration` are consumed.
+
+## Bounded investigation plan
+
+After delivery gates and reviews, dispatch this diagnostic **once** for a recorded exact source head to investigate issue69; retain run/head/image/emulator metadata and the original result. A failure's public input-session receipts may narrow where the handoff ended; sequential post-timeout native/window observations still cannot establish earlier deadline state. A pass leaves the cause undetermined. Do not dispatch again to obtain a preferred result, use this subset/traced run to replace a failed full gate, or merge PR71's failed head because this diagnostic passes. Any further experiment needs a new specific hypothesis and bounded plan.
+
+The separate new infrastructure slice must pass its own complete current-head normal CI and initial/requested fresh written Claude reviews before merge. Python checks exercise real shared-runner behavior without a device; no local app rebuild is implied by them. Existing production/APK contents are unchanged. Actual CI and any diagnostic dispatch results belong in the PR/issue, with earlier failures preserved. Native DM reaction controls, live/device/release acceptance and issues65/70 remain separate.

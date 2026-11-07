@@ -8,16 +8,20 @@ import android.os.PersistableBundle
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.core.formatting.MessageInline
 
 /** Transient UI origin, never saved. Reopening even the same row creates a distinct request. */
 internal class MessageActionSelection(val messageId: Long)
@@ -27,7 +31,8 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
     onReply: () -> Unit, onCopy: () -> Unit, onDismiss: () -> Unit,
     onEdit: (() -> Unit)? = null, canEdit: Boolean = false,
     onDelete: (() -> Unit)? = null, canDelete: Boolean = false,
-    onReactions: (() -> Unit)? = null, canReact: Boolean = false) {
+    onReactions: (() -> Unit)? = null, canReact: Boolean = false,
+    links: List<MessageInline.Link> = emptyList(), onOpenLink: ((String) -> Unit)? = null) {
     AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("message_actions"),
         title = { Text(stringResource(R.string.message_actions)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -57,6 +62,19 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
                 TextButton(onClick = action, enabled = available && canReact,
                     modifier = Modifier.fillMaxWidth().testTag("message_reactions_action")) {
                     Text(stringResource(R.string.room_reactions))
+                }
+            }
+            if (available && links.isNotEmpty() && onOpenLink != null) {
+                Text(stringResource(R.string.message_links_disclosure))
+                links.forEachIndexed { index, link ->
+                    // A changed destination retires its pointer/semantics node, rather than
+                    // updating the handler underneath a press on the previous address.
+                    key(link.target) {
+                        TextButton(onClick = { onOpenLink(link.target) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("message_link:$index")) {
+                            Text(stringResource(R.string.message_open_link, link.target))
+                        }
+                    }
                 }
             }
         } },

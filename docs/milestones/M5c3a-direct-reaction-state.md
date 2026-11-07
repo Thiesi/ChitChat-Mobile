@@ -1,6 +1,6 @@
 # M5c3a: serialized DM reaction state
 
-Starts from delivered [native room reactions](M5c2b-native-room-reactions.md), PR68/main `4ac011d`, and consumes the unchanged [M5c1 protocol](M5c1-reaction-protocol.md) inside the existing serialized DM thread actor. This slice supplies state only. Native DM choices/chips/reactor lists and recovery controls, guests and live/device/release acceptance remain separate. Existing in-app DM reaction-unavailable disclosures remain accurate.
+Originally based on PR68/main `4ac011d`, now integrated with delivered PR80/main `4f4d24a` and [native room reactions](M5c2b-native-room-reactions.md), this consumes the unchanged [M5c1 protocol](M5c1-reaction-protocol.md) inside the existing serialized DM thread actor. This slice supplies state only. Native DM choices/chips/reactor lists and recovery controls, guests and live/device/release acceptance remain separate. Existing in-app DM reaction-unavailable disclosures remain accurate.
 
 ## Original scope and serialization
 
@@ -20,4 +20,14 @@ Reaction confirmation/recovery GETs preserve independent SEND, whole-peer READ, 
 
 Twenty-six new JVM regressions cover actor/viewer perspective, block/ignore distinctions, unknown privacy, mute/tombstones, original canonical/owner/peer callbacks, modal/read/write exclusion, explicit GET/Review, ACK-before-GET failure, late cancellation, queued invalidations, target handoffs, historical retention loss,100-peer capacity and separate SEND/READ/BLOCK/AUTHOR uncertainty. Existing direct state and author tests protect the shared actor. Full JVM/lint/debug/release/test-APK/diagnostic compilation, Python diagnostics, original APK certificates, complete unfiltered Linux/API36 native CI and both written exact-head Claude reviews remain delivery gates. Actual commands/counts belong in the PR.
 
-The automatic post-merge main run for PR68 subsequently failed an existing DM author-recovery assertion (177/178), retained under [issue70](https://github.com/Thiesi/ChitChat-Mobile/issues/70). It differs from issue69's IME failure; neither is resolved by this state slice or a later pass. No retry, assertion weakening or production-fix claim is included. Resolve the new gate or obtain a specific maintainer decision before another development merge. Earlier negative artifacts and issues65/69 remain preserved.
+## Historical evidence and current-base integration
+
+Original head609a2d1 passed730 JVM/lint/build and both written reviews, but its own ordinary native run41967484045 failed177/178 at the unchanged100-cycle control, recorded cycle22. Complete316-file source and161-member build/APK/report archives were reverified by SHA256/every-member/CRC before integration. The old failure and review receipts are retained, not transferred as acceptance to this head.
+
+The maintainer accepted the delivery order: integrate this substantive actor slice with fresh main after PR80, then supply native DM controls. Main4f4d24a includes search, formatting/highlighting and room-navigation safeguards absent from the old base. Integration preserves those consumers and the original26 DM reaction regressions. Five documentation conflicts retain both current-main and state contracts; issue70's maintainer closure and completed/consumed diagnostic plans replace stale active-hold text. No production input helper/deadline/assertion changes or live/device operation is included.
+
+PR80's development exception applies only to ceefb8a and is not authority for this head. Fresh full JVM/lint/debug/release/test-APK/standalone compilation, ordinary full Linux/API36 native CI and both actual current-head written review rounds remain required. The independent original main author-recovery failure in closed issue70 and all Windows/Linux negatives remain preserved; no root-cause or release waiver is claimed.
+
+## Current integration local result
+
+The fresh integration passed90 focused DM JVM tests, then974 full JVM tests with0 failures/errors/skips and lint0. Command: `:app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest -PfocusDiagnostic=true :focus-diagnostic:assembleDebug --rerun-tasks`, using the checked-in wrapper, configured JDK17, original Android user home and offline caches. The ordinary input/native/CI source remains unchanged. All21 diagnostic-script unit tests and228 relative documentation links also passed. These local checks invoke no device, native test or live account; full201-test Linux/API36 CI and both new-head written reviews are still required and recorded separately on the PR.

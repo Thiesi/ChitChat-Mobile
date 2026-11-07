@@ -155,6 +155,21 @@ class ConversationViewModel internal constructor(private val operations: Convers
     }
     fun cancel() { background(); realtime?.selectRoom(null, false) }
 
+    /** Navigation must not turn an already authorized write into unknown delivery. */
+    fun leavePane() {
+        val value = mutable.value
+        if (!belongsTo(session.value) || (!postInFlight && !value.sending && !value.authorWriting && !value.reactionWriting &&
+            authorPosting == null && reactionPosting == null && readJob?.isActive != true)) {
+            cancel()
+            return
+        }
+        foreground = false
+        visibleNewest = null
+        mutable.value = value.copy(revealed = emptySet(), atLatest = false, anchor = viewport, draftsOpen = false)
+        realtime?.selectRoom(null, false)
+        // Keep original operation/sequence markers until ACK/failure. Real background still retires them.
+    }
+
     fun cancelRequest() {
         val uncertain = mutable.value.uncertainSend || postInFlight
         retire()
@@ -735,6 +750,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
 
     /** UI reports actual layout visibility; merely fetching the history never acknowledges reads. */
     fun viewport(anchor: TimelineAnchor?, newestVisibleId: Long?, atEdge: Boolean) {
+        if (!foreground || !belongsTo(session.value) || mutable.value.roomId == null) return
         viewport = anchor
         visibleNewest = newestVisibleId
         val value = mutable.value

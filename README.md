@@ -8,7 +8,17 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-[DM reaction state](docs/milestones/M5c3a-direct-reaction-state.md) now uses the existing serialized thread actor with explicit recovery and separate send/read/block/author uncertainty. Native DM reaction controls remain pending. The subsequent main native failure in [issue70](https://github.com/Thiesi/ChitChat-Mobile/issues/70) holds further merges until resolved or specifically adjudicated; this slice does not fix or waive it.
+[DM reaction state](docs/milestones/M5c3a-direct-reaction-state.md) extends the existing serialized thread actor with original peer/canonical choices, complete confirmations and explicit recovery that preserves separate send/read/block/author uncertainty. Native DM reaction controls remain pending. Historical PR71/issue69 failures remain negative; the current-base integration needs its own complete gates and written reviews.
+
+[Native participant search](docs/milestones/M5e3a-native-message-search.md) offers explicit All/Rooms/Direct queries, plain excerpts and bounded page navigation, with current-server DM privacy disclosures and private in-memory input. [Guarded original-message opening](docs/milestones/M5e3b-open-search-results.md) uses fresh exact-target lookup, current authorization and historical navigation without marking newer chat read.
+
+[Participant search state](docs/milestones/M5e2-message-search-state.md) supplies the private scoped query/page/selection actor now consumed by the native search screen. Foreground/session emissions never repeat a POST; exact-result opening binds the original selection to one fresh lookup request.
+
+[Participant message-search protocol](docs/milestones/M5e1-message-search-protocol.md) supplies typed private POST queries and bounded room/DM result hints through the existing session transport. Native controls use the same contracts; original-message navigation reuses fresh target authorization; live acceptance remains separate.
+
+[Native mention highlighting](docs/milestones/M5d3-native-mention-highlighting.md) uses the server’s existing room/DM snapshots, with separate room broadcast styling. Unresolved names, code, links and literal fallback gain no mention decoration. Completion/profile navigation and manual/live acceptance remain pending.
+
+[Native message formatting](docs/milestones/M5d2-native-message-formatting.md) adds room/DM emphasis, code, quotes and explicit link choices in message actions, using the delivered [bounded parser](docs/milestones/M5d1-message-format-parser.md). Copy and reply excerpts stay literal; mention completion/profile navigation and manual device/browser/accessibility acceptance remain pending.
 
 [Native member room reactions](docs/milestones/M5c2b-native-room-reactions.md) add named Add/Remove choices, selected chips, people lists and explicit recovery after unconfirmed changes, using the delivered protocol/room actor. DM reactions and guest/live/device acceptance remain pending. Earlier native failures remain recorded under the approved development-only gate policy; release acceptance stays separate.
 
@@ -34,7 +44,7 @@ The [native notification center](docs/milestones/M4c4c2-native-notification-cent
 
 The independent merged-main native run then failed 112/113 on the known focused-but-hidden keyboard condition. [IME diagnostics](docs/milestones/native-ime-diagnostics.md) records that failure and the added test-only window/filtered-CI evidence (local 531 JVM/115 native tests passed); issue31 remains open. A later green run is not a production keyboard fix.
 
-Room and DM reply previews open the exact original as a marked historical window, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Search remains pending. See [reply-target scope](docs/milestones/M4c4b2-native-reply-targets.md).
+Room and DM reply previews open the exact original as a marked historical window, keeping drafts and unknown-send guards. Missing/deleted/unauthorized targets are explicit; quote navigation does not mark newer messages read. Search results use their own guarded [original-message consumer](docs/milestones/M5e3b-open-search-results.md). See [reply-target scope](docs/milestones/M4c4b2-native-reply-targets.md).
 
 [Native Reply/Copy](docs/milestones/M5a-reply-composition.md) adds room/DM preview/removal and scoped reply-only drafts. Unknown sends stay guarded; copied plaintext may outlive logout. See the separate gate/acceptance limits.
 

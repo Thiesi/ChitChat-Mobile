@@ -108,6 +108,24 @@ class ConversationRealtimeTest {
         assertTrue(api.windows.isNotEmpty()); assertTrue(api.windows.all { it.room == 43L && it.upper == 20L })
         model.viewport(TimelineAnchor(20, 0), 20, true); runCurrent(); assertEquals(0, api.reads)
     }
+    @Test fun inactiveViewportCannotReplaceTheRequestedOriginalBeforeFirstForeground() = runTest(dispatcher) {
+        api.rows = (1L..20).map { message(it) }
+        assertTrue(model.prepareTarget(target(20)))
+        model.viewport(TimelineAnchor(1, 0), 20, true) // An inactive/retiring pane is not this entry's viewport.
+        model.foreground(); runCurrent()
+        assertEquals(20L, model.state.value.anchor?.id)
+        assertEquals(20L, model.state.value.highlightedMessageId); assertEquals(20L, model.state.value.fixedUpper)
+        assertEquals(0, api.reads); assertFalse(model.state.value.latestWindow)
+    }
+    @Test fun viewportAfterBackgroundCannotOverwriteTheRetainedHistoricalAnchorOnResume() = runTest(dispatcher) {
+        api.rows = (1L..20).map { message(it) }
+        assertTrue(model.prepareTarget(target(20))); model.foreground(); runCurrent()
+        model.viewport(TimelineAnchor(20, 7), null, false)
+        model.background(); model.viewport(TimelineAnchor(1, 0), 20, true)
+        model.foreground(); runCurrent()
+        assertEquals(20L, model.state.value.anchor?.id); assertEquals(7, model.state.value.anchor?.offset)
+        assertEquals(0, api.reads); assertFalse(model.state.value.latestWindow)
+    }
     @Test fun notificationPreparationRetainsBothRoomsDraftsAndUnknownDeliveryWithoutResendConsent() = runTest(dispatcher) {
         open(); model.updateDraft("Unconfirmed old room draft"); api.sendFailure = ApiFailure(FailureKind.TIMEOUT)
         model.send(); runCurrent(); assertTrue(model.state.value.uncertainSend)
@@ -116,6 +134,36 @@ class ConversationRealtimeTest {
         assertEquals("Unconfirmed old room draft", model.state.value.draft); assertTrue(model.state.value.uncertainSend)
         assertFalse(model.state.value.reconciledAfterUncertain); assertEquals("New room draft", model.drafts.value[43]?.body)
         model.acknowledgeDuplicateRisk(); assertTrue(model.state.value.uncertainSend); assertEquals(1, api.sends)
+    }
+    @Test fun leavingThePaneRetainsSendUntilAcknowledgmentAndKeepsTargetAdoptionWaiting() = runTest(dispatcher) {
+        open(); val snapshot = target(20, 43); api.sendGate = CompletableDeferred()
+        model.updateDraft("Pending navigation fixture"); model.send(); runCurrent()
+        model.leavePane(); runCurrent()
+        assertTrue(model.state.value.busy); assertTrue(model.state.value.sending)
+        assertFalse(model.state.value.uncertainSend); assertFalse(model.prepareTarget(snapshot))
+        api.sendGate!!.complete(Unit); runCurrent()
+        assertEquals("", model.state.value.draft); assertFalse(model.state.value.uncertainSend)
+        assertEquals(1, api.sends); assertTrue(model.prepareTarget(snapshot))
+    }
+    @Test fun leavingThePaneRetainsAnAuthorizedReadWithoutGrantingNewReadProof() = runTest(dispatcher) {
+        open(); val snapshot = target(20, 43); api.readGate = CompletableDeferred()
+        model.viewport(TimelineAnchor(3, 0), 3, true); runCurrent()
+        model.leavePane(); runCurrent()
+        assertTrue(model.state.value.reading); assertEquals(0, api.cancelledReads)
+        assertFalse(model.prepareTarget(snapshot)); assertFalse(model.state.value.atLatest)
+        model.viewport(TimelineAnchor(3, 0), 3, true); runCurrent(); assertEquals(1, api.reads)
+        api.readGate!!.complete(Unit); runCurrent()
+        assertEquals(3L, model.state.value.readCursor); assertEquals(1, api.reads)
+        assertTrue(model.prepareTarget(snapshot))
+    }
+    @Test fun genuineBackgroundAfterLeavingStillRetiresTheSendAndKeepsItsUnknownDraft() = runTest(dispatcher) {
+        open(); api.sendGate = CompletableDeferred()
+        model.updateDraft("Unknown navigation fixture"); model.send(); runCurrent()
+        model.leavePane(); model.background(); runCurrent()
+        api.sendGate!!.complete(Unit); runCurrent()
+        assertEquals("Unknown navigation fixture", model.state.value.draft)
+        assertTrue(model.state.value.uncertainSend); assertFalse(model.state.value.busy)
+        assertFalse(model.state.value.reconciledAfterUncertain); assertEquals(1, api.sends)
     }
     @Test fun notificationPreparationRejectsAnActiveReadWithoutCancellingIt() = runTest(dispatcher) {
         open(); val snapshot = target(20, 43); api.readGate = CompletableDeferred()
