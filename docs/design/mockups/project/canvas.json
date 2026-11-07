@@ -226,6 +226,13 @@
       "w": 390,
       "h": 844,
       "title": "Delete account (dark)"
+    },
+    "ServerUpdate.dc.html": {
+      "x": 1410,
+      "y": 8800,
+      "w": 390,
+      "h": 844,
+      "title": "Server needs an update (revalidation)"
     }
   },
   "order": [
@@ -259,7 +266,8 @@
     "ImageViewer.dc.html",
     "ReportMessage.dc.html",
     "Guidelines.dc.html",
-    "DeleteAccount.dc.html"
+    "DeleteAccount.dc.html",
+    "ServerUpdate.dc.html"
   ],
   "notes": {
     "tOnboard": {
@@ -356,15 +364,15 @@
       "y": 8520,
       "text": "Play readiness",
       "kind": "title1",
-      "maxW": 860
+      "maxW": 1800
     },
     "playNote": {
-      "x": 940,
+      "x": 1880,
       "y": 8800,
       "w": 380,
       "size": "m",
       "fill": "gray",
-      "text": "Policy texts are drafts that need maintainer approval. Server rules, server privacy links and re-acceptance depend on ChitChat#160. Spec: docs/design/play-readiness.md."
+      "text": "Policy texts are drafts that need maintainer approval. Server rules, server privacy links and re-acceptance depend on ChitChat#160. Spec: docs/design/play-readiness.md. Version numbers in ServerUpdate are placeholders; the minimum is set when the first required backend change merges."
     }
   },
   "designSystems": []

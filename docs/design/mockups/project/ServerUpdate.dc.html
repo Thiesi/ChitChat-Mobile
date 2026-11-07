@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Server needs an update</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; gap: 18px; padding: 0 26px;">
+    <div class="card" style="display: flex; gap: 14px; align-items: center;">
+      <div class="tile h-sea">S</div>
+      <div><div class="display" style="font-size: 18px; font-weight: 700;">Schmidt Family Chat</div><div style="font-size: 13px; color: var(--text-2);">chat.schmidt.family</div></div>
+    </div>
+    <h1 class="display" style="margin: 0; font-size: 28px; font-weight: 800; line-height: 1.15;">Schmidt Family Chat needs an update</h1>
+    <p style="margin: 0; font-size: 16px; color: var(--text-2);">This app can't continue with this server until it's updated. Your account and messages are safe on the server, and you'll pick up where you left off once it's updated.</p>
+    <div class="hint" style="margin: 0;">Server version 3.2.1 · this app needs 3.3.0 or newer</div>
+  </div>
+  <div style="padding: 0 24px 28px; display: flex; flex-direction: column; gap: 10px;">
+    <button class="btn">Copy a note for the operator</button>
+    <button class="btn ghost">Check again</button>
+    <button class="btn text" style="color: var(--text);">Sign out</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
