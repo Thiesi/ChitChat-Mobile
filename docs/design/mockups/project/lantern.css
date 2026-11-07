@@ -20,6 +20,12 @@
   --out: var(--ember); --out-text: #F2EDF7; --link: var(--dusk-dark); --err: var(--rose-dark); --mention: #4A3A1C; --unsure: var(--honey);
   background: var(--bg); color: var(--text); }
 
+/* AMOLED black: overrides four dark tokens only (docs/design/amoled-black.md). */
+.ccm.dark.amoled { --bg: #000000; --surface: #110E17; --raised: #1F1B29; --line: #2E2938; }
+.amoled .navbar, .amoled .sheet { border-top: 1px solid var(--line); box-shadow: none; }
+.amoled .fab { box-shadow: none; }
+.amoled .scrim { background: rgba(0,0,0,0.6); }
+
 .display { font-family: "Bricolage Grotesque", Roboto, system-ui, sans-serif; letter-spacing: -0.01em; }
 .inset { height: 28px; flex: none; }
 .appbar { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; min-height: 64px; flex: none; }

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Appearance settings, AMOLED black</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}
+.seg{display:flex;border:1.5px solid var(--field-line);border-radius:24px;overflow:hidden}
+.seg button{flex:1;min-height:48px;border:0;background:none;color:var(--text);font:inherit;font-size:15px;display:flex;align-items:center;justify-content:center;gap:6px}
+.seg button+button{border-left:1.5px solid var(--field-line)}
+.seg button.on{background:rgba(240,106,59,0.18);color:var(--accent-text);font-weight:700}
+.pv{flex:1;border-radius:18px;padding:10px;display:flex;flex-direction:column;gap:5px;border:1px solid var(--line)}
+.pv i{display:block;height:12px;border-radius:6px}
+.sw{width:52px;height:32px;border-radius:16px;background:var(--persimmon);position:relative;flex:none;border:0;padding:0}
+.sw::after{content:"";position:absolute;right:4px;top:4px;width:24px;height:24px;border-radius:12px;background:var(--ink)}
+</style>
+</helmet>
+<div class="ccm dark amoled">
+  <div class="inset"></div>
+  <div class="appbar" style="padding-left: 4px; gap: 8px;">
+    <a class="icon-btn" href="AdminHome.dc.html" aria-label="Back to your account"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <h1 class="display" style="font-size: 24px;">Appearance</h1>
+  </div>
+
+  <div style="padding: 8px 20px 0; display: flex; flex-direction: column; gap: 22px;">
+    <div>
+      <div class="label" id="themeLabel">Theme</div>
+      <div class="seg" role="radiogroup" aria-labelledby="themeLabel">
+        <button class="on" role="radio" aria-checked="true">
+          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 18px; height: 18px;"><path d="M5 12l5 5 9-10"></path></svg>System</button>
+        <button role="radio" aria-checked="false">Light</button>
+        <button role="radio" aria-checked="false">Dark</button>
+      </div>
+      <div class="hint">System follows your phone's dark mode. It's dark right now.</div>
+    </div>
+
+    <div style="display: flex; gap: 10px;" aria-hidden="true">
+      <div class="pv" style="background: #FBF7F1; border-color: #E6DCCF;">
+        <i style="width: 70%; background: #F3ECE2;"></i><i style="width: 55%; background: #FFD9C4; align-self: flex-end;"></i><i style="width: 18px; height: 18px; border-radius: 9px; background: #F06A3B; align-self: flex-end;"></i>
+        <span style="font-size: 12px; color: #5E566B; margin-top: 4px;">Light</span></div>
+      <div class="pv" style="background: #14111C; border-color: #3A3347;">
+        <i style="width: 70%; background: #272233;"></i><i style="width: 55%; background: #8A3A1E; align-self: flex-end;"></i><i style="width: 18px; height: 18px; border-radius: 9px; background: #F06A3B; align-self: flex-end;"></i>
+        <span style="font-size: 12px; color: #A79FB4; margin-top: 4px;">Dark</span></div>
+      <div class="pv" style="background: #000000; border-color: #F06A3B; border-width: 2px;">
+        <i style="width: 70%; background: #1F1B29;"></i><i style="width: 55%; background: #8A3A1E; align-self: flex-end;"></i><i style="width: 18px; height: 18px; border-radius: 9px; background: #F06A3B; align-self: flex-end;"></i>
+        <span style="font-size: 12px; color: #F2EDF7; margin-top: 4px; font-weight: 600;">Pure black</span></div>
+    </div>
+
+    <div class="card" style="display: flex; gap: 14px; align-items: center; background: var(--surface);">
+      <div style="flex-grow: 1;">
+        <label for="pb" style="font-size: 16px; font-weight: 600; display: block;">Pure black in dark mode</label>
+        <div class="hint" style="margin-top: 4px;">Uses true black whenever ChitChat is dark. Saves power on OLED screens.</div>
+      </div>
+      <button id="pb" class="sw" role="switch" aria-checked="true" aria-label="Pure black in dark mode"></button>
+    </div>
+
+    <div>
+      <div class="section" style="padding: 0 0 6px;"><span>ALSO</span></div>
+      <div class="row" style="padding: 8px 0; min-height: 56px;">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19l5-14h2l5 14M6.5 13h7M17 19l2.5-7 2.5 7M18 17h3"></path></svg>
+        <div class="main"><div class="name" style="font-size: 15px;">Text size</div><div class="line">Follows your phone's font size</div></div>
+      </div>
+      <div class="row" style="padding: 8px 0; min-height: 56px;">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M8 12a4 4 0 0 1 8 0"></path></svg>
+        <div class="main"><div class="name" style="font-size: 15px;">Animations</div><div class="line">Follows your phone's "Remove animations" setting</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
