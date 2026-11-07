@@ -8,7 +8,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
-[DM reaction state](docs/milestones/M5c3a-direct-reaction-state.md) extends the existing serialized thread actor with original peer/canonical choices, complete confirmations and explicit recovery that preserves separate send/read/block/author uncertainty. Native DM reaction controls remain pending. Historical PR71/issue69 failures remain negative; the current-base integration needs its own complete gates and written reviews.
+[Native DM reactions](docs/milestones/M5c3b-native-direct-reactions.md) consume the delivered PR71 actor through chips/actions, explicit Add/Remove choices, complete people lists and GET/Review recovery. Presentation is shared with rooms; original scope and serialized writes remain feature-owned. Guests, live/device/accessibility/release acceptance remain separate. Historical failures remain negative; every new slice needs its own full gates and written reviews.
 
 [Native participant search](docs/milestones/M5e3a-native-message-search.md) offers explicit All/Rooms/Direct queries, plain excerpts and bounded page navigation, with current-server DM privacy disclosures and private in-memory input. [Guarded original-message opening](docs/milestones/M5e3b-open-search-results.md) uses fresh exact-target lookup, current authorization and historical navigation without marking newer chat read.
 
@@ -20,7 +20,7 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 [Native message formatting](docs/milestones/M5d2-native-message-formatting.md) adds room/DM emphasis, code, quotes and explicit link choices in message actions, using the delivered [bounded parser](docs/milestones/M5d1-message-format-parser.md). Copy and reply excerpts stay literal; mention completion/profile navigation and manual device/browser/accessibility acceptance remain pending.
 
-[Native member room reactions](docs/milestones/M5c2b-native-room-reactions.md) add named Add/Remove choices, selected chips, people lists and explicit recovery after unconfirmed changes, using the delivered protocol/room actor. DM reactions and guest/live/device acceptance remain pending. Earlier native failures remain recorded under the approved development-only gate policy; release acceptance stays separate.
+[Native member room reactions](docs/milestones/M5c2b-native-room-reactions.md) add named Add/Remove choices, selected chips, people lists and explicit recovery after unconfirmed changes, using the delivered protocol/room actor. DM controls follow in [M5c3b](docs/milestones/M5c3b-native-direct-reactions.md); guest/live/device acceptance remains pending. Earlier native failures remain recorded under the approved development-only gate policy; release acceptance stays separate.
 
 [Reply/Copy PR49](https://github.com/Thiesi/ChitChat-Mobile/pull/49) and [input-observation PR54](https://github.com/Thiesi/ChitChat-Mobile/pull/54) are merged. PR54 passed600 fresh local JVM/lint0, CI160 native, both reviews and physical100cycles. Independent main passed160 native/lint0; JVM/R8 were cached. Local156/157 remains under the development-only [#55 exception](https://github.com/Thiesi/ChitChat-Mobile/issues/55), not a fix/release waiver. Preserve issue31 closure.
 

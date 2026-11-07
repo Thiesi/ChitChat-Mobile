@@ -39,6 +39,8 @@ import io.github.thiesi.chitchat.core.direct.*
 import io.github.thiesi.chitchat.core.conversation.ComposerReply
 import io.github.thiesi.chitchat.core.conversation.phpTrim
 import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
+import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
+import io.github.thiesi.chitchat.core.reactions.selectedBy
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.session.SessionState
@@ -53,6 +55,8 @@ import io.github.thiesi.chitchat.core.ui.isReadEdgeVisible
 import io.github.thiesi.chitchat.core.ui.MessageInput
 import io.github.thiesi.chitchat.core.ui.MessageSendButton
 import io.github.thiesi.chitchat.core.ui.MessageActions
+import io.github.thiesi.chitchat.core.ui.MessageReactionPicker
+import io.github.thiesi.chitchat.core.ui.reactionLabel
 import io.github.thiesi.chitchat.core.ui.MessageActionSelection
 import io.github.thiesi.chitchat.core.ui.ComposerReplyControl
 import io.github.thiesi.chitchat.core.ui.ComposerReplyOptions
@@ -193,6 +197,14 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             val checkAuthorHistory: (DirectAuthorUnknown) -> Unit = { original ->
                 if (interactive()) model.checkAuthorHistory(displayedSession, original)
             }
+            val checkReactionHistory: (DirectReactionUnknown) -> Unit = { original ->
+                if (interactive() && actions == null && replyOptions == null)
+                    model.checkReactionHistory(displayedSession, original)
+            }
+            fun openReactions(message: DirectMessage) {
+                if (interactive() && actions == null && replyOptions == null && model.beginReactions(displayedSession, peer, message))
+                    focus.clearFocus()
+            }
             fun openActions(message: DirectMessage) {
                 if (interactive() && actions == null && replyOptions == null && model.canUseMessage(displayedSession, peer, message)) {
                     focus.clearFocus(); actions = MessageActionSelection(message.id)
@@ -265,7 +277,8 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         SessionNotice(session, now, onRefreshSession)
                         Text(state.context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleLarge)
                         state.context?.let { Text(stringResource(R.string.dm_privacy_short, it.privacy.direct.retention), style = MaterialTheme.typography.bodySmall) }
-                        ThreadFeedback(model, state, attention[peer], ready, onAuthorCheck = checkAuthorHistory)
+                        ThreadFeedback(model, state, attention[peer], ready, onAuthorCheck = checkAuthorHistory,
+                            onReactionCheck = checkReactionHistory)
                     }
                     LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("dm_timeline"), timeline,
                         contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -291,7 +304,10 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                         coordinator.load(displayedSession, MessageTarget.DirectMessage(peer, id))
                                     }
                                     Unit
-                                } }, onActions = { openActions(message) })
+                                } }, onActions = { openActions(message) }, viewer = displayedSession.user?.id ?: 0,
+                                    canReact = interactive() && actions == null && replyOptions == null &&
+                                        model.canBeginReactions(displayedSession, peer, message),
+                                    onReactions = { openReactions(message) })
                             }
                         }
                         item("end") { Spacer(Modifier.height(1.dp)) }
@@ -309,6 +325,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 needsAttention = state.stale || state.error != null || state.validation != null || state.newerAvailable ||
                                     state.uncertainSend || state.uncertainRead || state.readError != null || state.uncertainBlock ||
                                     state.authorUnknown != null || state.authorLimit || state.authorNotice != null ||
+                                    state.reactionUnknown != null || state.reactionLimit || state.reactionNotice != null ||
                                     attention[peer] != null || state.draftLimit || !model.canEditDraft() ||
                                     context?.relationship?.messagingAvailable == false || context?.mutedEverywhere != null || !ready ||
                                     connection?.let { it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null } } == true) { dismiss ->
@@ -316,7 +333,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                     RealtimeStatus(connection, model.realtime::retry, model.realtime::dismissBroadcast, roomId = null)
                                 Text(context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleMedium)
                                 SessionNotice(session, now, onRefreshSession)
-                                ThreadFeedback(model, state, attention[peer], ready, true, dismiss, checkAuthorHistory)
+                                ThreadFeedback(model, state, attention[peer], ready, true, dismiss, checkAuthorHistory, checkReactionHistory)
                                 if (context != null) TextButton(onClick = { dismiss(); blockConfirm = true }, enabled = ready && !state.busy && !state.uncertainBlock) {
                                     Text(stringResource(if (context.relationship.blockedByMe) R.string.dm_unblock else R.string.dm_block))
                                 }
@@ -356,6 +373,12 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     onDelete = message?.takeIf { it.sender.id == displayedSession.user?.id && it.canDelete }?.let { original -> {
                         if (actions === request && interactive() && model.beginAuthor(displayedSession, peer, original, AuthorChangeKind.DELETE)) actions = null
                     } }, canDelete = message?.let { model.canBeginAuthor(displayedSession, peer, it, AuthorChangeKind.DELETE) } == true,
+                    onReactions = message?.let { original -> {
+                        if (actions === request && interactive() &&
+                            model.beginReactions(displayedSession, peer, original)) {
+                            actions = null; focus.clearFocus()
+                        }
+                    } }, canReact = message?.let { model.canBeginReactions(displayedSession, peer, it) } == true,
                     links = links, onOpenLink = { target ->
                         if (actions === request && interactive() && message != null &&
                             model.canUseMessage(displayedSession, peer, message) && links.any { it.target == target }) {
@@ -378,6 +401,21 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         dialog.checked -> model.canReviewAuthor(request)
                         else -> model.authorAvailable(request)
                     }, currentPreview = model.authorCurrentPreview(request), error = state.error?.let { directError(it) })
+            }
+            state.reactionDialog?.takeIf { paneInteractive() }?.let { dialog ->
+                val request = dialog.request
+                val current = model.reactionCurrentRow(request)
+                val pending = state.reactionUnknown?.takeIf { it.peerId == peer && it.messageId == request.original.id }
+                MessageReactionPicker(request, request.original.id, current?.reactions, current?.deleted == true,
+                    displayedSession.user?.id ?: 0, state.busy, dialog.checked,
+                    current != null && current !== request.original, pending?.messageId,
+                    "dm_reactions_dialog", "dm_reaction_choices", ready && !state.busy,
+                    model.canReviewReactions(request), state.error?.let { directError(it) },
+                    canChoose = { emoji, desired -> paneInteractive() && model.canSetReaction(request, emoji, desired) },
+                    onChoose = { emoji, desired -> if (paneInteractive()) model.setReaction(request, emoji, desired) },
+                    onCheck = { if (paneInteractive() && pending != null) model.checkReactionHistory(displayedSession, pending) },
+                    onReview = { if (paneInteractive()) model.reviewReactions(request) },
+                    onDismiss = { if (isCurrentEntry()) model.dismissReactions(request) })
             }
             replyOptions?.let { choice ->
                 val current = state.composerReply === choice
@@ -407,7 +445,8 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
 
 @Composable
 private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadState, attention: DirectAttention?,
-    ready: Boolean, alwaysRefresh: Boolean = false, dismiss: () -> Unit = {}, onAuthorCheck: (DirectAuthorUnknown) -> Unit) {
+    ready: Boolean, alwaysRefresh: Boolean = false, dismiss: () -> Unit = {}, onAuthorCheck: (DirectAuthorUnknown) -> Unit,
+    onReactionCheck: (DirectReactionUnknown) -> Unit) {
     if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
     if (state.stale && state.loaded) Text(stringResource(R.string.dm_stale))
     if (state.anchorLost) Text(stringResource(R.string.conversation_anchor_unavailable))
@@ -441,6 +480,16 @@ private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadStat
         "author_deleted" -> R.string.author_deleted
         else -> R.string.author_checked
     }), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+    if (state.reactionLimit || model.reactionCapacityFull()) Text(stringResource(R.string.dm_reaction_limit))
+    state.reactionUnknown?.let { original ->
+        Text(stringResource(R.string.reaction_unconfirmed, original.messageId.toString()))
+        if (state.reactionDialog == null) TextButton(onClick = { dismiss(); onReactionCheck(original) },
+            enabled = ready && !state.busy, modifier = Modifier.heightIn(min = 48.dp).testTag("reaction_check_history")) {
+            Text(stringResource(R.string.reaction_check_history))
+        }
+    }
+    state.reactionNotice?.let { notice -> Text(stringResource(if (notice == "reaction_changed")
+        R.string.reaction_changed else R.string.reaction_checked), Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
     state.context?.let { context ->
         if (context.relationship.blockedByMe) Text(stringResource(R.string.dm_you_blocked))
         else if (!context.relationship.messagingAvailable) Text(stringResource(R.string.dm_unavailable))
@@ -454,7 +503,7 @@ private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadStat
 
 @Composable
 private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, onOpenReply: ((Long) -> Unit)? = null,
-    onActions: (() -> Unit)? = null) {
+    onActions: (() -> Unit)? = null, viewer: Long = 0, canReact: Boolean = false, onReactions: (() -> Unit)? = null) {
     val actionsLabel = stringResource(R.string.message_actions)
     val mentionHints = remember(message.mentions) { MessageMentions.direct(message.mentions) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (message.outgoing) Alignment.End else Alignment.Start) {
@@ -483,7 +532,17 @@ private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, on
                 if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
             }
         }
-        if (message.reactions.isNotEmpty()) Text(message.reactions.joinToString("  ") { "${it.emoji} ${it.users.size}" })
+        if (message.reactions.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            message.reactions.forEachIndexed { index, group ->
+                val emoji = ReactionEmoji.fromValue(group.emoji)
+                val label = if (emoji != null) reactionLabel(emoji) else group.emoji
+                val description = pluralStringResource(R.plurals.reaction_chip_description, group.users.size, label, group.users.size)
+                FilterChip(selected = group.selectedBy(viewer), onClick = { onReactions?.invoke() }, enabled = canReact && onReactions != null,
+                    label = { Text("${group.emoji} ${group.users.size}") },
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("dm_reaction:${message.id}:$index")
+                        .semantics { contentDescription = description })
+            }
+        }
         if (message.outgoing) Text(stringResource(if (message.readAt == null) R.string.dm_sent else R.string.dm_read), style = MaterialTheme.typography.labelSmall)
     }
     }

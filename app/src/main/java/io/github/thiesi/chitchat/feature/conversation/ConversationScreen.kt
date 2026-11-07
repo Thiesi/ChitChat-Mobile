@@ -72,6 +72,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.repeatOnLifecycle
 import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.core.ui.reactionLabel
 import io.github.thiesi.chitchat.core.conversation.ConversationContext
 import io.github.thiesi.chitchat.core.conversation.ComposerReply
 import io.github.thiesi.chitchat.core.conversation.isPrivatePingCommand
