@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create account</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}
+.bar{height:4px;border-radius:2px;background:var(--raised);overflow:hidden;position:relative}
+.bar i{position:absolute;left:20%;width:35%;top:0;bottom:0;background:var(--persimmon);border-radius:2px}
+.input{min-height:52px}
+</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div class="appbar">
+    <a class="icon-btn" href="OnboardFound.dc.html" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <span style="display: inline-flex; gap: 8px; align-items: center; background: var(--raised); border-radius: 18px; padding: 4px 12px 4px 4px; font-size: 14px;">
+      <span class="tile sm h-sea" style="width: 28px; height: 28px; border-radius: 10px; font-size: 13px;">S</span>chat.schmidt.family</span>
+  </div>
+  <div style="padding: 4px 24px 0; display: flex; flex-direction: column; gap: 14px; flex-grow: 1;">
+    <h1 class="display" style="margin: 0; font-size: 30px; line-height: 1.08; font-weight: 800;">Make yourself at home</h1>
+    <p style="margin: 0; font-size: 14px; color: var(--text-2);">Your account is created on chat.schmidt.family, not with the app maker. The server decides what you can do.</p>
+    <div>
+      <label class="label" for="nu">Username</label>
+      <input id="nu" class="input" value="mara" autocomplete="username">
+      <div class="hint">3–32 letters, numbers, dots, underscores or hyphens.</div>
+    </div>
+    <div>
+      <label class="label" for="np">Password</label>
+      <input id="np" class="input" type="password" value="hunter2hunter2" autocomplete="new-password">
+    </div>
+    <div>
+      <label class="label" for="cp">Confirm password</label>
+      <input id="cp" class="input focus" type="password" value="hunter2hunt" autocomplete="new-password">
+    </div>
+    <div>
+      <button class="btn ghost sm"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 18px; height: 18px;"><rect x="4" y="5" width="16" height="15" rx="3"></rect><path d="M4 10h16M9 3v4M15 3v4"></path></svg>Add birth date (optional)</button>
+      <div class="hint">Only used for age-restricted rooms.</div>
+    </div>
+    <span class="spacer"></span>
+  </div>
+  <div style="padding: 0 24px 24px; display: flex; flex-direction: column; gap: 10px;">
+    <div role="status" style="display: flex; flex-direction: column; gap: 8px;">
+      <div class="bar" aria-hidden="true"><i></i></div>
+      <div class="hint" style="margin: 0;">Making sure you're a person. This takes a few seconds; you can keep filling in the form.</div>
+    </div>
+    <button class="btn" disabled style="width: 100%; opacity: 0.5;">Create my account</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -32,12 +32,18 @@
     </div>
     <h1 class="display" style="margin: 0; font-size: 32px; line-height: 1.1; font-weight: 800;">Found it. Are you new here?</h1>
     <p style="margin: 0; color: var(--text-2); font-size: 16px;">This server decides who may join. If sign-up is closed, ask the person who runs it.</p>
+    <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-2);">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 18px; height: 18px; flex: none;"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 11v5M12 8v.01"></path></svg>
+      <span>Your server hosts your conversations. Messages are not end-to-end encrypted.</span></div>
     <span class="spacer"></span>
   </div>
   <div style="padding: 0 24px 28px; display: flex; flex-direction: column; gap: 10px;">
     <a class="btn" href="FirstRooms.dc.html">Create my account</a>
     <a class="btn ghost" href="Home.dc.html">I already have one, sign in</a>
-    <button class="btn text">Look around as a guest</button>
+    <div style="display: flex; justify-content: space-between;">
+      <button class="btn text sm">Restore a closed account</button>
+      <a class="btn text sm" href="OnboardServer.dc.html">Use a different server</a>
+    </div>
   </div>
 </div>
 </x-dc>

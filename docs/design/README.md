@@ -18,6 +18,7 @@ a substitute.
 | [visual-vocabulary.md](visual-vocabulary.md) | Color, shape, type, iconography, motion and illustration: the identity kit |
 | [communication.md](communication.md) | How CCM tells people what is happening: status ladder, connectivity, delivery, voice |
 | [onboarding.md](onboarding.md) | First launch to first message |
+| [onboarding-restyle.md](onboarding-restyle.md) | Implementation spec mapping onboarding onto today's code, copy and tests |
 | [invite-codes.md](invite-codes.md) | Sharing and scanning the server address as a QR code or link (D5) |
 | [amoled-black.md](amoled-black.md) | The true-black dark variant required before going live |
 | [acceptance.md](acceptance.md) | Accessibility and readability floors, plus numbered, testable presentation requirements |
