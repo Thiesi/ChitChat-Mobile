@@ -7,8 +7,9 @@ with the transcript and lists slices, and the coordinator schedules it. Mockups:
 
 **This slice changes what is shown, never what happens.** Connection management,
 reconnects, reconciliation, session revalidation, rate limits and every write rule stay as
-they are. One deliberate behavior gate is added: Send is disabled while the device has no
-network (see Offline). It is listed separately so reviewers can judge it on its own.
+they are. The one new behavior, **Send when back online** (maintainer decision 2026-11-07),
+is specified under Offline. It needs ViewModel work, so the coordinator plans it as its own
+slice. It is not presentation-only.
 
 ## Today (2026-11-07)
 
@@ -43,7 +44,7 @@ Highest first. Only the highest applicable notice shows.
 | # | Condition | Level | Copy | Action |
 |---|---|---|---|---|
 | 1 | Session storage warning (`storageWarning`) | 2 | Existing session-storage copy, unchanged in meaning | Existing retry or sign-out action |
-| 2 | Device offline (`RealtimePhase.OFFLINE`) | 2 | **No connection.** You can read and write. Sending waits until you're back. | none |
+| 2 | Device offline (`RealtimePhase.OFFLINE`) | 2 | **No connection.** You can read and write. Messages you send will go out when you're back, while ChitChat is open. | none |
 | 3 | Stream error, TLS (`ERROR` + TLS) | 2 | **Can't connect securely to {host}.** The certificate couldn't be verified; this can't be bypassed. | Retry (existing `retry`) |
 | 4 | Stream error, incompatible or redirect | 2 | **{host} sent something ChitChat doesn't understand.** Live updates are off; pull down to refresh. | Retry |
 | 5 | Stream error, other | 2 | **Live updates stopped.** Pull down to refresh, or try again. | Retry |
@@ -101,15 +102,54 @@ At most one card shows, chosen as today (the first matching broadcast).
 
 ## Offline
 
-- Send is disabled while `RealtimePhase.OFFLINE`, with the accessible label "Send, waiting
-  for connection". **This is the one behavior gate in this slice.**
-  - It prevents starting a POST that cannot reach the server, so it avoids creating new
-    uncertain sends.
-  - It never queues, retries or auto-sends. When the network returns, Send re-enables and the
-    person decides.
-  - Composer text, drafts and replies stay editable.
-  - If the coordinator prefers not to gate Send, the offline notice copy changes to "Messages
-    you send now may not arrive." The rest of this spec is unaffected.
+### Send when back online (approved behavior, own slice)
+
+Pressing Send while `RealtimePhase.OFFLINE` doesn't start a request. It marks the
+conversation's current draft **waiting to send**:
+
+- **One per conversation.** It reuses the existing room or DM draft slot, which already holds
+  one text plus its reply reference. While a draft waits, the field shows its text
+  read-only. Above the composer, a notice reads **"Will send when you're back online."**
+  with **Cancel**, which returns the text to an editable draft. Send shows a small clock and
+  the accessible label "Waiting to send".
+- **One automatic attempt, foreground only.**
+  - When the realtime phase next becomes `LIVE` while that conversation's draft is still
+    waiting, the app is visible and the session generation and conversation scope are
+    unchanged, the ViewModel starts exactly one send through the ordinary send path, with
+    all of its existing guards (permissions, mute, block, rate limit, reply validity).
+  - "Visible" means the app is in the foreground, on any screen. The person doesn't need to be
+    in that conversation.
+  - Nothing runs while the app is backgrounded. No WorkManager, alarms or wake-ups.
+- **Outcomes** use the existing contracts:
+  - confirmed: the canonical row appears and the draft clears;
+  - definite failure (the request never reached the server): the draft stays with the
+    standard "Couldn't send" notice and is no longer waiting;
+  - **ambiguous** result: the standard uncertain-send state with **Check history**, then the
+    duplicate-risk choice. **Never a second automatic attempt.**
+  - a guard refusal at send time (for example muted, blocked, room access lost or reply target
+    gone): the draft stays editable with that guard's existing message.
+- **When it does not send:**
+  - The app goes to the background, the process dies, the session ends or changes generation,
+    or the person signs out or switches account: the waiting flag is dropped. The text stays
+    a normal draft wherever drafts survive today; drafts are memory-only and are cleared on
+    account change and process death, as today. Nothing ever sends later without the person
+    pressing Send again.
+  - Rate-limited (`retryAtMillis`) on reconnect: wait until the limit passes while still in
+    the foreground. If the app leaves the foreground first, drop the flag.
+- **Ordering.** Several conversations may each have a waiting draft. They send one at a time,
+  in the order Send was pressed, each only after the previous one finished with a confirmed or
+  definite result. An ambiguous result in one conversation doesn't block the others.
+- **Classification prerequisite.** The implementer must confirm that "could not reach the
+  server" (no route, DNS failure, connection refused before the request body is written) is
+  classified as a **definite** failure and anything after the write as ambiguous. If the
+  transport can't make that distinction reliably, treat the attempt's failure as ambiguous.
+- **Visibility.** The DM inbox and room list show a waiting draft as "**Waiting to send:**
+  …" in the row. The drafts manager labels it too.
+
+Other offline composer rules:
+- Composer text, drafts and replies stay editable until Send is pressed.
+- The offline notice (row 2) copy becomes **"No connection.** You can read and write.
+  Messages you send will go out when you're back, while ChitChat is open." 
 - Loaded content stays visible. No spinner covers readable content.
 - At the transcript's live edge, a quiet caption: "Newer messages appear when you
   reconnect." Add a time ("Loaded at 17:58") only if the screen's state already records when
@@ -152,8 +192,11 @@ At most one card shows, chosen as today (the first matching broadcast).
   - one slot at most;
   - polite announcement once per change;
   - the Back online timer cancels on leaving and on `ON_STOP`;
-  - Send is disabled while offline with its accessible label and re-enables on `LIVE`
-    without sending anything;
+  - Send while offline marks the draft waiting; Cancel restores it;
+  - exactly one automatic attempt on `LIVE` while visible;
+  - no attempt after background or process death;
+  - an ambiguous result enters the standard uncertain state with no second attempt;
+  - several waiting conversations send in press order;
   - compact heights move the slot into Details;
   - announcements render as a card with Read and Dismiss.
 - Existing realtime, reconnect and notification tests run unchanged. Screens with text-based
@@ -166,6 +209,6 @@ At most one card shows, chosen as today (the first matching broadcast).
 | P-100 | Each signed-in screen shows at most one status notice, chosen by the precedence table. `LIVE` alone shows nothing. | U, C |
 | P-101 | Copy, levels and actions match the table. Retry and Refresh session call the existing actions with their existing gating. | C |
 | P-102 | Back online appears only after a recovery and dismisses after about 2 s, with a lifecycle-bound timer. | C |
-| P-103 | Offline disables Send (with its accessible reason) and never queues, retries or auto-sends. Text and drafts stay editable. | C |
+| P-103 | Send when back online: one waiting draft per conversation, made only by pressing Send. At most one automatic attempt, only on reconnect while the app is visible, through the ordinary guarded send path. Never retried; ambiguous results use the existing uncertain-send flow; the waiting flag is dropped on background, sign-out, generation change or process death. No background work. | U, C (fakes), existing unknown-send tests |
 | P-104 | Announcements render as one dismissible steward-edged card, separate from status. | C, S |
 | P-105 | No new polling, timers beyond P-102 and P-25, or background work. Connectivity comes from the existing callback. | R |

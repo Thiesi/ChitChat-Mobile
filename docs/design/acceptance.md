@@ -59,7 +59,7 @@ review on the canvas sizes, **M** manual check on a device or emulator, **R** co
 | ID | Requirement | Verify |
 |---|---|---|
 | P-20 | Connectivity notices follow the table in [communication.md](communication.md): state names, copy intent, precedence, and the about-2-second "Back online" confirmation. One notice at a time. | C (fake connectivity source), S |
-| P-21 | Offline: Send is disabled with an accessible reason, the draft remains, loaded content stays visible with the "Loaded at" marker, and nothing is sent automatically on reconnect. | C |
+| P-21 | Offline: loaded content stays visible with the live-edge marker, drafts remain editable, and only a draft the person marked with Send while offline is sent, once, on reconnect while the app is visible (Send when back online, status-presentation.md P-103). Nothing else is ever sent automatically. | C |
 | P-22 | Delivery states render on the composer exactly as specified: Sending (Send busy, field read-only), Sent (canonical bubble appears), Not sure (an `unsureLine` notice with Check history; text kept), Failed (text kept). No message renders as a bubble before server confirmation. The duplicate-risk dialog appears only after an explicit Check that did not find the message. | C, existing unknown-send tests |
 | P-23 | No snackbar or toast carries information needed later. Errors name what happened, what was affected and what the person can do. | R |
 | P-24 | Required disclosures in communication.md stay visible without scrolling past the first screen of their surface. | S |

@@ -24,7 +24,7 @@
   </div>
   <div class="strip offline" role="status">
     <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="flex: none;"><path d="M2 8.5a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.5a5 5 0 0 1 6 0M12 19v.01M3 3l18 18"></path></svg>
-    <span style="flex-grow: 1;"><b>No connection.</b> You can read and write. Sending waits until you're back.</span>
+    <span style="flex-grow: 1;"><b>No connection.</b> You can read and write. Messages you send will go out when you're back, while ChitChat is open.</span>
   </div>
 
   <div class="transcript">
@@ -38,11 +38,16 @@
       Loaded at 17:58. Newer messages appear when you reconnect.</div>
   </div>
 
+  <div role="status" style="margin: 0 10px 6px; border-radius: 16px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; font-size: 14px; background: var(--surface); border: 1px solid var(--line);">
+    <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="flex: none; width: 20px; height: 20px; color: var(--text-2);"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg>
+    <span style="flex-grow: 1;"><b>Will send when you're back online.</b></span>
+    <button class="btn text sm" style="padding: 0 8px;">Cancel</button>
+  </div>
   <div class="composer" style="padding-bottom: 4px;">
     <div class="field"><span class="v filled">Three! And yes, I'll bring the pot</span></div>
-    <button class="send off" aria-label="Send, waiting for connection" disabled><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"></path></svg></button>
+    <button class="send off" aria-label="Waiting to send"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></button>
   </div>
-  <div class="hint" style="padding: 0 20px 18px; margin: 0;">Your draft is kept here. Send is available again as soon as we reconnect; nothing is sent by itself.</div>
+  <div class="hint" style="padding: 0 20px 18px; margin: 0;">Sent once when the connection returns while ChitChat is open. If you close the app first, it stays here as a draft.</div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
