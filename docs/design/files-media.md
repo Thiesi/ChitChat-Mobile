@@ -20,9 +20,14 @@ dependency choices are engineering decisions inside those slices. Mockups: `Room
     as a text send.
 - **Limits** are server-side: a maximum size (`ATTACHMENT_MAX_BYTES`, default 10 MiB,
   configurable up to 100 MiB) and a MIME allowlist (JSON, PDF, ZIP, GIF, JPEG, PNG, WebP, CSV,
-  plain text). **Neither is exposed to clients.** Errors include `attachment_too_large`,
-  `attachment_type_not_allowed`, `attachment_type_unknown`, `attachment_empty` and
-  `membership_required`.
+  plain text). **Neither is exposed to clients** (backend issue ChitChat#156). Errors include
+  `attachment_too_large`, `attachment_type_not_allowed`, `attachment_type_unknown`,
+  `attachment_empty` and `membership_required`. **A body larger than PHP's `post_max_size`
+  arrives as `400 validation_error`** (a missing form field), not `attachment_too_large` or
+  413 (#156).
+- **Throttling:** `429 rate_limited` carries **no `Retry-After` and no structured delay**. The wait
+  appears only in English prose (ChitChat#157). The client never parses that text.
+- **No image dimensions and no smaller renditions** (ChitChat#158).
 - **Metadata:** `{id, name, mime_type, size_bytes, sha256, previewable}`. Room history includes
   it, and DM history needs the bounded metadata endpoint for visible IDs, which the client
   already uses. There are **no thumbnails and no image dimensions**.
@@ -43,6 +48,27 @@ limits) is out of scope until the server offers it.
   downloads the full image. Previews load automatically only when cheap (see Image loading).
 - **Files stay in the app unless the person moves them.** Bytes live in memory for display.
   Saving uses a document the person chooses, and sharing uses a temporary grant.
+
+## Photo privacy: location removed before upload
+
+**Decision (technical lead, 2026-11-07):** the server stores files exactly as sent and doesn't
+remove metadata. A phone photo often carries the GPS location where it was taken, such as
+someone's home. So by default the client removes location metadata from photos before
+upload:
+
+- **What is removed:** GPS and location EXIF tags (the GPS IFD and location fields) from JPEG
+  and WebP, and any equivalent location metadata in PNG. Other metadata may be removed too,
+  but **orientation is preserved**, so photos don't arrive sideways.
+- **How:** edit the metadata segments **without re-encoding** the image where the format
+  allows it (JPEG/WebP EXIF and XMP removal). Re-encode only when location can't be removed
+  otherwise. Then keep quality high and dimensions unchanged.
+- **Which bytes:** the upload sends the cleaned bytes, and the SHA-256 reconciliation evidence
+  is computed over **exactly the bytes uploaded**.
+- **Presentation:** the pending card for a photo shows a small line, "Location removed",
+  after cleaning. If cleaning fails, the photo is **not** sent silently with its location.
+  Instead the card reads "Couldn't remove the location from this photo." with **Send anyway**
+  and **Remove**, an explicit choice. Non-image files are sent unchanged.
+- A per-send or global opt-out (keep location) isn't part of this slice.
 
 ## Composer: attaching
 
@@ -83,14 +109,15 @@ and [communication.md](communication.md). Nothing renders as a bubble before the
 | Uploading, body still sending | The card shows a determinate progress ring with "Sending 1.2 of 3.4 MB". Field and Send are locked | **Cancel**: aborts before the request body completes, so nothing was delivered. The attachment returns to the draft |
 | Uploaded, waiting for the server | Indeterminate ring, "Finishing…" | none. Cancelling now couldn't prove whether the server kept it |
 | Confirmed (201) | The canonical message appears as a bubble; draft and card clear | — |
-| Definite failure (server error before commit, too large, type not allowed, membership, 429 DM limit, block) | A level-2 notice with the server's meaning: "Your server refused this file: it's too large." / "This file type isn't allowed on this server." / "You've reached the upload limit for direct messages. Try again later." The file stays attached | Remove or replace, or send again later |
+| Definite failure (server error before commit, too large, type not allowed, membership, 429, block) | A level-2 notice with the server's meaning: "Your server refused this file: it's too large." / "This file type isn't allowed on this server." / "You've reached the upload limit. Try again later." (429: **generic**, no time is shown, because the server gives none in machine-readable form, #157). An upload answered with `400 validation_error` reads "Your server refused this file. It may be too large." (#156: an oversized body arrives as a missing field). The file stays attached | Remove or replace, or send again later |
 | **Unknown** (connection lost after the body was sent, timeout, ambiguous transport error) | The `unsureLine` notice: **"Not sure your file arrived."** with **Check history**. The file and caption stay attached | Check history runs the existing explicit reconciliation. If the message isn't found, the duplicate-risk dialog follows: "Send again? We checked and couldn't find it. Sending again may post it twice." |
 
 - **Reconciliation evidence (approved by the technical lead, 2026-11-07, PR #105):** the client
   computes the SHA-256 of the picked file. During Check history, a message of the viewer's own
   with the same `sha256`, sent after the attempt started, is offered as **evidence** ("We found
   your file 'diagram.png' sent at 18:02. Is this it?"). Constraints:
-  - one streaming read, the digest never logged or persisted;
+  - one streaming read over **exactly the bytes uploaded** (after location removal), the digest
+    never logged or persisted;
   - only the viewer's own messages after the attempt start;
   - the person must confirm, and a match never resolves the state automatically;
   - no match falls through to the existing duplicate-risk dialog;
@@ -110,11 +137,13 @@ and [communication.md](communication.md). Nothing renders as a bubble before the
 Within the transcript spec's bubble, run and chit rules:
 
 - **Previewable images** (`previewable: true`):
-  - The image fills the bubble's content width (max 260dp, max height 320dp, `contain`
-    scaling, 14dp inner corners) with the caption below it.
-  - Before the image's real dimensions are known, it reserves a 4:3 box. After decoding, it
-    keeps the decoded aspect ratio. The box size changes only once, from placeholder to
-    decoded, to limit layout jumps. Read proof still measures the item's actual bounds.
+  - **A fixed frame, 240×180dp (4:3), that never changes size** (ChitChat#158: no dimensions
+    are known before download). The image is fitted inside with `contain` scaling on a `raised`
+    background, with 14dp inner corners and the caption below. Loading, failing or decoding an
+    image never resizes the message, so the transcript doesn't jump and read proof and anchors
+    aren't disturbed. The full image is seen in the viewer.
+  - If #158 adds dimensions later, the frame may adopt the real aspect ratio, still bounded,
+    known before load, and so never changing after layout.
   - **GIFs** show their first frame, with a small "GIF" badge. They animate only in the viewer
     (battery).
 - **Other files:** a file card inside the bubble: type icon, filename (two lines max, ellipsized
@@ -230,7 +259,8 @@ The policy is local and read from existing system state, with no new requests:
 | P-150 | Only explicit Send uploads. One file per message. Nothing renders before 201. | C |
 | P-151 | Cancel only while the body is still sending. Unknown outcomes use Check history then the duplicate-risk dialog, never automatic retry. Attachments are never queued for Send when back online. | U, C |
 | P-152 | Server refusals show their meaning, keep the file attached and never guess client-side limits. | C |
-| P-153 | Images follow the loading policy, use memory-only caching cleared on account change, and show every state in the table. | U, C |
+| P-153 | Images follow the loading policy, use memory-only caching cleared on account change, render in a fixed frame that never resizes, and show every state in the table. | U, C |
+| P-157 | Photos are uploaded without location metadata by default, orientation kept. A cleaning failure requires an explicit Send anyway. The SHA-256 evidence covers the uploaded bytes. | U, C |
 | P-154 | Save uses a chosen document and never silently deletes it. Share-out uses temporary FileProvider grants and never hands out authenticated URLs. | C, R |
 | P-155 | Share-in never sends by itself, drops items across sign-in, and supports one file. | C |
 | P-156 | The viewer suppresses read and typing proof and offers zoom alternatives. | C |
