@@ -129,8 +129,13 @@ words people look for: **"Delete account"**.
   Super-Administrator. Give the role to someone else first.";
 - an unknown result after the request was sent reads "We're not sure your request went
   through." with **Check**. Check is the existing **session revalidation GET** (no POST):
-  - if the session is no longer authenticated, closure is treated as having taken effect, and
-    the after-success confirmation is shown with "for 14 days";
+  - if the session is no longer authenticated, that is **consistent with** closure but doesn't
+    prove it (the session may have expired, or an administrator may have signed it out). So
+    don't show the definite confirmation. Show instead: "You've been signed out, which means the
+    deletion most likely went through. If it did, you can restore your account until about
+    {date} with *Restore a closed account*. If you can still sign in normally, it wasn't
+    deleted." Then **Done** goes to onboarding step 3. The definite "scheduled for deletion"
+    confirmation (step 5) appears **only** after a confirmed success response;
   - if the session is still authenticated, nothing changed: "Your account wasn't deleted."
     The person may start the flow again explicitly.
 
