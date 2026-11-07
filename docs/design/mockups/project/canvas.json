@@ -163,6 +163,20 @@
       "w": 390,
       "h": 844,
       "title": "4b Create account (anti-bot check running)"
+    },
+    "PushShade.dc.html": {
+      "x": 1410,
+      "y": 6300,
+      "w": 390,
+      "h": 844,
+      "title": "Push notifications (M6): shade, group, lock screen"
+    },
+    "NotificationSettings.dc.html": {
+      "x": 1880,
+      "y": 6300,
+      "w": 390,
+      "h": 844,
+      "title": "You → Notifications (M6)"
     }
   },
   "order": [
@@ -187,7 +201,9 @@
     "Scan.dc.html",
     "ServerProblem.dc.html",
     "SignIn.dc.html",
-    "CreateAccount.dc.html"
+    "CreateAccount.dc.html",
+    "PushShade.dc.html",
+    "NotificationSettings.dc.html"
   ],
   "notes": {
     "tOnboard": {
@@ -256,6 +272,13 @@
       "size": "s",
       "fill": "gray",
       "text": "Home is a target picture. The mention card, the '@' badge and '4 here now' have no data source yet (summary mode carries no bodies; backend issues #153 and #154). See docs/design/lists-restyle.md."
+    },
+    "tPush": {
+      "x": 1410,
+      "y": 6020,
+      "text": "Push (M6)",
+      "kind": "title1",
+      "maxW": 860
     }
   },
   "designSystems": []
