@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Play feature graphic</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width: 1024px; height: 500px; background: #14111C; position: relative; overflow: hidden; display: flex; align-items: center; gap: 56px; padding: 0 110px; box-sizing: border-box;">
+  <svg width="300" height="300" viewBox="0 0 108 108" role="img" aria-label="ChitChat Lantern mark" style="flex: none;">
+    <defs><radialGradient id="fg" cx="46%" cy="47%" r="50%"><stop offset="0%" stop-color="#FFB547" stop-opacity="0.45"></stop><stop offset="100%" stop-color="#FFB547" stop-opacity="0"></stop></radialGradient></defs>
+    <circle cx="48" cy="50" r="52" fill="url(#fg)"></circle>
+    <path fill="#F06A3B" d="M39,30 H53 A14,14 0 0 1 67,44 V50 A14,14 0 0 1 53,64 H39 A14,14 0 0 1 25,50 V44 A14,14 0 0 1 39,30 Z"></path>
+    <circle cx="72" cy="70" r="5" fill="#F06A3B"></circle>
+    <circle cx="39" cy="47" r="3.5" fill="#14111C"></circle>
+    <circle cx="53" cy="47" r="3.5" fill="#14111C"></circle>
+  </svg>
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 104px; line-height: 1; letter-spacing: -0.02em; color: #F2EDF7;">ChitChat</div>
+    <div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 600; font-size: 36px; color: #A79FB4;">Your community's chat</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1024,"height":500}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
