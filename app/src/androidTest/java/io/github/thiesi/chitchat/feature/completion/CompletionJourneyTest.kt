@@ -7,16 +7,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.onPreInterceptKeyBeforeSoftKeyboard
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.unit.Density
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
@@ -56,6 +58,7 @@ class CompletionJourneyTest {
     private val constrained=mutableStateOf(false)
     private val largeFont=mutableStateOf(false)
     private val completionEnabled=mutableStateOf(true)
+    private lateinit var render: (ComponentActivity) -> Unit
     @Volatile private var ime=0
     private val settingsStore=object: SettingsStore {
         override val settings=kotlinx.coroutines.flow.MutableStateFlow(AppSettings(server=(ServerAddress.parse("chat.example.test") as AddressResult.Valid).address))
@@ -76,18 +79,32 @@ class CompletionJourneyTest {
         targets=ViewModelProvider(activity,MessageTargetViewModel.factory(api.lookups))[MessageTargetViewModel::class.java]
         val settings=ViewModelProvider(activity,SettingsViewModel.factory(settingsStore))[SettingsViewModel::class.java]
         val auth=ViewModelProvider(activity,AuthViewModel.factory(sessions))[AuthViewModel::class.java]
-        activity.setContent {
+        val content: @Composable () -> Unit = {
             val density=LocalDensity.current
             val bottom=WindowInsets.ime.getBottom(density);SideEffect { ime=bottom }
-            CompositionLocalProvider(LocalDensity provides Density(density.density,if (largeFont.value) 2f else density.fontScale)) {
-                // This bounds the whole component viewport, including production IME padding.
-                // A240dp total height could be consumed entirely by a normal phone keyboard.
-                Box(if (constrained.value) Modifier.widthIn(max=360.dp).fillMaxWidth().height(640.dp) else Modifier.fillMaxSize()) {
-                    TestChitChatApp(settings,auth,conversationModel=room,directInbox=inbox,directThread=thread,
-                        notifications=notices,messageTargets=targets,completion=if (completionEnabled.value) model else null)
-                }
+            // This bounds the whole viewport, including production IME padding.
+            Box(if (constrained.value) Modifier.widthIn(max=360.dp).fillMaxWidth().height(640.dp) else Modifier.fillMaxSize()) {
+                TestChitChatApp(settings,auth,conversationModel=room,directInbox=inbox,directThread=thread,
+                    notifications=notices,messageTargets=targets,completion=if (completionEnabled.value) model else null)
             }
         }
+        render={ host ->
+            if (largeFont.value) {
+                val context=android.view.ContextThemeWrapper(host,host.theme)
+                context.applyOverrideConfiguration(android.content.res.Configuration(host.resources.configuration).apply { fontScale=2f })
+                host.setContentView(ComposeView(context).apply { setContent(content=content) })
+            } else host.setContent(content=content)
+        }
+        render(activity)
+    }
+    // Before sign-in/input only. Own view resources propagate to Dialogs; no global setting.
+    private fun font200() { largeFont.value=true;render(compose.activity) }
+    private fun assertDialogFont() {
+        val layouts=mutableListOf<TextLayoutResult>()
+        compose.onNode(hasText(text(R.string.completion_title)) and hasAnyAncestor(isDialog()),useUnmergedTree=true)
+            .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }
+        assertEquals(if (largeFont.value) 2f else compose.activity.resources.configuration.fontScale,
+            layouts.single().layoutInput.density.fontScale,0.01f)
     }
     private fun text(id: Int)=InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
     private fun enter(roomTarget: Boolean=true) {
@@ -188,7 +205,7 @@ class CompletionJourneyTest {
         compose.onNodeWithTag("dm_send").assertIsNotEnabled()
     }
     @Test fun constrainedLargeFontRoomKeepsTheInputSendAnd48DpDetailsChoicesReachable() {
-        compose.runOnIdle { constrained.value=true;largeFont.value=true };enter();type("@An");loaded()
+        compose.runOnIdle { constrained.value=true;font200() };enter();type("@An");loaded()
         compose.onNodeWithTag("conversation_composer").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
         compose.onAllNodesWithTag("completion_choices").assertCountEquals(0)
@@ -205,10 +222,11 @@ class CompletionJourneyTest {
         compose.runOnIdle { assertSame(reply,room.state.value.composerReply);assertEquals("@Ann ",room.state.value.draft);assertEquals(0,api.rooms.sends) }
     }
     @Test fun aLongNameAt200PercentKeepsItsFullAccessibleLabelAndBounded48DpChoice() {
-        compose.runOnIdle { largeFont.value=true };enter();type("@L");loaded();details()
+        compose.runOnIdle { font200() };enter();type("@L");loaded();details()
         val button=compose.onNode(hasTestTag("completion_candidate:0") and hasAnyAncestor(isDialog()))
             .performScrollTo().assertIsDisplayed().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
             .assertContentDescriptionEquals("@"+longName)
+        assertDialogFont()
         val bounds=button.fetchSemanticsNode().boundsInRoot
         assertTrue(bounds.width<=compose.activity.resources.displayMetrics.widthPixels)
         choose();assertEquals("@${longName} ",characters("conversation_composer"))
@@ -230,7 +248,7 @@ class CompletionJourneyTest {
         compose.runOnIdle { assertEquals("NoMatch",room.state.value.draft);assertEquals(0,api.rooms.sends) }
     }
     @Test fun hiddenSuggestionsLeaveEnterAvailableForANewline() {
-        compose.runOnIdle { constrained.value=true;largeFont.value=true };enter();type("@An");loaded()
+        compose.runOnIdle { constrained.value=true;font200() };enter();type("@An");loaded()
         compose.onAllNodesWithTag("completion_choices").assertCountEquals(0)
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_ENTER)
         compose.waitForIdle()
@@ -301,6 +319,7 @@ class CompletionJourneyTest {
         compose.runOnIdle {
             runBlocking { settingsStore.saveTheme(if (dark) ThemePreference.DARK else ThemePreference.LIGHT) }
             largeFont.value=large;completionEnabled.value=false
+            if (large) render(compose.activity)
         }
         enter();type("@A")
         val label=(if (dark) "dark" else "light")+if (large) "-font200" else "-default"
@@ -312,6 +331,7 @@ class CompletionJourneyTest {
         compose.onNodeWithTag("conversation_composer").performTextInput("n");loaded();details()
         compose.onNode(hasTestTag("completion_candidate:0") and hasAnyAncestor(isDialog()))
             .assertIsDisplayed().assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
+        assertDialogFont()
         capture("$label-after-details")
         compose.onNode(hasText(text(R.string.rooms_close)) and hasAnyAncestor(isDialog())).assertIsDisplayed().performNativeTap()
     }
