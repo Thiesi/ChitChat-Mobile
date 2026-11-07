@@ -18,6 +18,7 @@ a substitute.
 | [visual-vocabulary.md](visual-vocabulary.md) | Color, shape, type, iconography, motion and illustration: the identity kit |
 | [communication.md](communication.md) | How CCM tells people what is happening: status ladder, connectivity, delivery, voice |
 | [onboarding.md](onboarding.md) | First launch to first message |
+| [invite-codes.md](invite-codes.md) | Sharing and scanning the server address as a QR code or link (D5) |
 | [amoled-black.md](amoled-black.md) | The true-black dark variant required before going live |
 | [acceptance.md](acceptance.md) | Accessibility and readability floors, plus numbered, testable presentation requirements |
 | [mockups/](mockups/) | Source of the mockup canvas: 13 phone screens and a vocabulary sheet |
@@ -43,7 +44,7 @@ rather than fake it:
 - Room previews or recency ordering in the room list: the directory API has no last-message
   summary. Room rows show the room's info line instead.
 - Admin "Looking after this server" card, guest visits and moderation actions: M7.
-- Invite QR codes: approved (D5), not yet implemented or scheduled.
+- Invite QR codes: specified in invite-codes.md (D5), not yet implemented or scheduled.
 
 ## Approved decisions (maintainer, 2026-11-07)
 
@@ -53,7 +54,7 @@ rather than fake it:
 | D2 | Display font | Bundle **Bricolage Grotesque** (SIL OFL, variable, subset to Latin plus Latin Extended) for display text only; message and UI text stays on the system font. Measure and report the APK size cost in the implementing PR (estimate 100–200 KB). Keep the OFL license text with the other licenses. |
 | D3 | Navigation | Bottom bar **Rooms · Direct · Activity · You**, replacing the current Home hub. |
 | D4 | Material You dynamic color | **Off.** |
-| D5 | Invite codes | A client-only QR/link format carrying only the server origin (no credentials, tokens, usernames or room IDs), scanned during onboarding; server confirmation (onboarding step 3) is always shown. |
+| D5 | Invite codes | A client-only QR/link carrying only the server origin (no credentials, tokens, usernames or room IDs), scanned during onboarding; server confirmation (onboarding step 3) is always shown. Specified in [invite-codes.md](invite-codes.md) as the plain HTTPS origin, so the same code also opens the web client for people without the app. |
 | D6 | Palettes | Lantern is the default. When account palettes arrive (M6), an account palette may replace the hue tokens while shapes, chit, type and status language stay. High-contrast stays available. **An "AMOLED black" theme must exist before CCM goes live** (see visual-vocabulary.md). |
 | D7 | Backend data | Backend issues filed: [presence count #153](https://github.com/Thiesi/ChitChat/issues/153) and [last activity time #154](https://github.com/Thiesi/ChitChat/issues/154) per joined room. Until the server provides them, room lists show neither. |
 
