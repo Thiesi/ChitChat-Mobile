@@ -1,6 +1,6 @@
 # Backend contract and compatibility
 
-[M5d4b completion state](milestones/M5d4b-completion-state.md) keeps existing endpoints/session transport. Default8 prefix hints and one existing25-member empty-prefix IRC seed use original response-specific limits. DM uses only its peer; room reserved names remain broadcasts. No backend patch, new API or native control is claimed.
+[M5d4c native mention completion](milestones/M5d4c-native-mention-completion.md) uses the reviewed M5d4b state and existing original-session GET. Room broadcasts remain explicit; DM and local Tab completion use only their intended names. UI changes grant no send/read/typing/notification authority and add no backend API.
 
 [M5d4a room mention candidates](milestones/M5d4a-room-mention-protocol.md) reuses existing GET rooms/mentionable-users.php and the same original-session transport, without another endpoint/cache or policy mutation. Current underscore LIKE behavior is retained as a compatible response shape and tracked in [backend152](https://github.com/Thiesi/ChitChat/issues/152); native controls remain separate.
 

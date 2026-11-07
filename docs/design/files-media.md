@@ -86,12 +86,17 @@ and [communication.md](communication.md). Nothing renders as a bubble before the
 | Definite failure (server error before commit, too large, type not allowed, membership, 429 DM limit, block) | A level-2 notice with the server's meaning: "Your server refused this file: it's too large." / "This file type isn't allowed on this server." / "You've reached the upload limit for direct messages. Try again later." The file stays attached | Remove or replace, or send again later |
 | **Unknown** (connection lost after the body was sent, timeout, ambiguous transport error) | The `unsureLine` notice: **"Not sure your file arrived."** with **Check history**. The file and caption stay attached | Check history runs the existing explicit reconciliation. If the message isn't found, the duplicate-risk dialog follows: "Send again? We checked and couldn't find it. Sending again may post it twice." |
 
-- **Reconciliation hint (optional, engineering decision):** the client may compute the SHA-256
-  of the picked file before upload. During Check history, a message of the viewer's own with
-  the same `sha256` sent after the attempt started is offered as **evidence** ("We found your
-  file 'diagram.png' sent at 18:02. Is this it?"). It never resolves the state automatically,
-  and it isn't text deduplication. The person confirms or chooses to send again, as with
-  messages.
+- **Reconciliation evidence (approved by the technical lead, 2026-11-07, PR #105):** the client
+  computes the SHA-256 of the picked file. During Check history, a message of the viewer's own
+  with the same `sha256`, sent after the attempt started, is offered as **evidence** ("We found
+  your file 'diagram.png' sent at 18:02. Is this it?"). Constraints:
+  - one streaming read, the digest never logged or persisted;
+  - only the viewer's own messages after the attempt start;
+  - the person must confirm, and a match never resolves the state automatically;
+  - no match falls through to the existing duplicate-risk dialog;
+  - a message with no `sha256` is never evidence.
+
+  This isn't text deduplication.
 - **Send when back online doesn't apply to attachments.** Offline, Send with an attachment
   stays available and fails definitely if it can't reach the server, or it is disabled with
   "Attachments can't wait for the connection" if engineering prefers that. Attachment drafts
@@ -143,9 +148,9 @@ The policy is local and read from existing system state, with no new requests:
 - Requests use `inline=1`, the existing session transport and same-origin rules. No disk
   cache: decoded bitmaps go into a bounded **memory-only** cache, cleared on sign-out, account
   switch and generation change. Decode with downsampling to the displayed size.
-- **Decision needed (technical lead):** whether to offer a setting ("Show photos
-  automatically: on Wi-Fi / always / never") in this slice or later. The default above stands
-  either way.
+- **Setting deferred** (technical lead, 2026-11-07): a "Show photos automatically: on Wi-Fi /
+  always / never" setting belongs to the later settings work. The files slice ships only the
+  fixed default above.
 
 ## Full-screen viewer
 
