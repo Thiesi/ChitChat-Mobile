@@ -178,8 +178,10 @@ the collapsed row), and the muted line "Message from someone you ignore" with **
      Your text is still in the box.";
   4. typing (existing `TypingStatus`): honey dots plus "Lena is typing", with the existing
      expiry. No animation when backgrounded.
-- Offline (communication.md): Send is disabled with the accessible reason "Send, waiting for
-  connection". The field stays editable, and nothing is sent automatically on reconnect.
+- Offline: pressing Send marks the draft waiting ("Will send when you're back online." with
+  Cancel above the composer, the field read-only while waiting). It is sent once on
+  reconnect while the app is visible, never retried. Full behavior:
+  [status-presentation.md](status-presentation.md).
 - The suggestion chips from `RoomEmpty` insert text only (P-33).
 
 ## Room and DM header

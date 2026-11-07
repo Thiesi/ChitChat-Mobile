@@ -34,7 +34,7 @@ presentation rules:
 | State | Detection | What the person sees |
 |---|---|---|
 | Online | Normal | Nothing. No "connected" badge. |
-| Device offline | `ConnectivityManager` network callback (event-driven, no polling) | Notice: **"No connection.** You can read and write. Sending waits until you're back." Send is disabled with the accessible label "Send, waiting for connection". Drafts stay in the box. |
+| Device offline | `ConnectivityManager` network callback (event-driven, no polling) | Notice: **"No connection.** You can read and write. Messages you send will go out when you're back, while ChitChat is open." Pressing Send marks the draft "Will send when you're back online" (one per conversation, cancellable); it is sent once on reconnect while the app is open, never retried. See [status-presentation.md](status-presentation.md). |
 | Server unreachable while the device is online | Failed requests or stream errors | Notice: **"Can't reach Schmidt Family Chat.** We'll keep trying." (installation name, else host). No technical codes in the strip; details live behind "Details". |
 | Reconnecting | Stream reconnect in progress after a drop | Header subtitle: "Reconnecting…" (level 1). Escalate to the notice only if it lasts longer than about 5 s. |
 | Back | First successful reconciliation after a drop | The notice turns into "Back online" for about 2 s, then disappears. Content updates in place without jumping the scroll position. |
@@ -42,11 +42,13 @@ presentation rules:
 
 What reconnection does and does not imply:
 
-- Reconnecting refreshes what is shown. It never sends anything on the person's behalf.
-  Drafts that were waiting stay drafts until the person presses Send.
+- Reconnecting refreshes what is shown. The only thing it may send is a draft the person
+  explicitly marked with Send while offline, and only once, while the app is visible. Every
+  other draft stays a draft until the person presses Send.
 - Content loaded before the drop stays visible while offline, with a quiet marker at the
-  live edge: "Loaded at 17:58. Newer messages appear when you reconnect." Do not blank the
-  screen or show a spinner over readable content.
+  live edge: "Newer messages appear when you reconnect." Prefix "Loaded at 17:58." only
+  where the screen already records its last load time. Do not blank the screen or show a
+  spinner over readable content. Implementation: [status-presentation.md](status-presentation.md).
 - Presence and typing are unknown while offline. Show "Who's here is unknown while
   offline" rather than a stale count.
 
