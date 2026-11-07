@@ -11,6 +11,8 @@ import io.github.thiesi.chitchat.core.search.*
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.targets.MessageTarget
+import io.github.thiesi.chitchat.core.targets.TargetRequest
+import io.github.thiesi.chitchat.core.direct.validatedDirectPrivacy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -23,7 +25,8 @@ class MessageSearchEntry internal constructor(internal val original: SessionStat
     fun matches(current: SessionState) = original.searchOwner() != null && original.searchOwner() == current.searchOwner()
 }
 class MessageSearchAttempt internal constructor(val entry: MessageSearchEntry, val request: MessageSearchRequest)
-class MessageSearchResults internal constructor(val attempt: MessageSearchAttempt, val page: MessageSearchPage)
+class MessageSearchResults internal constructor(val attempt: MessageSearchAttempt, val page: MessageSearchPage,
+    val accessFiltered: Boolean = false)
 class MessageSearchSelection internal constructor(val results: MessageSearchResults, val hit: MessageSearchHit) {
     /** A hint for fresh exact-target lookup, never authorization or canonical adoption. */
     val target: MessageTarget get() = when (val row = hit) {
@@ -31,6 +34,9 @@ class MessageSearchSelection internal constructor(val results: MessageSearchResu
         is MessageSearchHit.Direct -> MessageTarget.DirectMessage(row.peer.id, row.messageId)
     }
 }
+/** Owned GET reference only. Release must reference the target actor, never an Activity/View. */
+class MessageSearchTargetBinding internal constructor(val selection: MessageSearchSelection,
+    val request: TargetRequest, internal val release: (TargetRequest) -> Unit)
 data class MessageSearchState(
     val entry: MessageSearchEntry? = null,
     val query: String = "",
@@ -38,6 +44,7 @@ data class MessageSearchState(
     val pending: MessageSearchAttempt? = null,
     val results: MessageSearchResults? = null,
     val selection: MessageSearchSelection? = null,
+    val targetBinding: MessageSearchTargetBinding? = null,
     val failedAttempt: MessageSearchAttempt? = null,
     val error: ApiFailure? = null,
     val inputTooLong: Boolean = false,
@@ -98,11 +105,13 @@ class MessageSearchViewModel(private val operations: MessageSearchOperations,
         if (!usable(entry)) return false
         if (value.length > MAX_QUERY_UNITS) {
             inputRevision++
+            retireSelection()
             mutable.value = mutable.value.copy(inputTooLong = true, selection = null, failedAttempt = null, error = null)
             return false
         }
         if (value == mutable.value.query && !mutable.value.inputTooLong) return true
         inputRevision++
+        retireSelection()
         mutable.value = mutable.value.copy(query = value, inputTooLong = false, selection = null,
             failedAttempt = null, error = null)
         return true
@@ -110,6 +119,7 @@ class MessageSearchViewModel(private val operations: MessageSearchOperations,
     fun scope(entry: MessageSearchEntry, value: MessageSearchScope) {
         if (usable(entry) && mutable.value.scope != value) {
             inputRevision++
+            retireSelection()
             mutable.value = mutable.value.copy(scope = value, selection = null, failedAttempt = null, error = null)
         }
     }
@@ -145,6 +155,7 @@ class MessageSearchViewModel(private val operations: MessageSearchOperations,
         val attempt = MessageSearchAttempt(entry, request)
         val token = ++sequence
         val originalInputRevision = inputRevision
+        retireSelection()
         mutable.value = mutable.value.copy(pending = attempt, selection = null, failedAttempt = null, error = null)
         val work = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
@@ -171,18 +182,66 @@ class MessageSearchViewModel(private val operations: MessageSearchOperations,
 
     fun select(entry: MessageSearchEntry, results: MessageSearchResults, hit: MessageSearchHit): MessageSearchSelection? {
         if (!browsing(entry, results) || results.page.results.none { it === hit }) return null
+        retireSelection()
         val choice = MessageSearchSelection(results, hit)
         mutable.value = mutable.value.copy(selection = choice)
         return choice
     }
     fun cancelSelection(choice: MessageSearchSelection) {
-        if (mutable.value.selection === choice) mutable.value = mutable.value.copy(selection = null)
+        if (mutable.value.selection === choice) retireSelection()
+    }
+    private fun targetChoiceCurrent(choice: MessageSearchSelection) = mutable.value.selection === choice &&
+        browsing(choice.results.attempt.entry, choice.results) &&
+        (choice.results.attempt.request.scope == MessageSearchScope.ROOMS ||
+            runCatching { validatedDirectPrivacy(session.value.privacy) }.isSuccess)
+
+    /** Bind the root's original load before any asynchronous adoption effect can run. */
+    fun bindTarget(choice: MessageSearchSelection, request: TargetRequest,
+        release: (TargetRequest) -> Unit): MessageSearchTargetBinding? {
+        if (!targetChoiceCurrent(choice) || request.original !== choice.results.attempt.entry.original ||
+            !request.matches(session.value) || request.target != choice.target) return null
+        val old = mutable.value.targetBinding
+        if (old?.selection === choice && old.request === request) return old
+        if (old != null) {
+            mutable.value = mutable.value.copy(targetBinding = null)
+            old.release(old.request)
+            if (!targetChoiceCurrent(choice) || !request.matches(session.value)) return null
+        }
+        val binding = MessageSearchTargetBinding(choice, request, release)
+        mutable.value = mutable.value.copy(targetBinding = binding)
+        return binding
+    }
+    fun cancelTarget(binding: MessageSearchTargetBinding) {
+        if (mutable.value.targetBinding === binding) retireSelection()
+    }
+    /** Confirmed resource denial retires its cached excerpts; missing IDs are not a denial. */
+    fun targetDenied(binding: MessageSearchTargetBinding, request: TargetRequest, failure: ApiFailure) {
+        if (mutable.value.targetBinding !== binding || binding.request !== request ||
+            !request.matches(session.value) || !belongs(binding.selection.results.attempt.entry) ||
+            failure.status !in setOf(403, 404) || failure.code == "csrf_failed") return
+        val results = mutable.value.results ?: return
+        val target = request.target
+        val retained = results.page.results.filterNot { hit -> when (target) {
+            is MessageTarget.RoomMessage -> hit is MessageSearchHit.Room && hit.room.id == target.roomId
+            is MessageTarget.DirectMessage -> hit is MessageSearchHit.Direct && hit.peer.id == target.peerId
+            is MessageTarget.RoomPing -> false
+        } }
+        retireSelection()
+        mutable.value = mutable.value.copy(results = MessageSearchResults(results.attempt,
+            MessageSearchPage(retained, results.page.hasMore, results.page.nextOffset), accessFiltered = true),
+            failedAttempt = null, error = failure)
+    }
+    /** Called only inside the shared target actor's fresh, policy-rebound adoption callback. */
+    fun adoptTarget(binding: MessageSearchTargetBinding, request: TargetRequest, accept: () -> Boolean): Boolean {
+        if (mutable.value.targetBinding !== binding || binding.request !== request ||
+            !request.matches(session.value) || !targetChoiceCurrent(binding.selection)) return false
+        return adopt(binding.selection) { accept() }
     }
     /** Busy/rejecting native consumers keep their choice; successor selections remain untouched. */
     fun adopt(choice: MessageSearchSelection, accept: (MessageSearchSelection) -> Boolean): Boolean {
         if (mutable.value.selection !== choice || !browsing(choice.results.attempt.entry, choice.results)) return false
         if (!accept(choice)) return false
-        if (mutable.value.selection === choice) mutable.value = mutable.value.copy(selection = null)
+        if (mutable.value.selection === choice) retireSelection()
         return true
     }
 
@@ -195,7 +254,12 @@ class MessageSearchViewModel(private val operations: MessageSearchOperations,
         if (!belongs(entry)) return
         active = false; retire(); mutable.value = MessageSearchState()
     }
-    private fun retire() { sequence++; job?.cancel(); job = null }
+    private fun retireSelection() {
+        val old = mutable.value.targetBinding
+        mutable.value = mutable.value.copy(selection = null, targetBinding = null)
+        old?.release?.invoke(old.request)
+    }
+    private fun retire() { sequence++; job?.cancel(); job = null; retireSelection() }
     override fun onCleared() {
         cleared = true; active = false; retire(); owner = null; mutable.value = MessageSearchState()
         super.onCleared()
