@@ -54,7 +54,7 @@ rather than fake it:
 | D4 | Material You dynamic color | **Off.** |
 | D5 | Invite codes | A client-only QR/link format carrying only the server origin (no credentials, tokens, usernames or room IDs), scanned during onboarding; server confirmation (onboarding step 3) is always shown. |
 | D6 | Palettes | Lantern is the default. When account palettes arrive (M6), an account palette may replace the hue tokens while shapes, chit, type and status language stay. High-contrast stays available. **An "AMOLED black" theme must exist before CCM goes live** (see visual-vocabulary.md). |
-| D7 | Backend data | File backend issues proposing a directory presence count and last-activity time per joined room. Until the server provides them, room lists show neither. |
+| D7 | Backend data | Backend issues filed: [presence count #153](https://github.com/Thiesi/ChitChat/issues/153) and [last activity time #154](https://github.com/Thiesi/ChitChat/issues/154) per joined room. Until the server provides them, room lists show neither. |
 
 Ask the maintainer before deciding any similar consequential question that is not listed
 here.
