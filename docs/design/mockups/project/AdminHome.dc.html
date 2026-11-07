@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin account home</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}.row{min-height:56px}</style>
+</helmet>
+<div class="ccm dark">
+  <div class="inset"></div>
+  <div style="display: flex; gap: 16px; align-items: center; padding: 16px 20px 12px;">
+    <span class="av h-honey" style="width: 64px; height: 64px; font-size: 26px;">M</span>
+    <div>
+      <div class="display" style="font-size: 26px; font-weight: 800;">Mara</div>
+      <div style="display: flex; gap: 6px; align-items: center; margin-top: 4px;"><span class="role admin">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px; stroke-width: 2.5;"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path></svg>ADMIN</span>
+        <span style="font-size: 13px; color: var(--text-2);">Schmidt Family Chat</span></div>
+    </div>
+  </div>
+
+  <div style="padding: 4px 16px 8px;">
+    <div class="card" style="border-color: var(--dusk-dark); border-width: 1.5px; padding: 6px 0;">
+      <div style="padding: 10px 16px 4px; font-size: 13px; font-weight: 700; color: var(--dusk-dark); letter-spacing: 0.03em;">LOOKING AFTER THIS SERVER</div>
+      <div class="row">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--dusk-dark);"><path d="M5 21V4M5 4h11l-2 4 2 4H5"></path></svg>
+        <div class="main"><div class="name" style="font-size: 15px;">Reports waiting</div><div class="line">Oldest 3 hours ago</div></div>
+        <span class="badge" style="background: var(--dusk-dark);">2</span>
+      </div>
+      <div class="row">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--dusk-dark);"><circle cx="12" cy="8" r="4"></circle><path d="M4.5 20a7.5 7.5 0 0 1 15 0" stroke-dasharray="3 3"></path></svg>
+        <div class="main"><div class="name" style="font-size: 15px;">Guests visiting</div><div class="line">1 guest in General</div></div>
+      </div>
+      <div class="row">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--dusk-dark);"><path d="M3 12h4l3-7 4 14 3-7h4"></path></svg>
+        <div class="main"><div class="name" style="font-size: 15px;">Server status</div><div class="line">All checks passing</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section"><span>YOU</span></div>
+  <div class="row"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20.5a2 2 0 0 0 4 0"></path></svg><div class="main"><div class="name" style="font-size: 15px;">Notifications</div><div class="line">Mentions and pings · quiet 22:00–7:00</div></div></div>
+  <div class="row"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 3.5v17A8.5 8.5 0 0 0 12 3.5z" fill="currentColor"></path></svg><div class="main"><div class="name" style="font-size: 15px;">Appearance</div><div class="line">Lantern · follows system</div></div></div>
+  <div class="row"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><div class="main"><div class="name" style="font-size: 15px;">Privacy and security</div><div class="line">Typing, ignored people, sign-in</div></div></div>
+  <div class="row"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg><div class="main"><div class="name" style="font-size: 15px;">Export my data</div></div></div>
+
+  <span class="spacer"></span>
+  <nav class="navbar" aria-label="Main">
+    <a class="tab" href="Home.dc.html"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="13" rx="6"></rect><circle cx="19" cy="20" r="1.8"></circle></svg></span>Rooms</a>
+    <a class="tab" href="DirectInbox.dc.html"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4.5 20a7.5 7.5 0 0 1 15 0"></path></svg></span>Direct</a>
+    <a class="tab" href="Activity.dc.html"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20.5a2 2 0 0 0 4 0"></path></svg></span>Activity</a>
+    <a class="tab on" href="AdminHome.dc.html" aria-current="page"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="10" r="3"></circle><path d="M6.5 18.2a6.5 6.5 0 0 1 11 0"></path></svg></span>You<span class="dot" style="background: var(--dusk-dark);">2</span></a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

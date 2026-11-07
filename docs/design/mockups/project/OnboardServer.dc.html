@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Where do you chat</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div class="appbar">
+    <a class="icon-btn" href="Main.dc.html" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <span style="flex-grow: 1;"></span>
+    <span class="sub" style="padding-right: 12px;">Step 1 of 2</span>
+  </div>
+  <div style="padding: 8px 24px 0; display: flex; flex-direction: column; gap: 20px; flex-grow: 1;">
+    <h1 class="display" style="margin: 0; font-size: 34px; line-height: 1.08; font-weight: 800;">Where do you chat?</h1>
+    <p style="margin: 0; color: var(--text-2); font-size: 16px;">Type the address of your community's ChitChat. Whoever invited you knows it. It looks like a website address.</p>
+    <div>
+      <label class="label" for="srv">Server address</label>
+      <input id="srv" class="input focus" value="chat.schmidt.family" autocomplete="url">
+      <div class="hint">We always connect securely (HTTPS). You can switch servers later from your account.</div>
+    </div>
+    <div class="card" style="display: flex; gap: 14px; align-items: center; background: var(--raised); border: 0;">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--accent-text);"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><path d="M14 14h3v3M14 21h7v-4"></path></svg>
+      <div style="flex-grow: 1; font-size: 14px;"><b>Got an invite code?</b><br><span style="color: var(--text-2);">Scan it and the address fills itself in.</span></div>
+      <button class="btn text sm">Scan</button>
+    </div>
+    <span class="spacer"></span>
+  </div>
+  <div style="padding: 0 24px 28px;">
+    <a class="btn" href="OnboardFound.dc.html" style="width: 100%;">Continue</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
