@@ -153,5 +153,6 @@ A persimmon squircle bubble with two ink "eyes", and a small persimmon chit at i
 lower right, optionally inside a honey glow. Launcher icon: the bubble and chit on Night
 ink, adaptive-icon safe zone respected, monochrome themed-icon variant provided. The
 existing banner (`docs/assets/chitchat-banner.png`, blue glowing bubbles) belongs to the
-web project and is not the CCM mark. Final public identity remains a maintainer decision
-(see `AGENTS.md`).
+web project and is not the CCM mark. The mark and launcher icon are identical in every
+theme, including AMOLED black. Final public identity remains a maintainer decision (see
+`AGENTS.md`).
