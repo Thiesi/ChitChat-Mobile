@@ -63,7 +63,7 @@ review on the canvas sizes, **M** manual check on a device or emulator, **R** co
 | P-22 | Delivery states render exactly as specified: Sending, Sent, Not sure (honey outline plus Check), Failed (text restored). The duplicate-risk dialog appears only after an explicit Check that did not find the message. | C, existing unknown-send tests |
 | P-23 | No snackbar or toast carries information needed later. Errors name what happened, what was affected and what the person can do. | R |
 | P-24 | Required disclosures in communication.md stay visible without scrolling past the first screen of their surface. | S |
-| P-25 | Status presentation adds no timers, polling, wake locks or background work. Animations run only while visible in the foreground and none loops indefinitely. | R, U where practical |
+| P-25 | Status presentation adds no polling, wake locks or background work. The short UI timers the spec calls for (about 2 s "Back online" dismissal, about 5 s reconnect escalation, about 2 s placeholder animation limit) are bound to the composition or lifecycle that shows them and cancelled when it leaves or the app goes to the background. Animations run only while visible in the foreground and none loops indefinitely. | R, U where practical |
 
 ### Structure and onboarding
 

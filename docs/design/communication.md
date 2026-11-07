@@ -51,8 +51,10 @@ What reconnection does and does not imply:
   offline" rather than a stale count.
 
 Battery: these states come from callbacks and from the existing foreground stream. Never
-add timers, polling or wake-ups to keep a status indicator fresh. In the background, CCM
-shows nothing because it renders nothing.
+add polling or wake-ups to keep a status indicator fresh. The only timers allowed are the
+short presentation delays above (dismissing "Back online", escalating "Reconnecting…"),
+bound to the visible UI and cancelled when it leaves or the app goes to the background. In
+the background, CCM shows nothing because it renders nothing.
 
 ## Message delivery
 
