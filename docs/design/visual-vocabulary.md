@@ -23,7 +23,7 @@ one theme module (see [acceptance.md](acceptance.md), P-01). Feature screens use
 | `outgoing` | Apricot `#FFD9C4` | Ember `#8A3A1E` | Your bubbles |
 | `onOutgoing` | `#14111C` | `#F2EDF7` | Text on your bubbles (14.2:1 / 6.7:1) |
 | `presence` | Honey `#FFB547` | Honey `#FFB547` | Presence glow and dot, typing dots, mention badge |
-| `unsureLine` | Dark amber `#8F5B00` | Honey `#FFB547` | "Not sure this arrived" bubble outline and pill border (light: 4.4:1 on apricot, 5.4:1 on paper; dark: 4.4:1 on ember, 10.6:1 on night ink). Honey itself is only about 1.7:1 on light grounds, so it is never a boundary color there |
+| `unsureLine` | Dark amber `#8F5B00` | Honey `#FFB547` | The uncertain-send notice border above the composer, and the requested-message ring (light: 4.4:1 on apricot, 5.4:1 on paper; dark: 4.4:1 on ember, 10.6:1 on night ink). Honey itself is only about 1.7:1 on light grounds, so it is never a boundary color there |
 | `presenceWash` | `#FFF0D2` | `#4A3A1C` | Mention highlight background, warning strip |
 | `steward` | Dusk `#3D52C4` | Dusk `#A9B6FF` | Admin and moderation, links (6.1:1 / 7.9:1) |
 | `error` | Rose `#C4314B` | Rose `#FF8A9B` | Errors and destructive confirmation only (5.1:1 / 7.8:1) |

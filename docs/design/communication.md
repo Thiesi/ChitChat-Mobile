@@ -58,15 +58,17 @@ the background, CCM shows nothing because it renders nothing.
 
 ## Message delivery
 
-Shown under or inside your own bubble only. Other people's messages never carry delivery
-states.
+CCM shows a message as a bubble only after the server has confirmed it. There is no local
+"sending" bubble, because that would need text-based deduplication, which the contracts
+forbid. So delivery states live on the **composer**, never on bubbles, and other people's
+messages never carry delivery states. Details: [transcript-restyle.md](transcript-restyle.md).
 
 | State | Visual | Words | Actions |
 |---|---|---|---|
-| Sending | Bubble at reduced emphasis, small clock icon | "Sending" | none |
-| Sent (server confirmed) | Normal bubble | Time only; "Sent" under the latest one if useful | none |
-| Not sure it arrived (ambiguous result) | Bubble keeps full emphasis with a 2dp `unsureLine` inset outline (honey in dark, dark amber in light) | Pill: "Not sure this arrived · Check" | **Check** runs the explicit history check. If the message is found, it becomes Sent. If not, a level-3 decision follows: "Send again? We checked and couldn't find it. Sending again may post it twice." with **Keep as draft** and **Send again**. |
-| Failed before delivery (definitely not sent) | No bubble; notice above composer | "Couldn't send '…'. Nothing was delivered. Your text is back in the box." | The text is restored to the composer |
+| Sending | Send shows a progress ring; the field is read-only | Send's label: "Sending" | none |
+| Sent (server confirmed) | The canonical row appears as your bubble; the field clears | Time in the bubble | none |
+| Not sure it arrived (ambiguous result) | Text stays in the field; a notice with a 1.5dp `unsureLine` border above the composer | "Not sure your last message arrived." | **Check history** runs the explicit reconciliation. If the message is found, it appears as a bubble and the field clears. If not, a level-3 decision follows: "Send again? We checked and couldn't find it. Sending again may post it twice." with **Keep as draft** and **Send again** |
+| Failed before delivery (definitely not sent) | Text stays in the field; a level-2 notice above the composer | "Couldn't send. Nothing was delivered. Your text is still in the box." | Edit and send again when ready |
 
 These map exactly to the existing unknown-delivery contracts: automatic entry or reconnect
 is not the explicit check, and "Send again" is the explicit duplicate-risk consent. CCM has
