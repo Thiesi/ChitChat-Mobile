@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Server found</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div class="appbar">
+    <a class="icon-btn" href="OnboardServer.dc.html" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <span style="flex-grow: 1;"></span>
+    <span class="sub" style="padding-right: 12px;">Step 2 of 2</span>
+  </div>
+  <div style="padding: 8px 24px 0; display: flex; flex-direction: column; gap: 22px; flex-grow: 1;">
+    <div class="card" style="display: flex; gap: 16px; align-items: center; padding: 20px;">
+      <div class="tile h-sea" style="width: 64px; height: 64px; border-radius: 22px; font-size: 28px;">S</div>
+      <div style="min-width: 0;">
+        <div class="display" style="font-size: 22px; font-weight: 700; line-height: 1.15;">Schmidt Family Chat</div>
+        <div style="font-size: 14px; color: var(--text-2); display: flex; gap: 6px; align-items: center; margin-top: 4px;">
+          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px;"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+          chat.schmidt.family
+        </div>
+      </div>
+    </div>
+    <h1 class="display" style="margin: 0; font-size: 32px; line-height: 1.1; font-weight: 800;">Found it. Are you new here?</h1>
+    <p style="margin: 0; color: var(--text-2); font-size: 16px;">This server decides who may join. If sign-up is closed, ask the person who runs it.</p>
+    <span class="spacer"></span>
+  </div>
+  <div style="padding: 0 24px 28px; display: flex; flex-direction: column; gap: 10px;">
+    <a class="btn" href="FirstRooms.dc.html">Create my account</a>
+    <a class="btn ghost" href="Home.dc.html">I already have one, sign in</a>
+    <button class="btn text">Look around as a guest</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

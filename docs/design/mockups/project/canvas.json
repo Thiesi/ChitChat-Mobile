@@ -1,0 +1,33 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-11-07T12:00:00Z"},
+  "title": "ChitChat Mobile — Lantern",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Vocabulary.dc.html": {"x": 0, "y": 0, "w": 1840, "h": 900, "title": "Visual vocabulary"},
+    "Main.dc.html": {"x": 0, "y": 1300, "w": 390, "h": 844, "title": "1 Welcome (first launch)"},
+    "OnboardServer.dc.html": {"x": 470, "y": 1300, "w": 390, "h": 844, "title": "2 Where do you chat?"},
+    "OnboardFound.dc.html": {"x": 940, "y": 1300, "w": 390, "h": 844, "title": "3 Server found"},
+    "FirstRooms.dc.html": {"x": 1410, "y": 1300, "w": 390, "h": 844, "title": "4 Find your people (new account)"},
+    "Home.dc.html": {"x": 0, "y": 2550, "w": 390, "h": 844, "title": "Rooms home, returning user (light)"},
+    "RoomCrowded.dc.html": {"x": 470, "y": 2550, "w": 390, "h": 844, "title": "Crowded room (dark)"},
+    "RoomEmpty.dc.html": {"x": 940, "y": 2550, "w": 390, "h": 844, "title": "Empty room (light)"},
+    "DirectInbox.dc.html": {"x": 1410, "y": 2550, "w": 390, "h": 844, "title": "Lots of DMs (dark)"},
+    "DirectThread.dc.html": {"x": 1880, "y": 2550, "w": 390, "h": 844, "title": "DM delivery states (light)"},
+    "Offline.dc.html": {"x": 0, "y": 3800, "w": 390, "h": 844, "title": "Offline, drafts kept (dark)"},
+    "AdminHome.dc.html": {"x": 470, "y": 3800, "w": 390, "h": 844, "title": "Admin home (dark)"},
+    "AdminRoom.dc.html": {"x": 940, "y": 3800, "w": 390, "h": 844, "title": "Admin message actions (light)"},
+    "Activity.dc.html": {"x": 1410, "y": 3800, "w": 390, "h": 844, "title": "Activity / notifications (light)"}
+  },
+  "order": ["Vocabulary.dc.html", "Main.dc.html", "OnboardServer.dc.html", "OnboardFound.dc.html", "FirstRooms.dc.html",
+    "Home.dc.html", "RoomCrowded.dc.html", "RoomEmpty.dc.html", "DirectInbox.dc.html", "DirectThread.dc.html",
+    "Offline.dc.html", "AdminHome.dc.html", "AdminRoom.dc.html", "Activity.dc.html"],
+  "notes": {
+    "tOnboard": {"x": 0, "y": 1020, "text": "First run: server first, people second", "kind": "title1", "maxW": 1800},
+    "tDaily": {"x": 0, "y": 2270, "text": "Everyday use", "kind": "title1", "maxW": 2270},
+    "tSituations": {"x": 0, "y": 3520, "text": "Situations: offline, admin, activity", "kind": "title1", "maxW": 1800},
+    "status": {"x": 1900, "y": 1300, "w": 380, "size": "m", "fill": "orange", "text": "APPROVED direction (D1–D7, 2026-11-07). Specification: docs/design/ in the ChitChat-Mobile repo. An AMOLED black theme is required before going live. Sample names and content are fictional. Room previews, liveliness glow in lists and admin reports cards depend on data the API does not yet provide; see the dependency notes in the spec."}
+  },
+  "designSystems": []
+}
