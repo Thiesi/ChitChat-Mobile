@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lantern visual vocabulary</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}
+.voc{width:1840px;height:900px;box-sizing:border-box;padding:48px 56px;background:#FBF7F1;color:#14111C;font-family:Roboto,system-ui,sans-serif;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:40px}
+.voc h2{font-family:"Bricolage Grotesque",sans-serif;font-size:15px;letter-spacing:.06em;margin:0 0 16px;color:#5E566B}
+.sw{display:flex;align-items:center;gap:12px;margin-bottom:10px;font-size:14px}
+.sw i{width:44px;height:44px;border-radius:12px;display:block;flex:none;border:1px solid rgba(20,17,28,.12)}
+.sw small{display:block;color:#5E566B;font-size:12px}
+.panel{border-radius:24px;padding:20px}
+</style>
+</helmet>
+<div class="voc">
+  <div style="display: flex; flex-direction: column; gap: 22px;">
+    <div class="panel" style="background: #14111C; color: #F2EDF7; display: flex; flex-direction: column; gap: 18px; padding: 28px;">
+      <svg width="104" height="88" viewBox="0 0 132 112" role="img" aria-label="Lantern mark">
+        <defs><radialGradient id="vg" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FFB547" stop-opacity="0.55"></stop><stop offset="100%" stop-color="#FFB547" stop-opacity="0"></stop></radialGradient></defs>
+        <circle cx="58" cy="50" r="56" fill="url(#vg)"></circle>
+        <rect x="14" y="10" width="88" height="72" rx="30" fill="#F06A3B"></rect>
+        <circle cx="108" cy="92" r="11" fill="#F06A3B"></circle>
+        <circle cx="42" cy="46" r="6" fill="#14111C"></circle><circle cx="74" cy="46" r="6" fill="#14111C"></circle>
+      </svg>
+      <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 44px; font-weight: 800; letter-spacing: -0.02em;">ChitChat</div>
+      <div style="font-size: 14px; color: #A79FB4;">The mark: a big bubble and its small "chit". Two eyes, no mouth: it listens. The honey glow means someone is here.</div>
+    </div>
+    <div>
+      <h2>TYPE</h2>
+      <div style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 34px; font-weight: 800; line-height: 1.05;">Come in. The lights are on.</div>
+      <div style="font-size: 13px; color: #5E566B; margin: 6px 0 14px;">Display: Bricolage Grotesque 600–800. Titles, room names in headers, empty states, onboarding.</div>
+      <div style="font-size: 16px;">Flights are booked for the 14th, landing 10:40.</div>
+      <div style="font-size: 13px; color: #5E566B; margin-top: 6px;">Text: system sans (Roboto). Messages, lists, controls. Follows the device font and font size.</div>
+    </div>
+  </div>
+
+  <div>
+    <h2>COLOR · SIGNATURE</h2>
+    <div class="sw"><i style="background: #F06A3B;"></i><div><b>Persimmon</b> #F06A3B<small>Primary actions, Send, unread, the chit. Ink text on it, never white.</small></div></div>
+    <div class="sw"><i style="background: #14111C;"></i><div><b>Night ink</b> #14111C<small>Dark ground and all text on warm fills.</small></div></div>
+    <div class="sw"><i style="background: #FBF7F1;"></i><div><b>Paper</b> #FBF7F1<small>Light ground. Warm, never pure white.</small></div></div>
+    <div class="sw"><i style="background: #FFB547;"></i><div><b>Honey</b> #FFB547<small>Presence glow, typing, mentions, "not sure" states.</small></div></div>
+    <h2 style="margin-top: 22px;">COLOR · SUPPORT</h2>
+    <div class="sw"><i style="background: #FFD9C4;"></i><div><b>Apricot</b> / <b>Ember</b> #8A3A1E<small>Your bubbles, light / dark.</small></div></div>
+    <div class="sw"><i style="background: #3D52C4;"></i><div><b>Dusk</b> #3D52C4 / #A9B6FF<small>Links and stewardship (admin, moderation). Cool means duty.</small></div></div>
+    <div class="sw"><i style="background: #C4314B;"></i><div><b>Rose</b> #C4314B / #FF8A9B<small>Errors and destructive confirmation only.</small></div></div>
+    <div style="display: flex; gap: 6px; margin-top: 14px;">
+      <span class="tile sm h-apricot">A</span><span class="tile sm h-honey">H</span><span class="tile sm h-lime">L</span><span class="tile sm h-sea">S</span><span class="tile sm h-sky">S</span><span class="tile sm h-lilac">L</span><span class="tile sm h-rose">R</span><span class="tile sm h-clay">C</span>
+    </div>
+    <div style="font-size: 12px; color: #5E566B; margin-top: 6px;">Eight identity hues for rooms and people, picked from a stable hash. Always ink text.</div>
+  </div>
+
+  <div class="ccm light" style="width: auto; height: auto; background: transparent; gap: 0;">
+    <h2>SHAPES</h2>
+    <div style="display: flex; gap: 22px; align-items: center; margin-bottom: 8px;">
+      <div style="text-align: center; font-size: 12px; color: #5E566B;"><div class="tile h-sky" style="margin: 0 auto 6px;">T</div>Room: squircle</div>
+      <div style="text-align: center; font-size: 12px; color: #5E566B;"><div class="av h-rose" style="margin: 0 auto 6px; width: 48px; height: 48px;">L</div>Person: circle</div>
+      <div style="text-align: center; font-size: 12px; color: #5E566B;"><div class="av" style="margin: 0 auto 6px; width: 48px; height: 48px; background: var(--raised); color: var(--text-2); border: 1.5px dashed var(--field-line);">V</div>Guest: dashed</div>
+    </div>
+    <h2 style="margin-top: 18px;">THE CHIT</h2>
+    <div style="display: flex; flex-direction: column; gap: 3px; background: var(--bg); padding: 4px 0;">
+      <div class="msg"><div class="bubble">First in a run: plain</div></div>
+      <div class="msg"><div class="bubble chit">Last in a run: the chit marks who spoke <span class="t">18:02</span></div></div>
+      <div class="msg mine" style="margin-top: 8px;"><div class="bubble chit">Yours sit right, in apricot <span class="t">18:03</span></div></div>
+    </div>
+    <h2 style="margin-top: 22px;">LIVELINESS</h2>
+    <div style="display: flex; gap: 26px; align-items: center;">
+      <div style="text-align: center; font-size: 12px; color: #5E566B;"><div class="tile h-lime" style="margin: 0 auto 8px;">K</div>Nobody here</div>
+      <div style="text-align: center; font-size: 12px; color: #5E566B;"><div class="tile h-lime glow" style="margin: 0 auto 8px;">K</div>People here</div>
+    </div>
+    <div style="font-size: 12px; color: #5E566B; margin-top: 8px;">The glow is always paired with words ("4 here now"). It never animates.</div>
+  </div>
+
+  <div class="ccm light" style="width: auto; height: auto; background: transparent; gap: 0;">
+    <h2>HOW CCM SPEAKS</h2>
+    <div style="font-size: 13px; color: #5E566B; margin-bottom: 8px;">1 · Ambient: in place, no interruption</div>
+    <div class="state unknown" style="justify-content: flex-start;"><span class="pill">Not sure this arrived · Check</span></div>
+    <div style="font-size: 13px; color: #5E566B; margin: 14px 0 8px;">2 · Notice: a strip under the header, stays while true</div>
+    <div class="strip offline" style="border-radius: 14px;"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.5a5 5 0 0 1 6 0M12 19v.01M3 3l18 18"></path></svg><span><b>No connection.</b> Sending waits until you're back.</span></div>
+    <div style="font-size: 13px; color: #5E566B; margin: 14px 0 8px;">3 · Decision: a dialog, only when you must choose</div>
+    <div class="card" style="font-size: 14px;"><b>Send again?</b><br><span style="color: #5E566B;">We checked and couldn't find it. Sending again may post it twice.</span>
+      <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px;"><button class="btn text sm">Keep as draft</button><button class="btn sm">Send again</button></div></div>
+    <h2 style="margin-top: 22px;">VOICE</h2>
+    <div style="font-size: 14px; line-height: 1.6;"><b>Say:</b> "4 here now" · "Nothing was delivered" · "Your text is back in the box"<br><b style="color: #C4314B;">Not:</b> "4 users online" · "Error 503" · "Oops! Something went wrong"</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

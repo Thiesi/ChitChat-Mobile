@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [Presentation direction](docs/design/README.md) ("Lantern", decisions D1–D7 approved 2026-11-07) is the presentation contract for new UI work. The coordinator sequences restyling slices; its tokens, signatures, status ladder, onboarding and A-*/P-* floors bind presentation slices, J-* standards are reviewed by the presentation lead, and behavior contracts here always take precedence. Leave out dependency-marked elements rather than faking data.
+
 - [Local disk hygiene](docs/local-disk-hygiene.md): fixed reused scratch folders per kind (never per run/head), keep evidence in `docs/` or PR/CI artifacts, `ccm-` prefixed temp removed after runs, shared Gradle home/ANDROID_USER_HOME, serial connected/full gates, one worktree per active branch, and run read-only `python -I tools/scratch_guard.py` before heavy runs; clean up rather than raising its limit. No force pushes or direct pushes to `main`.
 
 - [M5d4b completion state](docs/milestones/M5d4b-completion-state.md) binds original pane/owner/entry and complete UTF16 draft/caret snapshots. Keep8 @choices, distinct room broadcasts, peer-only DM hints and one25-member IRC seed. No POST/read/typing/duplicate-risk consent, query retry loop or saved content. Native controls follow separately; all old native/input contracts remain unchanged.

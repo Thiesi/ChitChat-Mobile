@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DM delivery states</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div class="appbar" style="padding-left: 4px; gap: 10px; border-bottom: 1px solid var(--line);">
+    <a class="icon-btn" href="DirectInbox.dc.html" aria-label="Back to direct messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <span class="av sm h-sky">O</span>
+    <div style="flex-grow: 1; min-width: 0;">
+      <div class="display" style="font-size: 19px; font-weight: 700;">Oma Hilde</div>
+      <div style="font-size: 13px; color: var(--text-2);">Direct message</div>
+    </div>
+    <button class="icon-btn" aria-label="Conversation details"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5.5" r="1.3"></circle><circle cx="12" cy="12" r="1.3"></circle><circle cx="12" cy="18.5" r="1.3"></circle></svg></button>
+  </div>
+
+  <div class="transcript">
+    <div class="day">Today</div>
+    <div class="msg"><div class="bubble">Did you get home safely, dear?</div></div>
+    <div class="msg"><div class="bubble chit">The train looked so full on the news. <span class="t">16:30</span></div></div>
+
+    <div class="msg mine" style="margin-top: 10px;"><div class="bubble chit">Yes! Home by 9, all good. <span class="t">16:41</span></div></div>
+    <div class="state" style="color: var(--text-2);">Sent</div>
+
+    <div class="msg mine"><div class="bubble chit unsure">Sending you the photos from the garden now <span class="t">16:42</span></div></div>
+    <div class="state unknown"><span class="pill">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px;"><circle cx="12" cy="12" r="8.5"></circle><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5M12 16.5v.01"></path></svg>
+      Not sure this arrived · Check</span></div>
+
+    <div class="msg mine"><div class="bubble chit pending">And the one of the cat <span class="t"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 13px; height: 13px;"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg>Sending</span></div></div>
+    <div style="height: 6px;"></div>
+  </div>
+
+  <div class="strip warn" role="status" style="margin: 0 10px; border-radius: 16px; font-size: 13px; align-items: flex-start;">
+    <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="flex: none; width: 20px; height: 20px;"><path d="M12 4l9 16H3z"></path><path d="M12 10v4M12 17v.01"></path></svg>
+    <span><b>Couldn't send "and the recipe".</b> Nothing was delivered. Your text is back in the box below.</span>
+  </div>
+  <div class="composer">
+    <div class="field" style="border: 2px solid var(--persimmon);"><span class="v filled">and the recipe</span></div>
+    <button class="send" aria-label="Send"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"></path></svg></button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

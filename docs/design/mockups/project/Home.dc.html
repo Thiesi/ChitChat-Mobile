@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rooms home</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div class="appbar">
+    <div style="flex-grow: 1; min-width: 0;">
+      <h1 class="display">Rooms</h1>
+      <div class="sub">Schmidt Family Chat</div>
+    </div>
+    <button class="icon-btn" aria-label="Search messages"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg></button>
+    <button class="icon-btn" aria-label="Your account"><span class="av sm h-honey" style="width: 34px; height: 34px;">M</span></button>
+  </div>
+
+  <div style="padding: 4px 16px 6px;">
+    <div class="card" style="background: var(--honey-wash); border: 0; display: flex; gap: 14px; align-items: center;">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--ink); flex: none;"><circle cx="12" cy="12" r="4"></circle><path d="M16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-3.5 7.1"></path></svg>
+      <div style="flex-grow: 1; color: var(--ink); font-size: 14px;"><b>Jonas mentioned you in Kitchen</b><br>"@Mara can you bring the big pot on Sunday?"</div>
+      <button class="btn text sm" style="color: var(--persimmon-text);">Open</button>
+    </div>
+  </div>
+
+  <div class="section"><span>YOUR ROOMS</span></div>
+  <div class="row">
+    <div class="tile h-lime">K</div>
+    <div class="main"><div class="name">Kitchen</div><div class="line">Recipes, disasters, Sunday plans</div></div>
+    <div class="side"><span class="badge at" aria-label="1 mention">@</span><span class="badge">12</span></div>
+  </div>
+  <div class="row">
+    <div class="tile h-sky glow">T</div>
+    <div class="main"><div class="name">Travel 2027</div><div class="line"><b>4 here now</b> · Planning the Lisbon trip</div></div>
+    <div class="side"><span class="badge">3</span></div>
+  </div>
+  <div class="row">
+    <div class="tile h-apricot">G</div>
+    <div class="main"><div class="name">General</div><div class="line"><span class="draft">Draft:</span> did anyone else get the new router</div></div>
+    <div class="side"></div>
+  </div>
+  <div class="row">
+    <div class="tile h-lilac">B</div>
+    <div class="main"><div class="name">Board games</div><div class="line">Who's in on Friday?</div></div>
+    <div class="side"><span class="badge quiet">99+</span></div>
+  </div>
+  <div class="row">
+    <div class="tile h-clay">
+      <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="position: absolute; right: -4px; bottom: -4px; width: 18px; height: 18px; background: var(--bg); border-radius: 9px; padding: 2px; color: var(--text-2);"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+      F</div>
+    <div class="main"><div class="name">Family admin</div><div class="line">Private · bills and paperwork</div></div>
+    <div class="side"></div>
+  </div>
+
+  <span class="spacer"></span>
+  <button class="fab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5M11 8v6M8 11h6"></path></svg>Find rooms</button>
+  <nav class="navbar" aria-label="Main">
+    <a class="tab on" href="Home.dc.html" aria-current="page"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="13" rx="6"></rect><circle cx="19" cy="20" r="1.8"></circle></svg></span>Rooms</a>
+    <a class="tab" href="DirectInbox.dc.html"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4.5 20a7.5 7.5 0 0 1 15 0"></path></svg></span>Direct<span class="dot">5</span></a>
+    <a class="tab" href="Activity.dc.html"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20.5a2 2 0 0 0 4 0"></path></svg></span>Activity<span class="dot">2</span></a>
+    <a class="tab" href="AdminHome.dc.html"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="10" r="3"></circle><path d="M6.5 18.2a6.5 6.5 0 0 1 11 0"></path></svg></span>You</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
