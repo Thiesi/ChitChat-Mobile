@@ -184,6 +184,27 @@
       "w": 1400,
       "h": 560,
       "title": "App mark and icons"
+    },
+    "RoomFiles.dc.html": {
+      "x": 0,
+      "y": 7550,
+      "w": 390,
+      "h": 844,
+      "title": "Files: image, tap-to-show, file card, upload progress (light)"
+    },
+    "ShareIn.dc.html": {
+      "x": 470,
+      "y": 7550,
+      "w": 390,
+      "h": 844,
+      "title": "Share in: Send to… (dark)"
+    },
+    "ImageViewer.dc.html": {
+      "x": 940,
+      "y": 7550,
+      "w": 390,
+      "h": 844,
+      "title": "Image viewer"
     }
   },
   "order": [
@@ -211,7 +232,10 @@
     "SignIn.dc.html",
     "CreateAccount.dc.html",
     "PushShade.dc.html",
-    "NotificationSettings.dc.html"
+    "NotificationSettings.dc.html",
+    "RoomFiles.dc.html",
+    "ShareIn.dc.html",
+    "ImageViewer.dc.html"
   ],
   "notes": {
     "tOnboard": {
@@ -295,6 +319,13 @@
       "size": "s",
       "fill": "gray",
       "text": "'41 members' / '3 members' in room headers have no data source yet; omit until an API provides member counts (room-presence.md)."
+    },
+    "tFiles": {
+      "x": 0,
+      "y": 7270,
+      "text": "Files and sharing (M5)",
+      "kind": "title1",
+      "maxW": 1330
     }
   },
   "designSystems": []

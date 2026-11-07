@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Send to</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="ccm dark">
+  <div class="inset"></div>
+  <div class="appbar" style="padding-left: 4px; gap: 8px;">
+    <a class="icon-btn" href="Home.dc.html" aria-label="Cancel sharing"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+    <h1 class="display" style="font-size: 24px;">Send to…</h1>
+  </div>
+  <div style="padding: 0 16px 8px;">
+    <div class="card" style="display: flex; gap: 12px; align-items: center; padding: 10px;">
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: linear-gradient(135deg,#7FD1C1,#8DB8F5 60%,#F5C451); flex: none;" role="img" aria-label="Shared photo"></div>
+      <div style="min-width: 0;"><div style="font-weight: 600;">IMG_2041.jpg</div><div class="hint" style="margin: 0;">Photo · 3.4 MB · nothing is sent until you press Send</div></div>
+    </div>
+  </div>
+  <div style="padding: 0 16px;"><div class="field" style="border-radius: 24px;"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 20px; height: 20px;"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg><span class="v">Search people and rooms</span></div></div>
+  <div class="section"><span>DIRECT</span></div>
+  <div class="row"><span class="av h-rose">L</span><div class="main"><div class="name">Lena Schmidt</div></div></div>
+  <div class="row"><span class="av h-sky">O</span><div class="main"><div class="name">Oma Hilde</div></div></div>
+  <div class="section"><span>ROOMS</span></div>
+  <div class="row"><div class="tile h-sky">T</div><div class="main"><div class="name">Travel 2027</div></div></div>
+  <div class="row"><div class="tile h-lime">K</div><div class="main"><div class="name">Kitchen</div></div></div>
+  <div class="row" style="opacity: 0.6;"><div class="tile h-apricot">A</div><div class="main"><div class="name">Announcements</div><div class="line">Reading only: you can't post files here</div></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
