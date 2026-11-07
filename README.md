@@ -8,6 +8,8 @@ The Android application uses Kotlin and Jetpack Compose with ChitChat's existing
 
 ## Current status
 
+[DM reaction state](docs/milestones/M5c3a-direct-reaction-state.md) extends the existing serialized thread actor with original peer/canonical choices, complete confirmations and explicit recovery that preserves separate send/read/block/author uncertainty. Native DM reaction controls remain pending. Historical PR71/issue69 failures remain negative; the current-base integration needs its own complete gates and written reviews.
+
 [Native participant search](docs/milestones/M5e3a-native-message-search.md) offers explicit All/Rooms/Direct queries, plain excerpts and bounded page navigation, with current-server DM privacy disclosures and private in-memory input. [Guarded original-message opening](docs/milestones/M5e3b-open-search-results.md) uses fresh exact-target lookup, current authorization and historical navigation without marking newer chat read.
 
 [Participant search state](docs/milestones/M5e2-message-search-state.md) supplies the private scoped query/page/selection actor now consumed by the native search screen. Foreground/session emissions never repeat a POST; exact-result opening binds the original selection to one fresh lookup request.

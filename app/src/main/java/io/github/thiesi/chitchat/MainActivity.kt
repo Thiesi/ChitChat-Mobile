@@ -44,7 +44,8 @@ class MainActivity : ComponentActivity() {
                 (application as ChitChatApplication).directMessages, (application as ChitChatApplication).realtime))
             val directThread: DirectThreadViewModel = viewModel(factory = DirectThreadViewModel.factory(
                 (application as ChitChatApplication).directMessages, (application as ChitChatApplication).realtime,
-                (application as ChitChatApplication).typing, (application as ChitChatApplication).messageMutations))
+                (application as ChitChatApplication).typing, (application as ChitChatApplication).messageMutations,
+                (application as ChitChatApplication).messageReactions))
             val targets: MessageTargetViewModel = viewModel(factory = MessageTargetViewModel.factory(
                 (application as ChitChatApplication).messageTargets))
             val notifications: NotificationCenterViewModel = viewModel(factory = NotificationCenterViewModel.factory(

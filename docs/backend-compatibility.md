@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5c3a DM reaction state](milestones/M5c3a-direct-reaction-state.md) consumes the same original-session `react.php`/`unreact.php` protocol inside the serialized DM actor. Readable history remains distinct from send/block/author permissions and room ignores; no backend/API/SSE change is introduced. Native DM controls and live acceptance remain pending.
+
 [M5c2b native room reactions](milestones/M5c2b-native-room-reactions.md) consumes the existing original-session add/remove protocol without backend/API/SSE changes. Retained deleted-row own removal follows the existing service permission; native rendering does not restore deleted bodies or imply data purge. DM reaction controls, guests and live acceptance remain separate.
 
 [M5c1](milestones/M5c1-reaction-protocol.md) reuses existing room/DM `react.php`/`unreact.php`, exact six-emoji vocabulary and complete reactor lists. Explicit add/remove is not a safe POST replay guarantee: both services mutate before summary/event publication. DM blocking does not revoke reactions on readable history; remove differs from add's deleted/mute checks. Native controls/guests/live acceptance remain pending; no backend change is required.

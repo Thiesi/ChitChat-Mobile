@@ -1,0 +1,33 @@
+# M5c3a: serialized DM reaction state
+
+Originally based on PR68/main `4ac011d`, now integrated with delivered PR80/main `4f4d24a` and [native room reactions](M5c2b-native-room-reactions.md), this consumes the unchanged [M5c1 protocol](M5c1-reaction-protocol.md) inside the existing serialized DM thread actor. This slice supplies state only. Native DM choices/chips/reactor lists and recovery controls, guests and live/device/release acceptance remain separate. Existing in-app DM reaction-unavailable disclosures remain accurate.
+
+## Original scope and serialization
+
+An ephemeral request retains the original rendered session, peer and exact canonical row instance. It requires a foreground authenticated member, known discovered DM privacy/chat policy, fresh authorized context/history and matching sender/recipient/direction. Incoming rows need no author hints. Room ignores do not hide DM reaction state, and blocking or unavailable sending does not revoke reactions on otherwise-readable history. Selection uses the viewer ID in complete reactor lists, never another actor's `reacted_by_me` flag. Each choice is explicit Add or Remove, never a toggle. Adds require a non-deleted row and no current global mute; withdrawing an existing own reaction remains possible while muted or on retained tombstones.
+
+Reactions use a distinct REACTION marker in the existing DM actor alongside SEND, READ, BLOCK and AUTHOR. There is no second job/transport or room-style parallel mutation job. Active work prevents selection; invalidations queue/coalesce behind a POST. Target adoption/preparation rejects active reactions and proposals. Background/navigation retains an ID-only unknown result and drops selection; original owner/peer/sequence fences reject noncooperative late responses. Account/server/generation/version retirement clears private state. The acknowledged summary replaces only the original row's reactions, retaining content, read/quote/file/author metadata, and retires its pending marker before fallible canonical GETs.
+
+An open proposal suppresses read/typing proof and other message/draft/send/block/author choices. Closing requires fresh viewport proof. The existing screen lifecycle/modal observer recognizes the proposal, but this state slice exposes no new native control, focus/IME action, saved-state payload or keyboard workaround. The later native consumer must supply original entry/root/window guards and accessible controls.
+
+## Unknown outcomes and independent consent
+
+Exceptions/cancellation after POST starts may follow commit. Keep one ID-only marker per peer, at most100 peers with no eviction, retry queue, body or reactor-name persistence. Capacity is reserved before posting. Passive entry/refresh/invalidation and unrelated confirmed work never clear this marker. Only the original-reference explicit history GET reconciles it. Failed GET keeps the marker. A retained proposal becomes checked and cannot POST; explicit Review creates a NEW request from the new canonical row before any fresh desired choice. A dismissed proposal is not recreated by recovery; stale callbacks cannot close or authorize its successor. A passively replaced canonical row also requires explicit Review.
+
+Reaction confirmation/recovery GETs preserve independent SEND, whole-peer READ, BLOCK and AUTHOR uncertainty. They use the existing reload with block reconciliation disabled. Ordinary context/status reload retains its pre-existing BLOCK reconciliation behavior. Reaction GET/Review never supplies send-history/duplicate-risk consent or chat-read proof. Historical fixed upper bounds survive complete row loss; scoped resource denial clears inaccessible data while retaining unresolved writes and drafts.
+
+## Verification and delivery gate
+
+Twenty-six new JVM regressions cover actor/viewer perspective, block/ignore distinctions, unknown privacy, mute/tombstones, original canonical/owner/peer callbacks, modal/read/write exclusion, explicit GET/Review, ACK-before-GET failure, late cancellation, queued invalidations, target handoffs, historical retention loss,100-peer capacity and separate SEND/READ/BLOCK/AUTHOR uncertainty. Existing direct state and author tests protect the shared actor. Full JVM/lint/debug/release/test-APK/diagnostic compilation, Python diagnostics, original APK certificates, complete unfiltered Linux/API36 native CI and both written exact-head Claude reviews remain delivery gates. Actual commands/counts belong in the PR.
+
+## Historical evidence and current-base integration
+
+Original head609a2d1 passed730 JVM/lint/build and both written reviews, but its own ordinary native run41967484045 failed177/178 at the unchanged100-cycle control, recorded cycle22. Complete316-file source and161-member build/APK/report archives were reverified by SHA256/every-member/CRC before integration. The old failure and review receipts are retained, not transferred as acceptance to this head.
+
+The maintainer accepted the delivery order: integrate this substantive actor slice with fresh main after PR80, then supply native DM controls. Main4f4d24a includes search, formatting/highlighting and room-navigation safeguards absent from the old base. Integration preserves those consumers and the original26 DM reaction regressions. Five documentation conflicts retain both current-main and state contracts; issue70's maintainer closure and completed/consumed diagnostic plans replace stale active-hold text. No production input helper/deadline/assertion changes or live/device operation is included.
+
+PR80's development exception applies only to ceefb8a and is not authority for this head. Fresh full JVM/lint/debug/release/test-APK/standalone compilation, ordinary full Linux/API36 native CI and both actual current-head written review rounds remain required. The independent original main author-recovery failure in closed issue70 and all Windows/Linux negatives remain preserved; no root-cause or release waiver is claimed.
+
+## Current integration local result
+
+The fresh integration passed90 focused DM JVM tests, then974 full JVM tests with0 failures/errors/skips and lint0. Command: `:app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest -PfocusDiagnostic=true :focus-diagnostic:assembleDebug --rerun-tasks`, using the checked-in wrapper, configured JDK17, original Android user home and offline caches. The ordinary input/native/CI source remains unchanged. All21 diagnostic-script unit tests and228 relative documentation links also passed. These local checks invoke no device, native test or live account; full201-test Linux/API36 CI and both new-head written reviews are still required and recorded separately on the PR.
