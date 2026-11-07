@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 
 /** One input component through IME resize: no focus loss from swapping compact/expanded fields. */
@@ -25,6 +26,20 @@ internal fun MessageInput(value: String, onValueChange: (String) -> Unit, enable
         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), decorationBox = { inner ->
             OutlinedTextFieldDefaults.DecorationBox(value, inner, enabled, false, VisualTransformation.None,
+                interaction, label = { Text(label) }, contentPadding = PaddingValues(8.dp))
+        })
+}
+
+/** Same native field with explicit selection/composition for conversation completion. */
+@Composable
+internal fun MessageInput(value: TextFieldValue, onValueChange: (TextFieldValue) -> Unit, enabled: Boolean,
+    label: String, compact: Boolean, modifier: Modifier = Modifier, readOnly: Boolean = false) {
+    val interaction = remember { MutableInteractionSource() }
+    BasicTextField(value, onValueChange, modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {},
+        enabled = enabled, readOnly = readOnly, maxLines = if (compact) 1 else 4, interactionSource = interaction,
+        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), decorationBox = { inner ->
+            OutlinedTextFieldDefaults.DecorationBox(value.text, inner, enabled, false, VisualTransformation.None,
                 interaction, label = { Text(label) }, contentPadding = PaddingValues(8.dp))
         })
 }
