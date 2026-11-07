@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5d4a room mention candidates](milestones/M5d4a-room-mention-protocol.md) reuses existing GET rooms/mentionable-users.php and the same original-session transport, without another endpoint/cache or policy mutation. Current underscore LIKE behavior is retained as a compatible response shape and tracked in [backend152](https://github.com/Thiesi/ChitChat/issues/152); native controls remain separate.
+
 [M5f2 native basic profiles](milestones/M5f2-native-basic-profiles.md) consumes existing M5f1 GET facts without another endpoint, transport, image URL, policy or management mutation. Original session/target/context and runtime fences remain authoritative; native controls never turn server hints into permissions.
 
 [M5f1 basic profiles](milestones/M5f1-basic-profile-protocol.md) consumes existing `GET users/profile.php?user_id=...` with optional numeric room context, the current PHP session cookie and unchanged chosen-origin transport. GET carries no mutation CSRF header. Exact target/schema checks preserve guest visit meaning, nullable badge/version and legitimate avatar version0. Ignore/moderation enrichment and avatar/removal hints grant no mutation or policy authority. Native cards/images/management, guests and live acceptance remain separate; no backend change is required.

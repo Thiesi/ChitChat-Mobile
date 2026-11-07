@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5d4a](milestones/M5d4a-room-mention-protocol.md) follows delivered PR83/mainbf443d0 with the existing bounded room candidate protocol. Complete this head's own local/full215 native/written review gates, then add scoped draft/caret state/native suggestion consumers and appropriate local DM/IRC completion. Candidate lookup never resolves mentions or grants send/read/typing/duplicate-risk consent.
+
 [M5f2 native basic profiles](milestones/M5f2-native-basic-profiles.md) consumes delivered PR82/main2b42d95. Complete this head's own full gates/review/delivery, then continue mention completion, authenticated files/media/sharing and reporting. Exact4a808b9 development exception and later main208/208 transfer no future-head waiver.
 
 [M5f1 basic profile protocol](milestones/M5f1-basic-profile-protocol.md) follows delivered PR81/main2fdb024. Complete its own full build/JVM/lint/native/review gates, then add scoped native read-only profile display before mention completion, files/media/sharing and reporting. Avatar metadata is not image delivery or management; guest/live/device/release acceptance remains separate.

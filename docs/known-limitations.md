@@ -1,5 +1,7 @@
 # Current status and limitations
 
+[M5d4a](milestones/M5d4a-room-mention-protocol.md) is room candidate metadata only; native completion, DM/local providers, reserved broadcast choices and IRC Tab behavior remain pending. Existing underscore matching can return broader names (#152). Send-time authorization is server-owned; guest/live/device/release acceptance remains separate.
+
 [M5f2](milestones/M5f2-native-basic-profiles.md) adds read-only basic member-accessed profile cards. Avatar image transfer/management, guest-session consumers and live/device/accessibility/release acceptance remain pending. MemberSince means guest visit start for guest targets; metadata/removal hints never grant an action. No profile polling, saved-state content or implicit retry.
 
 [M5f1 basic profile protocol](milestones/M5f1-basic-profile-protocol.md) supplies read-only facts only. Native profile cards/navigation/initials, avatar image transfer and management are not implemented by this slice. No profile GET changes ignore/moderation policy, grants a removal action or supplies chat-read/send consent. Guest/live/device/release acceptance remains separate, and every new head requires its own complete development gates/reviews.
