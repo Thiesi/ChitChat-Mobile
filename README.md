@@ -1,5 +1,7 @@
 # ChitChat Mobile
 
+[Basic profile protocol](docs/milestones/M5f1-basic-profile-protocol.md) adds an original-session read-only metadata boundary after delivered native DM reactions/PR81. It validates exact account targets, guest visit facts and nullable avatar metadata without downloading images, applying policy hints or authorizing management. Native profile cards, avatar transfer/management and guest/live/device acceptance remain separate; current in-app profile-pending copy stays accurate.
+
 ![ChitChat Mobile — Self-hosted browser chat on your phone](docs/assets/chitchat-banner.png)
 
 ChitChat is a small, self-hosted browser chat application. ChitChat Mobile is its native mobile client.

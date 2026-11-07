@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5f1 basic profile protocol](milestones/M5f1-basic-profile-protocol.md) follows delivered PR81/main2fdb024. Complete its own full build/JVM/lint/native/review gates, then add scoped native read-only profile display before mention completion, files/media/sharing and reporting. Avatar metadata is not image delivery or management; guest/live/device/release acceptance remains separate.
+
 [M5c3b native DM reactions](milestones/M5c3b-native-direct-reactions.md) consumes delivered PR71/main2cba7cc. Complete its own full gates/reviews, then continue basic profiles, mention completion, authenticated files/media/sharing and reporting in the accepted order below. Native reaction controls do not grant guest/live/device/release acceptance or waive old failures.
 
 Current accepted delivery order (2026-11-07): PR80 delivered -> current-base PR71 state -> native DM reaction controls -> profiles -> mention completion -> files/media/sharing -> reporting -> separate CI maintenance/bounded IME work -> M6 -> M7 -> M8. See [current tracker](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6701668219). The milestone handoffs below retain their historical context; they do not revive completed diagnostics or waive later-head gates.
