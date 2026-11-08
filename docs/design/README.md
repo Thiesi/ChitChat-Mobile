@@ -23,7 +23,7 @@ a substitute.
 | [room-presence.md](room-presence.md) | Implementation spec for the room header, presence and inactivity moments, the people sheet and room details |
 | [copy-deck.md](copy-deck.md) | String audit against communication.md, grouped by the slice that applies each change, with affected tests and flagged contract strings |
 | [store-listing.md](store-listing.md) | Proposal: Play listing fields, description, icon, feature graphic, screenshot set (maintainer decision) |
-| [privacy-policy.md](privacy-policy.md) | Draft app privacy policy (pending maintainer approval; host-neutral, placeholders for publisher and contact) |
+| [privacy-policy.md](privacy-policy.md) | App privacy policy (approved 2026-11-08; published with the first Play build after its pre-publication checklist passes) |
 | [server-update.md](server-update.md) | The "This server needs an update" state at setup and on revalidation (minimum server version) |
 | [play-readiness.md](play-readiness.md) | Google Play: guidelines acceptance, in-app account deletion, deletion web page content, privacy surfaces |
 | [reporting.md](reporting.md) | M5 participant reporting: entry, form, who-sees-what, outcomes, follow-up actions |
