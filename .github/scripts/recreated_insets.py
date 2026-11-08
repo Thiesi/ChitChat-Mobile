@@ -90,15 +90,18 @@ def observe(stream):
                     started.add(cycle)
                 else:
                     if code not in {"0", "-1", "-2", "-3", "-4"} or cycle in finished: invalid = True
-                    finished[cycle] = code == "0"
+                    finished[cycle] = code
             block = {}
         elif line.startswith("INSTRUMENTATION_CODE: "):
             if runner_code is not None: invalid = True
             runner_code = line.split(":", 1)[1].strip()
+    controls = [[row for row in case["records"] if row["event"] not in {"draw", "compose"}] for case in records.values()]
     complete = (not invalid and runner_code == "-1" and set(records) == started == set(finished) == CYCLES
-                and all(r["records"] and r["records"][-1]["event"] == "cleanup_end" for r in records.values()))
+                and all(rows and rows[-1]["event"] == "cleanup_end" for rows in controls)
+                and all(code in {"0", "-1", "-2"} for code in finished.values()))
     return dict(measurementComplete=complete, invalidMetadata=invalid, startedCases=len(started),
-        finishedCases=len(finished), originalTestPass=complete and all(finished.values()) and
+        finishedCases=len(finished), caseResults=[dict(cycle=k, status=int(finished[k])) for k in sorted(finished)],
+        originalTestPass=complete and all(code == "0" for code in finished.values()) and
         all(not r["failed"] and not r["cleanupFailed"] for r in records.values()),
         cases=[records[k] for k in sorted(records)])
 

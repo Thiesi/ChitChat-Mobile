@@ -1,5 +1,4 @@
 """Bounded/privacy-safe measurement accounting; no Android or native input calls."""
-import copy
 import io
 import json
 from pathlib import Path
@@ -43,6 +42,7 @@ class InsetsRecordsTests(unittest.TestCase):
         value = diagnostic.observe(stream([case(i, i==7) for i in range(1,21)], failed={7}))
         self.assertTrue(value["measurementComplete"]); self.assertFalse(value["originalTestPass"])
         self.assertTrue(value["cases"][6]["failed"])
+        self.assertEqual({"cycle":7,"status":-2},value["caseResults"][6])
 
     def test_missing_duplicate_or_no_runner_finish_never_pass(self):
         values = [case(i) for i in range(1,21)]
@@ -57,6 +57,15 @@ class InsetsRecordsTests(unittest.TestCase):
             if variant == "missing": values[0]["records"] = []
             else: values[0]["cleanupFailed"] = True
             self.assertFalse(diagnostic.observe(stream(values))["originalTestPass"])
+
+    def test_cleanup_progress_after_terminal_control_is_not_missing_cleanup(self):
+        values = [case(i) for i in range(1,21)]
+        for value in values:
+            progress = dict(value["records"][0], sequence=2, uptimeMillis=1001, event="draw")
+            value["records"].append(progress)
+        result = diagnostic.observe(stream(values))
+        self.assertTrue(result["measurementComplete"])
+        self.assertTrue(result["originalTestPass"])
 
     def test_listener_unavailable_remains_unknown(self):
         value = case(1)
