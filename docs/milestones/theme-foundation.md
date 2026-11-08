@@ -30,8 +30,8 @@ describe the combined foundation contract; they do not grant phase A consumer ac
 
 - Immutable Light, Dark and Pure-black palettes; explicit Material roles, extended
   colors, stable ID-based identity hues and shared shapes.
-- Bundled Latin/Latin-Extended Bricolage Grotesque, with explicit700/800 variable-font
-  weight axes, for display, headline and titleLarge
+- Bundled Latin/Latin-Extended Bricolage Grotesque, as static700/800 faces at the source's
+  default optical size/width, for display, headline and titleLarge
   roles only. Body, message, label and smaller title typography retain system fonts
   and Material sizes. [Font license and reproducible subset provenance](../licenses/bricolage-grotesque-OFL.txt).
 - Persimmon/ink primary actions and unread counts; secondary actions keep their

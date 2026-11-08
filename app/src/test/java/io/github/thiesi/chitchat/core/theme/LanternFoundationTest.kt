@@ -4,15 +4,13 @@ import androidx.compose.material3.Typography
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.font.FontListFontFamily
-import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.ResourceFont
+import io.github.thiesi.chitchat.R
 import androidx.compose.ui.unit.em
 import org.junit.Assert.*
 import org.junit.Test
 
-@OptIn(ExperimentalTextApi::class)
 class LanternFoundationTest {
     private fun contrast(a: Color,b: Color): Float = (maxOf(a.luminance(),b.luminance())+0.05f)/(minOf(a.luminance(),b.luminance())+0.05f)
     private fun pair(name: String,foreground: Color,background: Color,floor: Float=4.5f) {
@@ -80,8 +78,8 @@ class LanternFoundationTest {
         val before=Typography();val after=lanternTypography()
         val fonts=(after.titleLarge.fontFamily as FontListFontFamily).fonts
         assertEquals(listOf(FontWeight.Bold,FontWeight.ExtraBold),fonts.map { it.weight })
-        for(font in fonts) assertEquals(FontVariation.Settings(FontVariation.weight(font.weight.weight)),
-            (font as ResourceFont).variationSettings)
+        assertEquals(listOf(R.font.bricolage_grotesque_bold,R.font.bricolage_grotesque_extra_bold),
+            fonts.map { (it as ResourceFont).resId })
         assertEquals(before.bodyLarge,after.bodyLarge);assertEquals(before.bodyMedium,after.bodyMedium)
         assertEquals(before.bodySmall,after.bodySmall);assertEquals(before.titleMedium,after.titleMedium)
         assertEquals(before.titleSmall,after.titleSmall);assertEquals(before.labelLarge,after.labelLarge)

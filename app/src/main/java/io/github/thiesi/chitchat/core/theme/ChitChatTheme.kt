@@ -12,11 +12,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import io.github.thiesi.chitchat.R
@@ -58,13 +56,10 @@ private val lanternShapes=Shapes(
     large=RoundedCornerShape(22.dp),extraLarge=RoundedCornerShape(28.dp),
 )
 
-@OptIn(ExperimentalTextApi::class)
 internal fun lanternTypography(): Typography {
-    // The legacy Font overload labels a weight but supplies empty variation settings.
-    // Set wght explicitly so the bundled variable face actually renders 700/800.
-    fun face(weight: FontWeight)=Font(R.font.bricolage_grotesque,weight=weight,
-        variationSettings=FontVariation.Settings(FontVariation.weight(weight.weight)))
-    val display=FontFamily(face(FontWeight.Bold),face(FontWeight.ExtraBold))
+    val display=FontFamily(
+        Font(R.font.bricolage_grotesque_bold,weight=FontWeight.Bold),
+        Font(R.font.bricolage_grotesque_extra_bold,weight=FontWeight.ExtraBold))
     val defaults=Typography()
     fun TextStyle.heading(weight: FontWeight)=copy(fontFamily=display,fontWeight=weight,letterSpacing=(-0.01).em)
     return defaults.copy(displayLarge=defaults.displayLarge.heading(FontWeight.ExtraBold),
