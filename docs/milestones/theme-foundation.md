@@ -1,30 +1,34 @@
 # Lantern theme foundation
 
-Status: phase A defines the core primitives, preference storage and assets. Phase B
-integrates the app, its appearance controls and existing components. Each delivery needs
-its own current-head development gates and applicable J review, recorded on its PR.
+Status: phase A delivered in PR112/main95062c7; phase B delivered in PR114/main3fa2b02.
+The core primitives, preference storage, assets, root appearance controls and existing
+components are integrated. Reusable capture infrastructure delivered separately in
+PR117/maina8f7d17. Each delivery's gates and presentation judgment are recorded below.
 This is the token prerequisite for later presentation slices, following delivered
 M5d4c (PR97, main3093e71). It consumes the approved
 [theme brief](../design/theme-foundation.md), [Pure black contract](../design/amoled-black.md)
-and adaptive icon assets from PR103. No earlier native exception applies to this slice.
+and adaptive icon assets from PR103. PR114 used its own exact9248fd3 development-only
+exception; it grants no later-head or release waiver.
 
 ## Delivery split
 
 The complete patch exceeded the existing126,000-byte written-review limit. It is split
 without raising that limit ([engineering record](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6715004003)):
 
-- **Phase A, this slice:** palettes, Material/type/shape definitions, identity helpers,
+- **Phase A, delivered:** palettes, Material/type/shape definitions, identity helpers,
   thin PrimaryButton/CountBadge definitions, local Pure-black storage and VM API,
   licensed font and approved icon/window resources. Debug pseudo-locales and ATF are
   enabled for the new component tests. Existing test stores implement the added setting.
-- **Phase B, next:** root theme and switch, actual device-night observation and background
+- **Phase B, delivered:** root theme and switch, actual device-night observation and background
   mirror call sites, existing-screen wrapper/color/shape migration, source-policy and
-  appearance journeys, and before/after capture infrastructure.
+  appearance journeys and before/after captures. PR117 owns the reusable capture workflow.
 
-Phase A exposes no Pure-black switch and does not replace the root's existing Material
-theme. Its new controls are exercised as components. Full-screen presentation and the
-Light/Dark/Pure-black default/200% evidence belong to phase B. The following sections
-describe the combined foundation contract; they do not grant phase A consumer acceptance.
+Phase A shipped component definitions without a Pure-black switch or root-theme replacement.
+Phase B supplied those consumers and the Light/Dark/Pure-black default/200% evidence.
+The review limit stayed126,000 bytes: complete code/tests remained in B; only narrative
+status/evidence prose moved into this immediate documentation follow-up, as
+[approved](https://github.com/Thiesi/ChitChat-Mobile/pull/114#issuecomment-6718210680).
+The following sections describe the delivered combined foundation contract.
 
 ## Complete foundation contract
 
@@ -35,8 +39,12 @@ describe the combined foundation contract; they do not grant phase A consumer ac
   roles only. Body, message, label and smaller title typography retain system fonts
   and Material sizes. [Font license and reproducible subset provenance](../licenses/bricolage-grotesque-OFL.txt).
 - Persimmon/ink primary actions and unread counts; secondary actions keep their
-  callbacks and enabled conditions and use outlined treatment. Existing Send geometry,
+  callbacks and enabled conditions and use outlined treatment. Enabled outlined actions
+  share a1dp `fieldLine` border and `text` label; the source-policy scan rejects raw
+  OutlinedButton call sites outside the shared helper. Existing Send geometry,
   input interaction, native taps, deadlines and visibility predicates stay intact.
+- Attention dots distinguish `error`, `unsureLine` uncertainty and neutral retained-range
+  Persimmon; explicit kind/status text keeps color from being the only signal.
 - A local `pure_black` Boolean, independent of System/Light/Dark, defaulting to false
   for missing or wrong-type data. Its merged Switch row has a 48dp target. The switch
   applies immediately whenever the resolved theme is dark and survives recreation.
@@ -54,8 +62,8 @@ are device preferences: the backend has no account-level theme synchronization A
 
 ## System mode and cold start
 
-Phase A defines and unit-tests these helpers. Phase B adds their root/MainActivity call
-sites; phase A does not install a per-app night override.
+Phase A defines and unit-tests these helpers; delivered phase B installs their
+root/MainActivity call sites under the conditions below.
 
 The app resolves one `dark` value for its palette, Pure black and bar icons. Once settings
 are loaded, System reads the actual device/global configuration, rather than the app's
@@ -88,13 +96,15 @@ source token ownership, safe settings decoding/write failure, startup resolution
 background mirror timing/deduplication.
 
 Phase A instrumentation checks the new primary/count components and real preference
-persistence. Phase B adds the appearance switch/recreation and synthetic production-root
+persistence. Phase B covers the appearance switch/recreation and synthetic production-root
 navigation cases. New/restyled
 presentation cases enable ATF on API34+ without adding checks to historical keyboard
 journeys. No assertion, native tap path or five-second input deadline is weakened.
 
-Each PR's full native gate remains one complete unfiltered/untraced suite. Phase B's separate bounded
-capture-only workflow provides before/after evidence at **actual360×640dp**, default and
+Each delivery used its then-current full unfiltered/untraced native gate, with B's failure
+preserved under its explicit exception. PR117's separate manually dispatched, non-gating
+capture workflow accepts base/head refs, retains artifacts for seven days and supplies
+before/after evidence at **actual360×640dp**, default and
 200% resource font scale. Before uses exact production source3093e71 plus only the new
 navigation test fixture; after uses the PR head. Eleven scenes cover server setup, auth,
 home, Settings, Rooms, room thread, Direct inbox/thread, Activity, Account and Search.
@@ -112,11 +122,55 @@ delivery. Controlled fixtures do not establish manual-device or live acceptance.
 physical-device, launcher appearance, cold-start, live, release/signing/distribution
 and the third-party-license screen remain separate acceptance boundaries.
 
+## Delivered evidence
+
+- **A112**, main95062c7:236 native/1113 JVM/lint0/debug+release, two clean written
+  reviews and the component-scope J pass. Actual unsigned R8 APKs were3286322B with
+  the variable font and3144150B with static700/800, a142172B reduction. Compressed font
+  entries fell from224875B to82531B; static font source is159008B. The source's default
+  optical size is96. These are retained measured APK/payload comparisons, not estimates.
+- **Infrastructure117**, maina8f7d17:240 native/1113 JVM/lint0/builds,52 helpers and two
+  clean written reviews. The earlier timeout/no-screenshot capture run42439374886 stays
+  an infrastructure failure, not a native or presentation pass.
+- **B114**, exact9248fd369dcfb78db770f139b0cfb9912a3e298e → main3fa2b02:
+  [run42456751329](https://github.com/Thiesi/ChitChat-Mobile/actions/runs/42456751329)
+  passed1116 JVM/lint0/debug+release and **failed247/248 native,0 skipped**. The sole
+  failure was the existing DirectAuthor initial editor's strict5000ms IME check, before
+  text replacement or recreation. It remains failed under the maintainer's
+  [exact-head development-only exception](https://github.com/Thiesi/ChitChat-Mobile/pull/114#issuecomment-6718681878),
+  with no retry, weakened input check or root-cause claim. Both written reviews
+  [6718476459](https://github.com/Thiesi/ChitChat-Mobile/pull/114#issuecomment-6718476459)/
+  [6718486751](https://github.com/Thiesi/ChitChat-Mobile/pull/114#issuecomment-6718486751)
+  and the final [J review6718555475](https://github.com/Thiesi/ChitChat-Mobile/pull/114#issuecomment-6718555475)
+  passed. Delivery/source/merged-tree verification is on the PR.
+- **B captures**, [run42456785748](https://github.com/Thiesi/ChitChat-Mobile/actions/runs/42456785748):
+  complete44 before/66 after PNGs,11 scenes at both font scales, with actual viewport
+  and font scale checked and restored. Before has Light/Dark; after adds Pure black.
+  Final J reviewed auth/rooms/activity/direct/thread across all three palettes and both
+  scales; outlined-button contrast and dot-severity regressions are resolved.
+- **B size**, retained unsigned R8 APK3161426B,17276B above delivered A; its font payload
+  remains82531 compressed bytes with identical font hashes. Whole-B growth is distinct
+  from the variable-to-static font comparison.
+
+Original capture/fixture negatives and the independent ReplyTargetHost subscription
+regression fixed in PR115 remain recorded on their PRs. Later passes do not erase them
+or resolve issue69. Existing bounded-status clipping at200% belongs to the status slice;
+existing DM bubble padding belongs to the transcript slice. Controlled captures and
+component checks do not establish manual-device, real launcher/cold-start/provider,
+live, complete accessibility, third-party-license-screen, signing or distribution acceptance.
+
 ## Follow-on order
 
-Theme primitives (A) → app/component integration (B) → files/media/sharing protocol/state and native slices → M6 durable
+Delivered A/B → this documentation → approved API35/API36 CI change → files/media/sharing
+protocol/state/native slices → M6 push
 push categories → onboarding → navigation shell → reporting → transcript/lists/status/
 modals → separate Send when back online → CI41/IME → remaining M6 → M7 → M8, per the
 [accepted coordinator plan](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6713312760).
-IME PR A may proceed separately while this theme PR waits for CI/reviews, under its
-[bounded authority](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6713567378).
+IME diagnostics A delivered in PR113 and the standalone reproducer in PR121. Its a/b/c
+measurements are consumed49/50,50/50,48/50, with all failures retained and cause unproven.
+The maintainer's separate [gate-platform decision](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6720079251)
+authorizes the CI follow-up, preserving strict inputs and API36/release acceptance.
+M6 includes the approved opt-in/off-by-default ordinary DM alert once its backend
+contract merges, plus the existing UnifiedPush Web Push path and embedded FCM distributor
+fallback; see the [current plan](../implementation-plan.md) and
+[push presentation contract](../design/push-presentation.md).
