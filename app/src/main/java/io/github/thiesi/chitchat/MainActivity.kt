@@ -3,11 +3,9 @@ package io.github.thiesi.chitchat
 import android.os.Bundle
 import android.os.Build
 import android.app.UiModeManager
-import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.activity.SystemBarStyle
+import io.github.thiesi.chitchat.core.ui.configureChatWindow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModelProvider
 import io.github.thiesi.chitchat.core.theme.BackgroundNightModeSync
@@ -32,7 +30,7 @@ class MainActivity : ComponentActivity() {
     private val nightModeSync=BackgroundNightModeSync()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        configureChatWindow()
         settingsModel=ViewModelProvider(this,SettingsViewModel.factory(
             (application as ChitChatApplication).settingsRepository))[SettingsViewModel::class.java]
         setContent {
@@ -67,10 +65,7 @@ class MainActivity : ComponentActivity() {
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
                 notifications = notifications, search = search, profiles = profiles, completion = completion, onThemeChanged = { dark ->
-                enableEdgeToEdge(
-                    statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
-                    navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
-                )
+                configureChatWindow(dark)
             })
         }
     }

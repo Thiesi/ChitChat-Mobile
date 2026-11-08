@@ -76,3 +76,38 @@ follows from changing the declaration alone.
 The report must distinguish lagging Compose state, no received inset and a retired producer/window where
 the evidence permits. It must leave unavailable causes unknown and propose any app or fixture correction
 separately. No additional measurement or product/release acceptance follows from this infrastructure.
+## Final bounded window-alignment attempt
+
+Issue69/6728241370 authorizes exactly one further candidate head and its ordinary
+gate. The pre-theme/current comparison42530146699 failed19/20 in both arms, so the
+recorded symptom predates Lantern B. Real MainActivity42531290955 passed its one
+synthetic DM-recreation/native-tap geometry case (input and Send bottom377, IME
+top381), with the limitations recorded on issue69/6728186345. These measurements
+do not change any original failed result or establish every room-to-DM path safe.
+
+The fixture already called enableEdgeToEdge on recreation. The remaining source
+differences were its inside-super callback and its omitted resolved-theme callback.
+A debug-only NativeWindowTestActivity now applies the same shared configureChatWindow
+helper after super.onCreate, before optional onCreate content, on every creation.
+MainActivity's two original enableEdgeToEdge bodies are extracted verbatim into that
+helper; production still makes the same initial and resolved-dark SystemBarStyle
+calls at the same lifecycle/content locations. This is a reuse refactor with no
+intended production behavior change. TestChitChatApp forwards the same palette
+callback for this fixture. Both timing cases stay enabled, with every input action,
+predicate and5000ms deadline unchanged. The manifest/window-order/callback drift
+guard binds both hosts to the same theme and window setup.
+
+Only an already-failed reply assertion reads the new scalar snapshot: Activity/window/
+current Compose-root identity, full/decor/content/root heights, layout-system-UI flags,
+view fits-system-windows flags, soft-input mode, current native/holder IME bottoms and
+the pinned Compose listener's saved onApplyWindowInsets argument/prepared/running
+flags. It never installs/replaces a listener, changes focus/insets or retains Views.
+The saved argument can be cleared on onEnd: missing/refused data remains unknown,
+never a zero/absent dispatch claim. Sequential failure samples have separate timestamps.
+Pinned source: [foundation-layout1.11.4](https://dl.google.com/dl/android/maven2/androidx/compose/foundation/foundation-layout-android/1.11.4/foundation-layout-android-1.11.4-sources.jar).
+
+The source freezes before the one ordinary gate. If the API35 ReplyComposer cases
+pass, normal current-head gates/reviews govern delivery and the interim rule ends.
+If they fail, stop: per the coordinator this PR is reduced to theme/guard hygiene,
+the interim rule remains and the mechanism is lower priority. No further iteration
+or diagnostic dispatch is implied.

@@ -8,7 +8,7 @@ import android.app.Instrumentation
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
+import io.github.thiesi.chitchat.core.ui.configureChatWindow
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
@@ -44,6 +44,8 @@ import io.github.thiesi.chitchat.testing.NativeChatFixtures
 import io.github.thiesi.chitchat.testing.nativeInputWindow
 import io.github.thiesi.chitchat.testing.nativeImeServerAfterFailure
 import io.github.thiesi.chitchat.testing.NativeTextInputTrace
+import io.github.thiesi.chitchat.testing.NativeWindowTestActivity
+import io.github.thiesi.chitchat.testing.recreatedWindowAfterFailure
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -60,7 +62,7 @@ private annotation class ContentDuringOnCreate
 
 /** Real navigation/windows/IME/provider retention; deterministic fixtures, not live-server acceptance. */
 class ReplyComposerJourneyTest {
-    private val compose = createAndroidComposeRule<ComponentActivity>()
+    private val compose = createAndroidComposeRule<NativeWindowTestActivity>()
     private var onCreateHost = false
     private val bootstrap = TestRule { base, description -> object : Statement() {
         override fun evaluate() {
@@ -70,7 +72,7 @@ class ReplyComposerJourneyTest {
             val application = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as Application
             val callback = object : Application.ActivityLifecycleCallbacks {
                 override fun onActivityCreated(activity: Activity, state: Bundle?) {
-                    if (activity is ComponentActivity && activity.javaClass == ComponentActivity::class.java) install(activity)
+                    if (activity is NativeWindowTestActivity) activity.createContent = { install(activity) }
                 }
                 override fun onActivityStarted(activity: Activity) = Unit
                 override fun onActivityResumed(activity: Activity) = Unit
@@ -110,7 +112,6 @@ class ReplyComposerJourneyTest {
         val config = activity.resources.configuration
         args.getString("expectedOrientation")?.let { assertEquals(it.toInt(), config.orientation) }
         args.getString("expectedFontScale")?.let { assertEquals(it.toFloat(), config.fontScale, 0.01f) }
-        activity.enableEdgeToEdge()
         room = ViewModelProvider(activity, ConversationViewModel.factory(api.rooms, typing = typing.controller))[ConversationViewModel::class.java]
         direct = ViewModelProvider(activity, DirectThreadViewModel.factory(api.directs, typing = typing.controller))[DirectThreadViewModel::class.java]
         targets = ViewModelProvider(activity, MessageTargetViewModel.factory(api.lookups))[MessageTargetViewModel::class.java]
@@ -122,7 +123,8 @@ class ReplyComposerJourneyTest {
             val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
             SideEffect { ime = bottom }
             Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, conversationModel = room,
-                directInbox = inbox, directThread = direct, messageTargets = targets, notifications = notices) }
+                directInbox = inbox, directThread = direct, messageTargets = targets, notifications = notices,
+                onThemeChanged = { activity.configureChatWindow(it) }) }
         }
     }
     private fun root() {
@@ -342,12 +344,13 @@ class ReplyComposerJourneyTest {
             val bounds = runCatching { input.fetchSemanticsNode().boundsInWindow }.getOrNull()
             val options = runCatching { compose.onAllNodesWithTag("message_actions").fetchSemanticsNodes().size }.getOrNull()
             val canSend = compose.runOnIdle { if (isRoom) room.canSend() else direct.canSend() }
+            val layout = recreatedWindowAfterFailure()
             val window = nativeInputWindow()
             val inputSessions = NativeTextInputTrace.describe()
             val server = nativeImeServerAfterFailure()
             throw AssertionError("Reply handoff: uptime=$observedAt, room=$isRoom, selected=${selected != null}, " +
                 "focused=$focused, displayed=$displayed, bounds=$bounds, options=$options, canSend=$canSend, " +
-                "deadlineIME=$deadlineIme, laterIME=$ime, window=$window, inputSessions=$inputSessions, server=$server", failure)
+                "deadlineIME=$deadlineIme, laterIME=$ime, window=$window, layout=$layout, inputSessions=$inputSessions, server=$server", failure)
         }
     }
     private fun options() {
