@@ -23,6 +23,36 @@ JUnit/HTML, environment and content-free allowlisted failure lifecycle evidence 
 retained for seven days. Any setup/accounting failure stays incomplete. Report both
 arms on issue69 before selecting a production or fixture correction.
 
-The separate real-MainActivity impact case is still being prepared; no invocation
-of it is implied by this comparison mode. It must preserve the real production
-Activity/content/theme lifecycle while substituting only synthetic test operations.
+## Separate real-MainActivity impact case
+
+The explicit `main-activity-impact` mode builds an opt-in test source set using
+`-PmainActivityImpact=true`, verifies both APK signatures, packages and test-only
+diagnostic inclusion, then runs one case on the same pinned API35 environment.
+It does not run the comparison or the old controls. No invocation is implied by
+compiling the opt-in APKs or by the comparison mode.
+
+An outer test rule seeds synthetic settings/auth/account/room/direct/target/notice
+ViewModels in the real MainActivity store in API35's pre-created callback. MainActivity
+then runs its unchanged production onCreate, content, theme and onThemeChanged code;
+the fixture never calls setContent, modifies the window, installs an insets listener,
+or requests focus/IME. Other inactive application services retain their normal
+signed-out, serverless session. No server or account fixtures are required.
+
+The case opens a synthetic DM through the actual notification/navigation consumer,
+recreates the Activity while in that DM, verifies Activity/window replacement and
+ViewModel retention, and makes exactly one native composer tap. Within5000ms it
+requires focused/displayed input and a positive visible native IME. Then both input
+and Send must fit wholly above full WindowMetrics height minus the native IME bottom.
+The default-display window must start at origin0,0; decor height is recorded separately
+so an adjustResize-shrunken decor cannot cause the IME to be subtracted twice. See
+[WindowMetrics bounds](https://developer.android.com/reference/android/view/WindowMetrics#getBounds()). These are
+new impact assertions; every ordinary test's positive-Compose-inset predicate is
+unchanged. Cleanup closes the keyboard and verifies it hidden before Activity teardown;
+a cleanup failure cannot replace the primary failure.
+
+At most five scalar records retain lifecycle identity/timestamps/native IME/geometry
+and cleanup status, without text or raw dumps. Metadata failure cannot turn a native
+failure green. Original JUnit/HTML, APK hashes/signature proof and metadata are retained
+seven days. A pass establishes only this synthetic real-Activity journey on pinned API35;
+it does not prove all real devices, room-to-DM transitions, themes or configuration
+changes correct, nor establish an API26-34 result. Report the bounded outcome on issue69.

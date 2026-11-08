@@ -30,6 +30,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+    if (providers.gradleProperty("mainActivityImpact").orNull == "true") {
+        sourceSets.getByName("androidTest").java.srcDir("src/mainActivityImpact/java")
+    }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     lint { warningsAsErrors = true }
 }
