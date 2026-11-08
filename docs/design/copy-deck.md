@@ -120,7 +120,7 @@ The onboarding spec's copy table already covers `welcome_title`, `welcome_body`,
 | `rooms_joined` / `rooms_invited` / `rooms_discoverable` | Joined / Invited / Available to discover | Section labels: Your rooms / Invitations / Open rooms (row labels go away) | RoomsJourneyTest (`rooms_invited`) |
 | `rooms_refresh` | Refresh rooms | Refresh | — |
 | `rooms_reconcile` | Check current room state | Check room list | RoomsJourneyTest |
-| `rooms_stale` | Room information may be out of date. Refresh before changing membership or creating a room. | The room list may be out of date. Pull down to refresh. | — |
+| `rooms_stale` | Room information may be out of date. Refresh before changing membership or creating a room. | The room list may be out of date. Refresh to update it. | — |
 | `rooms_empty` | No rooms are available to this account. | No rooms yet. When someone opens a room on this server, it shows up here. | AuthJourneyTest |
 | `rooms_lookup_id` | Room ID | Room number | LiveSessionTest |
 | `rooms_lookup_hint` | Have an unlisted room link? Enter its numeric room ID. Knowing an ID does not grant private-room access. | Have a link to a hidden room? Enter its room number. A number alone doesn't open private rooms. | — |
@@ -130,12 +130,12 @@ The onboarding spec's copy table already covers `welcome_title`, `welcome_body`,
 | `dm_search_help` | Enter 2–32 username characters: letters, numbers, underscore, dot or hyphen. Results follow the server's prefix search. | Type at least 2 letters of a username. | — |
 | `dm_inbox_empty` | No conversations yet. Find someone to start a conversation. | No conversations yet. Tap New message to start one. | — |
 | `dm_inbox_cap` | The server lists at most 100 recent conversations. Find a person to open an older conversation. | Showing your 100 most recent conversations. Use New message to find older ones. | — |
-| `dm_stale` | History or counts may be out of date. Refresh before sending. | This may be out of date. Pull down to refresh. | — |
+| `dm_stale` | History or counts may be out of date. Refresh before sending. | This may be out of date. Refresh before sending. | — |
 | `dm_drafts` | Saved drafts on this device session | Drafts | — |
 | `dm_local_attention` | %1$d new here (local attention) | %1$d new since you opened it | — |
 | `notifications_empty` | No notifications. | Nothing here yet. Mentions and pings will show up here. | — |
 | `notifications_more` | Older notifications | Load older | — |
-| `notifications_stale` | These notifications may be out of date. Refresh before changing read state. | This may be out of date. Pull down to refresh before marking anything read. | — |
+| `notifications_stale` | These notifications may be out of date. Refresh before changing read state. | This may be out of date. Refresh before marking anything read. | — |
 | `notifications_historical` | Showing an older window. Refresh keeps this range; Latest returns to new notifications. | Showing older activity. Latest brings you back to the newest. | — |
 | `message_search_query` | Search query | Search messages | — |
 | `message_search_limit` / `message_search_validation` | Use 2–200 characters after whitespace normalization, including a letter or number… | Use 2–200 characters, including a letter or number. | — |
@@ -183,6 +183,13 @@ change with them.
 
 ## Contract strings: flagged for the technical lead (no change without sign-off)
 
+**Sign-off (technical lead, 2026-11-08, on PR #111):** most rows are approved. Two conditions apply:
+- **The "Send again" resend dialog** appears only after a completed history GET, never directly.
+- **The edited-retention sentence** stays reachable (message details beside `author_retention`),
+  and the tests that assert it move with it.
+
+
+
 These carry contract meaning. The proposals keep the meaning and only change voice. Each needs
 technical-lead sign-off, and the affected tests are listed.
 
@@ -193,8 +200,8 @@ technical-lead sign-off, and the affected tests are listed.
 | `conversation_duplicate_choice` | You accepted possible duplication. Nothing was resent automatically. | Okay. Nothing was resent; press Send when you're ready. | Consent outcome | — |
 | `dm_unknown` | Delivery is unknown. Check the latest history before deciding whether to send again; identical text is not proof… | Not sure your last message arrived. Check history before sending again. Matching text isn't proof either way. | Unknown-send contract | — |
 | `room_draft_unknown` | Delivery was not confirmed. Check the room history explicitly before choosing another send. | Not sure this draft's last send arrived. Check the room history before sending again. | Unknown-send contract | — |
-| `conversation_network` / `dm_network` | The request could not be confirmed… No send is retried automatically. | Couldn't reach the server. Nothing was resent. Check your connection, then refresh. | No-replay statement | — |
-| `conversation_stale` | …it does not replay an interrupted send. | This may be out of date. Pull down to refresh; refreshing never resends anything. | No-replay statement | — |
+| `conversation_network` / `dm_network` | The request could not be confirmed… No send is retried automatically. | Couldn't confirm with the server. Nothing was resent. Check your connection, then refresh. | No-replay statement | — |
+| `conversation_stale` | …it does not replay an interrupted send. | This may be out of date. Refresh to update it; refreshing never resends anything. | No-replay statement | — |
 | `conversation_edited` | Edited · previous versions may be retained by the server | Bubble caption "edited"; the retention sentence moves into message details next to `author_retention` | Retention disclosure placement | ConversationJourneyTest |
 | `author_unconfirmed` / `reaction_unconfirmed` / `rooms_unconfirmed` / `notifications_unknown_read` / `typing_unconfirmed` / `ignore_unconfirmed` | (various "may have succeeded… will not be retried") | Pattern: "We're not sure your {change} went through. Check before choosing again; nothing is retried by itself." | Unknown-write contracts | TypingPreferenceJourneyTest (`typing_unconfirmed`) |
 | `typing_preference_unknown` | …unknown does not mean enabled. | We couldn't confirm this setting. Until we can, typing isn't treated as on. Refresh, or choose on or off. | Unknown is not consent | — |
