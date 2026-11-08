@@ -13,8 +13,9 @@ The server's dispatcher sends `{title, body, link, app_name}`:
 - `title` and `body` are the same rendered, display-safe text the in-app notification list
   uses. **No raw message body is ever in a push.**
 - `link` is a same-origin link that the native link parser (M4c4a) treats as a hint.
-- `app_name` is the installation's **effective** name, which the public health endpoint
-  doesn't expose.
+- `app_name` is the installation's **effective** name, the same value the session now
+  returns as `application.name` (ChitChat#149). The public health endpoint still doesn't
+  expose it.
 
 Optional notification IDs and bindings are proposed in backend issue ChitChat#147.
 Notification kinds (mention, ping, account, moderation) are **not** in the payload. Ordinary

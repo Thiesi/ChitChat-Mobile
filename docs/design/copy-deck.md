@@ -26,7 +26,9 @@ Voice reminders (communication.md):
 - short, warm, plain;
 - "you" over passive voice;
 - no "please" and no exclamation marks in errors;
-- installation name over "the server" where code can supply it;
+- installation name over "the server" where code can supply it. The name is
+  `application.name` from the session (ChitChat#149), else the host; `{host}` in this deck
+  means that display name;
 - no internal terms (session events, canonical, reconcile, window, acknowledgement, ASCII).
 
 ## Onboarding slice (onboarding-restyle.md)
