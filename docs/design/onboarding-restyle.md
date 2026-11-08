@@ -70,9 +70,13 @@ transcript, lists, status and modals → Send when back online.
 ### 3 Server found (new chooser; ANONYMOUS phase)
 
 - Shown when the anonymous bootstrap succeeds. A card with the installation lantern (initial
-  and identity hue from the host), the host as the name, and a lock icon. Use the installation
-  name only once the server exposes the effective name (backend issue #149). The configured
-  default name from health must not be shown as if it were the installation's name.
+  from the name, identity hue from the host), the **installation name** from
+  `application.name` (ChitChat#149, the effective name including the operator's override) as
+  the title, then the **host as a second line** and a lock icon. The host always stays
+  visible: the name is chosen by the server's operator, so the address is what lets a person
+  check where they're signing in. When `application.name` is missing or blank, the host is the
+  title and there's no second line. The configured default name from health is never shown as
+  the installation's name.
 - Headline "Found it. Are you new here?" and the buttons:
   - **Create my account**, only if `public.registrationEnabled == true` and lockdown is
     off. Otherwise replace it with the line "Sign-up is closed on this server. Ask the person
@@ -84,7 +88,9 @@ transcript, lists, status and modals → Send when back online.
 - Level-2 notices on this screen as needed, at most one at a time, in this precedence:
   maintenance lockdown (with the server's message if any), then providers-unavailable.
 - The privacy line from the old card, restyled as a muted line with an info icon: "Your
-  server hosts your conversations. Messages are not end-to-end encrypted."
+  server hosts your conversations. Messages are not end-to-end encrypted." When the public
+  session has `policies.privacy` (ChitChat#160), a link "{installation}'s privacy policy"
+  follows on its own line and opens the policy document screen (play-readiness.md §1).
 - **Use a different server** (text button) is available while not authenticated and returns
   to step 2 with the field empty.
 - `AuthFlow` selection now happens here instead of through text buttons under the sign-in
@@ -94,8 +100,11 @@ transcript, lists, status and modals → Send when back online.
 
 - Server chip at the top (lantern plus host, not interactive), display title "Welcome back",
   username and password fields (56dp, labels above, password visibility toggle with the label
-  "Show password"), full-width **Sign in**, and a text button "Forgot your password? Ask the
-  person who runs the server." (static text: today only administrators can reset a forgotten password). When the server offers self-service reset ([ChitChat#155](https://github.com/Thiesi/ChitChat/issues/155)), replace it with a **Forgot password?** button leading to that flow.
+  "Show password"), full-width **Sign in**, and below it either a **Forgot password?** text
+  button or the static line "Forgot your password? Ask the person who runs the server." The
+  button appears only when the server supports self-service reset (ChitChat#155, merged),
+  detected by a successful reset challenge. It leads to the native reset flow in
+  [recovery-key.md](recovery-key.md).
 - Existing rules stay: the password lives only in composition memory, is cleared on
   `ON_STOP` and is never saved in bundles. `contentType` hints for autofill remain.
   Rate-limit (`login_throttled` or `rate_limited`) shows as a level-1 line under the button:
@@ -120,11 +129,16 @@ transcript, lists, status and modals → Send when back online.
   - failed or idle: "That check didn't finish." with **Try again**.
   
   Never a percentage. **Create my account** stays disabled until ready, exactly as today.
+- **Server rules (ChitChat#160):** when the public session has `policies.rules`, the agreement
+  line "By creating an account, you agree to {installation}'s rules" sits above the button,
+  and registration sends `accepted_rules_version`. Its outcomes are in play-readiness.md §1.
 - The ambiguous-result warning (`registration_unknown`) becomes a level-2 notice at the top
   of the form with a **Sign in instead** action. The request is never repeated automatically
   (existing rule).
-- After success, go to step 5. "Registered in this session" is VM memory only, never
-  persisted, and is cleared on sign-out.
+- After success, show the one-time **recovery key display** when `register.php` returned a
+  `recovery_key` (ChitChat#155, [recovery-key.md](recovery-key.md)), then the guidelines
+  screen, then step 5. "Registered in this session" is VM memory only, never persisted, and is
+  cleared on sign-out.
 
 ### 4c One more step (restyled PENDING_MFA)
 

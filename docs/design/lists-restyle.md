@@ -50,17 +50,48 @@ One `LazyColumn` (`rooms_directory`):
   2. **Invitations** (`invited`; omitted when empty);
   3. **Open rooms** (the rest).
 
-  Section labels use the Label style. Rooms are not re-sorted by unread count or activity:
-  the directory has no activity data (backend issue #154), and moving rows on every
-  refresh breaks spatial memory.
+  Section labels use the Label style. Rooms are **never re-sorted** by unread count or
+  activity, not even now that recency exists (#154). The server's order is kept, because
+  moving rows on every refresh breaks spatial memory. Recency is shown, never used to sort
+  (technical lead, 2026-11-08).
 - **Row content:**
   - lantern, name, and as secondary line the info line;
   - for private rooms, a small lock overlay on the lantern;
   - unread `CountBadge` (99+) for joined rooms with `unreadCount > 0`.
 
-  Not shown until the backend provides data: "N here now" and the glow (#153), recency
-  (#154), and a per-room mention badge (no data source today). Mockup `Home` shows those
-  as targets.
+  - **Liveliness (ChitChat#153, merged in main `9cf052c`):** joined-room entries carry
+    `active_count`, the number of *other* people active in the room (the viewer is
+    excluded). It's a snapshot taken when the list was fetched.
+    - `active_count ≥ 1`: the lantern gets the honey **glow** (visual-vocabulary.md), and
+      the secondary line starts with **"{n} here now"** in `text` weight 600, then " · " and
+      the info line, as in mockup `Home`. The presence text never truncates; the info line
+      does.
+    - `0`, `null` or a missing field: **nothing**. No "0 here", no "quiet", no glow.
+    - It refreshes only on the directory's existing triggers (entry, foreground, existing
+      room invalidations, manual Refresh). No polling and no SSE for it.
+    - **Never shown stale:** while the directory is stale or the device is offline (status
+      spec), the glow and "here now" are hidden and the row shows only its info line. A
+      snapshot isn't presented as current.
+  - **Recency (ChitChat#154, merged):** joined-room entries carry `last_activity_at`, the
+    creation time of the newest visible message. It sits in the row's trailing column above
+    the unread badge, in Caption and `textMuted`:
+    - today: the time ("14:02", in the device's 12- or 24-hour setting);
+    - yesterday: "Yesterday";
+    - within the last 6 days: the weekday ("Tue");
+    - older: a short date ("12 Oct"; the year is added when it differs from this year).
+    - `null` or missing: nothing. Never "No activity" and never "Never".
+    - It's converted from UTC to the device time zone on display. The relative buckets use
+      the device's local date.
+    - It includes messages from accounts the viewer ignores (ignore is a display filter), so
+      it shows **time only**: never a sender, preview or "new message" wording. The time may
+      therefore be newer than the last message the viewer sees in the transcript, and that's
+      expected.
+  - **Accessibility:** the row's content description reads, in order, the name, "{n} people
+    here now" (when shown), the info line, "Last message {time or day}" (when shown) and the
+    unread count.
+  - Invitations and open rooms carry neither field (`null` when not joined) and show neither.
+  - Still not shown: a per-room mention badge (no data source). The Rooms tab keeps no badge
+    (navigation-shell.md, decided).
 - **Tap behavior** (a deliberate flow change, using existing guarded callbacks):
   - a joined room opens the conversation directly through the existing `openRoom` path,
     with its current guards;
@@ -155,7 +186,9 @@ A `LazyColumn` (`notification_list`):
 - **Rows:**
   - leading: the actor pebble when the notification names a user, with a type badge
     overlay (honey "@" for mentions, persimmon paper plane for pings, steward shield for
-    moderation and account), else a type icon in a `raised` circle;
+    moderation and account), else a type icon in a `raised` circle (a document icon for
+    `privacy_policy_updated`, ChitChat#160, which opens the server's privacy document per
+    play-readiness.md §1);
   - primary: the rendered title text as plain text;
   - secondary: the rendered context ("Kitchen · …");
   - trailing: the time;
@@ -224,7 +257,8 @@ A `LazyColumn` (`notification_list`):
 | ID | Requirement | Verify |
 |---|---|---|
 | P-90 | All four lists use the shared row anatomy, with lanterns for rooms and pebbles for people (P-10, P-11), and no cards. | S, R |
-| P-91 | The room directory shows Your rooms, Invitations and Open rooms in server order, with no presence, recency or mention data until the backend provides it. | C, R |
+| P-91 | The room directory shows Your rooms, Invitations and Open rooms in server order and never re-sorts by recency or presence. No mention data is shown. | C, R |
+| P-96 | Joined rows show the glow and "{n} here now" only for `active_count ≥ 1` on a fresh, online directory, and nothing for 0, null or missing. Recency shows `last_activity_at` as time, Yesterday, weekday or date, and nothing for null, never with a sender or preview. No new requests or timers. | U, C |
 | P-92 | Membership writes, reconciliation and the uncertain state behave exactly as today. Check room list is explicit, and pull-to-refresh never reconciles. | C, existing tests |
 | P-93 | DM rows keep today's preview rules, draft precedence and local attention, and filters make no new requests. The privacy line stays visible. | C |
 | P-94 | Activity keeps explicit View, Mark read and Mark all with confirmation, unknown-read gating, explicit More and server order. | C, existing tests |

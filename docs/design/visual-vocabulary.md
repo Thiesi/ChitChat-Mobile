@@ -145,8 +145,11 @@ bubble's bottom-right, mirrored for RTL.
 
 ## Iconography
 
-- Outlined stroke icons, 24dp, about 1.8dp stroke, round caps and joins. Material Symbols
-  Rounded (outlined, weight 300–400) is an acceptable source.
+- Outlined stroke icons, 24dp, about 1.8dp stroke, round caps and joins. **The canonical set
+  is [assets/icons/](assets/icons/README.md)**, drawn for CCM and shared with the ChitChat web
+  client. Add a missing glyph there first, in the same style, rather than mixing in another
+  family. Material Symbols Rounded (outlined, weight 300–400) is acceptable only as a drawing
+  reference.
 - The Rooms tab icon is the app mark simplified (bubble plus chit). The Direct tab icon is a
   person. Do not use a generic chat-bubble icon for both.
 - Emoji appear only as user content (messages, the six reactions). They are never used as

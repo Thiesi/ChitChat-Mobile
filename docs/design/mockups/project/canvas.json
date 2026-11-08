@@ -240,6 +240,48 @@
       "w": 1024,
       "h": 500,
       "title": "Play feature graphic (proposal)"
+    },
+    "GuidelinesServer.dc.html": {
+      "x": 0,
+      "y": 10050,
+      "w": 390,
+      "h": 844,
+      "title": "Guidelines with server rules (#160)"
+    },
+    "RulesUpdated.dc.html": {
+      "x": 470,
+      "y": 10050,
+      "w": 390,
+      "h": 844,
+      "title": "Server updated its rules (dark, #160)"
+    },
+    "PolicyDocument.dc.html": {
+      "x": 940,
+      "y": 10050,
+      "w": 390,
+      "h": 844,
+      "title": "Server rules document, hosted markdown (#160)"
+    },
+    "ReportPerson.dc.html": {
+      "x": 1880,
+      "y": 7550,
+      "w": 390,
+      "h": 844,
+      "title": "Report a person (form dialog, dark, #159)"
+    },
+    "ResetPassword.dc.html": {
+      "x": 1410,
+      "y": 10050,
+      "w": 390,
+      "h": 844,
+      "title": "Reset your password (#155)"
+    },
+    "RecoveryKey.dc.html": {
+      "x": 1880,
+      "y": 10050,
+      "w": 390,
+      "h": 844,
+      "title": "Save your recovery key, shown once (dark, #155)"
     }
   },
   "order": [
