@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Approved app-mark asset staged for M6's notification consumer.
+     Retain this single silhouette until that consumer references it directly. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_chitchat" />

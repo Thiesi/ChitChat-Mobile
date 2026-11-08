@@ -64,6 +64,7 @@ class MessageSearchJourneyTest {
         override val settings = MutableStateFlow(AppSettings(server =
             (ServerAddress.parse("chat.example.test") as AddressResult.Valid).address))
         override suspend fun saveServer(server: ServerAddress?) { settings.value = settings.value.copy(server = server) }
+        override suspend fun savePureBlack(enabled: Boolean) = Unit
         override suspend fun saveTheme(theme: ThemePreference) { settings.value = settings.value.copy(theme = theme) }
     }).also { store.put("settings", it) }
     private lateinit var model: MessageSearchViewModel

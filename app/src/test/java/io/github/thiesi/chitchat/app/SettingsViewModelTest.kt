@@ -84,6 +84,7 @@ class SettingsViewModelTest {
         val store = object : SettingsStore {
             override val settings = flow<AppSettings> { throw IOException("fixture") }
             override suspend fun saveServer(server: ServerAddress?) = Unit
+            override suspend fun savePureBlack(enabled: Boolean) = Unit
             override suspend fun saveTheme(theme: ThemePreference) = Unit
         }
         val model = SettingsViewModel(store)
@@ -101,6 +102,7 @@ class SettingsViewModelTest {
             if (failWrites) throw IOException("Test storage failure")
             settings.value = settings.value.copy(server = server)
         }
+        override suspend fun savePureBlack(enabled: Boolean) = Unit
         override suspend fun saveTheme(theme: ThemePreference) {
             if (failWrites) throw IOException("Test storage failure")
             settings.value = settings.value.copy(theme = theme)

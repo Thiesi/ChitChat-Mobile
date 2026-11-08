@@ -10,7 +10,7 @@ class LanternTest {
         val x=a.luminance();val y=b.luminance()
         return (maxOf(x,y)+0.05f)/(minOf(x,y)+0.05f)
     }
-    private fun palette(p: Lantern.Palette) {
+    private fun palette(p: LanternPalette) {
         for (background in listOf(p.ground,p.raised)) {
             for (foreground in listOf(p.text,p.muted,p.actionText))
                 assertTrue("Readable text against its actual ground",contrast(foreground,background)>=4.5f)

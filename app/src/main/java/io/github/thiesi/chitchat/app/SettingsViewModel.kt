@@ -62,6 +62,7 @@ class SettingsViewModel(private val store: SettingsStore) : ViewModel() {
     fun clearAddressError() { mutableState.update { it.copy(addressError = null) } }
     fun forgetServer() = write { store.saveServer(null) }
     fun setTheme(theme: ThemePreference) = write { store.saveTheme(theme) }
+    fun setPureBlack(enabled: Boolean) = write { store.savePureBlack(enabled) }
 
     private fun write(action: suspend () -> Unit) {
         if (mutableState.value.saving) return
