@@ -186,7 +186,9 @@ A `LazyColumn` (`notification_list`):
 - **Rows:**
   - leading: the actor pebble when the notification names a user, with a type badge
     overlay (honey "@" for mentions, persimmon paper plane for pings, steward shield for
-    moderation and account), else a type icon in a `raised` circle;
+    moderation and account), else a type icon in a `raised` circle (a document icon for
+    `privacy_policy_updated`, ChitChat#160, which opens the server's privacy document per
+    play-readiness.md §1);
   - primary: the rendered title text as plain text;
   - secondary: the rendered context ("Kitchen · …");
   - trailing: the time;

@@ -6,7 +6,7 @@ comments 6713519327 and 6713603503; the maintainer confirmed Play distribution o
 (§1), the deletion web resource text (§3) and the data safety facts (§4) as written on
 2026-11-07 (recorded on PR #108).** The app privacy policy is drafted separately. Mapping the
 facts onto the form's answers stays the maintainer's decision. Application ID, signing and listing remain maintainer decisions. Mockups:
-`Guidelines` and `DeleteAccount` on the canvas.
+`Guidelines`, `GuidelinesServer`, `RulesUpdated`, `PolicyDocument` and `DeleteAccount` on the canvas.
 
 CCM is a client for self-hosted ChitChat servers. The app maker runs no server and receives
 no account or message data; each installation is run by its own operator. Every screen here
@@ -15,9 +15,9 @@ keeps that distinction clear.
 ## 1. Community guidelines at onboarding
 
 Play's user-generated-content policy expects people to accept terms that define
-objectionable content before they create content. Installations can't publish their own rules
-yet (ChitChat#160), so CCM ships **generic app-level guidelines** now and is built to show the
-server's own rules later.
+objectionable content before they create content. CCM ships **generic app-level guidelines**
+on every server. Installations that publish their own rules (ChitChat#160, merged) add them to
+the same screen, below.
 
 ### Today (no backend dependency)
 
@@ -49,24 +49,155 @@ server's own rules later.
 > You can report any message from its menu, and ignore people in rooms or block them in direct
 > messages. Reports go to the people who moderate this server.
 
-### When the server publishes its rules (Dependency: ChitChat#160)
+### Server rules and privacy (ChitChat#160, merged)
 
-When the server exposes rules or terms and a privacy-policy link with versions (#160's
-proposal):
+ChitChat#160 merged in ChitChat main `acaaabe` (contract in issue #1, comment 6727010633;
+ChitChat `docs/api/policies.md`). The web UI follows separately. Guest acceptance comes with
+M7 and is out of scope here.
 
-- The same screen shows a second section, "**{installation}'s rules**", with the server's text
-  or link and its privacy link. One **I agree** covers both, and the screen says so.
-- **At registration**, the accepted server version is sent as the API defines
-  (`accepted_terms_version` in the proposal). The onboarding Create account form gets a line,
-  "By creating an account you agree to {installation}'s rules," with a link above the button.
-- **Re-acceptance:** when the session reports that acceptance is required (the proposal's
-  `terms_acceptance_required`), the next foreground shows "**{installation} updated its rules**",
-  with what changed (the server's text or link) and **I agree** or **Sign out**. Until then,
-  reading may continue, but write actions show the re-acceptance screen instead of acting.
-  The server enforces this anyway, and the client mirrors it.
-- With nothing configured on the server, only the app guidelines apply, as today.
-- Everything in this subsection is **Dependency #160**. Leave it out of the build until the API
-  exists.
+**What the server tells the client**
+
+- The public session carries `policies: {rules, privacy, legal_notice}`. Each is an object or
+  `null`. `rules` has `{url, version, updated_at}`, `privacy` has `{url, updated_at}` and
+  `legal_notice` has `{url}`.
+- The account's session (and login and register) carries `user.rules: {accepted_version,
+  accepted_at, acceptance_required}`. Versions are positive integers that only increase.
+- **Feature check:** the presence of `policies` in `session.php`. When it's missing, or all
+  three entries are `null`, nothing is gated and the screens below show only the app's own
+  parts. A missing `policies` is **not** a server-update trigger (server-update.md decides
+  that from `capabilities.schema_version` alone).
+- **`rules: null`:** only the app guidelines apply, exactly as in "Today" above.
+
+**Guidelines screen with server rules** (mockup `GuidelinesServer`)
+
+When `policies.rules` is present, the guidelines screen gains a section below the app
+guidelines. Its rows are always shown. The acceptance sentence and the accept request apply only
+while `user.rules.acceptance_required` is true (the last bullet covers the other case):
+
+- Section label "**{installation}'s rules**" (Label style), then a row in a `raised` card: the
+  `document` icon, "Read {installation}'s rules", the caption "Updated {date}" from
+  `rules.updated_at` (device date format), and a chevron. It opens the document screen below.
+- When `policies.privacy` is present, a second row "**{installation}'s privacy policy**"
+  opens the server's privacy document. The app's own "Privacy policy" link stays and is
+  renamed "**The app's privacy policy**" whenever a server privacy row is shown, so the two
+  are never confused.
+- The operator line stays ("{installation} is run by its own operators …"), and the "may have
+  additional rules" clause becomes "and set the rules above" when server rules are shown.
+- Above the buttons, in Body and `textMuted`: "**By tapping I agree, you accept these
+  guidelines and {installation}'s rules.**" One **I agree** covers both. Reading the server's
+  document is offered, never forced: the button doesn't wait for the person to open it.
+- **I agree** records the app guidelines' local acceptance (as today) and sends `POST
+  policies/accept.php {version}` with the `rules.version` that was shown. It shows busy in
+  place ("Saving…") and the screen stays until the server confirms. Then the person moves on.
+  - **`409 rules_version_outdated`:** the rules changed while the screen was open. Re-read
+    the session, then show the re-acceptance screen for the new version with the level-1
+    line "{installation} updated its rules just now. Please look again." Never accept the new
+    version automatically.
+  - **Unknown result** (timeout or connection lost after sending): a session GET checks
+    `acceptance_required`. If it's false, move on. If it's still true, the screen stays with
+    **I agree** enabled again. Never resend on its own.
+  - **Other failures:** the existing status ladder (offline, server problem). The screen stays.
+- When server rules exist but `acceptance_required` is false (for example, accepted on another
+  device or at sign-up), the screen shows the rows as reading links only, with no acceptance
+  sentence about the server, and **I agree** covers the app guidelines alone.
+
+**At sign-up** (onboarding step 4b)
+
+- When `policies.rules` is present, the Create account form shows a line above **Create my
+  account**: "By creating an account, you agree to **{installation}'s rules**." The linked
+  words open the document screen. With `policies.privacy`, the line continues "and
+  acknowledge its **privacy policy**."
+- Registration (and OIDC registration) sends `accepted_rules_version` with the version from
+  the session the form rendered with.
+  - `409 rules_version_outdated`: the account wasn't created. Re-read the session and show the
+    level-2 notice "{installation} updated its rules while you were signing up. Look at them,
+    then create your account again." The form keeps its fields (the password fields follow
+    their existing clearing rules). Never resubmit automatically.
+  - `400 rules_acceptance_required` means the client sent no version. It's a client bug: show
+    the generic server-problem notice, and keep the form.
+- After a successful registration, `acceptance_required` is false, so the guidelines screen
+  then asks only for the app guidelines and lists the server rows as reading links.
+
+**Re-acceptance** (mockup `RulesUpdated`)
+
+- **When:** `user.rules.acceptance_required` turns true on a signed-in session (cold start,
+  foreground, session refresh), or a write is refused with `403 rules_acceptance_required`.
+- **Screen** (full screen over the shell, no bottom bar; the same layout as the guidelines
+  screen):
+  - title "**{installation} updated its rules**";
+  - "Updated {date}" caption;
+  - when the document's `change_summary` is non-empty: a `raised` card "**What changed**"
+    with the summary as **plain text** (no formatting, up to 6 lines, then "Show all");
+  - the row "Read {installation}'s rules" to the document screen;
+  - "By tapping I agree, you accept {installation}'s updated rules." in `textMuted`;
+  - **I agree** (primary) and **Not now** (text button). This replaces the earlier draft's
+    Sign out (technical lead decision, 2026-11-08): reading is never gated by the server.
+- **I agree** posts the shown version with the same outcomes as above.
+- **Not now** returns to where the person was. Reading continues: rooms, DMs, Activity,
+  search, files and settings work. A small level-1 banner sits at the top of each conversation,
+  "**Agree to {installation}'s updated rules to send messages.**" with **Review**, and the
+  composer stays enabled so drafts keep working.
+- There is no Sign out on this screen. Signing out stays in You, as always.
+- The `change_summary` comes from `GET policies/show.php?document=rules`. If that GET fails,
+  the screen shows without the What changed card.
+
+**Write refusals**
+
+- The server refuses new content with **`403 rules_acceptance_required`**: messages, edits,
+  adding reactions, pings, uploads and avatar changes. It's a **definite refusal**: nothing was
+  committed.
+- The draft stays in the composer (text, reply and attached file). An edit dialog keeps its
+  text. A refused reaction leaves the chip unchanged. No unknown-send state is set, because the
+  outcome is known.
+- The re-acceptance screen opens at once.
+- After **I agree**, the person returns to the same place with the draft intact. **Nothing
+  resends automatically.** The person presses Send (or adds the reaction) again.
+- Never gated, and never showing this screen: reads, deleting one's own messages, removing
+  reactions, block, ignore, report, devices and push, account, security, export, account
+  closure, moderation and admin.
+
+**Document screen** (mockup `PolicyDocument`; full screen, top bar with Back)
+
+- Title: "{installation}'s rules" or "{installation}'s privacy policy". The caption under it
+  reads "Version {n} · Updated {date}" for rules and "Updated {date}" for privacy.
+- **Hosted documents** (`source: hosted`) render the **`markdown`** field through the bounded
+  formatter, extended to the server's display subset, and never as server HTML. No WebView.
+  - The subset is CommonMark core. Raw HTML is shown escaped as literal text.
+  - Links become tappable only for `http`, `https` and `mailto`. Other schemes stay plain text.
+    Tapping a link follows the existing M5d2 explicit link choice ("Open in browser").
+  - Images are dropped and never fetched. Their alt text is not shown.
+  - Headings at level 2 and below. A level-1 heading renders as level 2, because the screen
+    owns the title.
+  - Blockquotes are flattened to ordinary paragraphs. Code renders as plain body text.
+  - If parsing fails or exceeds the formatter's bounds, the text shows as literal plain text
+    (the existing literal fallback), never a blank screen.
+  - **Typography:** body copy uses Lantern UI text (system sans, Body style, `text`), never
+    Bricolage. Headings use the type roles: level 2 is Title, level 3 and below is Label. Lists
+    use the body style with 8dp item spacing. The column is limited to the reading width on
+    large screens.
+- **External documents** (`source: external`, `html` and `markdown` null): a short screen
+  "{installation} publishes this document on its website.", the host of the URL on its own
+  line, and **Open in browser** (primary). Only `https` URLs get the button. Anything else
+  shows "This document's address isn't secure, so the app won't open it. Ask the person who
+  runs the server." and no button.
+- **`404 policy_document_not_found`:** "{installation} hasn't published this document yet."
+  This isn't an error state.
+- Loading and failures use the existing status ladder, with **Retry** (a GET). Nothing is
+  cached on disk. The document lives in memory while the screen is open.
+- The screen opens from the guidelines and re-acceptance screens, the Create account line,
+  onboarding step 3 and About and privacy.
+
+**Legal notice:** when `policies.legal_notice` is present, You → **About and privacy** gets a
+row "**{installation}'s legal notice**" with the `open-external` icon. It opens the URL with the
+same explicit "Open in browser" handling (`https` only, as above). There is no document screen
+for it.
+
+**Privacy-policy updates in Activity:** the server adds a `privacy_policy_updated`
+notification kind. It's timeline-only and never pushed. CCM tolerates it as it does
+`direct_message_received`: the row shows the server's rendered text with the `document` icon in a
+`raised` circle, and tapping it opens the server's privacy document screen. Until that
+destination is built, the row shows without a destination, like other unsupported kinds. An
+unknown kind is never an error.
 
 ## 2. Deleting the account in the app
 
@@ -180,10 +311,11 @@ Where privacy information appears, so the app and the data safety form say the s
 | Surface | Content | Status |
 |---|---|---|
 | Welcome screen footer | "Privacy" link to the **app's privacy policy** (CCM-owned page, URL a maintainer decision) | New |
-| Onboarding step 3 (Server found) | "Your server hosts your conversations. Messages are not end-to-end encrypted." (existing line, onboarding spec) plus, with #160, the server's privacy link | Existing; #160 dependency |
-| Community guidelines screen | App privacy link; with #160, the server's rules and privacy link | New |
+| Onboarding step 3 (Server found) | "Your server hosts your conversations. Messages are not end-to-end encrypted." (existing line, onboarding spec) plus, when `policies.privacy` is present, "{installation}'s privacy policy" | Existing; #160 merged |
+| Community guidelines screen | The app's privacy policy; when present, the server's rules and privacy policy (§1) | New |
+| Create account form | When present, the server's rules and privacy policy in the agreement line (§1) | #160 merged |
 | DM inbox header | "Not end-to-end encrypted. What this means" → the existing DM privacy and retention details (`dm_privacy_short`, inspection and retained-edit strings) | Existing |
-| You → **About and privacy** (new row group) | App version, the app's privacy policy, the server's privacy policy (#160), open-source licenses (including Bricolage Grotesque OFL), and "How notifications are delivered" (distributor explanation from the push spec) | New |
+| You → **About and privacy** (new row group) | App version, the app's privacy policy, and when present the server's privacy policy, rules and legal notice (§1), open-source licenses (including Bricolage Grotesque OFL), and "How notifications are delivered" (distributor explanation from the push spec) | New |
 | Delete account | Section 2 disclosures | New |
 | Export | The existing unencrypted-file and partial-file disclosures | Existing |
 
@@ -211,7 +343,10 @@ re-verify them at release. How they map to the form's answers is the maintainer'
 | ID | Requirement | Verify |
 |---|---|---|
 | P-170 | No write action is possible before the guidelines are accepted for the current version, server and account. Acceptance is stored locally and versioned. | C |
-| P-171 | Server rules, server privacy and re-acceptance appear only once #160 exists, marked as a dependency until then. | R |
+| P-171 | With `policies.rules`, one I agree covers the app guidelines and the server rules and posts the shown version. Sign-up sends `accepted_rules_version`. `409` and unknown results re-read the session and never accept or resend on their own. `rules: null` or a missing `policies` shows only the app guidelines. | U, C |
+| P-175 | A `403 rules_acceptance_required` is a definite refusal: the draft, reply, file or edit text is kept, no unknown state is set, re-acceptance opens, and nothing resends after I agree. Ungated actions never show re-acceptance. | U, C |
+| P-176 | Hosted policy documents render `markdown` through the bounded formatter's display subset (escaped HTML, http(s) and mailto links only, no images, headings level 2 and below, flattened quotes, plain code) with literal fallback, never server HTML or a WebView. External documents and the legal notice open only `https` URLs, through an explicit Open in browser. | U, C |
+| P-177 | `privacy_policy_updated` notifications are tolerated in Activity and never fail parsing. `change_summary` shows as plain text. | U |
 | P-172 | Delete account is reachable from You → Privacy and security. It discloses the per-server scope, the 14-day restoration, finalization and what is kept, shows the destructive decision dialog before the request, uses step-up only on 403 step_up_required, checks unknown results with a session GET, and never resends automatically. | C |
 | P-173 | Privacy links and disclosures appear at every surface in the table, with wording consistent with the existing DM disclosures. | R, S |
 | P-174 | The guidelines text, deletion page and data safety facts are used as approved (2026-11-07). The privacy policy is published only after its own approval. Factual lines are re-verified against the shipped app before release. | R |
