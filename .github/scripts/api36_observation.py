@@ -26,8 +26,11 @@ def read_bounded(path, maximum):
 
 def known_ime(failure):
     text = failure.text or ""
-    return (failure.tag == "failure" and failure.get("type") == "java.lang.AssertionError"
+    # Pinned DDMLib omits type; require the explicit root stack class in either format.
+    return (failure.tag == "failure" and failure.get("type") in (None, "java.lang.AssertionError")
+        and text.startswith("java.lang.AssertionError: Tap fixture: ")
         and len(TAP.findall(text)) == 1
+        and text.count("Caused by:") == 1 and "Suppressed:" not in text
         and "Caused by: androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms" in text
         and "NativeInputKt.tapNativeInput(NativeInput.kt:20)" in text
         and "NativeInputKt.tapNativeInput(NativeInput.kt:29)" in text)
