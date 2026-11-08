@@ -70,8 +70,9 @@ M7 and is out of scope here.
 
 **Guidelines screen with server rules** (mockup `GuidelinesServer`)
 
-When `policies.rules` is present and `user.rules.acceptance_required` is true, the guidelines
-screen gains a section below the app guidelines:
+When `policies.rules` is present, the guidelines screen gains a section below the app
+guidelines. Its rows are always shown. The acceptance sentence and the accept request apply only
+while `user.rules.acceptance_required` is true (the last bullet covers the other case):
 
 - Section label "**{installation}'s rules**" (Label style), then a row in a `raised` card: the
   `document` icon, "Read {installation}'s rules", the caption "Updated {date}" from
