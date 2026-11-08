@@ -69,7 +69,32 @@ Eight hues, always with `#14111C` text (all at least 8.4:1):
 `lilac #B7A3F5`, `rose #F29BC4`, `clay #D9B08C`.
 
 The hue is chosen by a stable hash of the server-provided immutable ID (room ID, account
-ID), so it never changes when someone renames a room or person. When an avatar image exists
+ID), so it never changes when someone renames a room or person.
+
+**Shared hash (CCM and the ChitChat web client compute it identically).** For a non-negative
+integer ID:
+
+```
+index = (id XOR (id >>> 32)) mod 8      // Kotlin: Math.floorMod(id xor (id ushr 32), 8L)
+      = (id mod 8) XOR (floor(id / 2^32) mod 8)   // JS-safe without BigInt for IDs < 2^53
+```
+
+The index selects the hue from the list above, in that order: 0 apricot, 1 honey, 2 lime,
+3 sea, 4 sky, 5 lilac, 6 rose, 7 clay. Room IDs and account IDs use the same function; a room
+and a person with the same number share a hue, and their shapes tell them apart. Test vectors:
+
+| ID | Index | Hue |
+|---|---|---|
+| 0 | 0 | apricot |
+| 1 | 1 | honey |
+| 7 | 7 | clay |
+| 9 | 1 | honey |
+| 1234567 | 7 | clay |
+| 4294967296 (2^32) | 1 | honey |
+| 4294967297 | 0 | apricot |
+
+The order of the eight hues, the function and these vectors change only through paired PRs in
+both repositories. The source of truth in CCM is `identityHueIndex` in `core/theme/Lantern.kt`. When an avatar image exists
 (future M5 media), the hue stays as a fallback and loading color.
 
 ## Shape
