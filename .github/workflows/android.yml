@@ -29,8 +29,6 @@ jobs:
         run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease --max-workers=2
       - name: Compile the opt-in standalone diagnostic (no device invocation)
         run: ./gradlew -PfocusDiagnostic=true :focus-diagnostic:assembleDebug --max-workers=2
-      - name: Compile the opt-in recreated-insets diagnostic (no instrumentation)
-        run: ./gradlew -PrecreatedInsetsDiagnostic=true :app:assembleDebugAndroidTest --max-workers=2
       - name: Build and unit-test the opt-in IME reproducer (no instrumentation)
         run: |
           ./gradlew -PimeReproducer=true :ime-reproducer:assembleDebug :ime-reproducer:assembleDebugAndroidTest :ime-reproducer:testDebugUnitTest :ime-reproducer:lintDebug --max-workers=2

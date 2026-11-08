@@ -73,8 +73,7 @@ internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel, a
     realtime: RealtimeController? = null, messageTargets: MessageTargetViewModel? = null,
     notifications: NotificationCenterViewModel? = null, search: MessageSearchViewModel? = null,
     profiles: io.github.thiesi.chitchat.feature.profile.ProfileViewModel? = null,
-    completion: io.github.thiesi.chitchat.feature.completion.CompletionViewModel? = null,
-    onThemeChanged: (Boolean) -> Unit = {}) {
+    completion: io.github.thiesi.chitchat.feature.completion.CompletionViewModel? = null) {
     val accountModel = account ?: remember(auth) { AccountViewModel(TestAccounts(auth.state)) }
     val rooms = roomModel ?: remember(auth) { RoomsViewModel(EmptyRoomOperations(auth.state)) }
     val conversations = conversationModel ?: remember(auth) { ConversationViewModel(EmptyConversationOperations(auth.state)) }
@@ -85,9 +84,9 @@ internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel, a
     }
     if (traceInput) io.github.thiesi.chitchat.testing.ObserveNativeTextInput {
         ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox,
-            directThread = directThread, messageTargets = messageTargets, notifications = notifications, search = search, profiles = profiles, completion = completion, onThemeChanged = onThemeChanged)
+            directThread = directThread, messageTargets = messageTargets, notifications = notifications, search = search, profiles = profiles, completion = completion)
     } else {
         ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox,
-            directThread = directThread, messageTargets = messageTargets, notifications = notifications, search = search, profiles = profiles, completion = completion, onThemeChanged = onThemeChanged)
+            directThread = directThread, messageTargets = messageTargets, notifications = notifications, search = search, profiles = profiles, completion = completion)
     }
 }

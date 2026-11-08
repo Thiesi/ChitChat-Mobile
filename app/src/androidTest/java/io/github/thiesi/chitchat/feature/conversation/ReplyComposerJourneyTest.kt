@@ -3,12 +3,10 @@ package io.github.thiesi.chitchat.feature.conversation
 import android.content.ClipboardManager
 import android.content.Intent
 import android.app.Activity
-import android.app.Application
 import android.app.Instrumentation
-import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import io.github.thiesi.chitchat.core.ui.configureChatWindow
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
@@ -44,50 +42,16 @@ import io.github.thiesi.chitchat.testing.NativeChatFixtures
 import io.github.thiesi.chitchat.testing.nativeInputWindow
 import io.github.thiesi.chitchat.testing.nativeImeServerAfterFailure
 import io.github.thiesi.chitchat.testing.NativeTextInputTrace
-import io.github.thiesi.chitchat.testing.NativeWindowTestActivity
-import io.github.thiesi.chitchat.testing.recreatedWindowAfterFailure
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicLong
 import org.junit.*
 import org.junit.Assert.*
-import org.junit.rules.RuleChain
-import org.junit.rules.TestRule
-import org.junit.runners.model.Statement
-
-@Target(AnnotationTarget.FUNCTION)
-@Retention(AnnotationRetention.RUNTIME)
-private annotation class ContentDuringOnCreate
 
 /** Real navigation/windows/IME/provider retention; deterministic fixtures, not live-server acceptance. */
 class ReplyComposerJourneyTest {
-    private val compose = createAndroidComposeRule<NativeWindowTestActivity>()
-    private var onCreateHost = false
-    private val bootstrap = TestRule { base, description -> object : Statement() {
-        override fun evaluate() {
-            // Keep the original late-install path as the unchanged baseline control. The new
-            // comparison differs only in content installation during onCreate, like MainActivity.
-            onCreateHost = description.getAnnotation(ContentDuringOnCreate::class.java) != null
-            val application = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as Application
-            val callback = object : Application.ActivityLifecycleCallbacks {
-                override fun onActivityCreated(activity: Activity, state: Bundle?) {
-                    if (activity is NativeWindowTestActivity) activity.createContent = { install(activity) }
-                }
-                override fun onActivityStarted(activity: Activity) = Unit
-                override fun onActivityResumed(activity: Activity) = Unit
-                override fun onActivityPaused(activity: Activity) = Unit
-                override fun onActivityStopped(activity: Activity) = Unit
-                override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
-                override fun onActivityDestroyed(activity: Activity) = Unit
-            }
-            if (onCreateHost) application.registerActivityLifecycleCallbacks(callback)
-            try { base.evaluate() } finally {
-                if (onCreateHost) application.unregisterActivityLifecycleCallbacks(callback)
-            }
-        }
-    } }
-    @get:Rule val activityAndCompose: RuleChain = RuleChain.outerRule(bootstrap).around(compose)
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val sessions = TestSessions()
     private val api = NativeChatFixtures(sessions)
     private val typingClock = AtomicLong(10_000L)
@@ -105,13 +69,14 @@ class ReplyComposerJourneyTest {
     }
     @Volatile private var ime = 0
     @Before fun bind() {
-        if (!onCreateHost) compose.activityRule.scenario.onActivity { install(it) }
+        compose.activityRule.scenario.onActivity { install(it) }
     }
     private fun install(activity: ComponentActivity) {
         val args = InstrumentationRegistry.getArguments()
         val config = activity.resources.configuration
         args.getString("expectedOrientation")?.let { assertEquals(it.toInt(), config.orientation) }
         args.getString("expectedFontScale")?.let { assertEquals(it.toFloat(), config.fontScale, 0.01f) }
+        activity.enableEdgeToEdge()
         room = ViewModelProvider(activity, ConversationViewModel.factory(api.rooms, typing = typing.controller))[ConversationViewModel::class.java]
         direct = ViewModelProvider(activity, DirectThreadViewModel.factory(api.directs, typing = typing.controller))[DirectThreadViewModel::class.java]
         targets = ViewModelProvider(activity, MessageTargetViewModel.factory(api.lookups))[MessageTargetViewModel::class.java]
@@ -123,8 +88,7 @@ class ReplyComposerJourneyTest {
             val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
             SideEffect { ime = bottom }
             Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, conversationModel = room,
-                directInbox = inbox, directThread = direct, messageTargets = targets, notifications = notices,
-                onThemeChanged = { activity.configureChatWindow(it) }) }
+                directInbox = inbox, directThread = direct, messageTargets = targets, notifications = notices) }
         }
     }
     private fun root() {
@@ -344,13 +308,12 @@ class ReplyComposerJourneyTest {
             val bounds = runCatching { input.fetchSemanticsNode().boundsInWindow }.getOrNull()
             val options = runCatching { compose.onAllNodesWithTag("message_actions").fetchSemanticsNodes().size }.getOrNull()
             val canSend = compose.runOnIdle { if (isRoom) room.canSend() else direct.canSend() }
-            val layout = recreatedWindowAfterFailure()
             val window = nativeInputWindow()
             val inputSessions = NativeTextInputTrace.describe()
             val server = nativeImeServerAfterFailure()
             throw AssertionError("Reply handoff: uptime=$observedAt, room=$isRoom, selected=${selected != null}, " +
                 "focused=$focused, displayed=$displayed, bounds=$bounds, options=$options, canSend=$canSend, " +
-                "deadlineIME=$deadlineIme, laterIME=$ime, window=$window, layout=$layout, inputSessions=$inputSessions, server=$server", failure)
+                "deadlineIME=$deadlineIme, laterIME=$ime, window=$window, inputSessions=$inputSessions, server=$server", failure)
         }
     }
     private fun options() {
@@ -441,31 +404,14 @@ class ReplyComposerJourneyTest {
         assertEquals("", direct.state.value.draft); assertEquals(0, api.rooms.sends + api.directs.sends)
     }
     @Test fun realActivityProvidersRetainBothComposersWhileDestroyedEntryCallbacksStayInert() {
-        providerRecreation(checkGeometry = false)
-    }
-    @Test @ContentDuringOnCreate fun onCreateInstallationKeepsRecreatedReplyComposersAboveTheNativeKeyboard() {
-        providerRecreation(checkGeometry = true)
-    }
-    private fun providerRecreation(checkGeometry: Boolean) {
         root()
         for (isRoom in listOf(true, false)) {
-            pane(isRoom); reply(isRoom)
-            if (checkGeometry) {
-                val bounds = compose.onNodeWithTag(if (isRoom) "conversation_composer" else "dm_composer").fetchSemanticsNode().boundsInWindow
-                var windowHeight = 0
-                compose.activityRule.scenario.onActivity { windowHeight = it.window.decorView.height }
-                val native = nativeInputWindow()
-                assertEquals(1, native.resumedActivities)
-                assertEquals(true, native.imeVisible)
-                val bottom = checkNotNull(native.imeBottom)
-                assertTrue("Pinned composer must remain above its native keyboard", bounds.bottom <= windowHeight - bottom)
-            }
-            type(isRoom, "Rotation draft"); hideIme()
+            pane(isRoom); reply(isRoom); type(isRoom, "Rotation draft"); hideIme()
             val oldRoom = room; val oldDirect = direct
             val original = if (isRoom) room.state.value.composerReply else direct.state.value.composerReply
             val oldOptions = compose.onNodeWithTag("composer_reply_options").fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
             compose.activityRule.scenario.recreate()
-            if (!onCreateHost) compose.activityRule.scenario.onActivity { install(it) }
+            compose.activityRule.scenario.onActivity { install(it) }
             compose.waitUntil(5_000) { if (isRoom) room.state.value.loaded && !room.state.value.busy && !room.state.value.stale
                 else direct.state.value.loaded && !direct.state.value.busy && !direct.state.value.stale }
             assertSame(oldRoom, room); assertSame(oldDirect, direct)

@@ -1,113 +1,52 @@
-# Recreated composer inset observation (#69)
+# Native test-host theme hygiene and retained IME observations
 
-The [technical lead's bounded diagnostic](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6726488531)
-investigates PR129's original API35 native/Compose divergence, not the standalone a/c no-surface signature.
-The original run42475781799 remains FAILED247/248. Its exact-head development exception grants no retry,
-new-head, device or release waiver; demonstrated product defects still block.
+Status: the bounded investigation is stopped under
+[issue69/6728241370](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6728241370).
+PR133's final scope is theme/manifest-guard hygiene; no keyboard fix is claimed.
 
-## Fixed measurement
+## Final hygiene scope
 
-One manual dispatch of `native-input-observation.yml` with explicit `reproducer_arm=recreated-insets`,
-pinned API35 Google x86_64 revision9,
-emulator16740729,2cores, animations0. One instrumentation invocation runs20 parameterized fresh-fixture
-cases: room reply/draft/recreation, then DM reply focus. Existing fixtures are fake sessions and data;
-no live account/server is used. No production or existing journey code is changed. The original native
-helpers, focus/display/positive-IME predicates and5000ms deadlines remain intact, without tap retry,
-forced focus/IME, inset dispatch or readiness polling. Normal fixture IME cleanup remains before destruction.
+The Compose library explicitly assigns its ComponentActivity a platform Light theme,
+which overrides the application's Theme.ChitChat fallback. The debug manifest now
+explicitly uses Theme.ChitChat and adjustResize, matching MainActivity's declared
+theme and input mode before attachment. A device-free manifest guard catches drift.
+Day/night resources and production Activity/input code are unchanged.
 
-The diagnostic class is compiled only with `-PrecreatedInsetsDiagnostic=true`; it is absent from ordinary
-test APKs. The registered manual workflow can measure the committed diagnostic branch before its merge;
-the existing consumed a/b/c arms and100-cycle control are not selected or changed by this mode.
-Ordinary CI compiles it in the build job, but ordinary native jobs use their own default source
-set and full unfiltered suite. The manual measurement is never a merge/acceptance substitute. The first
-authorized dispatch consumes this measurement even if setup fails; no retry is implied.
+The experimental production-helper extraction, debug Activity, lifecycle timing case,
+failure observer and opt-in20-case runner/collector are absent from the final diff.
+Their commits and measured source are retained in this PR's history. The original
+ReplyComposer journey remains enabled and byte-equivalent to main, with all original
+native actions, positive-Compose-inset predicates and5000ms deadlines intact.
 
-## Observations and limits
+## Original results, retained without retry
 
-The pinned foundation-layout1.11.4 stores its inset holder per `LocalView`. The Activity-root probe reads
-that holder and records whether this root is also the focused native editor. Its direct Compose inset and
-the original unfenced mirrored field are separate scalars, with producer/root/Activity/window identities.
-Read-only draw/attach/disposal and control samples include native IME visibility/bottom and attachment,
-window focus, Compose accessor count and native apply-listener presence. No inset or animation listener
-is replaced. Private listener/holder reflection can be unavailable: null remains unknown. Observation
-adds work and may perturb timing; a diagnostic pass cannot establish a fix or erase the original failure.
+- The20-cycle diagnostic42522293944 at05c985f failed20/20 on API35. Current attached/
+  focused roots reported native IME259 versus direct/mirrored Compose0. The original
+  collector's terminal-marker accounting failed; its later correction exists only in
+  archived experiment source, not this hygiene delivery. Report69/6727081243.
+- Timing-only0fb6f51/run42525249420: API35 failed247/249 (both timing cases),
+  API36 passed249/249. Startup timing alone was insufficient.
+- Theme-onlyab76e8f/run42527845665: API35 failed247/249 (both cases), API36 failed
+ 248/249 with a separately audited known strict-input symptom. Report133/6727876673.
+- Pre-theme/current comparison42530146699:19/20 in each arm; the same original
+  ReplyComposer failure predates Lantern B. Report69/6728081784.
+- Real-MainActivity42531290955/0294007:1/1 passed. After DM recreation and one native
+  composer tap, input and Send ended at377 above native IME top381; cleanup passed.
+  This covers only that synthetic API35 path, not all room-to-DM Reply/modal paths or
+  API26-34. Report69/6728186345.
+- Final alignedb43071b/run42533817034: API35 failed247/249 (both cases), API36
+  passed249/249;1116JVM/build/lint and two reviews passed. Post-failure window/decor640,
+  content/current focused Compose root357, native rootIME259/holder0; listener
+  prepared/runningfalse and saved-dispatch snapshot cleared. The content size is
+  consistent with640 minus259 IME and24 status-bar space. These separately timestamped
+  post-assertion samples prove no earlier deadline state or exact framework cause.
+  [Full retained report](https://github.com/Thiesi/ChitChat-Mobile/pull/133#issuecomment-6728672641).
 
-Each cycle retains at most64 control records plus the latest128 draw/Compose records; dropped progress
-is counted. All output is an explicit scalar allowlist, with no text, raw assertion, tree or dumps. Timestamps
-order separate observations, not an atomic native/Compose snapshot. Unknown/partial/inconsistent cycle
-accounting is never called a complete passing measurement. Reports, APK hashes/certificate and verified
-environment are retained for7 days; installation refuses existing packages and cleans up only its own.
-
-The original [42522293944](https://github.com/Thiesi/ChitChat-Mobile/actions/runs/42522293944) is FAILED:
-20 started/finished case records report20 DM handoff failures, with no fixture/package cleanup failure.
-The current attached/focused root has native bottom259 and direct Compose/mirrored bottom0 in every case;
-the first retained divergence precedes the failure sample by4346–4890ms. No stale-positive-holder mirror
-was observed, and no progress was dropped. Native apply-listener reflection is unknown, not absent.
-The [full report](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6727081243) retains the
-artifact hash, environment and limits. This single measurement is consumed and must not be replayed.
-
-The original collector also incorrectly required cleanup_end to be the last row, although cleanup can
-cause later draw/Compose progress. Its measurementComplete=false is preserved. The corrected parser
-requires the last control marker (not the last progress record) to be cleanup_end, and retains explicit
-JUnit status per case for future accounting. The correction is device-free; no original result is replaced.
-
-A test-only comparison now contrasts MainActivity's onCreate content installation with the original
-fixture's later onActivity installation after resume. It preserves the old recreation journey as its
-baseline negative and adds pinned-composer/native-keyboard geometry coverage using the same native
-helpers and strict5000ms predicates. A test-owned ActivityLifecycleCallbacks registration installs content
-when the same ComponentActivity calls super.onCreate, then unregisters after rule teardown; the original
-host class/theme/window declarations and release behavior stay unchanged. This comparison is not yet
-evidence that initialization timing is the cause or that a fixture correction fixes the problem.
-
-The original comparison [42525249420](https://github.com/Thiesi/ChitChat-Mobile/actions/runs/42525249420)
-FAILED247/249 onAPI35: both late andonCreate DM-after-recreation cases failed the unchanged positive-IME
-assertion. API36 PASSED249/249, with no skips; build/lint/1116JVM passed. This rejects the timing-only
-hypothesis. The source/head0fb6f51 and original artifacts remain retained.
-
-The merged manifest identifies a separate native-window mismatch: the library explicitly assigns
-ComponentActivity `@android:style/Theme.Material.Light.NoActionBar`, overriding the app's
-`@style/Theme.ChitChat`. The app theme includes its own windowActionModeOverlay/bar/background settings.
-The candidate fixture correction explicitly selects the app theme on the debug host before attachment,
-with tools:replace for the library declaration. MainActivity, production resources and all249 native
-cases/predicates remain unchanged; both installation paths and keyboard geometry remain tested. Its own
-fresh full gates and written reviews must establish the result; no framework-cause or product-fix claim
-follows from changing the declaration alone.
-
-The report must distinguish lagging Compose state, no received inset and a retired producer/window where
-the evidence permits. It must leave unavailable causes unknown and propose any app or fixture correction
-separately. No additional measurement or product/release acceptance follows from this infrastructure.
-## Final bounded window-alignment attempt
-
-Issue69/6728241370 authorizes exactly one further candidate head and its ordinary
-gate. The pre-theme/current comparison42530146699 failed19/20 in both arms, so the
-recorded symptom predates Lantern B. Real MainActivity42531290955 passed its one
-synthetic DM-recreation/native-tap geometry case (input and Send bottom377, IME
-top381), with the limitations recorded on issue69/6728186345. These measurements
-do not change any original failed result or establish every room-to-DM path safe.
-
-The fixture already called enableEdgeToEdge on recreation. The remaining source
-differences were its inside-super callback and its omitted resolved-theme callback.
-A debug-only NativeWindowTestActivity now applies the same shared configureChatWindow
-helper after super.onCreate, before optional onCreate content, on every creation.
-MainActivity's two original enableEdgeToEdge bodies are extracted verbatim into that
-helper; production still makes the same initial and resolved-dark SystemBarStyle
-calls at the same lifecycle/content locations. This is a reuse refactor with no
-intended production behavior change. TestChitChatApp forwards the same palette
-callback for this fixture. Both timing cases stay enabled, with every input action,
-predicate and5000ms deadline unchanged. The manifest/window-order/callback drift
-guard binds both hosts to the same theme and window setup.
-
-Only an already-failed reply assertion reads the new scalar snapshot: Activity/window/
-current Compose-root identity, full/decor/content/root heights, layout-system-UI flags,
-view fits-system-windows flags, soft-input mode, current native/holder IME bottoms and
-the pinned Compose listener's saved onApplyWindowInsets argument/prepared/running
-flags. It never installs/replaces a listener, changes focus/insets or retains Views.
-The saved argument can be cleared on onEnd: missing/refused data remains unknown,
-never a zero/absent dispatch claim. Sequential failure samples have separate timestamps.
-Pinned source: [foundation-layout1.11.4](https://dl.google.com/dl/android/maven2/androidx/compose/foundation/foundation-layout-android/1.11.4/foundation-layout-android-1.11.4-sources.jar).
-
-The source freezes before the one ordinary gate. If the API35 ReplyComposer cases
-pass, normal current-head gates/reviews govern delivery and the interim rule ends.
-If they fail, stop: per the coordinator this PR is reduced to theme/guard hygiene,
-the interim rule remains and the mechanism is lower priority. No further iteration
-or diagnostic dispatch is implied.
+All original reports/source/APK proofs remain retained; no failed result is rewritten.
+No additional experiment, diagnostic dispatch or alignment iteration is authorized.
+The remaining mechanism is lower priority; a new plan is needed before further work.
+The [maintainer's scoped interim rule](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6727888625)
+continues because this investigation delivered no fixture fix. The reduced head needs
+its own applicable checks and two written current-head reviews; earlier results do not
+transfer, per the [final disposition](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6728684050).
+Device, live, accessibility and release acceptance remain separate.
