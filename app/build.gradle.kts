@@ -19,7 +19,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
-        debug { applicationIdSuffix = ".debug" }
+        debug { applicationIdSuffix = ".debug"; isPseudoLocalesEnabled = true }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -73,6 +73,7 @@ dependencies {
     testImplementation(libs.okhttp.tls)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test)
+    androidTestImplementation(libs.compose.ui.test.accessibility)
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.okhttp.mockwebserver)

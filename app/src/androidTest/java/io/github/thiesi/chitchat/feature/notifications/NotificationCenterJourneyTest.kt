@@ -67,6 +67,7 @@ class NotificationCenterJourneyTest {
         val settings = SettingsViewModel(object : SettingsStore {
             override val settings = MutableStateFlow(AppSettings(server = address))
             override suspend fun saveServer(server: ServerAddress?) { settings.value = settings.value.copy(server = server) }
+            override suspend fun savePureBlack(enabled: Boolean) = Unit
             override suspend fun saveTheme(theme: ThemePreference) { settings.value = settings.value.copy(theme = theme) }
         }).also { store.put("settings", it) }
         compose.setContent { Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, notifications = model) } }

@@ -5,6 +5,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SettingsDecoderTest {
+    @Test fun pureBlackDefaultsOffAndRejectsUnreadableNonBooleanValues() {
+        for(value in listOf(null,"true",1,0,"false")) assertFalse(decodeSettings(null,null,value).pureBlack)
+        assertTrue(decodeSettings(null,"LIGHT",true).pureBlack)
+        assertFalse(decodeSettings(null,"DARK",false).pureBlack)
+    }
     @Test fun distinguishesInvalidStoredAddressWithoutRetainingItsSecrets() {
         val settings = decodeSettings("https://user:fixture-secret@chat.example.org/", "DARK")
         assertNull(settings.server)

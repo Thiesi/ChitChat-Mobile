@@ -55,6 +55,7 @@ class FoundationJourneyTest {
                 if (failWrite) { failWrite = false; throw IOException("Test storage failure") }
                 saved.value = saved.value.copy(server = server)
             }
+            override suspend fun savePureBlack(enabled: Boolean) = Unit
             override suspend fun saveTheme(theme: ThemePreference) { saved.value = saved.value.copy(theme = theme) }
         }
         return SettingsViewModel(store)
@@ -68,6 +69,7 @@ class FoundationJourneyTest {
                 emit(AppSettings())
             }
             override suspend fun saveServer(server: ServerAddress?) = Unit
+            override suspend fun savePureBlack(enabled: Boolean) = Unit
             override suspend fun saveTheme(theme: ThemePreference) = Unit
         }
         val model = SettingsViewModel(store)

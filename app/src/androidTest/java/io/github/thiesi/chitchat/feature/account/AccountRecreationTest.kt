@@ -42,6 +42,7 @@ class AccountRecreationTest {
         override val settings = MutableStateFlow(AppSettings(server =
             (ServerAddress.parse("chat.example.org") as AddressResult.Valid).address))
         override suspend fun saveServer(server: ServerAddress?) { settings.value = settings.value.copy(server = server) }
+        override suspend fun savePureBlack(enabled: Boolean) = Unit
         override suspend fun saveTheme(theme: ThemePreference) { settings.value = settings.value.copy(theme = theme) }
     })
     @Before fun bindRetainedModel() { compose.runOnUiThread {
