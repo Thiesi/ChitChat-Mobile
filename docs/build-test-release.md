@@ -88,6 +88,20 @@ Non-release slices require the complete current-head API35 **unfiltered/untraced
 
 API36's original process/test result remains visible and failed when it fails. Reports and a bounded scalar status artifact are retained for seven days; a separate default-branch workflow posts failures on their PR without executing PR code with a write token. Known strict IME failures are non-gating observations only when the original complete, unskipped suite/environment evidence matches: one native tap gained field focus, IME remained0, and the existing NativeInput helper timed out at5000ms. This classification does not prove a platform cause or absence of an app defect. Mixed/other failures, missing/truncated/contradictory reports or incomplete observations fail api36-product-defects and block delivery. Any demonstrated API36 product defect still blocks even if it matches the signature.
 
+Additional or suppressed error causes in the same failed case are not classified as only the known IME signature; they block along with mixed failures across cases.
+Pinned DDMLib emits failure stack text without an exception-type attribute. The classifier requires an explicit AssertionError root in that text and rejects contradictory type attributes; it never infers the class merely from an inner timeout.
+
+The [maintainer's temporary API35 rule](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6727888625)
+allows a code PR's sole API35 failure to be the recorded ReplyComposerJourneyTest
+DM-after-room-recreation case(s): chooseReply, focused/displayed input, Compose IME0
+and native IME visible or shown. Record the original test/run/signature and that
+decision on the PR, without retry. Every other API35 case, API36 product-defect guard
+(or manually confirmed known-IME signature until PR131), JVM/lint/build gate and both
+written current-head reviews remain required. The rule ends when the fixture fix lands
+or immediately if issue69 demonstrates real user impact. Release/device/accessibility
+gates remain required. The bounded pre-theme/current and real-MainActivity observations
+are recorded on issue69; the latter covers only its measured synthetic API35 path.
+
 The reporter can be manually dispatched with a completed Android PR run ID to report existing artifacts idempotently; it never invokes tests or changes a result. The privileged job checks out only the default branch, validates the originating workflow/PR/head and bounds/checksums the single JSON artifact. Raw assertions, messages, logcat and credentials are not copied into PR comments.
 
 The standalone comparison in [69/6720029615](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6720029615) was a49/50, b50/50 and c48/50, with different bundled IME versions in API35/36. It reproduces the symptom without CCM account/chat state but establishes no framework root cause or keyboard fix. All prior API36 failures and per-head exceptions remain recorded. Revisit the gate choice when an API36 image newer than revision7 ships or a physical-API36 result exists; the conditional Firebase Test Lab path remains separately authorized infrastructure.
