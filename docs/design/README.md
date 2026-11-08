@@ -57,10 +57,10 @@ Mockups show the target experience. Several elements need data or features that 
 exist yet. Each is marked "Dependency" in the documents, and implementers must leave it out
 rather than fake it:
 
-- Liveliness glow and "N here now" in room lists: the room directory API has no presence
-  summary. Today, presence is known only inside a room after entry.
-- Room previews or recency ordering in the room list: the directory API has no last-message
-  summary. Room rows show the room's info line instead.
+- ~~Liveliness glow and "N here now" in room lists~~ and ~~recency in room lists~~:
+  available since ChitChat#153/#154 merged (2026-11-08), designed in lists-restyle.md.
+  Recency is shown, never used for ordering. Room message previews stay out: the API gives
+  time only.
 - Admin "Looking after this server" card, guest visits and moderation actions: M7.
 - Invite QR codes: specified in invite-codes.md (D5), not yet implemented or scheduled.
 
@@ -74,7 +74,7 @@ rather than fake it:
 | D4 | Material You dynamic color | **Off.** |
 | D5 | Invite codes | A client-only QR/link carrying only the server origin (no credentials, tokens, usernames or room IDs), scanned during onboarding; server confirmation (onboarding step 3) is always shown. Specified in [invite-codes.md](invite-codes.md) as the plain HTTPS origin, so the same code also opens the web client for people without the app. |
 | D6 | Palettes | Lantern is the default. **The backend has no account-level theme or palette** (the web client stores its six palettes per device, in the browser; backend audit, issue #1). So CCM's appearance is a local device setting, like the web's. If CCM later offers additional palettes, they may replace the hue tokens while shapes, chit, type and status language stay. High-contrast stays available as a local option. **An "AMOLED black" theme must exist before CCM goes live** (see visual-vocabulary.md). |
-| D7 | Backend data | Backend issues filed: [presence count #153](https://github.com/Thiesi/ChitChat/issues/153) and [last activity time #154](https://github.com/Thiesi/ChitChat/issues/154) per joined room. Until the server provides them, room lists show neither. |
+| D7 | Backend data | Backend issues filed: [presence count #153](https://github.com/Thiesi/ChitChat/issues/153) and [last activity time #154](https://github.com/Thiesi/ChitChat/issues/154) per joined room. Both merged 2026-11-08 (ChitChat main `9cf052c`); room lists now show them per lists-restyle.md. |
 
 Ask the maintainer before deciding any similar consequential question that is not listed
 here.

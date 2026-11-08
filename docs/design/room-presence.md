@@ -26,6 +26,12 @@ When this document and a milestone contract disagree, the contract wins.
 There is no room details surface beyond the directory's detail dialog. Member counts are not
 available to the client.
 
+**List snapshot versus room header (ChitChat#153).** The room list's "{n} here now" comes from
+`active_count`: other people, viewer excluded, as of the last list fetch. Inside the room, the
+header uses the live presence list as below, and it is the authority once the person has
+entered. The two can differ for a moment, for example after the person joins, and that's
+expected. The header never copies the list's number, and the list never claims to be live.
+
 ## Header (from the transcript spec)
 
 - Lantern, room name, and a subtitle derived from presence:
@@ -119,7 +125,7 @@ A choice sheet, opened from the header:
 
 | ID | Requirement | Verify |
 |---|---|---|
-| P-130 | The header subtitle and glow follow the mapping. The glow appears only with at least one other present person on a fresh list. No member count is shown without data. | U, C |
+| P-130 | The header subtitle and glow follow the mapping. The glow appears only with at least one other present person on a fresh list. No member count is shown without data, and the header never reuses the room list's `active_count` snapshot. | U, C |
 | P-131 | Presence moments render above the composer, one at a time, with the existing enter actions and gating. Draft text is never lost. | C |
 | P-132 | The WARNING countdown runs only while visible and is announced once plus at 10 s, never every second. | C |
 | P-133 | The people sheet is never shown with a stale list, and guests are marked. | C |
