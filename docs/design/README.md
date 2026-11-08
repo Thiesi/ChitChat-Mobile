@@ -21,6 +21,7 @@ a substitute.
 | [onboarding-restyle.md](onboarding-restyle.md) | Implementation spec mapping onboarding onto today's code, copy and tests |
 | [invite-codes.md](invite-codes.md) | Sharing and scanning the server address as a QR code or link (D5) |
 | [room-presence.md](room-presence.md) | Implementation spec for the room header, presence and inactivity moments, the people sheet and room details |
+| [copy-deck.md](copy-deck.md) | String audit against communication.md, grouped by the slice that applies each change, with affected tests and flagged contract strings |
 | [store-listing.md](store-listing.md) | Proposal: Play listing fields, description, icon, feature graphic, screenshot set (maintainer decision) |
 | [privacy-policy.md](privacy-policy.md) | Draft app privacy policy (pending maintainer approval; host-neutral, placeholders for publisher and contact) |
 | [server-update.md](server-update.md) | The "This server needs an update" state at setup and on revalidation (minimum server version) |
