@@ -72,9 +72,11 @@ against the mockups: a new screen should look like it belongs on the same canvas
 
 ## What this is not
 
-- Not a restyle of the web client. The web app keeps its own six palettes, stored per device
-  in the browser; there is no account-level palette to sync (D6). CCM may later offer extra
-  local palettes, but its shapes and voice remain CCM's.
+- Not a web spec. The ChitChat web client will adopt Lantern in its own presentation phase
+  (agreed by both technical leads, 2026-11-08). Its visual lead owns that direction and adapts
+  layout to desktop density without adding new signatures. The mark, shared tokens and type
+  change only through paired PRs in both repositories. Pure black stays app-only. There is
+  still no account-level palette to sync (D6): palette choice stays local to each device.
 - Not permission to change behavior. See the [README](README.md) for precedence.
 - Not final. The layout is explicitly open, and the maintainer approves consequential
   decisions.
