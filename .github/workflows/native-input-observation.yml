@@ -7,7 +7,7 @@ on:
       reproducer_arm:
         description: Separate issue69 50-case arm (none retains the original 100-cycle control)
         type: choice
-        options: [none, a, b, c]
+        options: [none, a, b, c, lantern-bisect]
         default: none
         required: true
 
@@ -19,6 +19,60 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  lantern-bisect:
+    if: inputs.reproducer_arm == 'lantern-bisect'
+    name: Lantern comparison (${{ matrix.arm }}, measurement only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NATIVE_API: '35'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arm: before
+            source: 83b448089e69f2fc755e280f24908d6ee71b6a75
+          - arm: current
+            source: c49e04766d257d0578d95172abe7d9885479a04b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ matrix.source }}
+          path: observed
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run the authorized source comparison once
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          emulator-build: '16740729'
+          disable-animations: true
+          pre-emulator-launch-script: python3 -B .github/scripts/pin_journey_image.py
+          script: |
+            adb shell settings put secure show_ime_with_hard_keyboard 1
+            python3 -B .github/scripts/lantern_ime_bisect.py ${{ matrix.arm }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: lantern-ime-${{ matrix.arm }}-measurement-only
+          retention-days: 7
+          path: |
+            observed/app/build/reports/androidTests/
+            observed/app/build/outputs/androidTest-results/connected/
+
   traced-control:
     if: inputs.reproducer_arm == 'none' || inputs.reproducer_arm == ''
     runs-on: ubuntu-latest
