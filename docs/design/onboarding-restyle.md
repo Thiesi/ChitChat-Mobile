@@ -70,9 +70,13 @@ transcript, lists, status and modals → Send when back online.
 ### 3 Server found (new chooser; ANONYMOUS phase)
 
 - Shown when the anonymous bootstrap succeeds. A card with the installation lantern (initial
-  and identity hue from the host), the host as the name, and a lock icon. Use the installation
-  name only once the server exposes the effective name (backend issue #149). The configured
-  default name from health must not be shown as if it were the installation's name.
+  from the name, identity hue from the host), the **installation name** from
+  `application.name` (ChitChat#149, the effective name including the operator's override) as
+  the title, then the **host as a second line** and a lock icon. The host always stays
+  visible: the name is chosen by the server's operator, so the address is what lets a person
+  check where they're signing in. When `application.name` is missing or blank, the host is the
+  title and there's no second line. The configured default name from health is never shown as
+  the installation's name.
 - Headline "Found it. Are you new here?" and the buttons:
   - **Create my account**, only if `public.registrationEnabled == true` and lockdown is
     off. Otherwise replace it with the line "Sign-up is closed on this server. Ask the person
