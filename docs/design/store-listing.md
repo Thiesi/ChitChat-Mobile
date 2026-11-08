@@ -112,8 +112,8 @@ data).
 
 ## Content rating and policy notes (for the maintainer)
 
-- **User-generated content:** yes. Covered by guidelines acceptance, message reporting (and
-  #159 report-a-person when available), ignore and block.
+- **User-generated content:** yes. Covered by guidelines acceptance, message reporting,
+  reporting a person (ChitChat#159, reporting.md), ignore and block.
 - **Users interact:** yes (chat). **Shares location:** no (photo location is removed).
   **Digital purchases:** none.
 - **Data safety:** use the approved facts in `play-readiness.md` §4.
