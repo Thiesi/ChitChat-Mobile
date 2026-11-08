@@ -76,8 +76,9 @@ software, and it doesn't sell or share your data.
   preferences.
 - **Unsent drafts and temporary display data** (for example images you opened) are kept **in
   memory only** while the app runs. They aren't saved to storage.
-- When you **share** a file to another app, a temporary copy is made for that app and deleted
-  afterwards.
+- When you **share** a file to another app, a temporary copy is made for that app. It is kept
+  for up to 24 hours so the other app can finish opening it, then deleted. Signing out
+  deletes it straight away.
 - Files you **save** or **export** go to a location you choose, and stay there under your
   control. Exports aren't encrypted, and the app tells you so.
 - The app **turns off Android cloud backup** for its data.
@@ -131,7 +132,7 @@ Questions about your account or messages: the operator of your ChitChat server.
 - [ ] Session vault uses the Android Keystore AES-GCM key; backups are disabled
       (`allowBackup=false`, data extraction rules).
 - [ ] Photo location removal ships as specified in `files-media.md`.
-- [ ] Drafts and images aren't written to disk, and share copies are deleted.
+- [ ] Drafts and images aren't written to disk, and share copies expire after 24 hours and are deleted on sign-out.
 - [x] Embedded FCM distributor ships (maintainer, 2026-11-08); the FCM sentence is final. Verify it's used only when no UnifiedPush distributor is installed.
 - [x] Publisher (NetWork XXIII) and contact (chitchat@NetWorkXXIII.de) filled in; confirm the mail alias works before publishing. URL: https://ChitChat.NetWorkXXIII.de/app/privacy.
 - [ ] Wording consistent with the data safety form answers.

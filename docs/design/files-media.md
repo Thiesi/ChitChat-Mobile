@@ -106,11 +106,11 @@ and [communication.md](communication.md). Nothing renders as a bubble before the
 
 | State | What the person sees | Actions |
 |---|---|---|
-| Uploading, body still sending | The card shows a determinate progress ring with "Sending 1.2 of 3.4 MB". Field and Send are locked | **Cancel**: aborts before the request body completes, so nothing was delivered. The attachment returns to the draft |
-| Uploaded, waiting for the server | Indeterminate ring, "Finishing…" | none. Cancelling now couldn't prove whether the server kept it |
+| Uploading, body still sending | The card shows a determinate progress ring with "Sending 1.2 of 3.4 MB". Field and Send are locked | **Cancel**: aborts the request while its body is still being written. Only then may the card say nothing was delivered, and the attachment returns to the draft. If the transport reports that the full body was already written when the cancel took effect, the outcome is **Unknown** (below), never non-delivery |
+| Uploaded, waiting for the server | Indeterminate ring, "Finishing…" | none. Cancel disappears here and nothing in this phase claims non-delivery. Any interruption after the full body is written (cancel race, connection loss, timeout, genuine background) is **Unknown** |
 | Confirmed (201) | The canonical message appears as a bubble; draft and card clear | — |
 | Definite failure (server error before commit, too large, type not allowed, membership, 429, block) | A level-2 notice with the server's meaning: "Your server refused this file: it's too large." / "This file type isn't allowed on this server." / "You've reached the upload limit. Try again later." (429: **generic**, no time is shown, because the server gives none in machine-readable form, #157). An upload answered with `400 validation_error` reads "Your server refused this file. It may be too large." (#156: an oversized body arrives as a missing field). The file stays attached | Remove or replace, or send again later |
-| **Unknown** (connection lost after the body was sent, timeout, ambiguous transport error) | The `unsureLine` notice: **"Not sure your file arrived."** with **Check history**. The file and caption stay attached | Check history runs the existing explicit reconciliation. If the message isn't found, the duplicate-risk dialog follows: "Send again? We checked and couldn't find it. Sending again may post it twice." |
+| **Unknown** (anything after the full body was written: connection lost, timeout, a cancel that lost the race, ambiguous transport error) | The `unsureLine` notice: **"Not sure your file arrived."** with **Check history**. The file and caption stay attached | Check history runs the existing explicit reconciliation. If the message isn't found, the duplicate-risk dialog follows: "Send again? We checked and couldn't find it. Sending again may post it twice." |
 
 - **Reconciliation evidence (approved by the technical lead, 2026-11-07, PR #105):** the client
   computes the SHA-256 of the picked file. During Check history, a message of the viewer's own
@@ -131,6 +131,11 @@ and [communication.md](communication.md). Nothing renders as a bubble before the
 - Upload progress runs only while the app is in the foreground and the conversation is the
   owner. Leaving the app follows the existing genuine-background rules for in-flight writes.
   Navigation never cancels or replays a POST.
+- **Cancel is not proof by itself (technical lead decision, 2026-11-08, issue #1).** The progress
+  ring and "Sending" label are presentation; they never prove non-commit. Non-delivery is
+  claimed only when the transport shows the request body was still being written when it was
+  aborted. Everything else follows the existing POST-uncertainty contract: Check history, the
+  SHA-256 evidence, then duplicate-risk consent.
 
 ## In the transcript
 
@@ -211,8 +216,22 @@ The policy is local and read from existing system state, with no new requests:
 - **Share** (viewer, file card overflow, message actions) downloads the file into the app's
   private cache, then opens the system share sheet with a **temporary read grant** through a
   FileProvider URI. Authenticated URLs are never handed to other apps (feature-parity).
-- The cached copy is deleted when the share completes or is cancelled, and in any case on the
-  next app start. A small first-use note: "Sharing copies the file to the app you choose."
+- **Lifetime of the copy (technical lead decision, 2026-11-08, issue #1).** Android gives no
+  signal that the receiving app has finished reading: choosing a target, dismissing the sheet
+  or returning to CCM proves nothing, and a mail or file app may open the URI minutes later.
+  So:
+  - Nothing is deleted or revoked when the chooser returns or CCM resumes.
+  - Copies live in a dedicated **private cache subfolder** and are shared through **read-only**
+    FileProvider grants.
+  - A copy is kept for **24 hours**. Expired copies are deleted at the next app start or the
+    next share, whichever comes first.
+  - **Cancel before handoff** (the person backs out while the download is still running, or
+    before the share sheet opens) deletes the copy immediately.
+  - **Sign-out and account removal** delete that account's copies immediately. Trade-off,
+    accepted: a receiver still reading a file at that moment loses access, and the person
+    shares it again. Privacy on sign-out wins over a slow receiver.
+  - The app never promises "deleted when sharing completes", because it can't observe that.
+- A small first-use note: "Sharing copies the file to the app you choose."
 - For DMs, the share sheet doesn't preselect any target, and the not-end-to-end-encrypted
   disclosure stays where it is. No extra warning is invented.
 
@@ -239,7 +258,12 @@ The policy is local and read from existing system state, with no new requests:
   - Cancel is allowed only before the body completes;
   - unknown never auto-retries, and Check history leads to the duplicate-risk dialog;
   - the auto-load policy (size, metered, previewable);
-  - memory-cache clearing on account change.
+  - memory-cache clearing on account change;
+  - Cancel during body writing yields non-delivery, while a cancel or interruption after the
+    full body is written yields Unknown;
+  - share copies: kept across chooser return and resume, deleted when older than 24 hours at
+    start or next share, deleted at once on cancel before handoff and on sign-out or account
+    removal.
 - **Compose:**
   - the attach sheet and pending card (Remove, Replace confirmation);
   - progress semantics;
@@ -257,10 +281,10 @@ The policy is local and read from existing system state, with no new requests:
 | ID | Requirement | Verify |
 |---|---|---|
 | P-150 | Only explicit Send uploads. One file per message. Nothing renders before 201. | C |
-| P-151 | Cancel only while the body is still sending. Unknown outcomes use Check history then the duplicate-risk dialog, never automatic retry. Attachments are never queued for Send when back online. | U, C |
+| P-151 | Cancel only while the body is still sending, and non-delivery is claimed only when the transport shows the body was still being written. Any cancel or interruption after the full body is written is Unknown. Unknown outcomes use Check history then the duplicate-risk dialog, never automatic retry. Attachments are never queued for Send when back online. | U, C |
 | P-152 | Server refusals show their meaning, keep the file attached and never guess client-side limits. | C |
 | P-153 | Images follow the loading policy, use memory-only caching cleared on account change, render in a fixed frame that never resizes, and show every state in the table. | U, C |
 | P-157 | Photos are uploaded without location metadata by default, orientation kept. A cleaning failure requires an explicit Send anyway. The SHA-256 evidence covers the uploaded bytes. | U, C |
-| P-154 | Save uses a chosen document and never silently deletes it. Share-out uses temporary FileProvider grants and never hands out authenticated URLs. | C, R |
+| P-154 | Save uses a chosen document and never silently deletes it. Share-out uses read-only FileProvider grants on copies in a private cache subfolder, never hands out authenticated URLs, never deletes on chooser return, keeps copies at most 24 hours (deleted at next start or share), and deletes them at once on cancel before handoff and on sign-out or account removal. | U, C, R |
 | P-155 | Share-in never sends by itself, drops items across sign-in, and supports one file. | C |
 | P-156 | The viewer suppresses read and typing proof and offers zoom alternatives. | C |
