@@ -1,0 +1,64 @@
+name: Theme foundation review captures
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Before production ref
+        required: true
+      head_ref:
+        description: After production and fixture ref
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: theme-review-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        revision: [before, after]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.head_ref || github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+      - name: Prepare exact comparison source
+        env:
+          CAPTURE_REVISION: ${{ matrix.revision }}
+          CAPTURE_BASE_REF: ${{ inputs.base_ref || '3093e71b4236bb27689cef130f3a7b788794b005' }}
+        run: python3 -B .github/scripts/theme_comparison.py prepare "$CAPTURE_REVISION"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        env:
+          CAPTURE_REVISION: ${{ matrix.revision }}
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          emulator-build: '16740729'
+          disable-animations: true
+          pre-emulator-launch-script: python3 -B .github/scripts/pin_journey_image.py
+          script: python3 -B .github/scripts/theme_comparison.py run "$CAPTURE_REVISION"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: theme-${{ matrix.revision }}-review-only
+          retention-days: 7
+          path: app/build/reports/theme-comparison/
