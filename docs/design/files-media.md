@@ -13,18 +13,26 @@ dependency choices are engineering decisions inside those slices. Mockups: `Room
     characters, mentions parsed), optional `reply_to_message_id`, and `file`. Persistent
     membership and the age policy are required.
   - DMs: `POST direct-messages/attachments/upload.php` with `recipient_user_id` and the same
-    optional fields. Limited to **10 successful uploads per user per hour**. An empty caption
+    optional fields. Limited per hour per route (see the policy below). An empty caption
     makes the filename the body. A block returns `403 direct_message_unavailable`.
   - Success is `201` with the created message. The message, metadata and realtime event commit
     together. **There is no idempotency key**, so an interrupted upload has the same ambiguity
     as a text send.
-- **Limits** are server-side: a maximum size (`ATTACHMENT_MAX_BYTES`, default 10 MiB,
-  configurable up to 100 MiB) and a MIME allowlist (JSON, PDF, ZIP, GIF, JPEG, PNG, WebP, CSV,
-  plain text). **Neither is exposed to clients** (backend issue ChitChat#156). Errors include
-  `attachment_too_large`, `attachment_type_not_allowed`, `attachment_type_unknown`,
-  `attachment_empty` and `membership_required`. **A body larger than PHP's `post_max_size`
-  arrives as `400 validation_error`** (a missing form field), not `attachment_too_large` or
-  413 (#156).
+- **Upload policy (ChitChat#156, merged in main `4db1147`, v3.3.0).** `GET session.php` carries
+  a top-level `attachments` block: `{max_bytes, allowed_mime_types[], previewable_mime_types[],
+  rate_limits: {room: {maximum_attempts, window_seconds}, direct_message: {…}}}`.
+  - `null` when signed out and for guests. A **missing key** means an older server: the policy
+    is unknown.
+  - `max_bytes` is the effective limit, enforced exactly as advertised. **`max_bytes: 0` means
+    uploads are unavailable on this server.**
+  - It is read from the existing bootstrap and refreshed with it. No new requests.
+- **Refusals:** every size rejection is `413 attachment_too_large` with an integer
+  `error.max_bytes`, including bodies PHP discarded (the old misleading 400 is gone). A reverse
+  proxy may still answer with its own **non-JSON 413**: that's a definite "too large" refusal
+  with an unknown limit, never unknown delivery. Other errors: `attachment_type_not_allowed`,
+  `attachment_type_unknown`, `attachment_empty` and `membership_required`.
+- **Quotas count attempts,** refused ones included (default 10 per hour per route). Pre-checks
+  therefore protect the person's quota as well as their time.
 - **Throttling:** `429 rate_limited` carries `error.retry_after_seconds` (ChitChat#157, merged).
   It's phrased per `status-presentation.md` "Waiting times". When it's absent the wait is
   unknown, and the client never parses the English text.
@@ -37,8 +45,8 @@ dependency choices are engineering decisions inside those slices. Mockups: `Room
   request. Responses are `no-store`.
 - **Not end-to-end encrypted.** DM files follow DM retention. Guests can't upload.
 
-Anything not listed here (multi-file messages, thumbnails, video, audio, client-visible
-limits) is out of scope until the server offers it.
+Anything not listed here (multi-file messages, thumbnails, video, audio) is out of scope
+until the server offers it.
 
 ## Principles
 
@@ -74,14 +82,25 @@ upload:
 ## Composer: attaching
 
 - **Entry:** a paperclip icon button (48dp, label "Attach") inside the message field's
-  trailing area, beside the reserved emoji slot. Hidden where uploads aren't allowed: guests,
-  reading-only rooms, a blocked DM, or no permission to send.
+  trailing area, beside the reserved emoji slot. Hidden where uploads aren't allowed: guests
+  (`attachments` is `null`), reading-only rooms, a blocked DM, or no permission to send.
+- **Server without uploads (`max_bytes: 0`):** the paperclip stays visible, so the absence is
+  explained rather than mysterious. Its label is "Attach, not available on this server", and
+  pressing it shows a level-1 line above the composer instead of the sheet: "This server
+  doesn't accept files." No picker opens and nothing is requested. Share-in treats files the
+  same way (see Share in).
 - **Choice sheet** (modals spec), two rows:
   - **Photo**: the system Photo Picker, images only, no storage permission;
   - **File**: the system document picker.
 
-  The picker MIME filter may list the v3.2.1 allowlist as a convenience, but the server stays
-  the authority. A rejected type shows the server's answer.
+  - **With a policy,** both pickers filter to `allowed_mime_types`. Photo lists only the
+    allowed image types, and the row is left out when none are allowed.
+  - **Without a policy** (missing key), there's no filter and no pre-check, and the server's
+    answer is shown.
+  - The server stays the authority either way: a type it rejects shows its answer.
+  - Below the two rows, one muted line when `rate_limits` exists for this route: "Your server
+    allows {n} uploads {per hour | every {m} minutes}, refused ones included." It's phrased from
+    `maximum_attempts` and `window_seconds` (3600 reads "per hour"), never as a live counter.
 - **Pending attachment card** above the composer field, in the composer notice stack directly
   under the reply chip:
   - images: a locally decoded, downsampled thumbnail (decoded on the device, never uploaded
@@ -96,9 +115,24 @@ upload:
 - The attachment is part of the conversation's in-memory draft, alongside text and reply
   (existing draft rules). It is never persisted. A process death drops it, as it drops text
   drafts today, and the content URI permission wouldn't survive anyway.
-- **Large-file hint:** the client doesn't know the server's limit. If the file is larger than
-  10 MiB (the default), show a muted line under the card: "This is a large file. Your server
-  may refuse it." Never block the send on a guessed limit.
+- **Pre-send checks (with a policy).** They run when the file is attached, against the bytes
+  that would actually be uploaded (after location removal, P-157):
+  - **Too large:** the card shows a level-2 line, "This file is {size}. This server accepts
+    files up to {limit}." Send is disabled for this attachment, and Remove or Replace is
+    offered. No POST is made, so no quota attempt is spent.
+  - **Type not allowed:** when the provider reports a type that isn't in
+    `allowed_mime_types`, the card says "This server doesn't accept {kind}." with a plural
+    noun phrase for `{kind}`: "HEIC images", "MP4 videos", or "{EXT} files" with the extension
+    in capitals when there's no friendly name. Send is disabled for it.
+  - **Unknown type** (no type, or `application/octet-stream`): no pre-check. The server
+    decides.
+  - **Size display:** file size and limit use the same system formatter. If both round to the
+    same text (for example 10.4 MB against a 10.49 MB limit), add one decimal until they
+    differ, so the sentence never contradicts itself.
+  - The policy can change between bootstraps. A server refusal always wins over the cached
+    policy, and the card then shows the server's figure.
+- **Without a policy** (an older server): no size or type pre-check and no guessed limit. The
+  server's refusal is shown.
 
 ## Sending and delivery states
 
@@ -110,7 +144,7 @@ and [communication.md](communication.md). Nothing renders as a bubble before the
 | Uploading, body still sending | The card shows a determinate progress ring with "Sending 1.2 of 3.4 MB". Field and Send are locked | **Cancel**: aborts the request while its body is still being written. Only then may the card say nothing was delivered, and the attachment returns to the draft. If the transport reports that the full body was already written when the cancel took effect, the outcome is **Unknown** (below), never non-delivery |
 | Uploaded, waiting for the server | Indeterminate ring, "Finishing…" | none. Cancel disappears here and nothing in this phase claims non-delivery. Any interruption after the full body is written (cancel race, connection loss, timeout, genuine background) is **Unknown** |
 | Confirmed (201) | The canonical message appears as a bubble; draft and card clear | — |
-| Definite failure (server error before commit, too large, type not allowed, membership, 429, block) | A level-2 notice with the server's meaning: "Your server refused this file: it's too large." / "This file type isn't allowed on this server." / "You've reached the upload limit. Try again in {wait}." (429 with `retry_after_seconds`, phrased per status-presentation "Waiting times"), or "You've reached the upload limit. Try again later." when the delay is unknown. Send stays available, and nothing uploads by itself when the time is up. An upload answered with `400 validation_error` reads "Your server refused this file. It may be too large." (#156: an oversized body arrives as a missing field). The file stays attached | Remove or replace, or send again later |
+| Definite failure (server error before commit, too large, type not allowed, membership, 429, block) | A level-2 notice with the server's meaning: "Your server refused this file: it's larger than the {limit} it accepts." (413 with `error.max_bytes`) or "Your server refused this file: it's too large." (a non-JSON 413 from a proxy, with an unknown limit, still a definite refusal and never Unknown) / "This file type isn't allowed on this server." / "You've reached the upload limit. Try again in {wait}." (429 with `retry_after_seconds`, phrased per status-presentation "Waiting times"), or "You've reached the upload limit. Try again later." when the delay is unknown. Send stays available, and nothing uploads by itself when the time is up. The file stays attached | Remove or replace, or send again later |
 | **Unknown** (anything after the full body was written: connection lost, timeout, a cancel that lost the race, ambiguous transport error) | The `unsureLine` notice: **"Not sure your file arrived."** with **Check history**. The file and caption stay attached | Check history runs the existing explicit reconciliation. If the message isn't found, the duplicate-risk dialog follows: "Send again? We checked and couldn't find it. Sending again may post it twice." |
 
 - **Reconciliation evidence (approved by the technical lead, 2026-11-07, PR #105):** the client
@@ -251,6 +285,10 @@ The policy is local and read from existing system state, with no new requests:
   once you're signed in"). It is never held across sign-in.
 - Destinations where uploads aren't allowed (guest, reading-only, blocked) appear disabled with
   a reason.
+- **On a server without uploads (`max_bytes: 0`),** a shared file can't be attached anywhere.
+  "Send to…" shows a notice, "This server doesn't accept files. You can still share text.",
+  and offers shared text alone when the share contained any. A shared file that's too large or
+  of a refused type goes through the normal pre-send checks once it's attached.
 - Direct-share shortcuts in the system share sheet are out of scope for this slice.
 
 ## Tests
@@ -259,6 +297,12 @@ The policy is local and read from existing system state, with no new requests:
   - the state machine from pending to uploading, finishing, confirmed, definite failure and
     unknown;
   - Cancel is allowed only before the body completes;
+  - policy parsing: `null` (guest), missing (unknown, no pre-checks), `max_bytes: 0`
+    (unavailable);
+  - the size and type pre-checks block Send without a POST, unknown types pass, and size text
+    never shows equal figures;
+  - a JSON 413 shows `error.max_bytes`, and a non-JSON 413 is a definite refusal, never
+    Unknown;
   - unknown never auto-retries, and Check history leads to the duplicate-risk dialog;
   - the auto-load policy (size, metered, previewable);
   - memory-cache clearing on account change;
@@ -285,7 +329,8 @@ The policy is local and read from existing system state, with no new requests:
 |---|---|---|
 | P-150 | Only explicit Send uploads. One file per message. Nothing renders before 201. | C |
 | P-151 | Cancel only while the body is still sending, and non-delivery is claimed only when the transport shows the body was still being written. Any cancel or interruption after the full body is written is Unknown. Unknown outcomes use Check history then the duplicate-risk dialog, never automatic retry. Attachments are never queued for Send when back online. | U, C |
-| P-152 | Server refusals show their meaning, keep the file attached and never guess client-side limits. | C |
+| P-152 | Server refusals show their meaning and keep the file attached. A JSON 413 shows the server's limit, and a non-JSON 413 is a definite "too large" refusal, never Unknown. No limit is ever guessed when the policy is missing. | C |
+| P-158 | With ChitChat#156's policy: pickers filter to allowed types, and attaching a file over `max_bytes` or of a reported, disallowed type shows the real figures ("This file is 14 MB. This server accepts files up to 10 MB.") and disables Send without any POST. `max_bytes: 0` keeps the paperclip with the reason "This server doesn't accept files." instead of a picker. Guests (`null`) see no paperclip. The policy comes only from the existing bootstrap. | U, C |
 | P-153 | Images follow the loading policy, use memory-only caching cleared on account change, render in a fixed frame that never resizes, and show every state in the table. | U, C |
 | P-157 | Photos are uploaded without location metadata by default, orientation kept. A cleaning failure requires an explicit Send anyway. The SHA-256 evidence covers the uploaded bytes. | U, C |
 | P-154 | Save uses a chosen document and never silently deletes it. Share-out uses read-only FileProvider grants on copies in a private cache subfolder, never hands out authenticated URLs, never deletes on chooser return, lets copies expire after 24 hours and deletes expired copies at the next start or share (no claim of deletion at exactly 24 hours), and deletes them at once on cancel before handoff and on sign-out or account removal. | U, C, R |
