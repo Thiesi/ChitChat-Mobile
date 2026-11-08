@@ -240,6 +240,27 @@
       "w": 1024,
       "h": 500,
       "title": "Play feature graphic (proposal)"
+    },
+    "GuidelinesServer.dc.html": {
+      "x": 0,
+      "y": 10050,
+      "w": 390,
+      "h": 844,
+      "title": "Guidelines with server rules (#160)"
+    },
+    "RulesUpdated.dc.html": {
+      "x": 470,
+      "y": 10050,
+      "w": 390,
+      "h": 844,
+      "title": "Server updated its rules (dark, #160)"
+    },
+    "PolicyDocument.dc.html": {
+      "x": 940,
+      "y": 10050,
+      "w": 390,
+      "h": 844,
+      "title": "Server rules document, hosted markdown (#160)"
     }
   },
   "order": [

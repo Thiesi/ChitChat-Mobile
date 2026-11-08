@@ -88,7 +88,9 @@ transcript, lists, status and modals → Send when back online.
 - Level-2 notices on this screen as needed, at most one at a time, in this precedence:
   maintenance lockdown (with the server's message if any), then providers-unavailable.
 - The privacy line from the old card, restyled as a muted line with an info icon: "Your
-  server hosts your conversations. Messages are not end-to-end encrypted."
+  server hosts your conversations. Messages are not end-to-end encrypted." When the public
+  session has `policies.privacy` (ChitChat#160), a link "{installation}'s privacy policy"
+  follows on its own line and opens the policy document screen (play-readiness.md §1).
 - **Use a different server** (text button) is available while not authenticated and returns
   to step 2 with the field empty.
 - `AuthFlow` selection now happens here instead of through text buttons under the sign-in
@@ -124,6 +126,9 @@ transcript, lists, status and modals → Send when back online.
   - failed or idle: "That check didn't finish." with **Try again**.
   
   Never a percentage. **Create my account** stays disabled until ready, exactly as today.
+- **Server rules (ChitChat#160):** when the public session has `policies.rules`, the agreement
+  line "By creating an account, you agree to {installation}'s rules" sits above the button,
+  and registration sends `accepted_rules_version`. Its outcomes are in play-readiness.md §1.
 - The ambiguous-result warning (`registration_unknown`) becomes a level-2 notice at the top
   of the form with a **Sign in instead** action. The request is never repeated automatically
   (existing rule).
