@@ -1,6 +1,6 @@
 # Feature-parity matrix
 
-[Lantern theme foundation](milestones/theme-foundation.md): A delivered primitives/storage/assets in PR112. B integrates appearance controls and screen tokens with before/after captures. Each needs current-head development and J gates; device/live/release acceptance stays separate.
+[Theme A/B](milestones/theme-foundation.md): A delivered in PR112; B integrates appearance controls/tokens and captures. Current-head development/J and device/live/release gates remain separate.
 
 [M5d4c native mention completion](milestones/M5d4c-native-mention-completion.md) delivered in PR97/main3093e71 with scoped room/DM suggestion controls, full-draft/caret guards and local hardware Tab cycling. Its exact506251f development exception retains the233/234 native failure; it grants no future-head waiver or device/live/release acceptance.
 

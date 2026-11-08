@@ -1,7 +1,7 @@
 # Lantern theme foundation
 
-Status: phase A delivered the core primitives, preference storage and assets in PR112,
-main95062c7. This phase B integrates the app, its appearance controls and existing components. Each delivery needs
+Status: phase A defines the core primitives, preference storage and assets. Phase B
+integrates the app, its appearance controls and existing components. Each delivery needs
 its own current-head development gates and applicable J review, recorded on its PR.
 This is the token prerequisite for later presentation slices, following delivered
 M5d4c (PR97, main3093e71). It consumes the approved
@@ -120,3 +120,5 @@ modals → separate Send when back online → CI41/IME → remaining M6 → M7 �
 [accepted coordinator plan](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6713312760).
 IME PR A may proceed separately while this theme PR waits for CI/reviews, under its
 [bounded authority](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6713567378).
+
+The capture workflow accepts manual base/head refs; artifacts expire after seven days.

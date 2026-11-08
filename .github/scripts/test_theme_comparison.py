@@ -1,5 +1,4 @@
 """Bounded capture evidence checks; no real Gradle, adb or emulator invocation."""
-import io
 import json
 from pathlib import Path
 import struct

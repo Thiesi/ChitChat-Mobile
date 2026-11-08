@@ -1,4 +1,4 @@
-"""Bounded presentation comparison, never a full native gate or input diagnostic."""
+"""Bounded captures, separate from the full native gate."""
 from pathlib import Path
 from itertools import islice
 import hashlib,json,os,re,shutil,struct,subprocess,sys
@@ -90,7 +90,7 @@ def prepare(kind):
     record=dict(kind=kind,productionRef=before if kind=='before' else head,fixtureRef=head,baselineTheme=baseline_theme,
         productionUnmodified=kind=='before',testClass=class_name,worktree=str(work),
         fullNativeGate=False,expectedCases=4 if kind=='before' and not baseline_theme else 6,
-        label='Synthetic owned-window captures only; no live, manual-device or keyboard acceptance')
+        label='Fixture captures; no device/live/keyboard acceptance')
     (REPORT/'provenance.json').write_text(json.dumps(record,indent=2)+'\n',encoding='utf-8')
     print(json.dumps(record))
 
@@ -104,7 +104,7 @@ def run(kind):
         previous=display_snapshot();record['viewportBefore']=previous;record['viewportRestored']=False
         (REPORT/'provenance.json').write_text(json.dumps(record,indent=2)+'\n',encoding='utf-8')
         set_display(dict(size='360x640',density='160'))
-        # Exactly one new capture-class invocation. Never invoke/retry the ordinary full suite.
+        # One capture call; the full gate stays separate.
         record['instrumentationInvocations']=1
         status=subprocess.run(['./gradlew',':app:connectedDebugAndroidTest',
             '-Pandroid.testInstrumentationRunnerArguments.class='+record['testClass'],
@@ -134,7 +134,7 @@ def run(kind):
             record['captureCollectionIncomplete']=True
             print('Capture collection incomplete; original capture status retained.',file=sys.stderr)
         (REPORT/'provenance.json').write_text(json.dumps(record,indent=2)+'\n',encoding='utf-8')
-    # This is a capture-only job: missing evidence fails this job, never the native gate.
+    # Missing captures fail only this job.
     return (128-status if status<0 else status) or (0 if record['captureCollectionComplete'] and record.get('viewportRestored') else 1)
 
 if __name__=='__main__':

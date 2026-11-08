@@ -24,6 +24,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.app.SettingsViewModel
 import io.github.thiesi.chitchat.app.ChitChatApp
+import io.github.thiesi.chitchat.core.direct.*
 import io.github.thiesi.chitchat.core.rooms.*
 import io.github.thiesi.chitchat.core.search.*
 import io.github.thiesi.chitchat.core.server.*
@@ -46,7 +47,7 @@ import org.junit.Test
 import org.junit.Assert.*
 import java.io.File
 
-/** Owned-window synthetic presentation captures. No input activation, live account or export. */
+/** Synthetic owned-window captures; no input or live mutations. */
 @OptIn(ExperimentalTestApi::class)
 class ThemePresentationJourneyTest {
     @get:Rule val compose=createAndroidComposeRule<ComponentActivity>()
@@ -103,7 +104,15 @@ class ThemePresentationJourneyTest {
             }
             directory=ViewModelProvider(activity,RoomsViewModel.factory(rooms))[RoomsViewModel::class.java]
             room=ViewModelProvider(activity,ConversationViewModel.factory(api.rooms))[ConversationViewModel::class.java]
-            inbox=ViewModelProvider(activity,DirectInboxViewModel.factory(api.directs))[DirectInboxViewModel::class.java]
+            val directs=object: DirectOperations by api.directs {
+                override suspend fun inbox(): DirectInbox {
+                    val last=api.directs.history(8,null,1).messages.single()
+                    return DirectInbox(listOf(DirectConversation(last.sender,
+                        DirectPreview(last.id,last.body,last.createdAt,last.outgoing,last.deleted,last.editedAt,last.attachment),100)),
+                        api.privacy,api.policy.display)
+                }
+            }
+            inbox=ViewModelProvider(activity,DirectInboxViewModel.factory(directs))[DirectInboxViewModel::class.java]
             thread=ViewModelProvider(activity,DirectThreadViewModel.factory(api.directs))[DirectThreadViewModel::class.java]
             notices=ViewModelProvider(activity,NotificationCenterViewModel.factory(api.notices))[NotificationCenterViewModel::class.java]
             val targets=ViewModelProvider(activity,MessageTargetViewModel.factory(api.lookups))[MessageTargetViewModel::class.java]
@@ -133,8 +142,7 @@ class ThemePresentationJourneyTest {
         compose.waitUntil(5_000) { settings.state.value.let { it.hasLoadedSettings && it.settings==store.settings.value } }
         compose.waitForIdle()
         assertEquals(if(large) 2f else compose.activity.resources.configuration.fontScale,observedFontScale,0.01f)
-        // Only the separate comparison job requests exact dimensions. Ordinary CI
-        // retains and records its own window size rather than pretending it is 360dp.
+        // Comparison asserts 360dp; ordinary CI records its actual size.
         val args=InstrumentationRegistry.getArguments()
         args.getString("expectedCaptureWidthDp")?.toFloat()?.let { assertEquals(it,observedWidth,0.5f) }
         args.getString("expectedCaptureHeightDp")?.toFloat()?.let { assertEquals(it,observedHeight,0.5f) }
@@ -150,7 +158,6 @@ class ThemePresentationJourneyTest {
         compose.runOnIdle {
             runBlocking { sessions.signIn("Viewer","fixture-password") }
             sessions.state.value=sessions.state.value.copy(chatPolicy=api.policy,privacy=api.privacy)
-            runBlocking { api.directs.send(8,"Synthetic presentation fixture",null) }
         }
         compose.onNodeWithTag("notifications_open").assertExists()
         capture(label,"home")
@@ -165,8 +172,9 @@ class ThemePresentationJourneyTest {
         capture(label,"room");back();back()
         action(R.string.dm_title)
         compose.waitUntil(5_000) { inbox.state.value.let { it.inbox!=null && !it.busy } }
+        compose.onNodeWithTag("dm_inbox").performScrollToNode(hasTestTag("dm_conversation:8"))
         capture(label,"direct")
-        compose.onNodeWithTag("dm_conversation:8").reveal().performNativeTap()
+        compose.onNodeWithTag("dm_conversation:8").assertIsDisplayed().performNativeTap()
         compose.waitUntil(5_000) { thread.state.value.let { it.loaded && !it.busy && it.peerId==8L } }
         compose.onNodeWithTag("dm_composer").assertHeightIsAtLeast(48.dp).assertIsDisplayed()
         capture(label,"thread");back();back()
@@ -194,7 +202,7 @@ class ThemePresentationJourneyTest {
         val image=node.captureToImage().asAndroidBitmap()
         try { File(folder,"theme-$label-$scene.png").outputStream().use { check(image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)) } }
         finally { image.recycle() }
-        // No text, account or message state: configuration/provenance scalars only.
+        // Configuration only; no account/message content.
         File(folder,"theme-$label-configuration.json").writeText("{\"fontScale\":$observedFontScale,\"widthDp\":$observedWidth,\"heightDp\":$observedHeight}")
     }
 
