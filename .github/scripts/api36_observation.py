@@ -28,6 +28,7 @@ def known_ime(failure):
     text = failure.text or ""
     return (failure.tag == "failure" and failure.get("type") == "java.lang.AssertionError"
         and len(TAP.findall(text)) == 1
+        and text.count("Caused by:") == 1 and "Suppressed:" not in text
         and "Caused by: androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms" in text
         and "NativeInputKt.tapNativeInput(NativeInput.kt:20)" in text
         and "NativeInputKt.tapNativeInput(NativeInput.kt:29)" in text)

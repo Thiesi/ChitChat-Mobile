@@ -57,6 +57,13 @@ class ObservationTests(unittest.TestCase):
             with self.subTest(text=text[-20:]):
                 self.assertEqual("other_failure",observation.analyze(results,reports,"failure")["disposition"])
 
+    def test_same_case_additional_error_chain_is_not_only_known_ime(self):
+        for suffix in ("\nSuppressed: java.lang.IllegalStateException: fixture cleanup failed",
+                       "\nCaused by: java.lang.IllegalStateException: additional fixture failure"):
+            results,reports,_=self.fixture([IME+suffix])
+            with self.subTest(kind=suffix.split(":")[0].strip()):
+                self.assertEqual("other_failure",observation.analyze(results,reports,"failure")["disposition"])
+
     def test_skipped_missing_truncated_or_duplicate_cases_never_count_complete(self):
         results,reports,path=self.fixture(skipped=1)
         self.assertEqual("incomplete",observation.analyze(results,reports,"success")["disposition"])
