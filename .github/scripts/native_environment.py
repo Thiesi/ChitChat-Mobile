@@ -74,13 +74,13 @@ def fingerprint() -> dict:
                             ("window_animation_scale", "transition_animation_scale", "animator_duration_scale")})
 
 
-def preconditions(data: dict) -> list[str]:
+def preconditions(data: dict, *, image_revision: str = IMAGE_REVISION) -> list[str]:
     failures = []
     # The action can continue after a failed pre-launch hook. Recheck both pins here
     # so its error can never lead to instrumentation on an unintended environment.
     if data["emulatorBuild"] != EMULATOR_BUILD or data["emulatorVersion"] != EMULATOR_VERSION:
         failures.append("pinned_emulator_mismatch")
-    if data["systemImageRevision"] != IMAGE_REVISION:
+    if data["systemImageRevision"] != image_revision:
         failures.append("pinned_image_revision_mismatch")
     if data["defaultIme"] != EXPECTED_IME or EXPECTED_IME not in (data["enabledImes"] or []):
         failures.append("expected_ime_not_enabled_and_selected")

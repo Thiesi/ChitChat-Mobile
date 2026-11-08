@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Match the approved M1 API36/toolchain and controlled API35/36 experiment.
+         Only this explicit target declaration is exempt from the latest-target hint;
+         all code, privacy and security lint checks remain enabled and fatal. -->
+    <issue id="OldTargetApi">
+        <ignore path="build.gradle.kts" />
+    </issue>
+</lint>

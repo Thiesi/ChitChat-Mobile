@@ -60,14 +60,14 @@ def selected_records(records: list[tuple[str, str, str | None]]) -> list[str]:
     return [record[0] for index, record in enumerate(records) if index not in drop]
 
 
-def filtered_trace(raw: str) -> str:
+def filtered_trace(raw: str, *, token_pattern: re.Pattern[str] = TOKEN) -> str:
     """Keep at most2000 allowlisted records; never include a raw fallback line."""
     records: list[tuple[str, str, str | None]] = []
     for line in raw.splitlines():
         fields = line.split()
         if len(fields) < 8 or not DATE.fullmatch(fields[0]) or not TIME.fullmatch(fields[1]):
             continue
-        if fields[5] == "ImeTracker:" and TOKEN.fullmatch(fields[6]) and fields[7] in EVENTS:
+        if fields[5] == "ImeTracker:" and token_pattern.fullmatch(fields[6]) and fields[7] in EVENTS:
             safe = fields[:2] + fields[5:8]
             safe.extend(value for value in fields[8:] if value in DETAILS)
             records.append((" ".join(safe), fields[7], None))
