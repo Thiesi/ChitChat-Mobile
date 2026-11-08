@@ -40,7 +40,7 @@ The onboarding spec's copy table already covers `welcome_title`, `welcome_body`,
 |---|---|---|---|
 | `checking_session` | Checking your server and session… | Looking for {host}… | — |
 | `session_expired` | This session expired or changed. Sign in again. | You've been signed out. Sign in again. | — |
-| `rate_limited` | Too many attempts. Please wait before trying again. | Too many attempts. Try again in a little while. | — |
+| `rate_limited` | Too many attempts. Please wait before trying again. | Too many attempts. Try again in a little while. (unknown delay) / Too many attempts. Try again in {wait}. (ChitChat#157, status-presentation "Waiting times") | — |
 | `request_rejected` | The server rejected this request. Check your account or contact the server administrator. | Your server refused this. If it keeps happening, ask the person who runs it. | — |
 | `redirect_error` | The server redirected this API request. Check the server address; credentials were not forwarded. | The server tried to send the app somewhere else. Check the address. Your password wasn't sent. | — |
 | `mfa_setup_required` | This server requires MFA setup in the browser before this account can sign in. | This server needs you to set up two-step sign-in on its website first. | — |
@@ -139,7 +139,7 @@ The onboarding spec's copy table already covers `welcome_title`, `welcome_body`,
 | `notifications_historical` | Showing an older window. Refresh keeps this range; Latest returns to new notifications. | Showing older activity. Latest brings you back to the newest. | — |
 | `message_search_query` | Search query | Search messages | — |
 | `message_search_limit` / `message_search_validation` | Use 2–200 characters after whitespace normalization, including a letter or number… | Use 2–200 characters, including a letter or number. | — |
-| `message_search_rate` | Too many requests. Please wait, then choose Search or Retry. | Too many searches. Wait a moment, then try again. | — |
+| `message_search_rate` | Too many requests. Please wait, then choose Search or Retry. | Too many searches. Wait a moment, then try again. (unknown delay) / Too many searches. Try again in {wait}. (ChitChat#157) | — |
 | `message_search_incompatible` | The server returned unavailable or incompatible search or privacy information. Refresh the session before trying again. | Search isn't available right now. Refresh, then try again. | — |
 | `message_search_empty` | No visible messages matched this search. | Nothing found for "{query}". | — |
 

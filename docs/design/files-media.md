@@ -25,8 +25,9 @@ dependency choices are engineering decisions inside those slices. Mockups: `Room
   `attachment_empty` and `membership_required`. **A body larger than PHP's `post_max_size`
   arrives as `400 validation_error`** (a missing form field), not `attachment_too_large` or
   413 (#156).
-- **Throttling:** `429 rate_limited` carries **no `Retry-After` and no structured delay**. The wait
-  appears only in English prose (ChitChat#157). The client never parses that text.
+- **Throttling:** `429 rate_limited` carries `error.retry_after_seconds` (ChitChat#157, merged).
+  It's phrased per `status-presentation.md` "Waiting times". When it's absent the wait is
+  unknown, and the client never parses the English text.
 - **No image dimensions and no smaller renditions** (ChitChat#158).
 - **Metadata:** `{id, name, mime_type, size_bytes, sha256, previewable}`. Room history includes
   it, and DM history needs the bounded metadata endpoint for visible IDs, which the client
@@ -109,7 +110,7 @@ and [communication.md](communication.md). Nothing renders as a bubble before the
 | Uploading, body still sending | The card shows a determinate progress ring with "Sending 1.2 of 3.4 MB". Field and Send are locked | **Cancel**: aborts the request while its body is still being written. Only then may the card say nothing was delivered, and the attachment returns to the draft. If the transport reports that the full body was already written when the cancel took effect, the outcome is **Unknown** (below), never non-delivery |
 | Uploaded, waiting for the server | Indeterminate ring, "Finishing…" | none. Cancel disappears here and nothing in this phase claims non-delivery. Any interruption after the full body is written (cancel race, connection loss, timeout, genuine background) is **Unknown** |
 | Confirmed (201) | The canonical message appears as a bubble; draft and card clear | — |
-| Definite failure (server error before commit, too large, type not allowed, membership, 429, block) | A level-2 notice with the server's meaning: "Your server refused this file: it's too large." / "This file type isn't allowed on this server." / "You've reached the upload limit. Try again later." (429: **generic**, no time is shown, because the server gives none in machine-readable form, #157). An upload answered with `400 validation_error` reads "Your server refused this file. It may be too large." (#156: an oversized body arrives as a missing field). The file stays attached | Remove or replace, or send again later |
+| Definite failure (server error before commit, too large, type not allowed, membership, 429, block) | A level-2 notice with the server's meaning: "Your server refused this file: it's too large." / "This file type isn't allowed on this server." / "You've reached the upload limit. Try again in {wait}." (429 with `retry_after_seconds`, phrased per status-presentation "Waiting times"), or "You've reached the upload limit. Try again later." when the delay is unknown. Send stays available, and nothing uploads by itself when the time is up. An upload answered with `400 validation_error` reads "Your server refused this file. It may be too large." (#156: an oversized body arrives as a missing field). The file stays attached | Remove or replace, or send again later |
 | **Unknown** (anything after the full body was written: connection lost, timeout, a cancel that lost the race, ambiguous transport error) | The `unsureLine` notice: **"Not sure your file arrived."** with **Check history**. The file and caption stay attached | Check history runs the existing explicit reconciliation. If the message isn't found, the duplicate-risk dialog follows: "Send again? We checked and couldn't find it. Sending again may post it twice." |
 
 - **Reconciliation evidence (approved by the technical lead, 2026-11-07, PR #105):** the client

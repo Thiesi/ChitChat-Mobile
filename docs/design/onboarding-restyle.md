@@ -98,8 +98,13 @@ transcript, lists, status and modals → Send when back online.
   person who runs the server." (static text: today only administrators can reset a forgotten password). When the server offers self-service reset ([ChitChat#155](https://github.com/Thiesi/ChitChat/issues/155)), replace it with a **Forgot password?** button leading to that flow.
 - Existing rules stay: the password lives only in composition memory, is cleared on
   `ON_STOP` and is never saved in bundles. `contentType` hints for autofill remain.
-  Rate-limit countdown (`retryAtMillis`) shows as a level-1 line under the button:
-  "Too many attempts. Try again in 12 s."
+  Rate-limit (`login_throttled` or `rate_limited`) shows as a level-1 line under the button:
+  "Too many sign-in attempts. Try again in {wait}." with `{wait}` from ChitChat#157's
+  `retry_after_seconds`, phrased per status-presentation "Waiting times" (for example "12 s" or
+  "about 4 minutes"). The value already covers both the username and the network limit. When
+  it's absent: "Too many attempts. Try again in a little while.", with no number, even while
+  the session layer's own fallback gate keeps Sign in disabled. Sign in re-enables when the
+  gate ends. Nothing signs in by itself.
 
 ### 4b Create account (restyled `RegistrationForm`)
 
