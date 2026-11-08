@@ -140,7 +140,9 @@ jobs:
         with:
           name: android-api36-observation-reports
           retention-days: 7
-          path: app/build/reports/androidTests/
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/connected/**/TEST-*.xml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
