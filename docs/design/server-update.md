@@ -44,7 +44,7 @@ its session response has no `capabilities.schema_version`, step 3 shows the serv
   this app needs {minimum} or newer."
 - **Actions:**
   - **Copy a note for the operator** (primary). It copies plain text: "Hi! The ChitChat Android
-    app needs our server ({host}) updated to ChitChat {minimum} or newer. It currently runs
+    app needs our server ({address}) updated to ChitChat {minimum} or newer. It currently runs
     {found}." A snackbar "Note copied" is acceptable here.
   - **Use a different server** (text button), back to step 2 with the field empty.
 - No Sign in, Create account or guest buttons while the version is too old.
@@ -76,8 +76,8 @@ session response without `capabilities.schema_version`:
 ## Copy rules
 
 - `{installation}` is `application.name` when present, else the host. On an older server it
-  is the host, because the name arrives with the same change. The operator note always uses
-  the host.
+  is the host, because the name arrives with the same change. `{address}` is always the raw
+  host (never `application.name`) and is what the operator note uses.
 - Version numbers appear only in the details line and in the note, never in the title.
 - Never mention internal identifiers, API names or error codes on this screen.
 
@@ -88,4 +88,4 @@ session response without `capabilities.schema_version`:
 | P-180 | A parsed session response without `capabilities.schema_version` (or `application`) shows this state at step 3 and on revalidation. Version strings never trigger it, and network or other failures never do. | U, C |
 | P-181 | Step 3 offers only Copy note and Use a different server. Revalidation offers Copy note, Check again and Sign out, and keeps the session. | C |
 | P-182 | While the state shows, no writes, reads or realtime run against that server. Check again is the only server request, and it is explicit. | C, R |
-| P-183 | The copied note contains the host, the minimum and the found version (or "unknown"), and nothing else. | U |
+| P-183 | The copied note contains the raw host (`{address}`, never the display name), the minimum and the found version (or "unknown"), and nothing else. | U |
