@@ -61,7 +61,9 @@ internal fun ReplyTargetHost(model: MessageTargetViewModel, value: MessageTarget
             while (now < session.retryAtMillis)
         }
     }
-    val room by conversations.state.collectAsStateWithLifecycle()
+    // Read even for search/notification targets: canPrepareTarget reads StateFlow directly,
+    // which alone does not subscribe this composition to the pending write becoming idle.
+    val room = conversations.state.collectAsStateWithLifecycle().value
     val thread = direct?.state?.collectAsStateWithLifecycle()?.value
     val result = value.result
     val canAdopt = if (fromNotification) when (result) {
