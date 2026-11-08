@@ -1,4 +1,5 @@
 name: Native input observation (not a merge gate)
+run-name: ${{ inputs.reproducer_arm != 'none' && inputs.reproducer_arm != '' && format('IME reproducer arm {0} (measurement only)', inputs.reproducer_arm) || 'Native input observation (not a merge gate)' }}
 
 on:
   workflow_dispatch:
