@@ -27,6 +27,31 @@ STAGES = {"LAUNCH", "NATIVE_TAP", "FOCUS_IME"}
 WINDOW = {**{key: "int" for key in ("uptimeMillis", "resumedActivities", "imeBottom", "softInputMode")},
           **{key: "bool" for key in ("windowFocused", "attached", "viewFocused", "imeVisible")}}
 STAMPS = {"startedUptimeMillis": "int", "finishedUptimeMillis": "int"}
+BUILD_TOOLS_VERSION = "35.0.0"  # Same verified M1 toolchain, never the host's newest SDK tools.
+CERTIFICATE = re.compile(rb"(?m)^Signer (?:#[1-9][0-9]*|\(minSdkVersion=[0-9]+(?: \(dev release=true\))?, maxSdkVersion=[0-9]+\)) certificate SHA-256 digest: ([0-9a-fA-F]{64})\s*$")
+
+
+def certificate_digest(output):
+    # Called only after apksigner verify exits successfully. SDK-range labels can repeat
+    # the same certificate; multiple distinct keys remain unavailable for this fixture.
+    values = {value.decode().lower() for value in CERTIFICATE.findall(output)}
+    if len(values) != 1:
+        raise RuntimeError("Exactly one verified APK certificate required")
+    return values.pop()
+
+
+def verification_tools(sdk):
+    folder = sdk / "build-tools" / BUILD_TOOLS_VERSION
+    signer = folder / ("apksigner.bat" if os.name == "nt" else "apksigner")
+    aapt = folder / ("aapt2.exe" if os.name == "nt" else "aapt2")
+    if not signer.is_file() or not aapt.is_file():
+        raise RuntimeError("Approved verification tools unavailable")
+    return signer, aapt
+
+
+def tool_output(tool, *arguments):
+    command = (["cmd.exe", "/c"] if tool.suffix.lower() == ".bat" else []) + [str(tool), *arguments]
+    return subprocess.check_output(command)
 
 
 def sanitize(value):
@@ -136,9 +161,11 @@ def instrument_once():
 
 def prepare():
     sdk = Path(os.environ["ANDROID_HOME"])
-    tools = sorted((p for p in (sdk / "build-tools").iterdir() if re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,2}", p.name)),
-                   key=lambda p: tuple(int(n) for n in p.name.split(".")))
-    signer, aapt = tools[-1] / "apksigner", tools[-1] / "aapt2"
+    REPORT.mkdir(parents=True, exist_ok=True)
+    preparation = dict(stage="APK_VERIFICATION", status="started", buildToolsVersion=BUILD_TOOLS_VERSION,
+                       instrumentationInvocations=0)
+    (REPORT / "preparation.json").write_text(json.dumps(preparation, indent=2) + "\n")
+    signer, aapt = verification_tools(sdk)
     artifacts = {}
     certificates = []
     for kind, folder, package in (("app", "debug", APP), ("test", "androidTest/debug", APP + ".test")):
@@ -146,12 +173,9 @@ def prepare():
         if len(apks) != 1:
             raise RuntimeError("Exactly one standalone APK required")
         path = apks[0]
-        certificate = subprocess.check_output([str(signer), "verify", "--print-certs", str(path)])
-        matches = re.findall(rb"Signer #1 certificate SHA-256 digest: ([0-9a-f]{64})", certificate)
-        if len(matches) != 1:
-            raise RuntimeError("APK signature unavailable")
-        certificates.append(matches[0].decode())
-        metadata = subprocess.check_output([str(aapt), "dump", "badging", str(path)])
+        certificate = tool_output(signer, "verify", "--print-certs", str(path))
+        certificates.append(certificate_digest(certificate))
+        metadata = tool_output(aapt, "dump", "badging", str(path))
         if re.findall(rb"^package: name='([^']+)'", metadata, re.M) != [package.encode()]:
             raise RuntimeError("Unexpected APK identity")
         if b"android.permission.INTERNET" in metadata:
@@ -166,8 +190,11 @@ def prepare():
                               sha256=hashlib.sha256(destination.read_bytes()).hexdigest())
     if certificates[0] != certificates[1]:
         raise RuntimeError("APK signatures differ")
-    data = dict(artifacts=artifacts, certificateSha256=certificates[0], standalone=True, networkPermission=False)
+    data = dict(artifacts=artifacts, certificateSha256=certificates[0], standalone=True, networkPermission=False,
+                buildToolsVersion=BUILD_TOOLS_VERSION)
     (REPORT / "apks.json").write_text(json.dumps(data, indent=2) + "\n")
+    preparation["status"] = "verified"
+    (REPORT / "preparation.json").write_text(json.dumps(preparation, indent=2) + "\n")
     return data
 
 

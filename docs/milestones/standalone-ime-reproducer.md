@@ -44,8 +44,13 @@ preconditions, plus actual API/core checks. Default IME/version, actual memory a
 fingerprint are recorded. No spellchecker/autofill/service changes or platform flags.
 
 Normal PR CI only compiles/signature-checks the new APKs, runs pure parser/helper tests and
-lint. Its ordinary app native suite stays unfiltered, untraced and unchanged. Manual arms
-use signature/hash-verified standalone APKs and one am-instrument call each; failed JUnit
+lint. Its ordinary app native suite stays unfiltered, untraced and unchanged.
+APK verification pins the approved build-tools35.0.0 rather than picking the host's newest
+version. Only after cryptographic verification succeeds, signer fingerprints accept the
+documented legacy/SDK-range labels and hexadecimal case, requiring exactly one unique
+certificate and an identical app/test certificate. Missing/multiple keys still stop setup.
+Preparation status is retained even before successful APK collection; there is no signature bypass.
+Manual arms use signature/hash-verified standalone APKs and one am-instrument call each; failed JUnit
 results remain failed even if adb exits0. A duplicate/missing case, wrong count/deadline,
 truncated output or transport interruption cannot claim a complete measurement. Status
 bundles are sanitized; raw instrumentation output is never saved. Allowlisted IME lifecycle

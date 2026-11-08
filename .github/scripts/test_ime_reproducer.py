@@ -135,5 +135,85 @@ class ReproducerRecordsTests(unittest.TestCase):
         self.assertEqual(["pinned_image_revision_mismatch"], native_environment.preconditions(data))
 
 
+
+class CertificateTests(unittest.TestCase):
+    def test_legacy_and_sdk_range_labels_normalize_one_certificate(self):
+        value = "ab" * 32
+        for sample in (
+            "Signer #1 certificate SHA-256 digest: " + value.upper() + "\r\n",
+            "Signer (minSdkVersion=33, maxSdkVersion=2147483647) certificate SHA-256 digest: " + value + "\n" +
+            "Signer (minSdkVersion=26, maxSdkVersion=32) certificate SHA-256 digest: " + value.upper() + "\n",
+            "Signer (minSdkVersion=33 (dev release=true), maxSdkVersion=2147483647) certificate SHA-256 digest: " + value + "\n",
+        ):
+            self.assertEqual(value, runner.certificate_digest(sample.encode()))
+
+    def test_missing_malformed_or_multiple_keys_are_rejected(self):
+        for sample in (
+            b"Source Stamp Signer certificate SHA-256 digest: " + b"a" * 64,
+            b"Signer #1 certificate SHA-256 digest: private-body-canary",
+            b"Signer #1 certificate SHA-256 digest: " + b"a" * 64 + b"\nSigner #2 certificate SHA-256 digest: " + b"b" * 64,
+        ):
+            with self.subTest(sample=sample[:50]), self.assertRaises(RuntimeError):
+                runner.certificate_digest(sample)
+
+    def fixture(self):
+        import tempfile
+        import zipfile
+        folder = self.enterContext(tempfile.TemporaryDirectory(prefix="ccm-ime-preparer-"))
+        root = Path(folder)
+        sdk = root / "sdk"
+        for version in ("35.0.0", "99.0.0"):
+            directory = sdk / "build-tools" / version
+            directory.mkdir(parents=True)
+            for name in (("apksigner.bat", "aapt2.exe") if os.name == "nt" else ("apksigner", "aapt2")):
+                (directory / name).write_bytes(b"not executed")
+        for directory in ("debug", "androidTest/debug"):
+            target = root / "ime-reproducer/build/outputs/apk" / directory / "fixture.apk"
+            target.parent.mkdir(parents=True)
+            with zipfile.ZipFile(target, "w") as apk:
+                apk.writestr("classes.dex", b"fixture")
+        self.enterContext(patch.dict(os.environ, {"ANDROID_HOME": str(sdk)}))
+        self.enterContext(patch.object(runner, "ROOT", root))
+        self.enterContext(patch.object(runner, "REPORT", root / "reports"))
+        return root
+
+    def test_preparation_uses_approved_tools_and_validates_both_apks(self):
+        root = self.fixture()
+        cert = b"Signer #1 certificate SHA-256 digest: " + b"A" * 64
+        responses = [cert, ("package: name='" + runner.APP + "'\n").encode(),
+                     cert, ("package: name='" + runner.APP + ".test'\n").encode()]
+        with patch.object(runner.subprocess, "check_output", side_effect=responses) as tool:
+            result = runner.prepare()
+        self.assertEqual("a" * 64, result["certificateSha256"])
+        self.assertEqual("35.0.0", result["buildToolsVersion"])
+        self.assertFalse(result["networkPermission"])
+        self.assertEqual({"app", "test"}, set(result["artifacts"]))
+        self.assertNotIn("99.0.0", str(tool.call_args_list))
+        self.assertIn("35.0.0", str(tool.call_args_list))
+        self.assertEqual("verified", json.loads((root / "reports/preparation.json").read_text())["status"])
+
+    def test_mismatched_certificates_stop_before_verified_metadata(self):
+        root = self.fixture()
+        responses = [b"Signer #1 certificate SHA-256 digest: " + b"a" * 64,
+                     ("package: name='" + runner.APP + "'\n").encode(),
+                     b"Signer #1 certificate SHA-256 digest: " + b"b" * 64,
+                     ("package: name='" + runner.APP + ".test'\n").encode()]
+        with patch.object(runner.subprocess, "check_output", side_effect=responses), self.assertRaises(RuntimeError):
+            runner.prepare()
+        self.assertFalse((root / "reports/apks.json").exists())
+        self.assertEqual(0, json.loads((root / "reports/preparation.json").read_text())["instrumentationInvocations"])
+
+    def test_crypto_failure_and_network_permission_are_never_bypassed(self):
+        root = self.fixture()
+        with patch.object(runner.subprocess, "check_output", side_effect=subprocess.CalledProcessError(1, "verify")), \
+             self.assertRaises(subprocess.CalledProcessError):
+            runner.prepare()
+        self.assertFalse((root / "reports/apks.json").exists())
+        cert = b"Signer #1 certificate SHA-256 digest: " + b"a" * 64
+        badging = ("package: name='" + runner.APP + "'\nuses-permission: name='android.permission.INTERNET'\n").encode()
+        with patch.object(runner.subprocess, "check_output", side_effect=[cert, badging]), self.assertRaises(RuntimeError):
+            runner.prepare()
+        self.assertFalse((root / "reports/apks.json").exists())
+
 if __name__ == "__main__":
     unittest.main()
