@@ -261,6 +261,13 @@
       "w": 390,
       "h": 844,
       "title": "Server rules document, hosted markdown (#160)"
+    },
+    "ReportPerson.dc.html": {
+      "x": 1880,
+      "y": 7550,
+      "w": 390,
+      "h": 844,
+      "title": "Report a person (form dialog, dark, #159)"
     }
   },
   "order": [
