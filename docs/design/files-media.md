@@ -223,8 +223,10 @@ The policy is local and read from existing system state, with no new requests:
   - Nothing is deleted or revoked when the chooser returns or CCM resumes.
   - Copies live in a dedicated **private cache subfolder** and are shared through **read-only**
     FileProvider grants.
-  - A copy is kept for **24 hours**. Expired copies are deleted at the next app start or the
-    next share, whichever comes first.
+  - A copy **expires after 24 hours**. Expired copies are deleted at the next app start or the
+    next share, whichever comes first. There is no scheduled background cleanup (battery), so
+    if CCM isn't opened again a copy can stay longer, until that next start or share (or until
+    Android clears the cache). Texts never promise "deleted after 24 hours".
   - **Cancel before handoff** (the person backs out while the download is still running, or
     before the share sheet opens) deletes the copy immediately.
   - **Sign-out and account removal** delete that account's copies immediately. Trade-off,
@@ -285,6 +287,6 @@ The policy is local and read from existing system state, with no new requests:
 | P-152 | Server refusals show their meaning, keep the file attached and never guess client-side limits. | C |
 | P-153 | Images follow the loading policy, use memory-only caching cleared on account change, render in a fixed frame that never resizes, and show every state in the table. | U, C |
 | P-157 | Photos are uploaded without location metadata by default, orientation kept. A cleaning failure requires an explicit Send anyway. The SHA-256 evidence covers the uploaded bytes. | U, C |
-| P-154 | Save uses a chosen document and never silently deletes it. Share-out uses read-only FileProvider grants on copies in a private cache subfolder, never hands out authenticated URLs, never deletes on chooser return, keeps copies at most 24 hours (deleted at next start or share), and deletes them at once on cancel before handoff and on sign-out or account removal. | U, C, R |
+| P-154 | Save uses a chosen document and never silently deletes it. Share-out uses read-only FileProvider grants on copies in a private cache subfolder, never hands out authenticated URLs, never deletes on chooser return, lets copies expire after 24 hours and deletes expired copies at the next start or share (no claim of deletion at exactly 24 hours), and deletes them at once on cancel before handoff and on sign-out or account removal. | U, C, R |
 | P-155 | Share-in never sends by itself, drops items across sign-in, and supports one file. | C |
 | P-156 | The viewer suppresses read and typing proof and offers zoom alternatives. | C |
