@@ -30,6 +30,9 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+    // Issue69's separately authorized measurement; absent from every ordinary test APK.
+    if (providers.gradleProperty("recreatedInsetsDiagnostic").orNull == "true")
+        sourceSets.getByName("androidTest").java.srcDir("src/recreatedInsetsDiagnostic/java")
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     lint { warningsAsErrors = true }
 }
