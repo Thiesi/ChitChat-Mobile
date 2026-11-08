@@ -129,7 +129,8 @@ screen gains a section below the app guidelines:
     with the summary as **plain text** (no formatting, up to 6 lines, then "Show all");
   - the row "Read {installation}'s rules" to the document screen;
   - "By tapping I agree, you accept {installation}'s updated rules." in `textMuted`;
-  - **I agree** (primary) and **Not now** (text button).
+  - **I agree** (primary) and **Not now** (text button). This replaces the earlier draft's
+    Sign out (technical lead decision, 2026-11-08): reading is never gated by the server.
 - **I agree** posts the shown version with the same outcomes as above.
 - **Not now** returns to where the person was. Reading continues: rooms, DMs, Activity,
   search, files and settings work. A small level-1 banner sits at the top of each conversation,
