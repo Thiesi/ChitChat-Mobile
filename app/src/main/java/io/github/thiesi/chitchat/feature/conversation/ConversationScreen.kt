@@ -32,7 +32,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import io.github.thiesi.chitchat.core.ui.CountBadge
+import io.github.thiesi.chitchat.core.ui.AttentionBadge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
@@ -472,7 +472,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     state.notice != null || blocked || connection?.takeIf { it.generation == session.generation }?.let {
                         it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null || it.roomId == roomId }
                     } == true
-                BadgedBox(badge = { if (attention) CountBadge() }) {
+                BadgedBox(badge = { if (attention) AttentionBadge(
+                    uncertain = state.uncertainSend || state.authorUnknown != null || state.reactionUnknown != null,
+                    failed = state.error != null || state.syncError != null || state.readError != null || state.validation != null)
+                }) {
                     IconButton(onClick = { completionDetailsToken=Any(); detailsOpen = true }, modifier = Modifier.semantics {
                         contentDescription = label
                         if (attention) stateDescription = status

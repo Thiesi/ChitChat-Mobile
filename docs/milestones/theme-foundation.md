@@ -13,11 +13,11 @@ and adaptive icon assets from PR103. No earlier native exception applies to this
 The complete patch exceeded the existing126,000-byte written-review limit. It is split
 without raising that limit ([engineering record](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6715004003)):
 
-- **Phase A, delivered PR112:** palettes, Material/type/shape definitions, identity helpers,
+- **Phase A, this slice:** palettes, Material/type/shape definitions, identity helpers,
   thin PrimaryButton/CountBadge definitions, local Pure-black storage and VM API,
   licensed font and approved icon/window resources. Debug pseudo-locales and ATF are
   enabled for the new component tests. Existing test stores implement the added setting.
-- **Phase B, this slice:** root theme and switch, actual device-night observation and background
+- **Phase B, next:** root theme and switch, actual device-night observation and background
   mirror call sites, existing-screen wrapper/color/shape migration, source-policy and
   appearance journeys, and before/after capture infrastructure.
 
@@ -120,5 +120,3 @@ modals → separate Send when back online → CI41/IME → remaining M6 → M7 �
 [accepted coordinator plan](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6713312760).
 IME PR A may proceed separately while this theme PR waits for CI/reviews, under its
 [bounded authority](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6713567378).
-
-The capture workflow accepts manual base/head refs; artifacts expire after seven days.

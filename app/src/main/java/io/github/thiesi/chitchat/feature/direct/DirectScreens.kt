@@ -1,7 +1,7 @@
 package io.github.thiesi.chitchat.feature.direct
 
 import io.github.thiesi.chitchat.core.ui.PrimaryButton
-import io.github.thiesi.chitchat.core.ui.CountBadge
+import io.github.thiesi.chitchat.core.ui.AttentionBadge
 
 import androidx.compose.material3.MaterialTheme
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
@@ -358,6 +358,9 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                     if (!it) profileDetailsToken = null
                                     detailsOpen = it
                                 },
+                                uncertain = state.uncertainSend || state.uncertainRead || state.uncertainBlock ||
+                                    state.authorUnknown != null || state.reactionUnknown != null,
+                                failed = state.error != null || state.validation != null || state.readError != null,
                                 needsAttention = completionComposer.choice!=null || state.stale || state.error != null || state.validation != null || state.newerAvailable ||
                                     state.uncertainSend || state.uncertainRead || state.readError != null || state.uncertainBlock ||
                                     state.authorUnknown != null || state.authorLimit || state.authorNotice != null ||
@@ -607,11 +610,12 @@ private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, on
 internal fun DirectPrivacyNotice(privacy: MessagePrivacy?, title: Int = R.string.dm_privacy, compact: Boolean = false,
     needsAttention: Boolean = false,
     expanded: Boolean, onExpandedChange: (Boolean) -> Unit,
+    uncertain: Boolean = false, failed: Boolean = false,
     actions: @Composable (() -> Unit) -> Unit = {}) {
     if (!compact) privacy?.let { Text(stringResource(R.string.dm_privacy_short, it.direct.retention), style = MaterialTheme.typography.bodySmall) }
     val label = stringResource(title)
     val status = stringResource(R.string.dm_details_attention)
-    BadgedBox(badge = { if (needsAttention) CountBadge() }) {
+    BadgedBox(badge = { if (needsAttention) AttentionBadge(uncertain=uncertain,failed=failed) }) {
         if (!compact) TextButton(onClick = { onExpandedChange(true) }, modifier = Modifier.semantics {
             if (needsAttention) stateDescription = status
         }) { Text(label) }
