@@ -5,6 +5,39 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NativeImeServerTest {
+    @Test fun streamFindsImeClientFieldsBeyondTheOldDumpLimitAtEveryChunkBoundary() {
+        val raw = "private-body-canary ".repeat(5_000) +
+            "mDecorViewVisible=true mWindowVisible=false mImeWindowVis=0x3"
+        for (size in listOf(1, 7, 63, 64, 65, 4096)) {
+            val scan = ImeServerFlagStream()
+            raw.chunked(size).forEach(scan::accept)
+            assertEquals(imeServerFlags(raw), scan.result(endOfStream = true))
+            assertFalse(scan.flagLimitReached)
+        }
+    }
+
+    @Test fun streamNeverTreatsAReadBoundaryAsEndOfValueOrLosesItsNameBoundary() {
+        val raw = "xmInputShown=true other.mInputShown=false mWindowVisible=truePrivate " +
+            "mShowRequested=false; mImeWindowVis=12345678901 mInputShown=true"
+        for (split in 1 until raw.length) {
+            val scan = ImeServerFlagStream()
+            scan.accept(raw.take(split)); scan.accept(raw.drop(split))
+            assertEquals(imeServerFlags(raw), scan.result(endOfStream = true))
+        }
+        val incomplete = ImeServerFlagStream()
+        incomplete.accept("mInputShown=true")
+        assertNull(incomplete.result(endOfStream = false))
+        incomplete.accept("Private")
+        assertNull(incomplete.result(endOfStream = true))
+    }
+
+    @Test fun streamKeepsTheSameFortyFlagCapAndNoPrivateTail() {
+        val scan = ImeServerFlagStream()
+        ("mInputShown=false ".repeat(100) + "private-body-canary").chunked(13).forEach(scan::accept)
+        assertEquals(List(40) { "mInputShown=false" }, scan.result(endOfStream = true))
+        assertTrue(scan.flagLimitReached)
+    }
+
     @Test fun keepsOnlyExactBooleanAndNumericFlags() {
         assertEquals(listOf("mInputShown=false", "mWindowVisible=true", "mImeWindowVis=0x3"),
             imeServerFlags("mInputShown=false mWindowVisible=true, mImeWindowVis=0x3}"))

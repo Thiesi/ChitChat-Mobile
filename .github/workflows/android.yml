@@ -63,9 +63,12 @@ jobs:
           api-level: 36
           target: google_apis
           arch: x86_64
+          emulator-build: '16740729'
           disable-animations: true
+          pre-emulator-launch-script: python3 -B .github/scripts/pin_journey_image.py
           script: |
             adb shell settings put secure show_ime_with_hard_keyboard 1
+            python3 -B .github/scripts/native_environment.py
             python3 -B .github/scripts/native_presentation.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
