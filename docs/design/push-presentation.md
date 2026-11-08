@@ -104,8 +104,8 @@ Presentation:
 - **Mention plus DM:** the server sends **one** alert with kind **`mentioned`** and
   suppresses `direct_message_received` for that message (decided by the ChitChat lead and
   documented as stable in #150). CCM shows it in the **`mentions`** channel with the "New
-  mention" public text, and it obeys the Mentions toggle rather than Direct messages. CCM never
-  posts a second notification for the same message and does no client-side merging or text
+  mention" public text. Which preference gates it when Mentions and Direct messages differ is
+  server behavior (#150); CCM shows whatever arrives. CCM never posts a second notification for the same message and does no client-side merging or text
   comparison. With notification IDs (#147), the ID tag also absorbs re-delivery.
 - **Clearing:** opening that conversation may clear its own posted alert once the tag or ID
   identifies it (the existing rule). Reading it in the app marks the Activity entry read on the
