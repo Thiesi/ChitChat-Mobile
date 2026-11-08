@@ -233,6 +233,13 @@
       "w": 390,
       "h": 844,
       "title": "Server needs an update (revalidation)"
+    },
+    "FeatureGraphic.dc.html": {
+      "x": 2350,
+      "y": 8800,
+      "w": 1024,
+      "h": 500,
+      "title": "Play feature graphic (proposal)"
     }
   },
   "order": [
@@ -267,7 +274,8 @@
     "ReportMessage.dc.html",
     "Guidelines.dc.html",
     "DeleteAccount.dc.html",
-    "ServerUpdate.dc.html"
+    "ServerUpdate.dc.html",
+    "FeatureGraphic.dc.html"
   ],
   "notes": {
     "tOnboard": {
@@ -364,7 +372,7 @@
       "y": 8520,
       "text": "Play readiness",
       "kind": "title1",
-      "maxW": 1800
+      "maxW": 3380
     },
     "playNote": {
       "x": 1880,
