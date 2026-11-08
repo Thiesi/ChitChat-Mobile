@@ -1,10 +1,14 @@
-# ChitChat Android app: privacy policy (draft)
+# ChitChat Android app: privacy policy
 
-Status: **draft for maintainer approval**, requested by the technical lead (issue #1 and PR #108).
+Status: **approved 2026-11-08** by the maintainer (issue #1, comment 6719241315). **Publish after
+the pre-publication checklist passes against the first Play build**, through Ops: Roanoke when
+the first Play upload is prepared, not before: several statements describe features that aren't
+shipped yet (photo location removal, share copies, push and FCM). Any later factual change to
+this text goes back to the maintainer through the technical lead.
 It is built from the approved data safety facts (`play-readiness.md` §4) and the existing
 in-app disclosures. It will be published at **https://ChitChat.NetWorkXXIII.de/app/privacy** (maintainer
 decision, 2026-11-08). Publisher (NetWork XXIII) and contact
-(chitchat@NetWorkXXIII.de) are set; only the publication date remains, set at approval. Every factual statement must be re-verified against the shipped app before
+(chitchat@NetWorkXXIII.de) are set; only the publication date remains, set at publication. Every factual statement must be re-verified against the shipped app before
 publication. Placeholders are written as **[PLACEHOLDER]**.
 
 Editorial notes for reviewers are in *italic brackets* and aren't part of the published text.
