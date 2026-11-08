@@ -107,9 +107,10 @@ with its existing re-fencing.
   - "Member since {date}" or, for guests, "Visiting since {date}" (a guest date is the visit
     start, M5f1).
 - The "read-only" explanation (`profile_read_only`) as a muted caption.
-- Actions: **Refresh** (existing, same gating and new-reference semantics) and **Close**. No
-  other actions in this slice. Avatar availability hints authorize no fetch (M5f1/M5f2).
-  "Message" or "Ignore" entry points would need their own decision.
+- Actions: **Refresh** (existing, same gating and new-reference semantics) and **Close**.
+  With ChitChat#159, **Report {name}…** sits below Refresh when the profile allows it
+  (reporting.md, "Report a person"). No other actions. Avatar availability hints authorize no
+  fetch (M5f1/M5f2). "Message" or "Ignore" entry points would need their own decision.
 - Loading and error states inside the sheet, with the existing copy.
 
 ## Decision dialogs
@@ -162,5 +163,5 @@ with its existing re-fencing.
 | P-111 | Choice sheets keep today's suppression flags, original-reference dismissal, busy refusal, configuration retention and test tags. There is no partially expanded state. | C |
 | P-112 | Form dialogs keep their window type, IME and Save geometry, focus behavior and tests, with only visual tokens changed. | C, existing input tests |
 | P-113 | Decision dialogs use the specified button rules (`error` for destructive confirms, never persimmon-filled) and move accessibility focus to the title. | C |
-| P-114 | The profile card shows only existing facts and actions (Refresh, Close), with guest dates as visit start. | C |
+| P-114 | The profile card shows only existing facts and actions (Refresh, Close, and Report per reporting.md P-165), with guest dates as visit start. | C |
 | P-115 | The message actions sheet orders sections as specified, and every row uses the existing guarded callback. | C |
