@@ -47,15 +47,27 @@ class ComparisonEvidenceTests(unittest.TestCase):
         self.image(name='other-app.png')
         with self.assertRaises(ValueError):runner.collect(self.root,self.destination,'after')
 
-    def run_capture(self,status,complete):
-        (self.destination/'provenance.json').write_text(json.dumps(dict(kind='after',worktree=str(self.root),testClass='fixture')))
+    def test_later_baseline_keeps_its_real_pure_black_matrix(self):
+        self.source=self.root/'ccm-theme-baseline';self.source.mkdir()
+        for palette in ('light','dark','black'):
+            for scale in ('default','font200'):
+                prefix=f'baseline-{palette}-{scale}'
+                for scene in runner.SCENES:self.image(prefix+'-'+scene+'.png')
+                (self.source/(prefix+'-configuration.json')).write_text(json.dumps(dict(
+                    widthDp=360,heightDp=640,fontScale=2 if scale=='font200' else 1)))
+        records,complete=runner.collect(self.root,self.destination,'before',True)
+        self.assertTrue(complete);self.assertEqual(72,len(records))
+
+    def run_capture(self,status,complete,kind='after'):
+        (self.destination/'provenance.json').write_text(json.dumps(dict(kind=kind,worktree=str(self.root),testClass='fixture')))
         previous=dict(size=dict(physical='320x640',override=None),density=dict(physical='160',override='240'))
         with patch.object(runner,'REPORT',self.destination),patch.object(runner.subprocess,'run') as command,\
-            patch.object(runner,'collect',return_value=([],complete)),\
+            patch.object(runner,'collect',return_value=([],complete)) as collect,\
             patch.object(runner,'display_snapshot',return_value=previous),patch.object(runner,'set_display') as display:
             command.return_value=subprocess.CompletedProcess([],status)
-            result=runner.run('after')
+            result=runner.run(kind)
             command.assert_called_once()
+            collect.assert_called_once_with(self.root/'app/build/outputs/connected_android_test_additional_output',self.destination,kind,False)
             self.assertEqual([call(dict(size='360x640',density='160')),call(dict(size='reset')),call(dict(density='240'))],display.call_args_list)
         record=json.loads((self.destination/'provenance.json').read_text())
         self.assertEqual(status,record['originalCaptureStatus'])
@@ -89,6 +101,7 @@ class ComparisonEvidenceTests(unittest.TestCase):
     def test_success_without_required_images_fails_only_the_capture_job(self):
         self.assertEqual(1,self.run_capture(0,False))
         self.assertEqual(0,self.run_capture(0,True))
+        self.assertEqual(0,self.run_capture(0,True,'before'))
 
 
 if __name__=='__main__':unittest.main()
