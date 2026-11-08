@@ -17,8 +17,10 @@ The server's dispatcher sends `{title, body, link, app_name}`:
   doesn't expose.
 
 Optional notification IDs and bindings are proposed in backend issue ChitChat#147.
-Notification kinds (mention, ping, account, moderation) are **not** in the payload, and
-ordinary unmentioned DMs create no notification at all (B6 is pending a product decision).
+Notification kinds (mention, ping, account, moderation) are **not** in the payload. Ordinary
+unmentioned DMs create no notification today. **The maintainer accepted ChitChat#150
+(2026-11-08):** opt-in DM alerts arrive with backend batch 3 (see "Direct message alerts"
+below). This replaces the earlier "B6 pending" note.
 Quiet hours and the mention/ping mutes are applied by the server before sending.
 
 ## Principles
@@ -42,7 +44,7 @@ user settings per channel ID.
 | `mentions` | Mentions and pings | High (heads-up, sound) | When push is enabled | Mentions and pings. **Until the payload carries a kind, every push goes here** |
 | `account` | Account and security | Default | When `kind` is available | Sign-ins, security and account notices |
 | `moderation` | Moderation | Default | When `kind` is available and the account holds a moderation role | Reports, revision reviews and moderator notices |
-| `direct` | Direct messages | High | Only if B6 is accepted | Ordinary DMs (not existing parity) |
+| `direct` | Direct messages | High | When the person first turns on Direct messages and `kind` is available | `direct_message_received` (ChitChat#150) |
 
 **Dependency:** separating `account` and `moderation` from `mentions` needs an optional
 `kind` in the payload, alongside the IDs proposed in ChitChat#147. Until then, CCM must not
@@ -74,6 +76,41 @@ Built with `NotificationCompat`:
   fresh authorization and exact-target validation, nothing marked read. If the destination
   is unauthorized, unsupported or stale, CCM opens the Activity tab. It never opens a browser.
   If the person must sign in first, the destination is dropped, not replayed afterwards.
+
+## Direct message alerts
+
+**Dependency: ChitChat#150** (accepted, backend batch 3 with #147/#148). Leave all of this out
+until it merges on ChitChat main. Server semantics, which presentation never changes:
+
+- kind `direct_message_received`; account preference `direct_message_push_enabled`,
+  **default false**;
+- generic text only, never message content, captions or file names;
+- no alerts for messages that existed before opting in;
+- the timeline entry is marked read when the conversation is read;
+- a DM that also mentions the recipient produces **one** alert;
+- eligibility (membership, blocks, closure, guests, revoked devices) is rechecked at dispatch.
+
+Presentation:
+
+- **The alert** is built exactly like every other push (see "The notification"): payload
+  title and text, `app_name` as sub-text, no large icon or avatar, no MessagingStyle, no
+  Reply or Mark read, and tap goes through the guarded destination flow (nothing marked read).
+  A DM alert is still a doorbell. CCM never shows or fetches the message for it.
+- **Channel:** `direct` when the payload carries `kind = direct_message_received`. Without a
+  `kind` (an older server, or #147 not yet shipped), it posts in `mentions` like every other
+  push. CCM never guesses from the text that a push is a DM.
+- **Lock screen:** the public version reads "{installation name}" / "New direct message" when
+  the kind is known, otherwise "New notification".
+- **Mention plus DM:** the server sends one alert and decides which kind it carries. CCM
+  presents it under that kind's channel and public text ("New mention" or "New direct
+  message") and never posts a second notification for the same message. There's no
+  client-side merging or text comparison. With notification IDs (#147), the ID tag also
+  absorbs re-delivery.
+- **Clearing:** opening that conversation may clear its own posted alert once the tag or ID
+  identifies it (the existing rule). Reading it in the app marks the Activity entry read on the
+  server; CCM never marks anything read from a push.
+- **Activity list:** `direct_message_received` entries show with the person's pebble and the
+  server's rendered text. Tapping one opens the DM through the same guarded flow.
 
 ## Grouping and replacement
 
@@ -134,10 +171,21 @@ The screen shows:
 
   Battery-optimization exemptions belong to the distributor, not CCM. CCM never asks for one
   for itself.
-- **What you get:** toggles for **mentions** and **pings**, the only mutable server
-  preferences (`mentioned_push_enabled`, `pinged_push_enabled`). Under them, a fixed line:
-  "Account, security and moderation notices always arrive while notifications are on." Those
-  kinds are not optional on the server.
+- **What you get:** toggles for **mentions** and **pings** (`mentioned_push_enabled`,
+  `pinged_push_enabled`) and, once ChitChat#150 merges, **Direct messages**
+  (`direct_message_push_enabled`). Under them, a fixed line: "Account, security and moderation
+  notices always arrive while notifications are on." Those kinds are not optional on the server.
+  - **Direct messages** toggle: **off by default**, label "Direct messages", hint "When someone
+    writes to you directly. The alert never shows what they wrote." When switched on, one
+    line below it: "You'll only get alerts for new messages from now on."
+  - The toggle is shown **only when the preferences response actually contains**
+    `direct_message_push_enabled` as a Boolean. Missing or null means the server doesn't
+    offer it: hide the row, never show it as Off.
+  - It's an account preference, so the copy doesn't promise per-phone behavior. It changes
+    alerts on all this account's devices, like quiet hours.
+  - Writes follow the existing preference rules: no optimistic flip that sticks after a
+    failure, and an uncertain write needs an explicit GET before a new choice (never a
+    replayed POST).
 - **Quiet hours:**
   - **whole hours** (0–23) for start and end, plus a time zone. The time zone defaults to the
     device's IANA zone and can be changed;
@@ -164,6 +212,9 @@ The screen shows:
 
 - **Unit:**
   - payload to notification mapping: title, text, sub-text, channel `mentions` without a kind;
+  - with #150: `direct_message_received` maps to `direct` with the "New direct message" public
+    version, and without a kind it maps to `mentions`;
+  - the Direct messages toggle is hidden when the preference field is missing or null;
   - the public lock-screen version;
   - group key per account and server;
   - tag from the ID only when present;
@@ -187,4 +238,5 @@ The screen shows:
 | P-123 | Lock-screen visibility is private with a generic public version. | U, M |
 | P-124 | Sign-out, account switch and generation change cancel that account's notifications and drop later pushes. | C |
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
-| P-126 | Settings offer only the mention and ping toggles plus whole-hour quiet hours with a time zone. No device row is labelled as this phone; Remove revokes by ID. Sign-out unsubscribes this device before the session ends. | C, R |
+| P-127 | Direct message alerts (after ChitChat#150 merges): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert never shows what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content. A combined mention-plus-DM alert stays one notification under the kind the server sent. | U, C |
+| P-126 | Settings offer only the mention and ping toggles (plus Direct messages per P-127) and whole-hour quiet hours with a time zone. No device row is labelled as this phone; Remove revokes by ID. Sign-out unsubscribes this device before the session ends. | C, R |
