@@ -76,6 +76,39 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
+      - name: Install verified Bun for the pinned review action
+        id: review-bun
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, io, os, pathlib, subprocess, tarfile, urllib.request
+          # Same version as the pinned action; the official npm route avoids its failing GitHub asset URL.
+          version = "1.3.14"
+          url = "https://registry.npmjs.org/@oven/bun-linux-x64/-/bun-linux-x64-1.3.14.tgz"
+          integrity = "7OVTAKvwfPmSbIV1HpdOoVVx5VRc427GuPPne93N6vk4eQBPId9nXmZDh9/zGaKPdbVjVtQSZafWQoUjx38Utw=="
+          with urllib.request.urlopen(url, timeout=60) as response:
+              data = response.read(67108865)
+          if len(data) > 67108864 or base64.b64encode(hashlib.sha512(data).digest()).decode() != integrity:
+              raise RuntimeError("Bun package integrity mismatch")
+          with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+              member = archive.getmember("package/bin/bun")
+              if not member.isfile() or not 0 < member.size <= 134217728:
+                  raise RuntimeError("Unexpected Bun executable")
+              payload = archive.extractfile(member).read(134217729)
+          if len(payload) != member.size or not payload.startswith(b"\x7fELF"):
+              raise RuntimeError("Invalid Bun executable")
+          folder = pathlib.Path(os.environ["RUNNER_TEMP"]) / "ccm-review-bun"
+          folder.mkdir(exist_ok=False)
+          binary = folder / "bun"
+          binary.write_bytes(payload)
+          binary.chmod(0o755)
+          result = subprocess.run([str(binary), "--version"], check=True, capture_output=True, text=True)
+          if result.stdout.strip() != version:
+              raise RuntimeError("Bun version mismatch")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("path=" + str(binary) + "\n")
+          print("Verified official npm Bun " + version + "; pinned review/security gates retained.")
+          PY
+
       - name: Review current PR revision
         id: claude
         uses: anthropics/claude-code-action@5eb090f3c3afd701a0672cd32981197ca27688f6 # v1
@@ -83,6 +116,7 @@ jobs:
           # Expiring scoped token avoids the App's default-branch validation skip.
           # Only the trusted step below posts the structured model result.
           github_token: ${{ github.token }}
+          path_to_bun_executable: ${{ steps.review-bun.outputs.path }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: false
