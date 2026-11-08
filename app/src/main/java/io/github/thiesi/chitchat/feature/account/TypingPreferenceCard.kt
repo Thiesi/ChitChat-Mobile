@@ -1,5 +1,8 @@
 package io.github.thiesi.chitchat.feature.account
 
+import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
+
+import androidx.compose.material3.OutlinedButton
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -52,7 +54,7 @@ fun TypingPreferenceCard(model: TypingPreferenceViewModel, session: SessionState
     val enabled = session.phase == SessionPhase.AUTHENTICATED && session.user?.guest == false &&
         !session.busy && !session.refreshRequired && !session.storageWarning && !state.busy &&
         !state.unconfirmed && now >= session.retryAtMillis
-    Card(Modifier.fillMaxWidth().testTag("typing_preference")) {
+    Card(Modifier.fillMaxWidth().testTag("typing_preference"), shape = MaterialTheme.shapes.large, border = lanternSurfaceBorder()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.typing_preference_title), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.typing_preference_scope))
@@ -66,7 +68,7 @@ fun TypingPreferenceCard(model: TypingPreferenceViewModel, session: SessionState
                 Switch(checked = shared, onCheckedChange = null, enabled = enabled)
             } else {
                 Text(stringResource(R.string.typing_preference_unknown))
-                Button(onClick = { model.change(false) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { model.change(false) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.typing_disable))
                 }
                 TextButton(onClick = { model.change(true) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {

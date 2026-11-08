@@ -7,7 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.Button
+import io.github.thiesi.chitchat.core.ui.PrimaryButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -84,7 +84,7 @@ private fun AccountContent(model: AccountViewModel, session: SessionState, onRef
             else -> Unit
         }
         state.remainingCodes?.let { Text(stringResource(R.string.recovery_remaining, it)) }
-        Button(onClick = {
+        PrimaryButton(onClick = {
             pickerMissing = false
             if (model.chooseDestination()) {
                 try { picker.launch("chitchat-personal-data.json") }

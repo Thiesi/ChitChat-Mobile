@@ -1,7 +1,12 @@
 package io.github.thiesi.chitchat.app
 
+import android.content.res.Configuration
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
+
 import androidx.activity.compose.LocalActivity
-import androidx.compose.foundation.isSystemInDarkTheme
+import io.github.thiesi.chitchat.core.theme.deviceIsDark
+import io.github.thiesi.chitchat.core.theme.effectiveDark
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -20,12 +25,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Badge
+import io.github.thiesi.chitchat.core.ui.PrimaryButton
+import io.github.thiesi.chitchat.core.ui.CountBadge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,11 +40,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
+import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,10 +55,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -149,18 +155,10 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         if (state.hasLoadedSettings) auth.selectServer(state.settings.server)
     }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { auth.foreground() }
-    val dark = when (state.settings.theme) {
-        ThemePreference.SYSTEM -> isSystemInDarkTheme()
-        ThemePreference.DARK -> true
-        ThemePreference.LIGHT -> false
-    }
+    val windowDark = LocalConfiguration.current.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    val dark = effectiveDark(state.settings.theme, deviceIsDark(), state.hasLoadedSettings, windowDark)
     LaunchedEffect(dark) { onThemeChanged(dark) }
-    val colors = if (dark) darkColorScheme(
-        primary = Color(0xFFA7D1C0), surface = Color(0xFF191C1A), background = Color(0xFF191C1A),
-    ) else lightColorScheme(
-        primary = Color(0xFF32675B), surface = Color(0xFFFFF8EF), background = Color(0xFFFFF8EF),
-    )
-    MaterialTheme(colorScheme = colors) {
+    ChitChatTheme(dark = dark, pureBlack = state.settings.pureBlack) {
         val nav = rememberNavController()
         val activity = LocalActivity.current
         LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
@@ -336,13 +334,13 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                             Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.headlineLarge)
                                             Text(state.settings.server!!.value, style = MaterialTheme.typography.titleMedium)
                                             AuthScreen(session, auth)
-                                            if (session.phase == SessionPhase.AUTHENTICATED) Button(onClick = {
+                                            if (session.phase == SessionPhase.AUTHENTICATED) PrimaryButton(onClick = {
                                                 nav.navigate("rooms") { launchSingleTop = true }
                                             }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.rooms_title)) }
                                             if (session.phase == SessionPhase.AUTHENTICATED && directInbox != null && directThread != null)
-                                                Button(onClick = { openDirect(null) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.dm_title)) }
+                                                OutlinedButton(onClick = { openDirect(null) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.dm_title)) }
                                             if (search != null && searchRoute(displayedSession) != null)
-                                                Button(onClick = {
+                                                OutlinedButton(onClick = {
                                                     if (nav.currentBackStackEntry === homeEntry && matchesSearchScope(auth.state.value,
                                                         displayedSession.generation, displayedSession.user?.id ?: -1,
                                                         displayedSession.user?.sessionVersion ?: -1, displayedSession.server?.value))
@@ -357,19 +355,19 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                                     if (notificationState.countStale) R.plurals.notifications_last_count else R.plurals.notifications_count, count, count)
                                                 } ?: stringResource(R.string.notifications_count_unknown)
                                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                    Button(onClick = {
+                                                    PrimaryButton(onClick = {
                                                         if (nav.currentBackStackEntry === homeEntry && displayedSession.noticeIdentity() == auth.state.value.noticeIdentity())
                                                             notificationRoute(displayedSession)?.let { nav.navigate(it) { launchSingleTop = true } }
                                                     }, modifier = Modifier.fillMaxWidth().testTag("notifications_open").semantics { stateDescription = countText }) {
                                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                                             Text(stringResource(R.string.notifications_title))
-                                                            notificationState.unreadCount?.takeIf { it > 0 }?.let { count -> Badge { Text(count.toString()) } }
+                                                            notificationState.unreadCount?.takeIf { it > 0 }?.let { count -> CountBadge { Text(count.toString()) } }
                                                         }
                                                     }
                                                     Text(countText, style = MaterialTheme.typography.bodySmall)
                                                 }
                                             }
-                                            Button(onClick = { nav.navigate("server") }, enabled = session.canChangeServer) {
+                                            OutlinedButton(onClick = { nav.navigate("server") }, enabled = session.canChangeServer) {
                                                 Text(stringResource(R.string.change_server))
                                             }
                                             if (!session.canChangeServer) Text(stringResource(R.string.sign_out_to_change_server))
@@ -640,8 +638,8 @@ private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSav
             enabled = !state.saving,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { submitAddress() }),
-        )
-        Button(
+         shape = MaterialTheme.shapes.medium)
+        PrimaryButton(
             onClick = submitAddress,
             enabled = !state.saving && address.isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
@@ -653,7 +651,7 @@ private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSav
 
 @Composable
 private fun PrivacyCard() {
-    Card(Modifier.fillMaxWidth()) {
+    Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, border = lanternSurfaceBorder()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.privacy_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.privacy_body))
@@ -684,6 +682,16 @@ private fun SettingsScreen(state: SettingsUiState, model: SettingsViewModel, can
                 }), Modifier.padding(start = 16.dp))
             }
         }
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("theme_pure_black").toggleable(
+            value = state.settings.pureBlack, enabled = !state.saving, role = Role.Switch,
+            onValueChange = model::setPureBlack,
+        ).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.theme_pure_black))
+                Text(stringResource(R.string.theme_pure_black_support), style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(checked = state.settings.pureBlack, onCheckedChange = null, enabled = !state.saving)
+        }
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.push_title), style = MaterialTheme.typography.titleLarge)
         Text(stringResource(R.string.push_body))
@@ -704,5 +712,5 @@ private fun SettingsScreen(state: SettingsUiState, model: SettingsViewModel, can
             TextButton(onClick = { confirmForget = false; model.forgetServer() }) { Text(stringResource(R.string.forget_server)) }
         },
         dismissButton = { TextButton(onClick = { confirmForget = false }) { Text(stringResource(R.string.cancel)) } },
-    )
+     modifier = Modifier.lanternDialogEdge())
 }

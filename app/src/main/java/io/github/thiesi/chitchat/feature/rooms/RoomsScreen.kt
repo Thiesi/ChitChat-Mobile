@@ -1,5 +1,9 @@
 package io.github.thiesi.chitchat.feature.rooms
 
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
+
+import androidx.compose.material3.OutlinedButton
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,8 +18,8 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.Button
+import io.github.thiesi.chitchat.core.ui.CountBadge
+import io.github.thiesi.chitchat.core.ui.PrimaryButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -85,10 +89,10 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
                     CircularProgressIndicator()
                     TextButton(onClick = model::cancelRequest) { Text(stringResource(R.string.cancel)) }
                 }
-                Button(onClick = model::refresh, enabled = ready && !state.busy, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = model::refresh, enabled = ready && !state.busy, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(if (state.mutationUncertain) R.string.rooms_reconcile else R.string.rooms_refresh))
                 }
-                if (canCreateRooms(session.user)) Button(onClick = model::showCreate, enabled = canMutate) {
+                if (canCreateRooms(session.user)) PrimaryButton(onClick = model::showCreate, enabled = canMutate) {
                     Text(stringResource(R.string.rooms_create))
                 }
                 if (state.loaded && state.rooms.isEmpty()) Text(stringResource(R.string.rooms_empty))
@@ -96,14 +100,14 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
         }
         items(state.rooms, key = { it.id }) { room ->
             Card(onClick = { model.select(room.id) }, enabled = ready && !state.busy,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = MaterialTheme.shapes.large, border = lanternSurfaceBorder()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(room.name, style = MaterialTheme.typography.titleMedium)
                     Text(stringResource(when { room.isMember -> R.string.rooms_joined
                         room.invited -> R.string.rooms_invited; else -> R.string.rooms_discoverable }))
                     if (room.infoLine.isNotBlank()) Text(room.infoLine)
                     Text(stringResource(visibilityLabel(room.visibility)))
-                    if (room.unreadCount > 0) Badge {
+                    if (room.unreadCount > 0) CountBadge {
                         Text(stringResource(R.string.rooms_unread, if (room.unreadCount >= 100) "99+" else room.unreadCount.toString()))
                     }
                 }
@@ -115,7 +119,7 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
                 OutlinedTextField(value = state.lookup, onValueChange = model::updateLookup,
                     label = { Text(stringResource(R.string.rooms_lookup_id)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), enabled = !state.busy,
-                    modifier = Modifier.fillMaxWidth())
+                    modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium)
                 Text(stringResource(R.string.rooms_lookup_hint), style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = model::lookup, enabled = ready && !state.busy && state.lookup.isNotBlank()) {
                     Text(stringResource(R.string.rooms_lookup))
@@ -130,7 +134,7 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
         title = { Text(stringResource(R.string.rooms_leave_title)) },
         text = { Text(stringResource(R.string.rooms_leave_warning)) },
         confirmButton = { TextButton(onClick = model::leave, enabled = canMutate) { Text(stringResource(R.string.rooms_leave)) } },
-        dismissButton = { TextButton(onClick = { model.confirmLeave(false) }) { Text(stringResource(R.string.cancel)) } })
+        dismissButton = { TextButton(onClick = { model.confirmLeave(false) }) { Text(stringResource(R.string.cancel)) } }, modifier = Modifier.lanternDialogEdge())
     else if (state.detailOpen) RoomDetailDialog(state, model, canMutate,
         session.user?.roles?.any { it in setOf("super_admin", "admin", "chat_admin", "global_moderator") } == true,
         onOpenRoom) {
@@ -165,24 +169,24 @@ private fun RoomDetailDialog(state: RoomsUiState, model: RoomsViewModel, canMuta
             }
             if (room != null) {
                 RoomMetadata(room)
-                Button(onClick = { model.closeDetail(); onOpenRoom(room.id) }, enabled = !state.busy &&
+                PrimaryButton(onClick = { model.closeDetail(); onOpenRoom(room.id) }, enabled = !state.busy &&
                     (room.visibility != "private" || room.isMember || canReadPrivate)) {
                     Text(stringResource(R.string.rooms_open_conversation))
                 }
                 Text(stringResource(R.string.rooms_presence_disclosure))
                 if (room.visibility == "private" && !room.isMember) Text(stringResource(R.string.rooms_private_invitation))
                 if (room.memberRole == "owner") Text(stringResource(R.string.rooms_owner_immutable))
-                else if (room.isMember) Button(onClick = { model.confirmLeave(true) }, enabled = canMutate) {
+                else if (room.isMember) OutlinedButton(onClick = { model.confirmLeave(true) }, enabled = canMutate) {
                     Text(stringResource(R.string.rooms_leave))
                 }
-                else Button(onClick = model::join, enabled = canMutate) { Text(stringResource(R.string.rooms_join)) }
+                else OutlinedButton(onClick = model::join, enabled = canMutate) { Text(stringResource(R.string.rooms_join)) }
             }
             if (state.stale) Text(stringResource(R.string.rooms_stale))
             if (state.stale || state.mutationUncertain) TextButton(onClick = model::refresh, enabled = !state.busy) {
                 Text(stringResource(R.string.rooms_reconcile))
             }
         } },
-        confirmButton = { TextButton(onClick = model::closeDetail, enabled = !state.busy) { Text(stringResource(R.string.rooms_close)) } })
+        confirmButton = { TextButton(onClick = model::closeDetail, enabled = !state.busy) { Text(stringResource(R.string.rooms_close)) } }, modifier = Modifier.lanternDialogEdge())
 }
 
 @Composable
@@ -234,7 +238,7 @@ private fun CreateRoomDialog(state: RoomsUiState, model: RoomsViewModel, canMuta
             }
         } },
         confirmButton = { TextButton(onClick = model::create, enabled = canMutate) { Text(stringResource(R.string.rooms_create_submit)) } },
-        dismissButton = { TextButton(onClick = model::closeCreate, enabled = !state.busy) { Text(stringResource(R.string.cancel)) } })
+        dismissButton = { TextButton(onClick = model::closeCreate, enabled = !state.busy) { Text(stringResource(R.string.cancel)) } }, modifier = Modifier.lanternDialogEdge())
 }
 
 @Composable
@@ -242,7 +246,7 @@ private fun RoomField(value: String, onChange: (String) -> Unit, label: Int, ena
     numeric: Boolean = false, multiline: Boolean = false) {
     OutlinedTextField(value, onChange, label = { Text(stringResource(label)) }, enabled = enabled,
         modifier = Modifier.fillMaxWidth(), singleLine = !multiline, minLines = if (multiline) 2 else 1,
-        keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text))
+        keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text), shape = MaterialTheme.shapes.medium)
 }
 
 @Composable

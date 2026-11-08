@@ -1,12 +1,16 @@
 package io.github.thiesi.chitchat
 
 import android.os.Bundle
+import android.os.Build
+import android.app.UiModeManager
 import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.ViewModelProvider
+import io.github.thiesi.chitchat.core.theme.BackgroundNightModeSync
 import io.github.thiesi.chitchat.app.ChitChatApp
 import io.github.thiesi.chitchat.app.SettingsViewModel
 import io.github.thiesi.chitchat.feature.auth.AuthViewModel
@@ -24,13 +28,15 @@ import io.github.thiesi.chitchat.feature.profile.ProfileViewModel
 import io.github.thiesi.chitchat.feature.completion.CompletionViewModel
 
 class MainActivity : ComponentActivity() {
+    private lateinit var settingsModel: SettingsViewModel
+    private val nightModeSync=BackgroundNightModeSync()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        settingsModel=ViewModelProvider(this,SettingsViewModel.factory(
+            (application as ChitChatApplication).settingsRepository))[SettingsViewModel::class.java]
         setContent {
-            val model: SettingsViewModel = viewModel(
-                factory = SettingsViewModel.factory((application as ChitChatApplication).settingsRepository),
-            )
+            val model=settingsModel
             val auth: AuthViewModel = viewModel(factory = AuthViewModel.factory((application as ChitChatApplication).sessions))
             val account: AccountViewModel = viewModel(factory = AccountViewModel.factory((application as ChitChatApplication).accounts))
             val typing: TypingPreferenceViewModel = viewModel(factory = TypingPreferenceViewModel.factory(
@@ -66,6 +72,16 @@ class MainActivity : ComponentActivity() {
                     navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
                 )
             })
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (Build.VERSION.SDK_INT>=31 && ::settingsModel.isInitialized) {
+            val manager=getSystemService(UiModeManager::class.java) ?: return
+            val state=settingsModel.state.value
+            nightModeSync.onStopped(isChangingConfigurations,state.settings.theme.takeIf { state.hasLoadedSettings },
+                manager::setApplicationNightMode)
         }
     }
 }

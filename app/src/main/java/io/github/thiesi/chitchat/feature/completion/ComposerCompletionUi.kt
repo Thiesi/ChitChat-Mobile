@@ -23,7 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.luminance
+import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
@@ -171,7 +171,7 @@ internal fun rememberComposerCompletion(model: CompletionViewModel?, expected: S
 @Composable
 internal fun CompletionSuggestions(composer: ComposerCompletion, fromDetails: Boolean=false, onAccepted: () -> Unit = {}) {
     val original=composer.choice ?: return
-    val palette=if (MaterialTheme.colorScheme.background.luminance()<0.5f) Lantern.dark else Lantern.light
+    val palette=ChitChatTheme.colors
     val identitySize=Lantern.badge*LocalDensity.current.fontScale.coerceAtLeast(1f)
     key(original) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {

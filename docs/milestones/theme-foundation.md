@@ -1,7 +1,7 @@
 # Lantern theme foundation
 
-Status: phase A defines the core primitives, preference storage and assets. Phase B
-integrates the app, its appearance controls and existing components. Each delivery needs
+Status: phase A delivered the core primitives, preference storage and assets in PR112,
+main95062c7. This phase B integrates the app, its appearance controls and existing components. Each delivery needs
 its own current-head development gates and applicable J review, recorded on its PR.
 This is the token prerequisite for later presentation slices, following delivered
 M5d4c (PR97, main3093e71). It consumes the approved
@@ -13,18 +13,18 @@ and adaptive icon assets from PR103. No earlier native exception applies to this
 The complete patch exceeded the existing126,000-byte written-review limit. It is split
 without raising that limit ([engineering record](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6715004003)):
 
-- **Phase A, this slice:** palettes, Material/type/shape definitions, identity helpers,
+- **Phase A, delivered PR112:** palettes, Material/type/shape definitions, identity helpers,
   thin PrimaryButton/CountBadge definitions, local Pure-black storage and VM API,
   licensed font and approved icon/window resources. Debug pseudo-locales and ATF are
   enabled for the new component tests. Existing test stores implement the added setting.
-- **Phase B, next:** root theme and switch, actual device-night observation and background
+- **Phase B, this slice:** root theme and switch, actual device-night observation and background
   mirror call sites, existing-screen wrapper/color/shape migration, source-policy and
   appearance journeys, and before/after capture infrastructure.
 
-Phase A exposes no Pure-black switch and does not replace the root's existing Material
-theme. Its new controls are exercised as components. Full-screen presentation and the
-Light/Dark/Pure-black default/200% evidence belong to phase B. The following sections
-describe the combined foundation contract; they do not grant phase A consumer acceptance.
+Phase A exposed no Pure-black switch and did not replace the root's existing Material
+theme. This slice wires both and supplies full-screen presentation plus
+Light/Dark/Pure-black default/200% evidence. The following sections describe the combined
+foundation contract; phase A's passing gates do not substitute for this consumer's gates.
 
 ## Complete foundation contract
 
@@ -54,8 +54,8 @@ are device preferences: the backend has no account-level theme synchronization A
 
 ## System mode and cold start
 
-Phase A defines and unit-tests these helpers. Phase B adds their root/MainActivity call
-sites; phase A does not install a per-app night override.
+Phase A defined and unit-tested these helpers. This slice adds their root/MainActivity
+call sites and the approved background-only per-app night mirror.
 
 The app resolves one `dark` value for its palette, Pure black and bar icons. Once settings
 are loaded, System reads the actual device/global configuration, rather than the app's
@@ -81,6 +81,12 @@ These limits need to be included in presentation review. ComponentActivity recre
 tests do not establish MainActivity cold-start/manual-device acceptance.
 
 ## Validation and evidence
+
+PR112 delivered1113 JVM/lint0/debug/release and236 native cases, both written code reviews
+and J component review passing at02df8e4. Its two static font resources occupy82,531
+compressed release bytes, retaining452 codepoints per face and the full OFL. This slice
+preserves those reviewed assets. All phase B validation/capture/review results remain
+separate and are recorded on its PR after actual execution.
 
 Across A+B, JVM coverage checks all mapped text/control contrast pairs, exact Material role mapping,
 four-only Pure-black overrides, immutable-ID identity stability, font-role isolation,

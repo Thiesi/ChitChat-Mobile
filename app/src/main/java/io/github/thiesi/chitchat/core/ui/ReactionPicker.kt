@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.core.ui
 
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,7 +47,7 @@ internal fun MessageReactionPicker(requestKey: Any, messageId: Long, groups: Lis
     canChoose: (ReactionEmoji, Boolean) -> Boolean, onChoose: (ReactionEmoji, Boolean) -> Unit,
     onCheck: () -> Unit, onReview: () -> Unit, onDismiss: () -> Unit) {
     var people by remember(requestKey) { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, modifier = Modifier.testTag(dialogTag),
+    AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, modifier = Modifier.testTag(dialogTag).lanternDialogEdge(),
         title = { Text(stringResource(R.string.room_reactions_message, messageId.toString())) },
         text = {
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp).testTag(choicesTag),

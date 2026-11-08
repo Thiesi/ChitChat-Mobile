@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.targets
 
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -79,7 +81,7 @@ internal fun ReplyTargetHost(model: MessageTargetViewModel, value: MessageTarget
     LaunchedEffect(request, result, available, canAdopt, ready) {
         if (available && canAdopt && ready) model.adopt(request, onAccept)
     }
-    AlertDialog(onDismissRequest = { model.cancel(request) }, modifier = Modifier.testTag("message_target_dialog"),
+    AlertDialog(onDismissRequest = { model.cancel(request) }, modifier = Modifier.testTag("message_target_dialog").lanternDialogEdge(),
         title = { Text(stringResource(if (request.target is MessageTarget.RoomPing) R.string.conversation_pings else R.string.message_target_title)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (value.loading) CircularProgressIndicator()

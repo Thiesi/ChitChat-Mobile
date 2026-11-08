@@ -1,6 +1,6 @@
 # Independently verifiable implementation milestones
 
-[Lantern theme foundation](milestones/theme-foundation.md) follows delivered PR97/main3093e71 and consumes approved design contracts and PR103 assets. Phase A defines primitives, local preference storage and assets; phase B integrates the root, appearance controls and existing components and supplies full captures. Each PR needs its own full build/JVM/lint/unfiltered-native/written-review and applicable J gates. No future-head or manual/device/live/release waiver transfers.
+[Lantern theme foundation](milestones/theme-foundation.md) follows delivered PR97/main3093e71 and consumes approved design contracts and PR103 assets. Phase A delivered primitives, local preference storage and assets in PR112/main95062c7; this phase B integrates the root, appearance controls and existing components and supplies full captures. Each PR needs its own full build/JVM/lint/unfiltered-native/written-review and applicable J gates. No future-head or manual/device/live/release waiver transfers.
 
 [M5d4c native mention completion](milestones/M5d4c-native-mention-completion.md) delivered as PR97/main3093e71 under the maintainer's exact506251f development exception. Its original233/234 native failure remains failed; both written code reviews and the J review passed. No old exception transfers.
 

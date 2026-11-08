@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from itertools import islice
+import re
 import shutil
 import subprocess
 import sys
@@ -10,7 +11,22 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE = [sys.executable, "-B", str(Path(__file__).with_name("native_journeys.py"))]
 DESTINATION = ROOT / "app/build/reports/androidTests/completion-presentation"
+THEME_DESTINATION = ROOT / "app/build/reports/androidTests/theme-foundation"
 SOURCE = ROOT / "app/build/outputs/connected_android_test_additional_output"
+THEME_NAME = re.compile(r"theme-(light|dark|black)-(default|font200)-(?:"
+    r"(?:server|auth|home|settings|rooms|room|direct|thread|activity|account|search)\.png|configuration\.json)")
+
+
+def collect_theme():
+    # Six new presentation cases: eleven PNG scenes and one scalar manifest each.
+    files = list(islice(SOURCE.rglob("ccm-theme-presentation/*"), 73))
+    if (not files or len(files) > 72 or len({p.name for p in files}) != len(files)
+        or any(THEME_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous theme presentation output")
+    THEME_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, THEME_DESTINATION / path.name)
+    print(f"Theme presentation files collected: {len(files)} of 72.")
 
 
 def main() -> int:
@@ -32,6 +48,10 @@ def main() -> int:
         # Optional presentation evidence must never replace the original result.
         # Do not print exception text, invoke another test or collect other-app UI.
         print("Presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_theme()
+    except Exception:
+        print("Theme presentation captures unavailable; original native status retained.", file=sys.stderr)
     return 128 - status if status < 0 else status
 
 

@@ -1,5 +1,8 @@
 package io.github.thiesi.chitchat.core.ui
 
+import androidx.compose.material3.MaterialTheme
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -42,7 +45,7 @@ internal fun ComposerReplyControl(compact: Boolean, title: String, preview: Stri
 @Composable
 internal fun ComposerReplyOptions(title: String, preview: String, canCancel: Boolean,
     onOpenOriginal: (() -> Unit)?, onCancel: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("composer_reply_dialog"),
+    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("composer_reply_dialog").lanternDialogEdge(),
         title = { Text(title) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
             Text(preview, modifier = Modifier.testTag("composer_reply_preview"))

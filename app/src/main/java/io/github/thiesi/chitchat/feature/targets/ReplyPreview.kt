@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.targets
 
+import androidx.compose.material3.MaterialTheme
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -15,7 +17,7 @@ import io.github.thiesi.chitchat.R
 @Composable
 internal fun ReplyPreview(text: String, onOpen: (() -> Unit)?, modifier: Modifier = Modifier) {
     if (onOpen == null) Text(text, modifier, style = MaterialTheme.typography.bodySmall)
-    else OutlinedCard(onClick = onOpen, modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+    else OutlinedCard(onClick = onOpen, modifier = modifier.fillMaxWidth().heightIn(min = 48.dp), shape = MaterialTheme.shapes.large) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.message_target_open_quote), style = MaterialTheme.typography.labelMedium)
             Text(text, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)

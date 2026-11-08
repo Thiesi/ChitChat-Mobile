@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.core.ui
 
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -68,7 +70,7 @@ internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetC
             }
         }
     } else {
-        AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, modifier = Modifier.testTag("author_change_dialog"),
+        AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, modifier = Modifier.testTag("author_change_dialog").lanternDialogEdge(),
             title = { Text(stringResource(R.string.author_delete_title)) },
             text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error)

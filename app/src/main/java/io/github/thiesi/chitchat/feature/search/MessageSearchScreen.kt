@@ -1,5 +1,8 @@
 package io.github.thiesi.chitchat.feature.search
 
+import androidx.compose.material3.MaterialTheme
+import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
+
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -87,7 +90,7 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
                     label = { Text(stringResource(R.string.message_search_query)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { submit() }),
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("message_search_query"))
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("message_search_query"), shape = MaterialTheme.shapes.medium)
                 val pending = value.pending
                 if (pending != null) key(pending) {
                     val cancelLabel = stringResource(R.string.message_search_cancel)
@@ -172,7 +175,7 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
                     if (visible != null) items(visible.page.results, key = { row ->
                         (if (row is MessageSearchHit.Room) "room:" else "direct:") + row.messageId
                     }) { row ->
-                        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, border = lanternSurfaceBorder()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(when (row) {
                                 is MessageSearchHit.Room -> stringResource(R.string.message_search_room, row.room.name)
                                 is MessageSearchHit.Direct -> stringResource(R.string.message_search_direct, row.peer.username)

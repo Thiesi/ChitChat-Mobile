@@ -70,6 +70,42 @@ class PresentationGateTests(unittest.TestCase):
         self.results(-9)
         self.assertEqual(137, runner.main()); self.assert_once()
 
+    def theme_files(self, files):
+        self.glob.side_effect = lambda pattern: ([Path("capture.png")]
+            if pattern == "ccm-completion-presentation/*.png" else iter(files))
+
+    def test_theme_images_and_configuration_keep_the_single_failed_gate_status(self):
+        self.results(7)
+        files=[Path("theme-dark-font200-home.png"),Path("theme-dark-font200-configuration.json")]
+        self.theme_files(files)
+        self.assertEqual(7,runner.main());self.assert_once()
+        self.assertEqual(3,self.copy.call_count)
+        for path in files:self.copy.assert_any_call(path,runner.THEME_DESTINATION/path.name)
+
+    def test_excess_theme_output_cannot_copy_or_replay(self):
+        self.results(7)
+        self.theme_files([Path(f"theme-light-default-{n}.png") for n in range(73)])
+        self.assertEqual(7,runner.main());self.assert_once()
+        self.assertEqual(1,self.copy.call_count)
+        self.mkdir.assert_called_once()
+
+    def test_ambiguous_or_other_app_theme_files_are_rejected_before_copy(self):
+        self.results(7)
+        for files in ([Path("a/theme-dark-default-home.png"),Path("b/theme-dark-default-home.png")],
+            [Path("other-app.png")]):
+            self.copy.reset_mock();self.mkdir.reset_mock();self.theme_files(files)
+            self.assertEqual(7,runner.main())
+            self.assertEqual(1,self.copy.call_count);self.mkdir.assert_called_once()
+        self.assertEqual(2,self.run.call_count)
+
+    def test_theme_collection_error_never_replaces_the_original_result_or_logs_details(self):
+        self.results(7);self.theme_files([Path("theme-black-default-home.png")])
+        def copy(source,destination):
+            if destination.parent==runner.THEME_DESTINATION:raise OSError("private-canary")
+        self.copy.side_effect=copy
+        self.assertEqual(7,runner.main());self.assert_once()
+        self.assertNotIn("private-canary",self.stderr.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

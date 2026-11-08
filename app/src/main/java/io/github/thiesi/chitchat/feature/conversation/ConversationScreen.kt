@@ -1,5 +1,8 @@
 package io.github.thiesi.chitchat.feature.conversation
 
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
+
 import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
 import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
 import io.github.thiesi.chitchat.core.reactions.selectedBy
@@ -29,7 +32,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Badge
+import io.github.thiesi.chitchat.core.ui.CountBadge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
@@ -469,7 +472,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     state.notice != null || blocked || connection?.takeIf { it.generation == session.generation }?.let {
                         it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null || it.roomId == roomId }
                     } == true
-                BadgedBox(badge = { if (attention) Badge() }) {
+                BadgedBox(badge = { if (attention) CountBadge() }) {
                     IconButton(onClick = { completionDetailsToken=Any(); detailsOpen = true }, modifier = Modifier.semantics {
                         contentDescription = label
                         if (attention) stateDescription = status
@@ -573,7 +576,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             }
             header(true) { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } }
         } },
-        confirmButton = { TextButton(onClick = { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } }) { Text(stringResource(R.string.rooms_close)) } })
+        confirmButton = { TextButton(onClick = { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } }) { Text(stringResource(R.string.rooms_close)) } }, modifier = Modifier.lanternDialogEdge())
     }
     if (pingsVisible) {
         val choice = state.pingSelection // Freeze the close callback's original selection, not a delegated live value.
@@ -588,7 +591,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         val close: () -> Unit = { if (isCurrentEntry()) {
             pingsOpen = false; choice?.let(model::dismissTargetPing)
         } }
-        AlertDialog(onDismissRequest = close, modifier = Modifier.testTag("private_pings_dialog"),
+        AlertDialog(onDismissRequest = close, modifier = Modifier.testTag("private_pings_dialog").lanternDialogEdge(),
         title = { Text(stringResource(if (targetMissing) R.string.ping_target_missing_title else R.string.conversation_pings)) },
         text = { LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp), state = pingList,
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -604,7 +607,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 Card(Modifier.fillMaxWidth().testTag("private_ping:${ping.id}").semantics {
                     selected = isTarget
                     if (isTarget) stateDescription = selectedLabel
-                }) { Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                }, shape = MaterialTheme.shapes.large, border = lanternSurfaceBorder()) { Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (isTarget) Text(selectedLabel, style = MaterialTheme.typography.labelMedium)
                     Text(stringResource(R.string.conversation_ping_people, ping.sender.username ?: stringResource(R.string.conversation_unknown_user),
                         ping.target.username ?: stringResource(R.string.conversation_unknown_user)))

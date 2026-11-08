@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.account
 
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
@@ -26,7 +28,7 @@ internal fun IgnorePersonDialog(model: IgnorePersonViewModel, state: IgnorePerso
     val ignored = session.chatPolicy?.ignoredUserIds?.contains(target.userId)
     val ready = !session.busy && !session.refreshRequired && !session.storageWarning &&
         !state.busy && !state.unconfirmed && now >= session.retryAtMillis && ignored != null
-    AlertDialog(onDismissRequest = { model.close(target) }, modifier = Modifier.testTag("room_person_dialog"),
+    AlertDialog(onDismissRequest = { model.close(target) }, modifier = Modifier.testTag("room_person_dialog").lanternDialogEdge(),
         title = { Text(target.username ?: stringResource(R.string.conversation_unknown_user)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.ignore_scope))

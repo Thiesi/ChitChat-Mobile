@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.core.ui
 
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -33,7 +35,7 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
     onDelete: (() -> Unit)? = null, canDelete: Boolean = false,
     onReactions: (() -> Unit)? = null, canReact: Boolean = false,
     links: List<MessageInline.Link> = emptyList(), onOpenLink: ((String) -> Unit)? = null) {
-    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("message_actions"),
+    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("message_actions").lanternDialogEdge(),
         title = { Text(stringResource(R.string.message_actions)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
             if (!available) Text(stringResource(R.string.message_actions_unavailable))

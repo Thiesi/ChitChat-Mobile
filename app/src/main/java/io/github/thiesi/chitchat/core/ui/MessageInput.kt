@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import io.github.thiesi.chitchat.core.theme.Lantern
 
 /** One input component through IME resize: no focus loss from swapping compact/expanded fields. */
 @Composable
@@ -26,7 +27,8 @@ internal fun MessageInput(value: String, onValueChange: (String) -> Unit, enable
         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), decorationBox = { inner ->
             OutlinedTextFieldDefaults.DecorationBox(value, inner, enabled, false, VisualTransformation.None,
-                interaction, label = { Text(label) }, contentPadding = PaddingValues(8.dp))
+                interaction, label = { Text(label) }, contentPadding = PaddingValues(8.dp),
+                container = { OutlinedTextFieldDefaults.Container(enabled, false, interaction, shape = Lantern.pill) })
         })
 }
 
@@ -40,6 +42,7 @@ internal fun MessageInput(value: TextFieldValue, onValueChange: (TextFieldValue)
         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), decorationBox = { inner ->
             OutlinedTextFieldDefaults.DecorationBox(value.text, inner, enabled, false, VisualTransformation.None,
-                interaction, label = { Text(label) }, contentPadding = PaddingValues(8.dp))
+                interaction, label = { Text(label) }, contentPadding = PaddingValues(8.dp),
+                container = { OutlinedTextFieldDefaults.Container(enabled, false, interaction, shape = Lantern.pill) })
         })
 }
