@@ -49,7 +49,7 @@ Highest first. Only the highest applicable notice shows.
 | 4 | Stream error, incompatible or redirect | 2 | **{host} sent something ChitChat doesn't understand.** Live updates are off; use Refresh to update. | Retry |
 | 5 | Stream error, other | 2 | **Live updates stopped.** Use Refresh to update, or try again. | Retry |
 | 6 | Session refresh required (`refreshRequired`) | 2 | **Your session needs a refresh.** | Refresh session (existing, disabled until `retryAtMillis`) |
-| 7 | Rate-limited (`now < retryAtMillis`) | 1 | Try again in {s} s. | none (countdown, existing timer) |
+| 7 | Rate-limited (`now < retryAtMillis`) | 1 | Try again in {wait}, per "Waiting times" below. | none (existing gate and timer) |
 | 8 | Reconnecting longer than 5 s (`RECONNECTING` or `CONNECTING`) | 2 | **Can't reach {host}.** We'll keep trying. | none |
 | 9 | Recovery: the first `LIVE` after any of rows 2–5 or 8 | 2, auto-dismiss after about 2 s | Back online | none |
 | 10 | Screen-specific uncertain state (rooms `mutationUncertain`, notifications `unknownRead`, …) | 2 | As specified in the lists and transcript specs | That spec's explicit action |
@@ -87,6 +87,38 @@ its own row-10 notice, so there is never a second status line.
   Details there, as today. Hidden while the IME is open only if today's rules hide it.
 - Screens without a top bar (onboarding) use the inline notice placement from
   `onboarding-restyle.md`.
+
+## Waiting times (ChitChat#157)
+
+ChitChat#157 is merged (main `52ebdb9`, ships in v3.3.0). A `429` with `rate_limited` or
+`login_throttled` carries `error.retry_after_seconds`, a positive integer that is already rounded
+up, plus the same value in `Retry-After`. Every screen phrases that wait the same way. The
+delay is **display-only**: it never starts an automatic resend, replay or retry.
+
+- **The value:** only a positive integer `error.retry_after_seconds` on a 429 counts. A missing,
+  zero, negative, fractional or non-numeric value, or one on any other status, is **unknown**.
+  The English `message` is never parsed. `guest_limit_reached` and other errors have no delay.
+- **The deadline** is local: receipt time (monotonic) plus the value. Text is computed from the
+  remaining time whenever the screen renders. It never uses a server clock.
+- **Honest rounding, always up**, so the app never says "now" before the server allows it.
+  `{wait}` is:
+
+  | Remaining | `{wait}` |
+  |---|---|
+  | 1–59 s | `{s} s` (for example "12 s") |
+  | 60–119 s | about a minute |
+  | 2–59 min | about {m} minutes (seconds rounded up to the next whole minute) |
+  | 60 min or more | about {h} hours (rounded up to the next whole hour) |
+
+  Use Android quantity strings for the plurals.
+- **Timers:** only a gate that already exists counts down (the session gate's `retryAtMillis`,
+  P-25). Waits of a minute or more don't tick and simply re-render when the screen does. P-105
+  stays unchanged: this adds no new timer.
+- **When the delay is unknown,** each screen keeps its generic copy ("Try again in a little
+  while"), and nothing shows a number. Any engineering fallback gate (for example the session
+  layer's 30 s default) is never presented as the server's wait.
+- **When the time is up,** the line disappears on the next render, and the action stays as the
+  person left it. Nothing is sent, uploaded or retried until the person acts again.
 
 ## Announcements
 
@@ -161,8 +193,18 @@ conversation's current draft **waiting to send**:
     a normal draft wherever drafts survive today; drafts are memory-only and are cleared on
     account change and process death, as today. Nothing ever sends later without the person
     pressing Send again.
-  - Rate-limited (`retryAtMillis`) on reconnect: wait until the limit passes while still in
-    the foreground. If the app leaves the foreground first, drop the flag.
+  - **Rate limits (technical lead decision, 2026-11-08), split by which request got the 429:**
+    1. **429 on the reconnect's revalidation or reconciliation GETs**, before the draft's
+       single attempt: wait in the foreground until the local deadline ("Waiting times"),
+       then continue revalidation, reconciliation and the one attempt. The draft has never been
+       attempted, so this is the first send the person explicitly asked for, not a replay. If
+       `retry_after_seconds` is unknown, don't guess a timer: wait for the next ordinary
+       foreground or connectivity trigger. If the app leaves the foreground first, drop the
+       flag.
+    2. **429 on the draft's send POST itself:** that *was* the one attempt, and it's a definite
+       refusal (not committed). The waiting flag clears, and the draft returns to the normal
+       composer with the wait shown ("Couldn't send. Try again in {wait}.", or "… Try again
+       later." when unknown). Nothing is sent again automatically.
 - **Ordering.** Several conversations may each have a waiting draft. They send one at a time,
   in the order Send was pressed, each only after the previous one finished with a confirmed or
   definite result. An ambiguous result in one conversation doesn't block the others.
@@ -245,3 +287,5 @@ Other offline composer rules:
 | P-103 | Send when back online: one waiting draft per conversation, made only by pressing Send on a clean draft (never on an uncertain, busy or consent-pending one; waiting is not an attempt and never touches delivery-unknown state). At most one automatic attempt, only after reconnect, completed session revalidation and that conversation's post-reconnect reconciliation, while the app is visible, through the ordinary guarded send path with policy re-read after the last await. Never retried; ambiguous results use the existing uncertain-send flow; the waiting flag is dropped on background, sign-out, generation change or process death. No background work. | U, C (fakes), existing unknown-send tests |
 | P-104 | Announcements render as one dismissible steward-edged card, separate from status. | C, S |
 | P-105 | No new polling, timers beyond P-102 and P-25, or background work. Connectivity comes from the existing callback. | R |
+| P-106 | Rate-limit waits use only a positive integer `error.retry_after_seconds` on a 429, are rounded up per "Waiting times", fall back to generic copy when unknown, never show an invented number and never trigger an automatic send, upload or retry. | U, C |
+| P-107 | Send when back online with a 429: on a reconnect revalidation or reconciliation GET it waits in the foreground for the known local deadline (or the next ordinary trigger when unknown) and then makes its single attempt; on the draft's send POST it clears the waiting flag, returns the draft to the composer with the wait shown, and never sends again automatically. | U, C (fakes) |

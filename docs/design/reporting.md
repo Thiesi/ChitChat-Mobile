@@ -96,7 +96,7 @@ keeps the dialog window type and the native input and IME rules.
 | `message_already_reported` | "You've already reported this message." Treated as success (the report exists) | Same follow-up sheet |
 | `message_not_reportable` | "This message can't be reported anymore. It may have been deleted." | Close |
 | `message_not_found` or `report_recipient_required` | "You can't report this message." | Close |
-| `rate_limited` | "You've sent a lot of reports recently. Try again later." The form stays open with its content | — |
+| `rate_limited` | "You've sent a lot of reports recently. Try again in {wait}." (ChitChat#157, phrased per status-presentation "Waiting times"), or "… Try again later." when the delay is unknown. The form stays open with its content, and nothing is resubmitted automatically | — |
 | Unknown (connection lost after sending, timeout) | The level-2 notice inside the dialog: "Not sure your report went through." with **Send again** | **Send again** is an explicit new submission. It's safe: if the first one arrived, the server answers `message_already_reported`, which shows as success. Never resent automatically |
 
 The message itself is **unchanged** after a report: no badge, no hiding, no "reported" mark. The
