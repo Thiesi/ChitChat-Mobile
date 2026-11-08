@@ -101,11 +101,12 @@ Presentation:
   push. CCM never guesses from the text that a push is a DM.
 - **Lock screen:** the public version reads "{installation name}" / "New direct message" when
   the kind is known, otherwise "New notification".
-- **Mention plus DM:** the server sends one alert and decides which kind it carries. CCM
-  presents it under that kind's channel and public text ("New mention" or "New direct
-  message") and never posts a second notification for the same message. There's no
-  client-side merging or text comparison. With notification IDs (#147), the ID tag also
-  absorbs re-delivery.
+- **Mention plus DM:** the server sends **one** alert with kind **`mentioned`** and
+  suppresses `direct_message_received` for that message (decided by the ChitChat lead and
+  documented as stable in #150). CCM shows it in the **`mentions`** channel with the "New
+  mention" public text, and it obeys the Mentions toggle rather than Direct messages. CCM never
+  posts a second notification for the same message and does no client-side merging or text
+  comparison. With notification IDs (#147), the ID tag also absorbs re-delivery.
 - **Clearing:** opening that conversation may clear its own posted alert once the tag or ID
   identifies it (the existing rule). Reading it in the app marks the Activity entry read on the
   server; CCM never marks anything read from a push.
@@ -238,5 +239,5 @@ The screen shows:
 | P-123 | Lock-screen visibility is private with a generic public version. | U, M |
 | P-124 | Sign-out, account switch and generation change cancel that account's notifications and drop later pushes. | C |
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
-| P-127 | Direct message alerts (after ChitChat#150 merges): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert never shows what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content. A combined mention-plus-DM alert stays one notification under the kind the server sent. | U, C |
+| P-127 | Direct message alerts (after ChitChat#150 merges): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert never shows what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content. A combined mention-plus-DM alert is one `mentioned` notification in the `mentions` channel. | U, C |
 | P-126 | Settings offer only the mention and ping toggles (plus Direct messages per P-127) and whole-hour quiet hours with a time zone. No device row is labelled as this phone; Remove revokes by ID. Sign-out unsubscribes this device before the session ends. | C, R |
