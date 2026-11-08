@@ -193,8 +193,18 @@ conversation's current draft **waiting to send**:
     a normal draft wherever drafts survive today; drafts are memory-only and are cleared on
     account change and process death, as today. Nothing ever sends later without the person
     pressing Send again.
-  - Rate-limited (`retryAtMillis`) on reconnect: wait until the limit passes while still in
-    the foreground. If the app leaves the foreground first, drop the flag.
+  - **Rate limits (technical lead decision, 2026-11-08), split by which request got the 429:**
+    1. **429 on the reconnect's revalidation or reconciliation GETs**, before the draft's
+       single attempt: wait in the foreground until the local deadline ("Waiting times"),
+       then continue revalidation, reconciliation and the one attempt. The draft has never been
+       attempted, so this is the first send the person explicitly asked for, not a replay. If
+       `retry_after_seconds` is unknown, don't guess a timer: wait for the next ordinary
+       foreground or connectivity trigger. If the app leaves the foreground first, drop the
+       flag.
+    2. **429 on the draft's send POST itself:** that *was* the one attempt, and it's a definite
+       refusal (not committed). The waiting flag clears, and the draft returns to the normal
+       composer with the wait shown ("Couldn't send. Try again in {wait}.", or "… Try again
+       later." when unknown). Nothing is sent again automatically.
 - **Ordering.** Several conversations may each have a waiting draft. They send one at a time,
   in the order Send was pressed, each only after the previous one finished with a confirmed or
   definite result. An ambiguous result in one conversation doesn't block the others.
@@ -278,3 +288,4 @@ Other offline composer rules:
 | P-104 | Announcements render as one dismissible steward-edged card, separate from status. | C, S |
 | P-105 | No new polling, timers beyond P-102 and P-25, or background work. Connectivity comes from the existing callback. | R |
 | P-106 | Rate-limit waits use only a positive integer `error.retry_after_seconds` on a 429, are rounded up per "Waiting times", fall back to generic copy when unknown, never show an invented number and never trigger an automatic send, upload or retry. | U, C |
+| P-107 | Send when back online with a 429: on a reconnect revalidation or reconciliation GET it waits in the foreground for the known local deadline (or the next ordinary trigger when unknown) and then makes its single attempt; on the draft's send POST it clears the waiting flag, returns the draft to the composer with the wait shown, and never sends again automatically. | U, C (fakes) |
