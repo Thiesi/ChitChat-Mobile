@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[Standalone IME measurements](milestones/standalone-ime-reproducer.md) add no product parity: opt-in app/server-free diagnostic APKs, fifty fresh-window cases per authorized arm, separate from ordinary native gates and real-device/live/release acceptance.
+
 [Lantern theme foundation](milestones/theme-foundation.md) phase A defines palette/type/shape and control primitives, local Pure-black storage and approved icon assets. Root appearance controls, existing-screen integration and full presentation captures follow in phase B. Each PR needs its own current-head gates; manual/device/live/release acceptance stays separate.
 
 [M5d4c native mention completion](milestones/M5d4c-native-mention-completion.md) delivered in PR97/main3093e71 with scoped room/DM suggestion controls, full-draft/caret guards and local hardware Tab cycling. Its exact506251f development exception retains the233/234 native failure; it grants no future-head waiver or device/live/release acceptance.

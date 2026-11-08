@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[Issue69 standalone IME reproducer](milestones/standalone-ime-reproducer.md) is a separately authorized parallel track while theme PR114 is held: app/server-free50-case measurements, arms a/b/c once each, never a replacement for a failed full gate. Results and platform disposition stay on69; no device run or inferred release acceptance.
+
 [Lantern theme foundation](milestones/theme-foundation.md) follows delivered PR97/main3093e71 and consumes approved design contracts and PR103 assets. Phase A defines primitives, local preference storage and assets; phase B integrates the root, appearance controls and existing components and supplies full captures. Each PR needs its own full build/JVM/lint/unfiltered-native/written-review and applicable J gates. No future-head or manual/device/live/release waiver transfers.
 
 [M5d4c native mention completion](milestones/M5d4c-native-mention-completion.md) delivered as PR97/main3093e71 under the maintainer's exact506251f development exception. Its original233/234 native failure remains failed; both written code reviews and the J review passed. No old exception transfers.
