@@ -12,9 +12,9 @@ member and guest) carries `application: {name, version}` and `capabilities: {sch
   the v3.3.0 release metadata lands, and an unparseable version is unknown.
 - `application.version` is shown **only as information** in the details line. It never decides
   anything.
-- Unknown capability keys are ignored. `false` means not offered.
 - A missing `policies` object (ChitChat#160) is not a trigger. It means the server publishes
   no rules or privacy documents, and only the app guidelines apply (play-readiness.md §1).
+- Unknown capability keys are ignored. `false` means not offered.
 - `{minimum}` is the engineering constant for the first release with the client's filed
   issues (v3.3.0).
 
