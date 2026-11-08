@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.auth
 
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,7 +11,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import io.github.thiesi.chitchat.core.ui.PrimaryButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -126,12 +127,12 @@ fun AuthScreen(state: SessionState, model: AuthViewModel) {
                 if (!state.storageWarning && !state.busy) Text(stringResource(R.string.session_retention))
                 state.recoveryCodesRemaining?.let { Text(stringResource(R.string.recovery_remaining, it)) }
                 if (state.refreshRequired) Text(stringResource(R.string.session_refresh_needed))
-                OutlinedButton(onClick = model::refresh, enabled = !state.busy && !waiting) { Text(stringResource(R.string.refresh_session)) }
-                OutlinedButton(onClick = model::signOut) { Text(stringResource(R.string.sign_out)) }
+                LanternOutlinedButton(onClick = model::refresh, enabled = !state.busy && !waiting) { Text(stringResource(R.string.refresh_session)) }
+                LanternOutlinedButton(onClick = model::signOut) { Text(stringResource(R.string.sign_out)) }
             }
             SessionPhase.GUEST -> {
                 Text(stringResource(R.string.guest_detected))
-                OutlinedButton(onClick = model::signOut) { Text(stringResource(R.string.end_guest_visit)) }
+                LanternOutlinedButton(onClick = model::signOut) { Text(stringResource(R.string.end_guest_visit)) }
             }
             SessionPhase.INVALIDATED -> {
                 Text(stringResource(R.string.session_not_available), style = MaterialTheme.typography.titleLarge)

@@ -1,8 +1,9 @@
 package io.github.thiesi.chitchat.feature.account
 
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+
 import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
 
-import androidx.compose.material3.OutlinedButton
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -68,7 +69,7 @@ fun TypingPreferenceCard(model: TypingPreferenceViewModel, session: SessionState
                 Switch(checked = shared, onCheckedChange = null, enabled = enabled)
             } else {
                 Text(stringResource(R.string.typing_preference_unknown))
-                OutlinedButton(onClick = { model.change(false) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+                LanternOutlinedButton(onClick = { model.change(false) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.typing_disable))
                 }
                 TextButton(onClick = { model.change(true) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {

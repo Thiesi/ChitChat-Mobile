@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.direct
 
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+
 import io.github.thiesi.chitchat.core.ui.PrimaryButton
 import io.github.thiesi.chitchat.core.ui.AttentionBadge
 
@@ -129,7 +131,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
                 if (state.searched && state.results.isEmpty()) Text(stringResource(R.string.dm_search_empty))
             }
             items(state.results, key = { "person:${it.id}" }) { person ->
-                OutlinedButton(onClick = { onSelect(person.id) }, Modifier.fillMaxWidth().testTag("dm_person:${person.id}"), enabled = ready) { Text(person.username.orEmpty()) }
+                LanternOutlinedButton(onClick = { onSelect(person.id) }, Modifier.fillMaxWidth().testTag("dm_person:${person.id}"), enabled = ready) { Text(person.username.orEmpty()) }
             }
             if (drafts.isNotEmpty()) item { Text(stringResource(R.string.dm_drafts), style = MaterialTheme.typography.titleMedium) }
             items(drafts.values.toList(), key = { "draft:${it.peer}" }) { draft ->

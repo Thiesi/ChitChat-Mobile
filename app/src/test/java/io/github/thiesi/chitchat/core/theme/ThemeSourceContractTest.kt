@@ -22,6 +22,7 @@ class ThemeSourceContractTest {
             val text=file.readText()
             if(file.name!="CountBadge.kt") assertFalse(file.path,Regex("\\bBadge\\s*[({]").containsMatchIn(text))
             if(file.name!="PrimaryButton.kt") assertFalse(file.path,Regex("\\bButton\\s*\\(").containsMatchIn(text))
+            if(file.name!="SurfaceEdges.kt") assertFalse(file.path,Regex("\\bOutlinedButton\\s*\\(").containsMatchIn(text))
         }
     }
     @Test fun systemAppearanceHasOneResolverRatherThanReadingAnAppOverride() {

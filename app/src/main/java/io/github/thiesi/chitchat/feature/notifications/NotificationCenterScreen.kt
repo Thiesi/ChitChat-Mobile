@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.notifications
 
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+
 import androidx.compose.material3.MaterialTheme
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
@@ -88,9 +90,9 @@ internal fun NotificationCenterScreen(model: NotificationCenterViewModel, expect
                 if (value.incompleteRange) Text(stringResource(R.string.notifications_incomplete))
                 else if (value.loaded && value.stale) Text(stringResource(R.string.notifications_stale))
                 if (!value.latestWindow) Text(stringResource(R.string.notifications_historical))
-                OutlinedButton(onClick = { if (isCurrentEntry()) model.refresh(expected) }, enabled = canGet,
+                LanternOutlinedButton(onClick = { if (isCurrentEntry()) model.refresh(expected) }, enabled = canGet,
                     modifier = Modifier.fillMaxWidth().testTag("notifications_refresh")) { Text(stringResource(R.string.notifications_refresh)) }
-                if (!value.latestWindow || value.incompleteRange) OutlinedButton(onClick = {
+                if (!value.latestWindow || value.incompleteRange) LanternOutlinedButton(onClick = {
                     if (isCurrentEntry()) model.latest(expected)
                 }, enabled = canGet, modifier = Modifier.fillMaxWidth().testTag("notifications_latest")) { Text(stringResource(R.string.notifications_latest)) }
                 TextButton(onClick = { if (isCurrentEntry()) model.requestAll(expected) },
@@ -134,10 +136,10 @@ internal fun NotificationCenterScreen(model: NotificationCenterViewModel, expect
                 if (value.busy && value.notifications.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (value.notifications.isNotEmpty() && (value.stale || value.error != null)) {
                     Text(stringResource(R.string.notifications_stale))
-                    OutlinedButton(onClick = { if (isCurrentEntry()) model.refresh(expected) }, enabled = canGet,
+                    LanternOutlinedButton(onClick = { if (isCurrentEntry()) model.refresh(expected) }, enabled = canGet,
                         modifier = Modifier.fillMaxWidth().testTag("notifications_footer_refresh")) { Text(stringResource(R.string.notifications_refresh)) }
                 }
-                if (value.mayHaveOlder) OutlinedButton(onClick = { if (isCurrentEntry()) model.older(expected) },
+                if (value.mayHaveOlder) LanternOutlinedButton(onClick = { if (isCurrentEntry()) model.older(expected) },
                     enabled = canGet && value.loaded && !value.stale,
                     modifier = Modifier.fillMaxWidth().testTag("notifications_more")) { Text(stringResource(R.string.notifications_more)) }
             }

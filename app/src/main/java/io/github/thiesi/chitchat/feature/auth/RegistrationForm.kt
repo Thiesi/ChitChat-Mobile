@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.auth
 
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,7 +15,6 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DisplayMode
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
@@ -100,7 +101,7 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
             RegistrationProblem.CONFIRMATION -> R.string.password_mismatch
         }))
         Text(stringResource(R.string.birth_date_explanation))
-        OutlinedButton(onClick = { focus.clearFocus(); keyboard?.hide(); pickerOpen = true }, enabled = enabled) {
+        LanternOutlinedButton(onClick = { focus.clearFocus(); keyboard?.hide(); pickerOpen = true }, enabled = enabled) {
             Text(birthDate?.let { stringResource(R.string.selected_birth_date, it.toString()) } ?: stringResource(R.string.add_birth_date))
         }
         if (birthDate != null) TextButton(onClick = { birthDate = null }, enabled = enabled) { Text(stringResource(R.string.remove_birth_date)) }

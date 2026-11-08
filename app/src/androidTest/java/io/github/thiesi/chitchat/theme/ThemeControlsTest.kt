@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -19,6 +20,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.core.settings.SettingsRepository
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import io.github.thiesi.chitchat.core.theme.Lantern
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
 import io.github.thiesi.chitchat.core.ui.PrimaryButton
 import io.github.thiesi.chitchat.core.ui.CountBadge
 import io.github.thiesi.chitchat.core.ui.AttentionBadge
@@ -36,10 +38,15 @@ class ThemeControlsTest {
     @Test fun filledActionAndCountBadgeUseReadableLanternColorsAndRealTouchTargets() {
         if(Build.VERSION.SDK_INT>=34) compose.enableAccessibilityChecks()
         val mode=mutableIntStateOf(0);var clicks=0
+        var labelColor=Lantern.light.text
         compose.setContent {
             ChitChatTheme(dark=mode.intValue!=0,pureBlack=mode.intValue==2) {
                 Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                     PrimaryButton(onClick={ clicks++ },modifier=Modifier.testTag("primary")) { Text("Continue") }
+                    LanternOutlinedButton(onClick={},modifier=Modifier.testTag("outlined")) {
+                        val color=androidx.compose.material3.LocalContentColor.current
+                        SideEffect { labelColor=color };Text("Change server")
+                    }
                     CountBadge(Modifier.testTag("count")) { Text("12") }
                 }
             }
@@ -52,6 +59,13 @@ class ThemeControlsTest {
             if(Build.VERSION.SDK_INT>=28) {
                 val pixels=compose.onNodeWithTag("count").captureToImage().toPixelMap()
                 assertEquals(Lantern.light.signature.toArgb(),pixels[pixels.width/2,2].toArgb())
+                val palette=listOf(Lantern.light,Lantern.dark,Lantern.amoledBlack)[value]
+                val outlined=compose.onNodeWithTag("outlined").assertIsEnabled().assertMinTouchTarget(compose.density).captureToImage().toPixelMap()
+                val border=(0 until outlined.height/3).map { outlined[outlined.width/2,it] }.first { it.toArgb()!=palette.ground.toArgb() }
+                assertEquals(palette.fieldLine.toArgb(),border.toArgb())
+                val a=border.luminance();val b=palette.ground.luminance()
+                assertTrue((maxOf(a,b)+0.05)/(minOf(a,b)+0.05)>=3.0)
+                compose.runOnIdle { assertEquals(palette.text,labelColor) }
             }
         }
         compose.runOnIdle { assertEquals(3,clicks) }

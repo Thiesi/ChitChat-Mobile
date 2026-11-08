@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.app
 
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+
 import android.content.res.Configuration
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
@@ -36,7 +38,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -338,9 +339,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                                 nav.navigate("rooms") { launchSingleTop = true }
                                             }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.rooms_title)) }
                                             if (session.phase == SessionPhase.AUTHENTICATED && directInbox != null && directThread != null)
-                                                OutlinedButton(onClick = { openDirect(null) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.dm_title)) }
+                                                LanternOutlinedButton(onClick = { openDirect(null) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.dm_title)) }
                                             if (search != null && searchRoute(displayedSession) != null)
-                                                OutlinedButton(onClick = {
+                                                LanternOutlinedButton(onClick = {
                                                     if (nav.currentBackStackEntry === homeEntry && matchesSearchScope(auth.state.value,
                                                         displayedSession.generation, displayedSession.user?.id ?: -1,
                                                         displayedSession.user?.sessionVersion ?: -1, displayedSession.server?.value))
@@ -367,7 +368,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                                     Text(countText, style = MaterialTheme.typography.bodySmall)
                                                 }
                                             }
-                                            OutlinedButton(onClick = { nav.navigate("server") }, enabled = session.canChangeServer) {
+                                            LanternOutlinedButton(onClick = { nav.navigate("server") }, enabled = session.canChangeServer) {
                                                 Text(stringResource(R.string.change_server))
                                             }
                                             if (!session.canChangeServer) Text(stringResource(R.string.sign_out_to_change_server))
@@ -698,7 +699,7 @@ private fun SettingsScreen(state: SettingsUiState, model: SettingsViewModel, can
         if (state.settings.server != null) {
             Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.titleLarge)
             Text(state.settings.server.value)
-            OutlinedButton(onClick = { confirmForget = true }, enabled = !state.saving && canChangeServer) {
+            LanternOutlinedButton(onClick = { confirmForget = true }, enabled = !state.saving && canChangeServer) {
                 Text(stringResource(R.string.forget_server))
             }
             if (!canChangeServer) Text(stringResource(R.string.sign_out_to_change_server))

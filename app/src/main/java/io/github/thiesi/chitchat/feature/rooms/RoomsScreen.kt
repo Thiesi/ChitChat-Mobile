@@ -1,9 +1,10 @@
 package io.github.thiesi.chitchat.feature.rooms
 
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
 
-import androidx.compose.material3.OutlinedButton
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -89,7 +90,7 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
                     CircularProgressIndicator()
                     TextButton(onClick = model::cancelRequest) { Text(stringResource(R.string.cancel)) }
                 }
-                OutlinedButton(onClick = model::refresh, enabled = ready && !state.busy, modifier = Modifier.fillMaxWidth()) {
+                LanternOutlinedButton(onClick = model::refresh, enabled = ready && !state.busy, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(if (state.mutationUncertain) R.string.rooms_reconcile else R.string.rooms_refresh))
                 }
                 if (canCreateRooms(session.user)) PrimaryButton(onClick = model::showCreate, enabled = canMutate) {
@@ -176,10 +177,10 @@ private fun RoomDetailDialog(state: RoomsUiState, model: RoomsViewModel, canMuta
                 Text(stringResource(R.string.rooms_presence_disclosure))
                 if (room.visibility == "private" && !room.isMember) Text(stringResource(R.string.rooms_private_invitation))
                 if (room.memberRole == "owner") Text(stringResource(R.string.rooms_owner_immutable))
-                else if (room.isMember) OutlinedButton(onClick = { model.confirmLeave(true) }, enabled = canMutate) {
+                else if (room.isMember) LanternOutlinedButton(onClick = { model.confirmLeave(true) }, enabled = canMutate) {
                     Text(stringResource(R.string.rooms_leave))
                 }
-                else OutlinedButton(onClick = model::join, enabled = canMutate) { Text(stringResource(R.string.rooms_join)) }
+                else LanternOutlinedButton(onClick = model::join, enabled = canMutate) { Text(stringResource(R.string.rooms_join)) }
             }
             if (state.stale) Text(stringResource(R.string.rooms_stale))
             if (state.stale || state.mutationUncertain) TextButton(onClick = model::refresh, enabled = !state.busy) {
