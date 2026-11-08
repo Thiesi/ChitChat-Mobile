@@ -4,7 +4,9 @@ Status: **approved 2026-11-08** by the maintainer (issue #1, comment 6719241315)
 the pre-publication checklist passes against the first Play build**, through Ops: Roanoke when
 the first Play upload is prepared, not before: several statements describe features that aren't
 shipped yet (photo location removal, share copies, push and FCM). Any later factual change to
-this text goes back to the maintainer through the technical lead.
+this text goes back to the maintainer through the technical lead. Two factual changes (server
+rules and documents, ChitChat#160; reports about people, ChitChat#159) were approved by the
+maintainer on 2026-11-08 (issue #1, comment 6727725892).
 It is built from the approved data safety facts (`play-readiness.md` §4) and the existing
 in-app disclosures. It will be published at **https://ChitChat.NetWorkXXIII.de/app/privacy** (maintainer
 decision, 2026-11-08). Publisher (NetWork XXIII) and contact
@@ -48,7 +50,8 @@ document covers the app.]*
 - **Account details:** your username and password when you sign in or register, and an optional
   birth date, which the server uses for age-restricted rooms.
 - **What you create:** messages, replies, reactions, edits and deletions; files and photos you
-  send; reports you submit about messages.
+  send; reports you submit about messages or people (for a person: their name and profile
+  picture as moderators see them).
 - **Session data:** cookies and security tokens the server uses to keep you signed in.
 - **Notification settings:** if you turn notifications on, the delivery address and encryption
   keys the server needs to send you notifications.
@@ -98,6 +101,11 @@ inspection is enabled, under **Direct → What this means**.
 
 Editing or deleting a message doesn't necessarily erase earlier versions that the server
 keeps. *[Matches the existing in-app disclosure.]*
+
+If your server publishes its own rules, privacy policy or legal notice, the app shows them or
+links to them. Those documents come from your server's operator, not from the app maker. When
+you agree to your server's rules, the app tells your server which version you agreed to, and
+your server keeps that record with your account.
 
 ### Your choices and rights
 

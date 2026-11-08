@@ -55,8 +55,8 @@ Highest first. Only the highest applicable notice shows.
 | 10 | Screen-specific uncertain state (rooms `mutationUncertain`, notifications `unknownRead`, …) | 2 | As specified in the lists and transcript specs | That spec's explicit action |
 | 11 | Screen stale or syncing | 1 | "Updating…" (syncing) / "This may be out of date. Refresh to update it." (stale) | none |
 
-- `{host}` is the installation's display name once the server provides it (#149), else
-  the host.
+- `{host}` is the installation's display name, `application.name` from the session
+  (ChitChat#149, merged), else the host.
 - `LIVE` alone shows **nothing**. The old "Session events connected" line is removed.
   Per-screen syncing and stale lines (row 11) carry the "history may still be synchronizing"
   honesty where it matters.
