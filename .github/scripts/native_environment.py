@@ -7,9 +7,11 @@ import re
 import subprocess
 import sys
 
+from pin_journey_image import EMULATOR_BUILD, EMULATOR_VERSION, IMAGE_REVISION
+
 ROOT = Path(__file__).resolve().parents[2]
 REPORT = ROOT / "app/build/reports/androidTests/device/environment.json"
-EXPECTED_IME = "com.android.inputmethod.latin/.LatinIME"
+EXPECTED_IME = "com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME"
 COMPONENT = re.compile(r"[A-Za-z0-9_.]+/[A-Za-z0-9_.$]+")
 SCALAR = re.compile(r"[A-Za-z0-9_./:+@-]{1,256}")
 
@@ -24,7 +26,7 @@ def read(command: list[str]) -> str | None:
 
 
 def scalar(raw: str | None) -> str | None:
-    return raw if raw is not None and SCALAR.fullmatch(raw) else None
+    return raw if raw is not None and raw != "null" and SCALAR.fullmatch(raw) else None
 
 
 def setting(namespace: str, name: str) -> str | None:
@@ -47,7 +49,7 @@ def fingerprint() -> dict:
     config = read(["adb", "shell", "cmd", "activity", "get-config"]) or ""
     keyboard = re.findall(r"(?<=-)(?:nokeys|qwerty|12key)(?=-|\s|$)", config)
     hidden = re.findall(r"(?<=-)(?:keysexposed|keyshidden|keyssoft)(?=-|\s|$)", config)
-    emulator = read([str(Path(os.environ.get("ANDROID_HOME", "")) / "emulator/emulator"), "-version"]) or ""
+    emulator = read([str(Path(os.environ.get("ANDROID_HOME", "")) / "emulator/emulator"), "-no-window", "-version"]) or ""
     emulator_version = re.search(r"Android emulator version ([0-9.]+) \(build_id ([0-9]+)\)", emulator)
     revision = None
     source = Path(os.environ.get("ANDROID_HOME", "")) / "system-images/android-36/google_apis/x86_64/source.properties"
@@ -74,6 +76,12 @@ def fingerprint() -> dict:
 
 def preconditions(data: dict) -> list[str]:
     failures = []
+    # The action can continue after a failed pre-launch hook. Recheck both pins here
+    # so its error can never lead to instrumentation on an unintended environment.
+    if data["emulatorBuild"] != EMULATOR_BUILD or data["emulatorVersion"] != EMULATOR_VERSION:
+        failures.append("pinned_emulator_mismatch")
+    if data["systemImageRevision"] != IMAGE_REVISION:
+        failures.append("pinned_image_revision_mismatch")
     if data["defaultIme"] != EXPECTED_IME or EXPECTED_IME not in (data["enabledImes"] or []):
         failures.append("expected_ime_not_enabled_and_selected")
     if data["showImeWithHardKeyboard"] != "1":

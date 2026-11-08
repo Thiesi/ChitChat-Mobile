@@ -9,6 +9,8 @@ import native_environment as env
 
 def ready():
     return dict(defaultIme=env.EXPECTED_IME, enabledImes=[env.EXPECTED_IME],
+                emulatorBuild=env.EMULATOR_BUILD, emulatorVersion=env.EMULATOR_VERSION,
+                systemImageRevision=env.IMAGE_REVISION,
                 showImeWithHardKeyboard="1", animations={"window": "0", "transition": "0.0", "animator": "0"})
 
 
@@ -17,7 +19,8 @@ class EnvironmentTests(unittest.TestCase):
         self.assertEqual([], env.preconditions(ready()))
         for key, value in (("defaultIme", None), ("defaultIme", "other/.Ime"),
                            ("enabledImes", []), ("showImeWithHardKeyboard", "0"),
-                           ("animations", {"window": None}), ("animations", {"window": "1.0"})):
+                           ("animations", {"window": None}), ("animations", {"window": "1.0"}),
+                           ("emulatorBuild", None), ("emulatorVersion", "37.0.0.0"), ("systemImageRevision", "8")):
             data = ready(); data[key] = value
             with self.subTest(key=key, value=value):
                 self.assertTrue(env.preconditions(data))
@@ -55,6 +58,14 @@ class EnvironmentTests(unittest.TestCase):
         self.assertEqual("keyshidden", data["hardKeyboardHidden"])
         self.assertEqual("16.0.0", data["imeVersionName"])
         self.assertNotIn("canary", str(data))
+
+    def test_host_version_probe_is_headless_and_missing_setting_is_null(self):
+        with patch.object(env, "read", return_value=None) as read, patch.object(Path, "read_text", side_effect=OSError):
+            data = env.fingerprint()
+        commands = [call.args[0] for call in read.call_args_list]
+        self.assertTrue(any(command[-2:] == ["-no-window", "-version"] for command in commands))
+        self.assertIsNone(data["emulatorVersion"])
+        self.assertIsNone(env.scalar("null"))
 
 
 if __name__ == "__main__":

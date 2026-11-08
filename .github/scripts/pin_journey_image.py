@@ -55,7 +55,7 @@ def main() -> None:
     image = sdk / "system-images/android-36/google_apis/x86_64"
     if image.is_symlink() or image.resolve() != image or not image.is_relative_to(sdk):
         raise RuntimeError("Unexpected SDK image target")
-    version = subprocess.check_output([str(sdk / "emulator/emulator"), "-version"], text=True)
+    version = subprocess.check_output([str(sdk / "emulator/emulator"), "-no-window", "-version"], text=True)
     if f"Android emulator version {EMULATOR_VERSION} (build_id {EMULATOR_BUILD})" not in version:
         raise RuntimeError("Pinned emulator build mismatch")
     if revision(image / "source.properties") == IMAGE_REVISION:

@@ -1,6 +1,5 @@
 """Run the unchanged native gate once; retain only filtered failure diagnostics."""
 
-from collections import deque
 from pathlib import Path
 import re
 import subprocess
@@ -25,9 +24,45 @@ DATE = re.compile(r"[0-9]{2}-[0-9]{2}")
 TIME = re.compile(r"[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}")
 
 
+def selected_records(records: list[tuple[str, str, str | None]]) -> list[str]:
+    """Prioritize observed failed-test windows under the unchanged2000-record cap."""
+    windows = []
+    method = None
+    start = 0
+    failed = False
+    for index, (_, event, identity) in enumerate(records):
+        if identity is None:
+            continue
+        if event == "started:":
+            if failed: windows.append((start, index - 1))
+            method, start, failed = identity, index, False
+        elif event == "failed:":
+            if method != identity:
+                # Missing start is unknown; do not invent an earlier test boundary.
+                if failed: windows.append((start, index - 1))
+                method, start = identity, index
+            failed = True
+        elif event == "finished:" and method == identity:
+            if failed: windows.append((start, index))
+            method, failed = None, False
+    if failed: windows.append((start, len(records) - 1))
+    if not windows:
+        return [record[0] for record in records[-2000:]]
+    protected = set()
+    for first, last in windows:
+        protected.update(range(first, last + 1))
+    excess = max(0, len(records) - 2000)
+    outside_progress = [i for i, record in enumerate(records) if i not in protected and record[1] == "onProgress"]
+    outside_other = [i for i, record in enumerate(records) if i not in protected and record[1] != "onProgress"]
+    # Only if the failed windows themselves exceed the cap, preserve their newest2000
+    # records, as the previous tail policy did. Output always retains chronological order.
+    drop = set((outside_progress + outside_other + sorted(protected))[:excess])
+    return [record[0] for index, record in enumerate(records) if index not in drop]
+
+
 def filtered_trace(raw: str) -> str:
-    """Keep the last 2000 allowlisted records; never include a raw fallback line."""
-    records: deque[str] = deque(maxlen=2000)
+    """Keep at most2000 allowlisted records; never include a raw fallback line."""
+    records: list[tuple[str, str, str | None]] = []
     for line in raw.splitlines():
         fields = line.split()
         if len(fields) < 8 or not DATE.fullmatch(fields[0]) or not TIME.fullmatch(fields[1]):
@@ -35,11 +70,12 @@ def filtered_trace(raw: str) -> str:
         if fields[5] == "ImeTracker:" and TOKEN.fullmatch(fields[6]) and fields[7] in EVENTS:
             safe = fields[:2] + fields[5:8]
             safe.extend(value for value in fields[8:] if value in DETAILS)
-            records.append(" ".join(safe))
+            records.append((" ".join(safe), fields[7], None))
         elif (fields[5] == "TestRunner:" and fields[6] in {"started:", "finished:", "failed:"}
               and METHOD.fullmatch(fields[7])):
-            records.append(" ".join(fields[:2] + fields[5:8]))
-    return "\n".join(records) + ("\n" if records else "")
+            records.append((" ".join(fields[:2] + fields[5:8]), fields[6], fields[7]))
+    selected = selected_records(records)
+    return "\n".join(selected) + ("\n" if selected else "")
 
 
 def run_once(command: list[str], report: Path) -> int:
