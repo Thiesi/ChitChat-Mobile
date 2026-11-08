@@ -1,15 +1,23 @@
 """Run the unchanged native gate once; retain only filtered failure diagnostics."""
 
 from pathlib import Path
+import json
+from itertools import islice
 import re
 import subprocess
 import sys
+import time
+import xml.etree.ElementTree as ET
 
 from ime_platform_constants import PHASES, REASONS
 
 
 ROOT = Path(__file__).resolve().parents[2]
 REPORT = ROOT / "app/build/reports/androidTests/device/ime-lifecycle.txt"
+RESULTS = ROOT / "app/build/outputs/androidTest-results/connected"
+SOURCES = REPORT.with_name("test-failure-sources.json")
+MAX_SOURCE_BYTES = 16 * 1024 * 1024
+SOURCE_NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9.$]{0,255}")
 GRADLE = ["./gradlew", ":app:connectedDebugAndroidTest",
           "-Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true", "--max-workers=2"]
 LOGCAT = ["adb", "logcat", "-d", "-v", "threadtime", "-s", "ImeTracker:I", "TestRunner:I", "*:S"]
@@ -101,8 +109,66 @@ def run_once(command: list[str], report: Path) -> int:
     return 128 - status if status < 0 else status
 
 
+def failure_sources(pages: list[bytes]) -> dict:
+    """Only static test identity/source locations; never retain assertion payloads."""
+    if sum(map(len, pages)) > MAX_SOURCE_BYTES or len(pages) > 64:
+        raise ValueError("Source summary input bound exceeded")
+    cases, observed, omitted = [], 0, 0
+    for page in pages:
+        if b"<!DOCTYPE" in page: raise ValueError("Unexpected XML declaration")
+        for case in ET.fromstring(page).iter("testcase"):
+            failures = case.findall("failure") + case.findall("error")
+            if not failures: continue
+            observed += 1
+            cls, name = case.get("classname", ""), case.get("name", "")
+            if (len(cases) >= 32 or not SOURCE_NAME.fullmatch(cls) or not SOURCE_NAME.fullmatch(name)
+                    or not cls.startswith("io.github.thiesi.chitchat.")):
+                omitted += 1
+                continue
+            source = cls.rsplit(".", 1)[-1].split("$", 1)[0]
+            frame = re.compile(r"(?m)^\s*at " + re.escape(cls) +
+                r"(?:\$[A-Za-z_0-9$]+)?\.[A-Za-z_0-9$<>]+\((" + re.escape(source) +
+                r"\.(?:kt|java)):([1-9][0-9]{0,6})\)\s*$")
+            locations = list(dict.fromkeys((file, int(line)) for failure in failures
+                for file, line in frame.findall(failure.text or "")))
+            cases.append(dict(className=cls, test=name,
+                frames=[dict(file=file, line=line) for file, line in locations[:4]],
+                framesTruncated=len(locations) > 4))
+    return dict(schema=1, failedCasesObserved=observed, omittedCases=omitted, cases=cases)
+
+
+def save_failure_sources(started_ns: int, finished_ns: int) -> None:
+    pages, total = [], 0
+    files = list(islice(RESULTS.rglob("TEST-*.xml"), 65))
+    if len(files) > 64: raise ValueError("Source summary file bound exceeded")
+    for path in sorted(files):
+        if path.is_symlink() or not path.is_file(): raise ValueError("Unexpected source input")
+        stamp = path.stat()
+        # Never attribute a previous invocation's XML after a setup/launch failure.
+        if not started_ns <= stamp.st_mtime_ns <= finished_ns: continue
+        if len(pages) >= 64 or stamp.st_size > MAX_SOURCE_BYTES - total:
+            raise ValueError("Source summary input bound exceeded")
+        with path.open("rb") as stream: page = stream.read(MAX_SOURCE_BYTES - total + 1)
+        total += len(page)
+        if total > MAX_SOURCE_BYTES: raise ValueError("Source summary input grew beyond bound")
+        pages.append(page)
+    if not pages: raise ValueError("No current-invocation XML available")
+    summary = failure_sources(pages)
+    SOURCES.parent.mkdir(parents=True, exist_ok=True)
+    SOURCES.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    for case in summary["cases"]:
+        for frame in case["frames"]:
+            print(f"Native failure source: {case['className']}.{case['test']} ({frame['file']}:{frame['line']})")
+
+
 def main() -> int:
-    return run_once(GRADLE, REPORT)
+    started_ns = time.time_ns()
+    status = run_once(GRADLE, REPORT)
+    if status != 0:
+        try: save_failure_sources(started_ns, time.time_ns())
+        except Exception:
+            print("Test source summary unavailable; original native failure preserved.", file=sys.stderr)
+    return status
 
 
 if __name__ == "__main__":
