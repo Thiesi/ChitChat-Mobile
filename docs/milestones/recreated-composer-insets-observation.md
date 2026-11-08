@@ -57,8 +57,21 @@ baseline negative and adds pinned-composer/native-keyboard geometry coverage usi
 helpers and strict5000ms predicates. A test-owned ActivityLifecycleCallbacks registration installs content
 when the same ComponentActivity calls super.onCreate, then unregisters after rule teardown; the original
 host class/theme/window declarations and release behavior stay unchanged. This comparison is not yet
-evidence that initialization timing is the cause or that a fixture
-correction fixes the problem; its own full results/reviews must be inspected before selecting a fix.
+evidence that initialization timing is the cause or that a fixture correction fixes the problem.
+
+The original comparison [42525249420](https://github.com/Thiesi/ChitChat-Mobile/actions/runs/42525249420)
+FAILED247/249 onAPI35: both late andonCreate DM-after-recreation cases failed the unchanged positive-IME
+assertion. API36 PASSED249/249, with no skips; build/lint/1116JVM passed. This rejects the timing-only
+hypothesis. The source/head0fb6f51 and original artifacts remain retained.
+
+The merged manifest identifies a separate native-window mismatch: the library explicitly assigns
+ComponentActivity `@android:style/Theme.Material.Light.NoActionBar`, overriding the app's
+`@style/Theme.ChitChat`. The app theme includes its own windowActionModeOverlay/bar/background settings.
+The candidate fixture correction explicitly selects the app theme on the debug host before attachment,
+with tools:replace for the library declaration. MainActivity, production resources and all249 native
+cases/predicates remain unchanged; both installation paths and keyboard geometry remain tested. Its own
+fresh full gates and written reviews must establish the result; no framework-cause or product-fix claim
+follows from changing the declaration alone.
 
 The report must distinguish lagging Compose state, no received inset and a retired producer/window where
 the evidence permits. It must leave unavailable causes unknown and propose any app or fixture correction
