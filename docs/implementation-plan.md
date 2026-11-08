@@ -124,6 +124,8 @@ Continue directly into the next independently buildable milestone without reques
 
 ## Integration configuration needed before acceptance
 
+The technical lead authorized [issue69 diagnostics/reproducibility PR A](milestones/ime-reproducible-diagnostics.md) alongside theme CI/review waits. It changes no product behavior or parity availability, preserves ordinary strict full gates and original failures, and is separate from the later once-per-arm50-cycle measurements. Theme remains the first delivery priority; a platform hypothesis is not a keyboard fix.
+
 PR58 delivered shared-editor reuse. Continue [M5b3's complete native DM author slice](milestones/M5b3-direct-author-controls.md) with its own full build/native/layout/CI/reviews, maintaining current-base and bounded complete-diff gates. Then continue remaining M5 interactions/media/search; author controls do not complete M5, guest parity or live acceptance.
 
 M5b3 DM author controls measured126571 bytes before documentation. First deliver the independently buildable [shared-editor prerequisite](milestones/shared-author-dialog.md), with its own full gates/reviews; then rebase the preserved DM consumer and complete its vertical slice. Never truncate review inputs or mistake extraction for DM parity. M5b2 is delivered in PR57; live acceptance remains separate.

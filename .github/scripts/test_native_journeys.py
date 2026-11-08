@@ -15,6 +15,15 @@ TRACE = """10-21 05:20:00.498  4531  4531 I ImeTracker: io.github.thiesi.chitcha
 
 
 class TraceTests(unittest.TestCase):
+    def test_progress_and_rescue_reason_are_fixed_platform_names_only(self):
+        raw = ("10-21 05:20:00.498 4531 4531 I ImeTracker: system_server:abc: "
+               "onProgress at PHASE_SERVER_IME_INVOKER PHASE_PRIVATE_BODY_CANARY private-body-canary\n"
+               "10-21 05:20:00.499 4531 4531 I ImeTracker: system_server:def: "
+               "onRequestShow ORIGIN_SERVER SHOW_INPUT_TARGET_CHANGED SHOW_PRIVATE_BODY_CANARY\n")
+        self.assertEqual("10-21 05:20:00.498 ImeTracker: system_server:abc: onProgress PHASE_SERVER_IME_INVOKER\n"
+                         "10-21 05:20:00.499 ImeTracker: system_server:def: onRequestShow ORIGIN_SERVER SHOW_INPUT_TARGET_CHANGED\n",
+                         runner.filtered_trace(raw))
+
     def test_keeps_fixed_phase_reason_event_and_native_test_identity(self):
         trace = runner.filtered_trace(TRACE)
         self.assertEqual(3, len(trace.splitlines()))

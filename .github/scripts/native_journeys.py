@@ -6,6 +6,8 @@ import re
 import subprocess
 import sys
 
+from ime_platform_constants import PHASES, REASONS
+
 
 ROOT = Path(__file__).resolve().parents[2]
 REPORT = ROOT / "app/build/reports/androidTests/device/ime-lifecycle.txt"
@@ -15,16 +17,8 @@ LOGCAT = ["adb", "logcat", "-d", "-v", "threadtime", "-s", "ImeTracker:I", "Test
 
 # Do not serialize raw logcat, exception text, editor objects, window titles or arbitrary tails.
 # Unknown platform reasons remain omitted, rather than expanding a privacy boundary implicitly.
-DETAILS = frozenset("""
-ORIGIN_CLIENT ORIGIN_SERVER
-PHASE_CLIENT_ALREADY_HIDDEN PHASE_CLIENT_ON_CONTROLS_CHANGED
-PHASE_CLIENT_REPORT_REQUESTED_VISIBLE_TYPES PHASE_CLIENT_VIEW_SERVED
-PHASE_SERVER_SHOULD_HIDE PHASE_WM_ABORT_SHOW_IME_POST_LAYOUT PHASE_WM_GET_CONTROL_WITH_LEASH
-SHOW_SOFT_INPUT SHOW_SOFT_INPUT_BY_INSETS_API
-HIDE_SAME_WINDOW_FOCUSED_WITHOUT_EDITOR HIDE_SOFT_INPUT HIDE_SOFT_INPUT_BY_INSETS_API
-HIDE_UNSPECIFIED_WINDOW CONTROLS_CHANGED IME_REQUESTED_CHANGED_LISTENER
-""".split())
-EVENTS = frozenset("onRequestShow onRequestHide onShown onHidden onCancelled onFailed setFinished".split())
+DETAILS = PHASES | REASONS | frozenset("ORIGIN_CLIENT ORIGIN_SERVER ORIGIN_IME ORIGIN_WM_SHELL".split())
+EVENTS = frozenset("onRequestShow onRequestHide onProgress onShown onHidden onCancelled onFailed setFinished".split())
 TOKEN = re.compile(r"(?:io\.github\.thiesi\.chitchat\.debug(?:\.test)?|system_server):[0-9a-fA-F]{1,16}:")
 METHOD = re.compile(r"[A-Za-z_][A-Za-z_0-9]*\(io\.github\.thiesi\.chitchat\.[A-Za-z_0-9.$]+\)")
 DATE = re.compile(r"[0-9]{2}-[0-9]{2}")

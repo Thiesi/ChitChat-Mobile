@@ -10,6 +10,8 @@ The earlier PR45 local full run also failed 112/113 at the second DM-composer ta
 
 ## What is collected
 
+The [issue69 diagnostics follow-up](ime-reproducible-diagnostics.md) adds fixed progress/reason names, suite-level environment setup/preconditions and pinned infrastructure. It retains this wrapper's one-call behavior,2,000-record output cap and original-failure preservation. Verification below remains historical evidence for the original slice.
+
 - The shared `androidTest` input helper takes a scalar native Activity/window snapshot before its single tap and after a timeout: monotonic uptime, resumed-Activity count, window/view focus, attachment, text-editor Boolean, native IME visibility/bottom inset and soft-input mode. Ambiguous/unavailable metadata remains null. No Activity/View, editor contents, title or input-method object is retained or logged.
 - No focus request, keyboard show/hide/restart, IMM getter that flushes focus, second tap, text injection before readiness, larger timeout or weaker predicate is introduced. The snapshot itself adds a main-thread observation and can affect timing; it must not be called a keyboard fix.
 - CI runs the existing connected-test command exactly once through `.github/scripts/native_journeys.py`. Only after failure it attempts a bounded-time logcat read of `ImeTracker` and `TestRunner`. Raw output is never written to reports or printed. The final report keeps at most2000 filtered records: fixed timestamp/token/event scalars, an explicit allowlist of known platform phases/reasons, and native test lifecycle method/class names. Unknown fields, other packages/tags, arbitrary tails and exception payloads are omitted, not dumped as a fallback.
