@@ -7,7 +7,7 @@ import re
 import subprocess
 import sys
 
-from pin_journey_image import EMULATOR_BUILD, EMULATOR_VERSION, IMAGE_REVISION
+from pin_journey_image import EMULATOR_BUILD, EMULATOR_VERSION, IMAGE_REVISION, IMAGE_PINS, requested_api
 
 ROOT = Path(__file__).resolve().parents[2]
 REPORT = ROOT / "app/build/reports/androidTests/device/environment.json"
@@ -33,7 +33,7 @@ def setting(namespace: str, name: str) -> str | None:
     return scalar(read(["adb", "shell", "settings", "get", namespace, name]))
 
 
-def fingerprint() -> dict:
+def fingerprint(*, image_api: int = 36) -> dict:
     # Each read happens once. No retry, readiness loop, per-tap use or service mutation.
     selected = setting("secure", "default_input_method")
     selected = selected if selected and COMPONENT.fullmatch(selected) else None
@@ -52,7 +52,7 @@ def fingerprint() -> dict:
     emulator = read([str(Path(os.environ.get("ANDROID_HOME", "")) / "emulator/emulator"), "-no-window", "-version"]) or ""
     emulator_version = re.search(r"Android emulator version ([0-9.]+) \(build_id ([0-9]+)\)", emulator)
     revision = None
-    source = Path(os.environ.get("ANDROID_HOME", "")) / "system-images/android-36/google_apis/x86_64/source.properties"
+    source = Path(os.environ.get("ANDROID_HOME", "")) / f"system-images/android-{image_api}/google_apis/x86_64/source.properties"
     try:
         match = re.search(r"(?m)^Pkg\.Revision\s*=\s*([0-9.]+)\s*$", source.read_text())
         revision = match[1] if match else None
@@ -62,6 +62,7 @@ def fingerprint() -> dict:
                 buildFingerprint=scalar(read(["adb", "shell", "getprop", "ro.build.fingerprint"])),
                 securityPatch=scalar(read(["adb", "shell", "getprop", "ro.build.version.security_patch"])),
                 systemImageRevision=revision,
+                sdk=scalar(read(["adb", "shell", "getprop", "ro.build.version.sdk"])),
                 emulatorVersion=emulator_version[1] if emulator_version else None,
                 emulatorBuild=emulator_version[2] if emulator_version else None,
                 showImeWithHardKeyboard=setting("secure", "show_ime_with_hard_keyboard"),
@@ -74,7 +75,7 @@ def fingerprint() -> dict:
                             ("window_animation_scale", "transition_animation_scale", "animator_duration_scale")})
 
 
-def preconditions(data: dict, *, image_revision: str = IMAGE_REVISION) -> list[str]:
+def preconditions(data: dict, *, image_revision: str = IMAGE_REVISION, image_api: int | None = None) -> list[str]:
     failures = []
     # The action can continue after a failed pre-launch hook. Recheck both pins here
     # so its error can never lead to instrumentation on an unintended environment.
@@ -82,6 +83,8 @@ def preconditions(data: dict, *, image_revision: str = IMAGE_REVISION) -> list[s
         failures.append("pinned_emulator_mismatch")
     if data["systemImageRevision"] != image_revision:
         failures.append("pinned_image_revision_mismatch")
+    if image_api is not None and data.get("sdk") != str(image_api):
+        failures.append("pinned_api_mismatch")
     if data["defaultIme"] != EXPECTED_IME or EXPECTED_IME not in (data["enabledImes"] or []):
         failures.append("expected_ime_not_enabled_and_selected")
     if data["showImeWithHardKeyboard"] != "1":
@@ -92,13 +95,14 @@ def preconditions(data: dict, *, image_revision: str = IMAGE_REVISION) -> list[s
 
 
 def main() -> int:
+    api = requested_api()
     # Enlarging/clearing the ring is suite setup, never a replay of instrumentation.
     for command in (["adb", "logcat", "-G", "16M"], ["adb", "logcat", "-c"]):
         if read(command) is None:
             print("Native environment setup failed; instrumentation not started.", file=sys.stderr)
             return 1
-    data = fingerprint()
-    failures = preconditions(data)
+    data = fingerprint(image_api=api)
+    failures = preconditions(data, image_revision=IMAGE_PINS[api]["revision"], image_api=api)
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text(json.dumps(dict(environment=data, failedPreconditions=failures), indent=2) + "\n",
                       encoding="utf-8")

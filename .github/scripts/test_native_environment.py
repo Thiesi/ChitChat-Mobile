@@ -1,6 +1,7 @@
 """No real SDK, device, subprocess or report writes."""
 
 from pathlib import Path
+import os
 import unittest
 from unittest.mock import patch
 
@@ -10,7 +11,7 @@ import native_environment as env
 def ready():
     return dict(defaultIme=env.EXPECTED_IME, enabledImes=[env.EXPECTED_IME],
                 emulatorBuild=env.EMULATOR_BUILD, emulatorVersion=env.EMULATOR_VERSION,
-                systemImageRevision=env.IMAGE_REVISION,
+                systemImageRevision=env.IMAGE_REVISION, sdk="36",
                 showImeWithHardKeyboard="1", animations={"window": "0", "transition": "0.0", "animator": "0"})
 
 
@@ -41,7 +42,7 @@ class EnvironmentTests(unittest.TestCase):
                 self.assertEqual(int(wrong), env.main())
                 self.assertEqual([["adb", "logcat", "-G", "16M"], ["adb", "logcat", "-c"]],
                                  [call.args[0] for call in read.call_args_list])
-                fingerprint.assert_called_once_with(); write.assert_called_once()
+                fingerprint.assert_called_once_with(image_api=36); write.assert_called_once()
                 self.assertIn('"failedPreconditions"', write.call_args.args[0])
 
     def test_fingerprint_discards_raw_config_dump_text_and_non_component_ime_lines(self):
@@ -66,6 +67,22 @@ class EnvironmentTests(unittest.TestCase):
         self.assertTrue(any(command[-2:] == ["-no-window", "-version"] for command in commands))
         self.assertIsNone(data["emulatorVersion"])
         self.assertIsNone(env.scalar("null"))
+
+    def test_api35_checks_its_revision_and_actual_device_api(self):
+        data = ready(); data.update(systemImageRevision="9", sdk="35")
+        self.assertEqual([], env.preconditions(data, image_revision="9", image_api=35))
+        data["sdk"] = "36"
+        self.assertIn("pinned_api_mismatch", env.preconditions(data, image_revision="9", image_api=35))
+        with patch.dict(os.environ, {"NATIVE_API": "35"}), patch.object(env, "read", return_value=""), \
+                patch.object(env, "fingerprint", return_value=data) as fingerprint, \
+                patch.object(Path, "mkdir"), patch.object(Path, "write_text"):
+            self.assertEqual(1, env.main())
+            fingerprint.assert_called_once_with(image_api=35)
+
+    def test_unapproved_api_stops_before_any_device_command(self):
+        with patch.dict(os.environ, {"NATIVE_API": "37"}), patch.object(env, "read") as read:
+            with self.assertRaises(ValueError): env.main()
+            read.assert_not_called()
 
 
 if __name__ == "__main__":
