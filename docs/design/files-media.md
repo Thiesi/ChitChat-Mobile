@@ -121,9 +121,9 @@ upload:
     files up to {limit}." Send is disabled for this attachment, and Remove or Replace is
     offered. No POST is made, so no quota attempt is spent.
   - **Type not allowed:** when the provider reports a type that isn't in
-    `allowed_mime_types`, the card says "This server doesn't accept {type} files." (for
-    example "HEIC images" or "MP4 videos", or the extension in capitals when there's no
-    friendly name). Send is disabled for it.
+    `allowed_mime_types`, the card says "This server doesn't accept {kind}." with a plural
+    noun phrase for `{kind}`: "HEIC images", "MP4 videos", or "{EXT} files" with the extension
+    in capitals when there's no friendly name. Send is disabled for it.
   - **Unknown type** (no type, or `application/octet-stream`): no pre-check. The server
     decides.
   - **Size display:** file size and limit use the same system formatter. If both round to the
