@@ -1,18 +1,20 @@
 package io.github.thiesi.chitchat.feature.auth
 
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
+import io.github.thiesi.chitchat.core.ui.PrimaryButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DisplayMode
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
@@ -81,25 +83,25 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
             label = { Text(stringResource(R.string.username)) }, enabled = enabled, singleLine = true,
             isError = attempted && problem == RegistrationProblem.USERNAME,
             supportingText = { Text(stringResource(R.string.username_policy)) },
-            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Next))
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Next), shape = MaterialTheme.shapes.medium)
         OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().semantics { contentType = ContentType.NewPassword },
             label = { Text(stringResource(R.string.password)) }, enabled = enabled, singleLine = true,
             isError = attempted && problem == RegistrationProblem.PASSWORD,
             visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Next))
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Next), shape = MaterialTheme.shapes.medium)
         OutlinedTextField(confirmation, { confirmation = it }, Modifier.fillMaxWidth(),
             label = { Text(stringResource(R.string.confirm_password)) }, enabled = enabled, singleLine = true,
             isError = attempted && problem == RegistrationProblem.CONFIRMATION,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { submit() }))
+            keyboardActions = KeyboardActions(onDone = { submit() }), shape = MaterialTheme.shapes.medium)
         if (attempted && problem != null) InlineError(stringResource(when (problem) {
             RegistrationProblem.USERNAME -> R.string.username_policy
             RegistrationProblem.PASSWORD -> R.string.password_policy
             RegistrationProblem.CONFIRMATION -> R.string.password_mismatch
         }))
         Text(stringResource(R.string.birth_date_explanation))
-        OutlinedButton(onClick = { focus.clearFocus(); keyboard?.hide(); pickerOpen = true }, enabled = enabled) {
+        LanternOutlinedButton(onClick = { focus.clearFocus(); keyboard?.hide(); pickerOpen = true }, enabled = enabled) {
             Text(birthDate?.let { stringResource(R.string.selected_birth_date, it.toString()) } ?: stringResource(R.string.add_birth_date))
         }
         if (birthDate != null) TextButton(onClick = { birthDate = null }, enabled = enabled) { Text(stringResource(R.string.remove_birth_date)) }
@@ -113,7 +115,7 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
                 Text(stringResource(R.string.refresh_registration_check))
             }
         }
-        Button(onClick = submit, enabled = ready, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create_account)) }
+        PrimaryButton(onClick = submit, enabled = ready, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create_account)) }
     }
     if (pickerOpen) {
         val today = remember { LocalDate.now(ZoneOffset.UTC) }

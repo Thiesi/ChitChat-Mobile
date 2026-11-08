@@ -1,5 +1,8 @@
 package io.github.thiesi.chitchat.feature.auth
 
+import androidx.compose.material3.MaterialTheme
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -73,7 +76,7 @@ internal fun StepUpDialog(title: String, methods: VerificationMethods, busy: Boo
                 }, label = { Text(stringResource(if (recovery) R.string.recovery_code else R.string.current_password)) },
                     singleLine = true, enabled = !busy, visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { submit() }))
+                    keyboardActions = KeyboardActions(onDone = { submit() }), shape = MaterialTheme.shapes.medium)
                 if (busy) CircularProgressIndicator()
             }
         },
@@ -81,5 +84,5 @@ internal fun StepUpDialog(title: String, methods: VerificationMethods, busy: Boo
             Text(stringResource(R.string.verify_and_continue))
         } },
         dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) } },
-    )
+     modifier = Modifier.lanternDialogEdge())
 }

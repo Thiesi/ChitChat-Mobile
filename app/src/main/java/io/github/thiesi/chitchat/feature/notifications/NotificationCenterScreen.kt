@@ -1,5 +1,11 @@
 package io.github.thiesi.chitchat.feature.notifications
 
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+
+import androidx.compose.material3.MaterialTheme
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
+
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -84,9 +90,9 @@ internal fun NotificationCenterScreen(model: NotificationCenterViewModel, expect
                 if (value.incompleteRange) Text(stringResource(R.string.notifications_incomplete))
                 else if (value.loaded && value.stale) Text(stringResource(R.string.notifications_stale))
                 if (!value.latestWindow) Text(stringResource(R.string.notifications_historical))
-                OutlinedButton(onClick = { if (isCurrentEntry()) model.refresh(expected) }, enabled = canGet,
+                LanternOutlinedButton(onClick = { if (isCurrentEntry()) model.refresh(expected) }, enabled = canGet,
                     modifier = Modifier.fillMaxWidth().testTag("notifications_refresh")) { Text(stringResource(R.string.notifications_refresh)) }
-                if (!value.latestWindow || value.incompleteRange) OutlinedButton(onClick = {
+                if (!value.latestWindow || value.incompleteRange) LanternOutlinedButton(onClick = {
                     if (isCurrentEntry()) model.latest(expected)
                 }, enabled = canGet, modifier = Modifier.fillMaxWidth().testTag("notifications_latest")) { Text(stringResource(R.string.notifications_latest)) }
                 TextButton(onClick = { if (isCurrentEntry()) model.requestAll(expected) },
@@ -99,7 +105,7 @@ internal fun NotificationCenterScreen(model: NotificationCenterViewModel, expect
         items(value.notifications, key = { "notification:${it.id}" }) { item ->
             val read = value.isRead(item)
             val status = stringResource(if (read) R.string.notifications_read else R.string.notifications_unread)
-            Card(Modifier.fillMaxWidth().testTag("notification:${item.id}").semantics { stateDescription = status }) {
+            Card(Modifier.fillMaxWidth().testTag("notification:${item.id}").semantics { stateDescription = status }, shape = MaterialTheme.shapes.large, border = lanternSurfaceBorder()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(item.title, style = MaterialTheme.typography.titleMedium)
                     Text(status, style = MaterialTheme.typography.labelMedium)
@@ -130,10 +136,10 @@ internal fun NotificationCenterScreen(model: NotificationCenterViewModel, expect
                 if (value.busy && value.notifications.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (value.notifications.isNotEmpty() && (value.stale || value.error != null)) {
                     Text(stringResource(R.string.notifications_stale))
-                    OutlinedButton(onClick = { if (isCurrentEntry()) model.refresh(expected) }, enabled = canGet,
+                    LanternOutlinedButton(onClick = { if (isCurrentEntry()) model.refresh(expected) }, enabled = canGet,
                         modifier = Modifier.fillMaxWidth().testTag("notifications_footer_refresh")) { Text(stringResource(R.string.notifications_refresh)) }
                 }
-                if (value.mayHaveOlder) OutlinedButton(onClick = { if (isCurrentEntry()) model.older(expected) },
+                if (value.mayHaveOlder) LanternOutlinedButton(onClick = { if (isCurrentEntry()) model.older(expected) },
                     enabled = canGet && value.loaded && !value.stale,
                     modifier = Modifier.fillMaxWidth().testTag("notifications_more")) { Text(stringResource(R.string.notifications_more)) }
             }
@@ -145,7 +151,7 @@ internal fun NotificationCenterScreen(model: NotificationCenterViewModel, expect
             text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text(stringResource(R.string.notifications_all_body)) } },
             confirmButton = { TextButton(onClick = { if (isCurrentEntry()) model.confirmAll(choice) },
                 enabled = canRead, modifier = Modifier.testTag("notifications_all_confirm")) { Text(stringResource(R.string.notifications_mark_all)) } },
-            dismissButton = { TextButton(onClick = { if (isCurrentEntry()) model.cancelAll(choice) }) { Text(stringResource(R.string.cancel)) } })
+            dismissButton = { TextButton(onClick = { if (isCurrentEntry()) model.cancelAll(choice) }) { Text(stringResource(R.string.cancel)) } }, modifier = Modifier.lanternDialogEdge())
     }
 }
 

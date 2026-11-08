@@ -1,14 +1,16 @@
 package io.github.thiesi.chitchat.feature.auth
 
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
+import io.github.thiesi.chitchat.core.ui.PrimaryButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -125,23 +127,23 @@ fun AuthScreen(state: SessionState, model: AuthViewModel) {
                 if (!state.storageWarning && !state.busy) Text(stringResource(R.string.session_retention))
                 state.recoveryCodesRemaining?.let { Text(stringResource(R.string.recovery_remaining, it)) }
                 if (state.refreshRequired) Text(stringResource(R.string.session_refresh_needed))
-                OutlinedButton(onClick = model::refresh, enabled = !state.busy && !waiting) { Text(stringResource(R.string.refresh_session)) }
-                Button(onClick = model::signOut) { Text(stringResource(R.string.sign_out)) }
+                LanternOutlinedButton(onClick = model::refresh, enabled = !state.busy && !waiting) { Text(stringResource(R.string.refresh_session)) }
+                LanternOutlinedButton(onClick = model::signOut) { Text(stringResource(R.string.sign_out)) }
             }
             SessionPhase.GUEST -> {
                 Text(stringResource(R.string.guest_detected))
-                Button(onClick = model::signOut) { Text(stringResource(R.string.end_guest_visit)) }
+                LanternOutlinedButton(onClick = model::signOut) { Text(stringResource(R.string.end_guest_visit)) }
             }
             SessionPhase.INVALIDATED -> {
                 Text(stringResource(R.string.session_not_available), style = MaterialTheme.typography.titleLarge)
-                Button(onClick = model::reconnect, enabled = !waiting) { Text(stringResource(R.string.reconnect)) }
+                PrimaryButton(onClick = model::reconnect, enabled = !waiting) { Text(stringResource(R.string.reconnect)) }
                 TextButton(onClick = model::signOut) { Text(stringResource(R.string.clear_local_session)) }
             }
             SessionPhase.SIGNED_OUT -> {
                 Text(stringResource(if (state.storageWarning) R.string.sign_out_needs_attention else R.string.signed_out), style = MaterialTheme.typography.titleLarge)
                 if (state.busy) Text(stringResource(R.string.confirming_logout))
                 else if (state.logoutUnconfirmed && !state.storageWarning) Text(stringResource(R.string.logout_unconfirmed))
-                Button(onClick = model::reconnect, enabled = !state.busy && !state.storageWarning && !waiting) {
+                PrimaryButton(onClick = model::reconnect, enabled = !state.busy && !state.storageWarning && !waiting) {
                     Text(stringResource(R.string.back_to_sign_in))
                 }
             }
@@ -169,13 +171,13 @@ private fun PasswordForm(model: AuthViewModel, enabled: Boolean, restore: Boolea
     }
     OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().semantics { contentType = ContentType.Username },
         label = { Text(stringResource(R.string.username)) }, enabled = enabled, singleLine = true,
-        keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Next))
+        keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Next), shape = MaterialTheme.shapes.medium)
     OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().semantics { contentType = ContentType.Password },
         label = { Text(stringResource(R.string.password)) }, enabled = enabled, singleLine = true,
         visualTransformation = PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { submit() }))
-    Button(onClick = submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth()) {
+        keyboardActions = KeyboardActions(onDone = { submit() }), shape = MaterialTheme.shapes.medium)
+    PrimaryButton(onClick = submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth()) {
         Text(stringResource(if (restore) R.string.restore_and_sign_in else R.string.sign_in))
     }
 }
@@ -198,8 +200,8 @@ private fun RecoveryForm(model: AuthViewModel, enabled: Boolean) {
     OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.recovery_code)) },
         enabled = enabled, singleLine = true, visualTransformation = PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { submit() }))
-    Button(onClick = submit, enabled = canSubmit) { Text(stringResource(R.string.use_recovery_code)) }
+        keyboardActions = KeyboardActions(onDone = { submit() }), shape = MaterialTheme.shapes.medium)
+    PrimaryButton(onClick = submit, enabled = canSubmit) { Text(stringResource(R.string.use_recovery_code)) }
 }
 
 @Composable

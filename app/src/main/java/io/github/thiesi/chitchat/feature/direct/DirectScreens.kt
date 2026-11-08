@@ -1,5 +1,13 @@
 package io.github.thiesi.chitchat.feature.direct
 
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+
+import io.github.thiesi.chitchat.core.ui.PrimaryButton
+import io.github.thiesi.chitchat.core.ui.AttentionBadge
+
+import androidx.compose.material3.MaterialTheme
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -112,8 +120,8 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
                 Text(stringResource(R.string.dm_no_push), style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(state.query, model::updateQuery, Modifier.fillMaxWidth().testTag("dm_search_input"),
                     label = { Text(stringResource(R.string.dm_search_label)) }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { submit() }))
-                Button(onClick = submit, enabled = ready && state.inbox != null && !state.stale && !state.searching) {
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { submit() }), shape = MaterialTheme.shapes.medium)
+                PrimaryButton(onClick = submit, enabled = ready && state.inbox != null && !state.stale && !state.searching) {
                     Text(stringResource(R.string.dm_search))
                 }
                 Text(stringResource(R.string.dm_search_help), style = MaterialTheme.typography.bodySmall)
@@ -123,7 +131,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
                 if (state.searched && state.results.isEmpty()) Text(stringResource(R.string.dm_search_empty))
             }
             items(state.results, key = { "person:${it.id}" }) { person ->
-                OutlinedButton(onClick = { onSelect(person.id) }, Modifier.fillMaxWidth().testTag("dm_person:${person.id}"), enabled = ready) { Text(person.username.orEmpty()) }
+                LanternOutlinedButton(onClick = { onSelect(person.id) }, Modifier.fillMaxWidth().testTag("dm_person:${person.id}"), enabled = ready) { Text(person.username.orEmpty()) }
             }
             if (drafts.isNotEmpty()) item { Text(stringResource(R.string.dm_drafts), style = MaterialTheme.typography.titleMedium) }
             items(drafts.values.toList(), key = { "draft:${it.peer}" }) { draft ->
@@ -137,7 +145,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
             item { Text(stringResource(R.string.dm_inbox_cap), style = MaterialTheme.typography.bodySmall) }
             if (state.inbox != null && state.inbox!!.conversations.isEmpty()) item { Text(stringResource(R.string.dm_inbox_empty)) }
             items(state.inbox?.conversations.orEmpty(), key = { "peer:${it.peer.id}" }) { conversation ->
-                OutlinedCard(onClick = { onSelect(conversation.peer.id) }, Modifier.fillMaxWidth().testTag("dm_conversation:${conversation.peer.id}"), enabled = ready) {
+                OutlinedCard(onClick = { onSelect(conversation.peer.id) }, Modifier.fillMaxWidth().testTag("dm_conversation:${conversation.peer.id}"), enabled = ready, shape = MaterialTheme.shapes.large) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(conversation.peer.username.orEmpty(), style = MaterialTheme.typography.titleMedium)
                         val last = conversation.lastMessage
@@ -155,7 +163,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
         if (discard != null) AlertDialog(onDismissRequest = { discard = null },
             title = { Text(stringResource(R.string.dm_discard_draft)) }, text = { Text(stringResource(R.string.dm_discard_warning)) },
             confirmButton = { TextButton(onClick = { thread.discardSavedDraft(discard!!); discard = null }) { Text(stringResource(R.string.dm_discard_draft)) } },
-            dismissButton = { TextButton(onClick = { discard = null }) { Text(stringResource(R.string.cancel)) } })
+            dismissButton = { TextButton(onClick = { discard = null }) { Text(stringResource(R.string.cancel)) } }, modifier = Modifier.lanternDialogEdge())
     }
 }
 
@@ -352,6 +360,9 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                     if (!it) profileDetailsToken = null
                                     detailsOpen = it
                                 },
+                                uncertain = state.uncertainSend || state.uncertainRead || state.uncertainBlock ||
+                                    state.authorUnknown != null || state.reactionUnknown != null,
+                                failed = state.error != null || state.validation != null || state.readError != null,
                                 needsAttention = completionComposer.choice!=null || state.stale || state.error != null || state.validation != null || state.newerAvailable ||
                                     state.uncertainSend || state.uncertainRead || state.readError != null || state.uncertainBlock ||
                                     state.authorUnknown != null || state.authorLimit || state.authorNotice != null ||
@@ -485,7 +496,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                 AlertDialog(onDismissRequest = { blockConfirm = false }, title = { Text(stringResource(if (blocked) R.string.dm_unblock else R.string.dm_block)) },
                     text = { Text(stringResource(R.string.dm_block_help)) },
                     confirmButton = { TextButton(onClick = { blockConfirm = false; model.setBlocked(displayedSession, peer, !blocked) }, Modifier.testTag("dm_confirm_block")) { Text(stringResource(if (blocked) R.string.dm_unblock else R.string.dm_block)) } },
-                    dismissButton = { TextButton(onClick = { blockConfirm = false }) { Text(stringResource(R.string.cancel)) } })
+                    dismissButton = { TextButton(onClick = { blockConfirm = false }) { Text(stringResource(R.string.cancel)) } }, modifier = Modifier.lanternDialogEdge())
             }
         }
     }
@@ -601,11 +612,12 @@ private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, on
 internal fun DirectPrivacyNotice(privacy: MessagePrivacy?, title: Int = R.string.dm_privacy, compact: Boolean = false,
     needsAttention: Boolean = false,
     expanded: Boolean, onExpandedChange: (Boolean) -> Unit,
+    uncertain: Boolean = false, failed: Boolean = false,
     actions: @Composable (() -> Unit) -> Unit = {}) {
     if (!compact) privacy?.let { Text(stringResource(R.string.dm_privacy_short, it.direct.retention), style = MaterialTheme.typography.bodySmall) }
     val label = stringResource(title)
     val status = stringResource(R.string.dm_details_attention)
-    BadgedBox(badge = { if (needsAttention) Badge() }) {
+    BadgedBox(badge = { if (needsAttention) AttentionBadge(uncertain=uncertain,failed=failed) }) {
         if (!compact) TextButton(onClick = { onExpandedChange(true) }, modifier = Modifier.semantics {
             if (needsAttention) stateDescription = status
         }) { Text(label) }
@@ -635,7 +647,7 @@ internal fun DirectPrivacyNotice(privacy: MessagePrivacy?, title: Int = R.string
             Text(stringResource(R.string.dm_no_push))
             actions { onExpandedChange(false) }
         }
-    }, confirmButton = { TextButton(onClick = { onExpandedChange(false) }) { Text(stringResource(R.string.dm_close)) } })
+    }, confirmButton = { TextButton(onClick = { onExpandedChange(false) }) { Text(stringResource(R.string.dm_close)) } }, modifier = Modifier.lanternDialogEdge())
 }
 
 @Composable

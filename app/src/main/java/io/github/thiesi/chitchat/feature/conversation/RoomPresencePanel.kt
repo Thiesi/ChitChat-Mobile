@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -73,5 +75,5 @@ internal fun RoomPresencePanel(state: RealtimeState?, eligible: Boolean, canEnte
                     Text(if (user.guest) stringResource(R.string.presence_guest, user.username) else user.username)
                 }
             }
-        }, confirmButton = { TextButton(onClick = { usersOpen = false }) { Text(stringResource(R.string.rooms_close)) } })
+        }, confirmButton = { TextButton(onClick = { usersOpen = false }) { Text(stringResource(R.string.rooms_close)) } }, modifier = Modifier.lanternDialogEdge())
 }

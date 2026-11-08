@@ -1,5 +1,8 @@
 package io.github.thiesi.chitchat.feature.profile
 
+import androidx.compose.material3.MaterialTheme
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -21,7 +24,7 @@ import java.time.format.FormatStyle
 @Composable
 fun ProfileDialog(state: ProfileState, canRefresh: Boolean, onRefresh: () -> Unit, onClose: () -> Unit) {
     val locale = LocalConfiguration.current.locales[0]
-    AlertDialog(onDismissRequest = onClose, modifier = Modifier.testTag("profile_dialog"),
+    AlertDialog(onDismissRequest = onClose, modifier = Modifier.testTag("profile_dialog").lanternDialogEdge(),
         title = { Text(stringResource(R.string.profile_title)) }, text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (state.loading) { CircularProgressIndicator(); Text(stringResource(R.string.profile_loading)) }

@@ -1,5 +1,8 @@
 package io.github.thiesi.chitchat.feature.conversation
 
+import androidx.compose.material3.MaterialTheme
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -28,7 +31,7 @@ fun RoomDraftsDialog(model: ConversationViewModel, session: SessionState, onOpen
     val original = session
     val visible = saved.values.filter { it.matches(original) && it.matches(currentSession) }
         .sortedWith(compareBy<RoomDraft> { it.roomName.orEmpty().lowercase() }.thenBy { it.roomId })
-    AlertDialog(onDismissRequest = { model.hideDrafts(original) }, modifier = Modifier.testTag("room_drafts_dialog"),
+    AlertDialog(onDismissRequest = { model.hideDrafts(original) }, modifier = Modifier.testTag("room_drafts_dialog").lanternDialogEdge(),
         title = { Text(stringResource(R.string.room_drafts_title)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.room_drafts_scope))

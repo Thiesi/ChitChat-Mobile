@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.realtime
 
+import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -70,7 +72,7 @@ fun RealtimeStatus(state: RealtimeState, retry: () -> Unit, dismiss: (Long) -> U
                         Text(notice.text)
                     }
                 }, confirmButton = { TextButton(onClick = { dismiss(notice.id) }) { Text(stringResource(R.string.realtime_dismiss_notice)) } },
-                dismissButton = { TextButton(onClick = { expanded = false }) { Text(stringResource(R.string.back)) } })
+                dismissButton = { TextButton(onClick = { expanded = false }) { Text(stringResource(R.string.back)) } }, modifier = Modifier.lanternDialogEdge())
         }
     }
 }
