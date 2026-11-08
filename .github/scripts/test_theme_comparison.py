@@ -6,7 +6,7 @@ import struct
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import call,patch
 
 import theme_comparison as runner
 
@@ -49,14 +49,37 @@ class ComparisonEvidenceTests(unittest.TestCase):
 
     def run_capture(self,status,complete):
         (self.destination/'provenance.json').write_text(json.dumps(dict(kind='after',worktree=str(self.root),testClass='fixture')))
+        previous=dict(size=dict(physical='320x640',override=None),density=dict(physical='160',override='240'))
         with patch.object(runner,'REPORT',self.destination),patch.object(runner.subprocess,'run') as command,\
-            patch.object(runner,'collect',return_value=([],complete)):
+            patch.object(runner,'collect',return_value=([],complete)),\
+            patch.object(runner,'display_snapshot',return_value=previous),patch.object(runner,'set_display') as display:
             command.return_value=subprocess.CompletedProcess([],status)
             result=runner.run('after')
             command.assert_called_once()
+            self.assertEqual([call(dict(size='360x640',density='160')),call(dict(size='reset')),call(dict(density='240'))],display.call_args_list)
         record=json.loads((self.destination/'provenance.json').read_text())
         self.assertEqual(status,record['originalCaptureStatus'])
+        self.assertEqual(previous,record['viewportBefore']);self.assertTrue(record['viewportRestored'])
         return result
+
+    def test_original_display_policy_must_be_known_before_any_mutation(self):
+        outputs=['Physical size: 320x640\n','Physical density: 160\nOverride density: 240\n']
+        with patch.object(runner.subprocess,'check_output',side_effect=outputs):
+            saved=runner.display_snapshot()
+        self.assertIsNone(saved['size']['override']);self.assertEqual('240',saved['density']['override'])
+        with patch.object(runner.subprocess,'check_output',return_value='Physical size: 320x640\nOverride size: unknown\n'):
+            with self.assertRaises(ValueError):runner.display_snapshot()
+
+    def test_failed_restore_cannot_erase_original_failure_or_claim_success(self):
+        for status in (7,0):
+            (self.destination/'provenance.json').write_text(json.dumps(dict(kind='after',worktree=str(self.root),testClass='fixture')))
+            with patch.object(runner,'REPORT',self.destination),patch.object(runner,'collect',return_value=([],True)),\
+                patch.object(runner,'display_snapshot',return_value=dict(size=dict(physical='320x640',override=None))),\
+                patch.object(runner,'set_display',side_effect=[None,OSError()]),\
+                patch.object(runner.subprocess,'run',return_value=subprocess.CompletedProcess([],status)) as command:
+                self.assertEqual(status or 1,runner.run('after'));command.assert_called_once()
+            record=json.loads((self.destination/'provenance.json').read_text())
+            self.assertEqual(status,record['originalCaptureStatus']);self.assertFalse(record['viewportRestored'])
 
     def test_collection_never_turns_a_failed_capture_invocation_green(self):
         self.assertEqual(7,self.run_capture(7,True))

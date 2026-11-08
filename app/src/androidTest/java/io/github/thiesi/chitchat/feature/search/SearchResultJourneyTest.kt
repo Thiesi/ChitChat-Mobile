@@ -116,7 +116,7 @@ class SearchResultJourneyTest {
         catch (failure: RuntimeException) {
             throw AssertionError("Search routing IME cleanup: before=$before, after=$ime, beforeWindow=$window, afterWindow=${nativeInputWindow()}", failure)
         }
-        compose.waitUntil(5_000) { ime == 0 }
+        compose.waitUntil(5_000) { ime == 0 && nativeInputWindow().imeVisible == false }
         assertEquals("Native IME hidden must be confirmed", false, nativeInputWindow().imeVisible)
     }
     @After fun close() {

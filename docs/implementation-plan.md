@@ -1,6 +1,6 @@
 # Independently verifiable implementation milestones
 
-[Lantern theme foundation](milestones/theme-foundation.md) follows delivered PR97/main3093e71 and consumes approved design contracts and PR103 assets. Phase A delivered primitives, local preference storage and assets in PR112/main95062c7; this phase B integrates the root, appearance controls and existing components and supplies full captures. Each PR needs its own full build/JVM/lint/unfiltered-native/written-review and applicable J gates. No future-head or manual/device/live/release waiver transfers.
+[Lantern theme foundation](milestones/theme-foundation.md) follows delivered PR97/main3093e71 and consumes approved design contracts and PR103 assets. Phase A defines primitives, local preference storage and assets; phase B integrates the root, appearance controls and existing components and supplies full captures. Each PR needs its own full build/JVM/lint/unfiltered-native/written-review and applicable J gates. No future-head or manual/device/live/release waiver transfers.
 
 [M5d4c native mention completion](milestones/M5d4c-native-mention-completion.md) delivered as PR97/main3093e71 under the maintainer's exact506251f development exception. Its original233/234 native failure remains failed; both written code reviews and the J review passed. No old exception transfers.
 
@@ -125,6 +125,8 @@ After **each buildable milestone**, commit and push, open a PR to trigger Claude
 Continue directly into the next independently buildable milestone without requesting routine confirmation. Pause only for a genuine blocker, missing authority/configuration necessary for the affected work, or a consequential unresolved product/security decision; report it and continue independent authorized work where possible. Milestone progress updates are not approval gates. This standing autonomy instruction does not waive tests/reviews, authorize changes to the backend checkout, or expand live-account mutation permissions.
 
 ## Integration configuration needed before acceptance
+
+The technical lead authorized [issue69 diagnostics/reproducibility PR A](milestones/ime-reproducible-diagnostics.md) alongside theme CI/review waits. It changes no product behavior or parity availability, preserves ordinary strict full gates and original failures, and is separate from the later once-per-arm50-cycle measurements. Theme remains the first delivery priority; a platform hypothesis is not a keyboard fix.
 
 PR58 delivered shared-editor reuse. Continue [M5b3's complete native DM author slice](milestones/M5b3-direct-author-controls.md) with its own full build/native/layout/CI/reviews, maintaining current-base and bounded complete-diff gates. Then continue remaining M5 interactions/media/search; author controls do not complete M5, guest parity or live acceptance.
 

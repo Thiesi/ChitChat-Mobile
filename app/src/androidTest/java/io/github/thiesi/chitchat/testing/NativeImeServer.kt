@@ -2,6 +2,9 @@ package io.github.thiesi.chitchat.testing
 
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.system.Os
+import android.system.OsConstants
+import android.system.StructPollfd
 import androidx.test.platform.app.InstrumentationRegistry
 
 /** Failure-only observation. No EditorInfo, input connection, window title or raw dump retained. */
@@ -27,6 +30,35 @@ private val serverFlag = Regex(
 /** Pure fixed-field filter; unknown metadata is unavailable, not a fabricated hidden keyboard. */
 internal fun imeServerFlags(raw: CharSequence): List<String>? = serverFlag.findAll(raw)
     .take(MAX_SERVER_FLAGS).map { it.value }.toList().takeIf { it.isNotEmpty() }
+
+/** Scan fixed fields across read boundaries without retaining lines or a complete service dump. */
+internal class ImeServerFlagStream {
+    private var tail = ""
+    private var start = 0
+    private val selected = mutableListOf<String>()
+    val flagLimitReached: Boolean get() = selected.size == MAX_SERVER_FLAGS
+
+    fun accept(chunk: CharSequence) {
+        if (flagLimitReached) return
+        // Each fixed field is shorter than64 chars. Keep its preceding character for the
+        // negative lookbehind and do not treat a chunk end as the end of the dump.
+        val input = tail + chunk
+        val cut = (input.length - 64).coerceAtLeast(0)
+        serverFlag.findAll(input, start).takeWhile { it.range.first < cut }
+            .take(MAX_SERVER_FLAGS - selected.size).forEach { selected += it.value }
+        if (cut > 0) { tail = input.substring(cut - 1); start = 1 }
+        else tail = input
+    }
+
+    fun result(endOfStream: Boolean): List<String>? {
+        if (endOfStream && !flagLimitReached) {
+            serverFlag.findAll(tail, start).take(MAX_SERVER_FLAGS - selected.size)
+                .forEach { selected += it.value }
+            tail = ""; start = 0
+        }
+        return selected.toList().takeIf { it.isNotEmpty() }
+    }
+}
 
 private val windowHeader = Regex("^\\s*Window #\\d+ Window\\{")
 private val imeAttributes = Regex("^\\s*mAttrs=\\{.*\\bty=(?:INPUT_METHOD|2011)(?=\\s|\\})")
@@ -69,12 +101,40 @@ internal fun imeWindowFlags(raw: CharSequence): List<String>? {
 
 /** Call only AFTER the original tap deadline, BEFORE @After can hide/retire the IME.
  * dumpsys has its own two-second service timeout; input and focus are never changed.
- * Bound the transient dump and retain only the fixed flags, never a raw fallback/error string.
+ * Stream input_method through the fixed-field filter; window capture retains its65KiB bound.
+ * Both retain only flags, never a raw fallback/error string.
  */
 internal fun nativeImeServerAfterFailure(): NativeImeServer = NativeImeServer(
-    inputMethod = captureImeDump("dumpsys -t 2 input_method", ::imeServerFlags),
+    inputMethod = captureInputMethodStream(),
     imeWindow = captureImeDump("dumpsys -t 2 window windows", ::imeWindowFlags),
 )
+
+private fun captureInputMethodStream(): NativeImeDump {
+    val started = SystemClock.uptimeMillis()
+    var incomplete = false
+    val scanner = ImeServerFlagStream()
+    val flags = runCatching {
+        val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("dumpsys -t 2 input_method")
+        descriptor.use {
+            val poll = StructPollfd().apply {
+                fd = descriptor.fileDescriptor; events = OsConstants.POLLIN.toShort()
+            }
+            val buffer = ByteArray(4096)
+            var eof = false
+            while (true) {
+                val remaining = 2_000 - (SystemClock.uptimeMillis() - started)
+                if (remaining <= 0 || Os.poll(arrayOf(poll), remaining.toInt()) == 0) break
+                val read = Os.read(descriptor.fileDescriptor, buffer, 0, buffer.size)
+                if (read == 0) { eof = true; break }
+                scanner.accept(String(buffer, 0, read, Charsets.UTF_8))
+            }
+            incomplete = !eof
+            scanner.result(endOfStream = eof)
+        }
+    }.getOrNull()
+    return NativeImeDump(started, SystemClock.uptimeMillis(), flags, incomplete || scanner.flagLimitReached)
+}
 
 private fun captureImeDump(command: String, filter: (CharSequence) -> List<String>?): NativeImeDump {
     val started = SystemClock.uptimeMillis()

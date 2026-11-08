@@ -10,6 +10,22 @@ TARGET=ROOT/'.tooling/worktrees/theme-baseline'
 REPORT=ROOT/'app/build/reports/theme-comparison'
 SCENES=('server','auth','home','settings','rooms','room','direct','thread','activity','account','search')
 
+def display_snapshot():
+    saved={}
+    for kind,pattern in (('size',r'[1-9][0-9]{1,4}x[1-9][0-9]{1,4}'),('density',r'[1-9][0-9]{1,3}')):
+        raw=subprocess.check_output(['adb','shell','wm',kind],text=True,timeout=10)
+        lines=raw.splitlines()
+        physical=re.findall(r'^Physical '+kind+r': ('+pattern+r')\s*$',raw,re.M)
+        override=re.findall(r'^Override '+kind+r': ('+pattern+r')\s*$',raw,re.M)
+        if len(physical)!=1 or len(override)>1 or len(lines)!=1+len(override):
+            raise ValueError('Unknown original display policy')
+        saved[kind]=dict(physical=physical[0],override=override[0] if override else None)
+    return saved
+
+def set_display(values):
+    for kind,value in values.items():
+        subprocess.run(['adb','shell','wm',kind,value],check=True,timeout=10)
+
 def collect(source,destination,kind):
     folder='ccm-theme-baseline' if kind=='before' else 'ccm-theme-presentation'
     prefix='baseline' if kind=='before' else 'theme'
@@ -77,14 +93,25 @@ def run(kind):
     record=json.loads((REPORT/'provenance.json').read_text());assert record['kind']==kind
     work=Path(record['worktree'])
     status=1
+    previous=None
+    record['instrumentationInvocations']=0
     try:
+        previous=display_snapshot();record['viewportBefore']=previous;record['viewportRestored']=False
+        (REPORT/'provenance.json').write_text(json.dumps(record,indent=2)+'\n',encoding='utf-8')
+        set_display(dict(size='360x640',density='160'))
         # Exactly one new capture-class invocation. Never invoke/retry the ordinary full suite.
+        record['instrumentationInvocations']=1
         status=subprocess.run(['./gradlew',':app:connectedDebugAndroidTest',
             '-Pandroid.testInstrumentationRunnerArguments.class='+record['testClass'],
             '-Pandroid.testInstrumentationRunnerArguments.expectedCaptureWidthDp=360',
             '-Pandroid.testInstrumentationRunnerArguments.expectedCaptureHeightDp=640',
             '--max-workers=2','--console=plain'],cwd=work,check=False).returncode
     finally:
+        if previous is not None:
+            record['viewportRestored']=True
+            for kind,value in previous.items():
+                try:set_display({kind:value['override'] or 'reset'})
+                except (OSError,subprocess.SubprocessError):record['viewportRestored']=False
         record['originalCaptureStatus']=status
         record['captures']=[]
         record['apks']=[]
@@ -103,7 +130,7 @@ def run(kind):
             print('Capture collection incomplete; original capture status retained.',file=sys.stderr)
         (REPORT/'provenance.json').write_text(json.dumps(record,indent=2)+'\n',encoding='utf-8')
     # This is a capture-only job: missing evidence fails this job, never the native gate.
-    return (128-status if status<0 else status) or (0 if record['captureCollectionComplete'] else 1)
+    return (128-status if status<0 else status) or (0 if record['captureCollectionComplete'] and record.get('viewportRestored') else 1)
 
 if __name__=='__main__':
     assert len(sys.argv)==3 and sys.argv[1] in ('prepare','run') and sys.argv[2] in ('before','after')

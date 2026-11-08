@@ -48,8 +48,9 @@ jobs:
           api-level: 36
           target: google_apis
           arch: x86_64
+          emulator-build: '16740729'
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -skin 360x640 -dpi 160
+          pre-emulator-launch-script: python3 -B .github/scripts/pin_journey_image.py
           script: python3 -B .github/scripts/theme_comparison.py run "$CAPTURE_REVISION"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()

@@ -15,6 +15,57 @@ TRACE = """10-21 05:20:00.498  4531  4531 I ImeTracker: io.github.thiesi.chitcha
 
 
 class TraceTests(unittest.TestCase):
+    @staticmethod
+    def failed_window(name="failure"):
+        return [(name + "-start", "started:", name), (name + "-progress", "onProgress", None),
+                (name + "-failure", "failed:", name), (name + "-cleanup", "onHidden", None),
+                (name + "-end", "finished:", name)]
+
+    def test_failed_window_keeps_cleanup_and_drops_outside_progress_before_other_records(self):
+        window = self.failed_window()
+        ordinary = [(f"ordinary-{i}", "onShown", None) for i in range(1980)]
+        progress = [(f"progress-{i}", "onProgress", None) for i in range(100)]
+        selected = runner.selected_records(window + ordinary + progress)
+        self.assertEqual(2000, len(selected))
+        self.assertEqual([row[0] for row in window + ordinary], selected[:1985])
+        self.assertNotIn("progress-84", selected)
+        self.assertEqual("progress-99", selected[-1])
+
+    def test_then_drops_oldest_outside_records_preserving_failure_window_and_order(self):
+        window = self.failed_window()
+        outside = [(f"outside-{i}", "onShown", None) for i in range(2500)]
+        selected = runner.selected_records(window + outside)
+        self.assertEqual([row[0] for row in window + outside[505:]], selected)
+
+    def test_multiple_failures_and_available_unfinished_cleanup_take_priority(self):
+        first = self.failed_window("first")
+        outside = [(f"progress-{i}", "onProgress", None) for i in range(2500)]
+        unfinished = self.failed_window("second")[:-1]
+        selected = runner.selected_records(first + outside + unfinished)
+        self.assertEqual(2000, len(selected))
+        self.assertEqual([row[0] for row in first], selected[:5])
+        self.assertEqual([row[0] for row in unfinished], selected[-4:])
+
+    def test_failed_window_alone_over_cap_retains_newest_records_without_raising_cap(self):
+        records = [("start", "started:", "failed")] + [
+            (f"progress-{i}", "onProgress", None) for i in range(2100)] + [
+            ("failure", "failed:", "failed"), ("cleanup", "onHidden", None), ("end", "finished:", "failed")]
+        self.assertEqual([row[0] for row in records[-2000:]], runner.selected_records(records))
+
+    def test_missing_failure_marker_retains_original_newest_records_policy(self):
+        records = [(f"shown-{i}", "onShown", None) for i in range(100)] + [
+            (f"progress-{i}", "onProgress", None) for i in range(2100)]
+        self.assertEqual([row[0] for row in records[-2000:]], runner.selected_records(records))
+
+    def test_progress_and_rescue_reason_are_fixed_platform_names_only(self):
+        raw = ("10-21 05:20:00.498 4531 4531 I ImeTracker: system_server:abc: "
+               "onProgress at PHASE_SERVER_IME_INVOKER PHASE_PRIVATE_BODY_CANARY private-body-canary\n"
+               "10-21 05:20:00.499 4531 4531 I ImeTracker: system_server:def: "
+               "onRequestShow ORIGIN_SERVER SHOW_INPUT_TARGET_CHANGED SHOW_PRIVATE_BODY_CANARY\n")
+        self.assertEqual("10-21 05:20:00.498 ImeTracker: system_server:abc: onProgress PHASE_SERVER_IME_INVOKER\n"
+                         "10-21 05:20:00.499 ImeTracker: system_server:def: onRequestShow ORIGIN_SERVER SHOW_INPUT_TARGET_CHANGED\n",
+                         runner.filtered_trace(raw))
+
     def test_keeps_fixed_phase_reason_event_and_native_test_identity(self):
         trace = runner.filtered_trace(TRACE)
         self.assertEqual(3, len(trace.splitlines()))

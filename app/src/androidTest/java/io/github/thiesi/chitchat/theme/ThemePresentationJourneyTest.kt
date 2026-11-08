@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks // THEME_ONLY
@@ -69,7 +70,15 @@ class ThemePresentationJourneyTest {
     private var observedHeight=0f
     private fun text(id: Int)=InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
     private fun back() { compose.onNodeWithText(text(R.string.back)).assertIsDisplayed().performNativeTap() }
-    private fun action(id: Int) { compose.onNodeWithText(text(id)).performScrollTo().assertIsDisplayed().performNativeTap() }
+    private fun SemanticsNodeInteraction.reveal(): SemanticsNodeInteraction {
+        var parent=fetchSemanticsNode().parent
+        while(parent!=null) {
+            if(parent.config.contains(SemanticsActions.ScrollBy)) { performScrollTo();break }
+            parent=parent.parent
+        }
+        return assertIsDisplayed()
+    }
+    private fun action(id: Int) { compose.onNodeWithText(text(id)).reveal().performNativeTap() }
 
     private fun install(mode: Int,large: Boolean) {
         if(Build.VERSION.SDK_INT>=34) compose.enableAccessibilityChecks() // THEME_ONLY
@@ -150,22 +159,22 @@ class ThemePresentationJourneyTest {
         compose.waitUntil(5_000) { directory.state.value.loaded && !directory.state.value.busy }
         capture(label,"rooms")
         compose.onNodeWithText("Room 43").assertIsDisplayed().performNativeTap()
-        compose.onNode(hasText(text(R.string.rooms_open_conversation)) and hasAnyAncestor(isDialog())).performScrollTo().performNativeTap()
+        compose.onNode(hasText(text(R.string.rooms_open_conversation)) and hasAnyAncestor(isDialog())).reveal().performNativeTap()
         compose.waitUntil(5_000) { room.state.value.let { it.loaded && !it.busy && it.roomId==43L } }
         compose.onNodeWithTag("conversation_composer").assertHeightIsAtLeast(48.dp).assertIsDisplayed()
         capture(label,"room");back();back()
         action(R.string.dm_title)
         compose.waitUntil(5_000) { inbox.state.value.let { it.inbox!=null && !it.busy } }
         capture(label,"direct")
-        compose.onNodeWithTag("dm_conversation:8").performScrollTo().performNativeTap()
+        compose.onNodeWithTag("dm_conversation:8").reveal().performNativeTap()
         compose.waitUntil(5_000) { thread.state.value.let { it.loaded && !it.busy && it.peerId==8L } }
         compose.onNodeWithTag("dm_composer").assertHeightIsAtLeast(48.dp).assertIsDisplayed()
         capture(label,"thread");back();back()
-        compose.onNodeWithTag("notifications_open").performScrollTo().performNativeTap()
+        compose.onNodeWithTag("notifications_open").reveal().performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
         capture(label,"activity");back()
         action(R.string.account);capture(label,"account");back()
-        compose.onNodeWithTag("message_search_open").performScrollTo().performNativeTap()
+        compose.onNodeWithTag("message_search_open").reveal().performNativeTap()
         compose.waitUntil(5_000) { search.state.value.entry!=null }
         capture(label,"search")
         compose.runOnIdle { assertEquals(0,api.rooms.sends);assertEquals(0,api.notices.posts) }
