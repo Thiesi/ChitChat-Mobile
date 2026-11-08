@@ -46,14 +46,14 @@ Highest first. Only the highest applicable notice shows.
 | 1 | Session storage warning (`storageWarning`) | 2 | Existing session-storage copy, unchanged in meaning | Existing retry or sign-out action |
 | 2 | Device offline (`RealtimePhase.OFFLINE`) | 2 | **No connection.** You can read and write. Messages you send will go out when you're back, while ChitChat is open. | none |
 | 3 | Stream error, TLS (`ERROR` + TLS) | 2 | **Can't connect securely to {host}.** The certificate couldn't be verified; this can't be bypassed. | Retry (existing `retry`) |
-| 4 | Stream error, incompatible or redirect | 2 | **{host} sent something ChitChat doesn't understand.** Live updates are off; pull down to refresh. | Retry |
-| 5 | Stream error, other | 2 | **Live updates stopped.** Pull down to refresh, or try again. | Retry |
+| 4 | Stream error, incompatible or redirect | 2 | **{host} sent something ChitChat doesn't understand.** Live updates are off; use Refresh to update. | Retry |
+| 5 | Stream error, other | 2 | **Live updates stopped.** Use Refresh to update, or try again. | Retry |
 | 6 | Session refresh required (`refreshRequired`) | 2 | **Your session needs a refresh.** | Refresh session (existing, disabled until `retryAtMillis`) |
 | 7 | Rate-limited (`now < retryAtMillis`) | 1 | Try again in {s} s. | none (countdown, existing timer) |
 | 8 | Reconnecting longer than 5 s (`RECONNECTING` or `CONNECTING`) | 2 | **Can't reach {host}.** We'll keep trying. | none |
 | 9 | Recovery: the first `LIVE` after any of rows 2–5 or 8 | 2, auto-dismiss after about 2 s | Back online | none |
 | 10 | Screen-specific uncertain state (rooms `mutationUncertain`, notifications `unknownRead`, …) | 2 | As specified in the lists and transcript specs | That spec's explicit action |
-| 11 | Screen stale or syncing | 1 | "Updating…" (syncing) / "This may be out of date. Pull down to refresh." (stale) | none |
+| 11 | Screen stale or syncing | 1 | "Updating…" (syncing) / "This may be out of date. Refresh to update it." (stale) | none |
 
 - `{host}` is the installation's display name once the server provides it (#149), else
   the host.
@@ -183,7 +183,7 @@ Other offline composer rules:
   it last loaded. Don't add tracking just for the caption.
 - Presence: the header subtitle reads "Who's here is unknown while offline". Typing
   indicators clear, as the existing expiry already does.
-- Pull-to-refresh while offline does nothing beyond today's behavior. It shows the offline
+- Where a list offers pull-to-refresh (the room directory, per lists-restyle.md), pulling while offline does nothing beyond today's behavior. It shows the offline
   notice instead of a spinner.
 
 ## Errors elsewhere
