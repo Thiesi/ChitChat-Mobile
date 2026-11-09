@@ -5,8 +5,7 @@ implements UnifiedPush/Web Push (see [push-architecture.md](../push-architecture
 decides presentation only. Transport, registration, key handling, instance and generation
 validation, and logout cleanup are M6 engineering under the existing architecture decision.
 Mockups: `PushShade` and `NotificationSettings` on the canvas. `NotificationSettings` shows the
-batch 3 target: "This phone" depends on #147, and the quiet-hours and honesty lines need a
-server with #148.
+batch 3 target, which ships with the batch 3 minimum server version.
 
 ## What a push contains today
 
@@ -31,11 +30,12 @@ client-facing decisions 6729292941; CCM issue #1, comment 6729288173). **#148 ha
 #150 haven't. Each part below names the issue it depends on. Leave #147 and #150 parts out of
 the build until they merge, and keep today's behavior meanwhile.
 
-**#148 has no client check,** and the 3.4.0 minimum doesn't include it. So the two #148
-settings lines below (honesty and quiet hours) show only when the session's
-`application.version` is at least the first release that includes #148. That's an
-engineering constant, set when the release is tagged, compared like server-update.md's
-Detection. Older or unknown versions keep today's honesty line and no quiet-hours line.
+**One rule: the minimum server version.** #148 has no client check, and the 3.4.0 minimum
+doesn't include it. All batch 3 push behavior, including the two settings lines below
+(honesty and quiet hours), **requires CCM's minimum server version to be at least the batch 3
+release** (#148, #147 and #150). The technical lead raises the minimum when that release is
+tagged, and the push slice ships against it (server-update.md). There are no per-line or
+per-feature version checks.
 
 - **Delivery lifetime (#148):** mentions, pings and DM alerts live **30 minutes** from
   notification creation, with urgency `high`. Every other kind lives **6 hours**, with urgency
@@ -273,7 +273,7 @@ The screen shows:
   - **Off** clears the window (all three fields `null`);
   - the three values are always sent together (server rule);
   - copy: "Quiet hours are applied by your server, on all your devices."
-  - **on a server with #148** (version gate above), a second line: "Alerts during quiet hours
+  - a second line (batch 3 minimum, above): "Alerts during quiet hours
     aren't sent later. You'll find them in Activity." The server drops them for good (no
     morning replay), so the copy doesn't promise a catch-up.
 - **Devices** (from `GET push/preferences.php`): one row per subscription, newest first.
@@ -295,14 +295,13 @@ The screen shows:
   - With #147's cap of 20 devices, a subscribe refused with `409 push_subscription_conflict` is
     a definite refusal: "This delivery address is already used by another account. Choose a
     different delivery app or remove it there first." It's never retried automatically.
-- **Honesty line:** on a server with #148 (version gate above): "Notifications usually arrive
+- **Honesty line** (batch 3 minimum, above): "Notifications usually arrive
   within seconds, sometimes a little longer, and later if your phone was offline. Some never
   arrive. Open the app to see everything." Dispatch takes up to about 15 seconds unless the
   operator runs the listening worker, hence "sometimes a little longer". Mentions, pings and
   DM alerts give up after 30 minutes and other notices after 6 hours, so "later" stays
-  bounded without the copy promising a number. On older or unknown servers, today's line
-  stays: "Notifications can arrive a minute or so after the message. Open the app to see
-  everything."
+  bounded without the copy promising a number. It replaces the earlier "a minute or so"
+  line.
 
 ## Tests (for the M6 slice)
 
@@ -323,9 +322,6 @@ The screen shows:
   - a stale-generation payload is dropped;
   - a mention-plus-DM event posts exactly one notification, in the channel of the kind that
     arrived.
-  - the honesty and quiet-hours lines follow the #148 version gate: the new lines at or above
-    the release constant, today's honesty line and no quiet-hours line below it or for an
-    unknown version.
 - **Instrumented:**
   - channels appear only after Turn on;
   - tap routes through the guarded destination flow and falls back to Activity;
@@ -347,5 +343,5 @@ The screen shows:
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
 | P-127 | Direct message alerts (after ChitChat#150 merges): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert never shows what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content. A mention-plus-DM event is one notification: `mentioned` in `mentions` when mention alerts are on, else `direct_message_received` in `direct`. | U, C |
 | P-128 | With #147, one notification per event: the tag is `event_id`, so a duplicate replaces and never stacks, and a bounded, memory-only recent-event set keeps a dismissed duplicate from reappearing within the process lifetime. | U |
-| P-129 | No per-notification "late" badge or label. On a server at or above the first release with #148 (version gate), the honesty line says alerts usually arrive within seconds, sometimes a little longer, can come later or not arrive, and the quiet-hours line says they aren't sent after quiet hours. Older or unknown servers keep today's honesty line and no quiet-hours line. | U, C |
+| P-129 | No per-notification "late" badge or label. The honesty line says alerts usually arrive within seconds, sometimes a little longer, can come later or not arrive, and the quiet-hours line says they aren't sent after quiet hours. Both ship with the batch 3 minimum server version, with no per-line version check. | C, R |
 | P-126 | Settings offer only the mention and ping toggles (plus Direct messages per P-127) and whole-hour quiet hours with a time zone. Before #147, no device row is labelled as this phone; with #147, only the current-session row is, and its action is Turn off. Remove revokes by ID. Sign-out unsubscribes this device before the session ends. | C, R |
