@@ -17,7 +17,9 @@ file/line locations per case (maximum32cases), printing them in CI and writing
 `device/test-failure-sources.json` into the existing report artifact. No assertion
 message, method payload, foreign frame or raw stack is retained by this summary.
 Inputs are bounded to64files/16MiB and must have modification times inside this
-invocation; unavailable/malformed/stale data stays unavailable. Frame order is report
+invocation. Retire the previous derived summary before the ordinary run and include
+the current invocation's start/end timestamps; if retirement fails, emit only a fixed
+warning to verify those timestamps and still run the original gate. Unavailable/malformed/stale input stays unavailable. Frame order is report
 order, not a causal or deadline claim. Summary failure cannot replace the original
 exit status. The shared run_once path and separate opt-in observation remain unchanged;
 no device command, test invocation, predicate or deadline is added.

@@ -154,6 +154,7 @@ def save_failure_sources(started_ns: int, finished_ns: int) -> None:
         pages.append(page)
     if not pages: raise ValueError("No current-invocation XML available")
     summary = failure_sources(pages)
+    summary.update(invocationStartedUnixNs=started_ns, invocationFinishedUnixNs=finished_ns)
     SOURCES.parent.mkdir(parents=True, exist_ok=True)
     SOURCES.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     for case in summary["cases"]:
@@ -162,6 +163,9 @@ def save_failure_sources(started_ns: int, finished_ns: int) -> None:
 
 
 def main() -> int:
+    try: SOURCES.unlink(missing_ok=True)
+    except OSError:
+        print("Previous test source summary could not be cleared; verify invocation timestamps.", file=sys.stderr)
     started_ns = time.time_ns()
     status = run_once(GRADLE, REPORT)
     if status != 0:

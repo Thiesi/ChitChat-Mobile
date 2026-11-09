@@ -107,6 +107,7 @@ class GateTests(unittest.TestCase):
         self.run = self.enterContext(patch.object(runner.subprocess, "run"))
         self.mkdir = self.enterContext(patch.object(Path, "mkdir"))
         self.write = self.enterContext(patch.object(Path, "write_text"))
+        self.unlink = self.enterContext(patch.object(Path, "unlink"))
         self.sources = self.enterContext(patch.object(runner, "save_failure_sources"))
 
     def test_success_runs_once_without_capture_or_report_writes(self):
@@ -114,6 +115,18 @@ class GateTests(unittest.TestCase):
         self.assertEqual(0, runner.main())
         self.run.assert_called_once_with(runner.GRADLE, cwd=runner.ROOT, check=False)
         self.mkdir.assert_not_called(); self.write.assert_not_called()
+        self.unlink.assert_called_once_with(missing_ok=True)
+        self.sources.assert_not_called()
+
+    def test_stale_source_cleanup_failure_does_not_prevent_or_rewrite_the_gate(self):
+        self.unlink.side_effect = OSError("private-body-canary")
+        self.run.return_value = subprocess.CompletedProcess(runner.GRADLE, 0)
+        with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            self.assertEqual(0, runner.main())
+        self.run.assert_called_once_with(runner.GRADLE, cwd=runner.ROOT, check=False)
+        self.sources.assert_not_called()
+        self.assertIn("verify invocation timestamps", stderr.getvalue())
+        self.assertNotIn("canary", stderr.getvalue())
 
     def test_failure_keeps_original_status_and_saves_only_filtered_capture(self):
         self.run.side_effect = [subprocess.CompletedProcess(runner.GRADLE, 7),
@@ -215,6 +228,8 @@ class FailureSourceTests(unittest.TestCase):
             saved = write.call_args.args[0]
             self.assertNotIn("canary", saved)
             self.assertEqual(167, json.loads(saved)["cases"][0]["frames"][0]["line"])
+            self.assertEqual(10, json.loads(saved)["invocationStartedUnixNs"])
+            self.assertEqual(20, json.loads(saved)["invocationFinishedUnixNs"])
             self.assertIn("CompletionJourneyTest.kt:167", emit.call_args.args[0])
 
     def test_file_count_is_bounded_before_reading_any_input(self):
