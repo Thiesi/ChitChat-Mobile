@@ -6,10 +6,10 @@ issues, with no fallback paths for older servers. Mockup: `ServerUpdate` on the 
 
 **Detection** (ChitChat#149; baseline decision on issue #1, comment 6729652556). `GET
 session.php` (anonymous, member and guest) carries `application: {name, version}` and
-`capabilities: {schema_version, …}`. **The minimum is ChitChat 3.5.0** (`{minimum}`), the
-release with batch 3 push (#147, #148, #150) and the staff data (#191), on top of 3.4.0's
-batch 2 (#160, #159, #155, #158). It was raised from 3.4.0 on 2026-11-09 (issue #1, comment
-6737288486).
+`capabilities: {schema_version, …}`. **The minimum is ChitChat 3.5.0** (`{minimum}`; tag
+`v3.5.0`, commit `25e65eb`), the release with batch 3 push (#147, #148, #150) and the staff data
+(#191), on top of 3.4.0's batch 2 (#160, #159, #155, #158). It was raised from 3.4.0 on
+2026-11-09 (issue #1, comment 6737288486), matching AGENTS.md and `backend-compatibility.md`.
 
 The state shows only for a parsed session response that is **definitely older than 3.5.0**:
 
