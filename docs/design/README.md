@@ -39,6 +39,7 @@ a substitute.
 | [lists-restyle.md](lists-restyle.md) | Implementation spec for the room directory, DM inbox, Activity and search lists |
 | [transcript-restyle.md](transcript-restyle.md) | Implementation spec for room and DM transcripts and composers: runs, bubbles, chit, actions, composer delivery states |
 | [navigation-shell.md](navigation-shell.md) | Implementation spec for D3: bottom bar, You hub, tab and Back behavior under existing navigation contracts |
+| [gap-audit.md](gap-audit.md) | Audit of today's app against Lantern (2026-11-09 captures): what matches, gaps per restyle slice ranked by impact, A-* violations, suggested order |
 | [theme-foundation.md](theme-foundation.md) | Implementation spec for the first slice: tokens, Material mapping, wrappers, font, settings, window, icon |
 | [amoled-black.md](amoled-black.md) | The true-black dark variant required before going live |
 | [acceptance.md](acceptance.md) | Accessibility and readability floors, plus numbered, testable presentation requirements |
