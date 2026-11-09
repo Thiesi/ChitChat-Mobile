@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g4d explicit original-photo preparation](milestones/M5g4d-explicit-original-photo-preparation.md) adds only local original-bound state and final unchanged-byte evidence after an explicit privacy choice. No endpoint, backend baseline, policy or upload change. The future original-session upload must still recheck final-byte policy and serialized uncertainty; local readiness grants no POST authority.
+
 [M5g4c final-byte policy](milestones/M5g4c-attachment-policy-state.md) shares the existing transport precheck predicates with room/DM state observations, without endpoint, baseline, server-policy or POST changes. Unknown MIME detection and final-byte size retain their current meanings. Original-session transport checks and the actual server answer remain authoritative; cached observations never grant upload permission.
 
 [M5g4b DM attachment drafts](milestones/M5g4b-direct-attachment-draft-state.md) adds local DM ownership and shared room/DM allocation accounting, with no endpoint, backend baseline, server-limit or upload change. Local readiness never authorizes a POST; current original-session, final-byte policy and uncertainty contracts still bind the following upload consumer.

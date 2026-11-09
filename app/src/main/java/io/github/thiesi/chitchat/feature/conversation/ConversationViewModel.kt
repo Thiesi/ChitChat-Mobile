@@ -8,6 +8,7 @@ import io.github.thiesi.chitchat.core.media.observeAttachmentPolicy
 import io.github.thiesi.chitchat.core.media.AttachmentPreparation
 import io.github.thiesi.chitchat.core.media.AttachmentPreparationOutcome
 import io.github.thiesi.chitchat.core.media.AttachmentPreparationTask
+import io.github.thiesi.chitchat.core.media.OriginalPhotoPreparationTask
 import io.github.thiesi.chitchat.core.media.PickedAttachmentRead
 import io.github.thiesi.chitchat.core.media.RetainedAttachmentPreparation
 import io.github.thiesi.chitchat.core.conversation.ComposerReply
@@ -292,33 +293,69 @@ class ConversationViewModel internal constructor(private val operations: Convers
                 memo == null || !memo.matches(session.value) || memo.slot !== slot) return@launch
             val task = AttachmentPreparationTask.forAvailableMemory(read, source, budget)
             val producer = task.start(this) { completed, outcome ->
-                val current = savedDrafts.value[roomId]
-                if (completed !== task || attachments[roomId] !== work || !selection.matches(session.value) ||
-                    current == null || !current.matches(session.value) || current.slot !== slot) false
-                else {
-                    work.view = when (outcome) {
-                        is AttachmentPreparationOutcome.Failed -> RoomAttachmentDraft(selection, RoomAttachmentPhase.FAILED,
-                            failure = outcome.kind)
-                        is AttachmentPreparationOutcome.Prepared -> {
-                            work.retained = outcome.retained
-                            when (val prepared = checkNotNull(outcome.retained.preparation)) {
-                                is AttachmentPreparation.Ready -> RoomAttachmentDraft(selection, RoomAttachmentPhase.READY,
-                                    sizeBytes = prepared.payload.sizeBytes, privacy = prepared.privacy)
-                                is AttachmentPreparation.NeedsChoice -> RoomAttachmentDraft(selection, RoomAttachmentPhase.PRIVACY_CHOICE,
-                                    sizeBytes = prepared.original.bytes.size.toLong(), privacyFailure = prepared.kind)
-                            }
-                        }
-                    }
-                    // Update only the frozen private slot, never the active pane, text/reply or send state.
-                    savedDrafts.value = savedDrafts.value + (roomId to current.withAttachment(work.view))
-                    outcome is AttachmentPreparationOutcome.Prepared
-                }
+                completed === task && adoptAttachmentOutcome(roomId, work, outcome)
             }
             work.producerEnd = producer
             producer.join()
         }
         work.job = pending.takeUnless { it.isCompleted }
         return true
+    }
+
+    /** Explicit original-bound privacy choice. This prepares local bytes; it never sends.
+     * The original producer must have completed its final resource handoff first.
+     */
+    internal fun prepareOriginalPhoto(expected: SessionState, roomId: Long, original: RoomAttachmentDraft,
+        isCurrentEntry: () -> Boolean): Boolean {
+        val value = mutable.value
+        if (!isCurrentEntry() || !foreground || roomId != value.roomId || !belongsTo(expected) || expected.user?.guest != false ||
+            !composerCanSend() || value.busy || value.sending) return false
+        val policy = session.value.attachmentPolicy
+        if (policy == AttachmentPolicy.Invalid || policy == AttachmentPolicy.Unavailable ||
+            (policy is AttachmentPolicy.Known && policy.maxBytes == 0L)) return false
+        val current = attachments[roomId] ?: return false
+        val selection = current.selection
+        val memo = savedDrafts.value[roomId] ?: return false
+        if (current.view !== original || original.phase != RoomAttachmentPhase.PRIVACY_CHOICE ||
+            !selection.matches(session.value) || !memo.matches(session.value) || memo.slot !== selection.slot ||
+            current.producerEnd?.isCompleted != true) return false
+        val retained = current.retained ?: return false
+        val choice = retained.preparation as? AttachmentPreparation.NeedsChoice ?: return false
+        val task = OriginalPhotoPreparationTask(retained, choice)
+        // New worker identity, same private slot/selection. Old callbacks cannot adopt into it.
+        val work = AttachmentWork(selection)
+        current.retained = null
+        attachments[roomId] = work
+        rememberDraft()
+        val producer = task.start(viewModelScope) { completed, outcome ->
+            completed === task && adoptAttachmentOutcome(roomId, work, outcome)
+        }
+        work.producerEnd = producer
+        work.job = producer.takeUnless { it.isCompleted }
+        return true
+    }
+
+    private fun adoptAttachmentOutcome(roomId: Long, work: AttachmentWork, outcome: AttachmentPreparationOutcome): Boolean {
+        val selection = work.selection
+        val current = savedDrafts.value[roomId]
+        if (attachments[roomId] !== work || !selection.matches(session.value) || current == null ||
+            !current.matches(session.value) || current.slot !== selection.slot) return false
+        work.view = when (outcome) {
+            is AttachmentPreparationOutcome.Failed -> RoomAttachmentDraft(selection, RoomAttachmentPhase.FAILED,
+                failure = outcome.kind)
+            is AttachmentPreparationOutcome.Prepared -> {
+                work.retained = outcome.retained
+                when (val prepared = checkNotNull(outcome.retained.preparation)) {
+                    is AttachmentPreparation.Ready -> RoomAttachmentDraft(selection, RoomAttachmentPhase.READY,
+                        sizeBytes = prepared.payload.sizeBytes, privacy = prepared.privacy)
+                    is AttachmentPreparation.NeedsChoice -> RoomAttachmentDraft(selection, RoomAttachmentPhase.PRIVACY_CHOICE,
+                        sizeBytes = prepared.original.bytes.size.toLong(), privacyFailure = prepared.kind)
+                }
+            }
+        }
+        // Private completion only: preserve the latest caption/reply/uncertainty and active pane.
+        savedDrafts.value = savedDrafts.value + (roomId to current.withAttachment(work.view))
+        return outcome is AttachmentPreparationOutcome.Prepared
     }
 
     internal fun visibleAttachment(expected: SessionState, roomId: Long,

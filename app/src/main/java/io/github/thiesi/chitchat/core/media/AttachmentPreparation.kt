@@ -6,7 +6,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okio.ByteString
 
-internal enum class AttachmentPhotoPrivacy { NON_PHOTO, LOCATION_REMOVED }
+internal enum class AttachmentPhotoPrivacy { NON_PHOTO, LOCATION_REMOVED, UNCHANGED_AFTER_CHOICE }
 internal enum class PhotoPrivacyFailure { CLEANING_FAILED, UNSUPPORTED_IMAGE }
 internal sealed interface AttachmentPreparation {
     class Ready(val payload: PreparedAttachmentPayload, val privacy: AttachmentPhotoPrivacy) : AttachmentPreparation
