@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g5b retained upload ownership](milestones/M5g5b-retained-upload-ownership.md) supplies the narrow draft/transport hold over an existing READY reservation, with actual-stop cancellation lifetime. After its own gates/reviews, integrate room upload/uncertainty into its existing write serialization, then DM's distinct actor marker, then native picker/card/consent controls. Byte ownership grants no send or retry authority.
+
 [M5g5a upload exchange evidence](milestones/M5g5a-upload-exchange-evidence.md) supplies the actual transport-stop boundary and distinct file/full-multipart facts. After its gates/reviews, integrate retained READY ownership with serialized room/DM upload/unknown-delivery state, then native picker/card/consent controls. Facts never grant non-delivery, retry or send authority. Preserve frozen original owner/entry/attempt and no POST replay.
 
 [M5g4d explicit original-photo preparation](milestones/M5g4d-explicit-original-photo-preparation.md) completes the local original-bound privacy-choice state prerequisite for both private owners. Next implement serialized attachment POST/unknown-delivery state, then native picker/card/consent controls. Keep actual worker lifetime, final-byte policy and explicit original-session send authority separate; prove multipart termination before any non-delivery claim.

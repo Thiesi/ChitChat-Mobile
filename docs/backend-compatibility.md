@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g5b retained upload ownership](milestones/M5g5b-retained-upload-ownership.md) adds no server contract: original-session room/DM multipart can hold the exact READY allocation until actual transport termination, without releasing a surviving draft or replaying a POST. Feature serialization, explicit uncertainty/reconciliation and native controls remain separate.
+
 [M5g5a upload exchange evidence](milestones/M5g5a-upload-exchange-evidence.md) adds local per-attempt progress and actual callback/writer termination facts to the same original-session multipart routes. No endpoint, baseline, cookie/CSRF/policy/receipt, timeout or server-limit change. Server delivery and non-delivery require their own evidence; the later actor still owns explicit uncertainty/reconciliation consent.
 
 [M5g4d explicit original-photo preparation](milestones/M5g4d-explicit-original-photo-preparation.md) adds only local original-bound state and final unchanged-byte evidence after an explicit privacy choice. No endpoint, backend baseline, policy or upload change. The future original-session upload must still recheck final-byte policy and serialized uncertainty; local readiness grants no POST authority.

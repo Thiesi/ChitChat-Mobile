@@ -2,6 +2,11 @@ package io.github.thiesi.chitchat.core.session
 
 import io.github.thiesi.chitchat.core.media.AttachmentUpload
 import io.github.thiesi.chitchat.core.media.PreparedAttachmentPayload
+import io.github.thiesi.chitchat.core.media.AttachmentMemoryBudget
+import io.github.thiesi.chitchat.core.media.AttachmentPreparation
+import io.github.thiesi.chitchat.core.media.AttachmentPhotoPrivacy
+import io.github.thiesi.chitchat.core.media.RetainedAttachmentPreparation
+import io.github.thiesi.chitchat.core.media.SessionAttachmentRepository
 
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
@@ -18,9 +23,12 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.OkHttpClient
@@ -1115,6 +1123,111 @@ class SessionRepositoryTest {
         assertEquals("GET", server.takeRequest().method)
         assertEquals(setOf(8L), sessions.state.value.chatPolicy!!.ignoredUserIds)
         assertFalse(sessions.state.value.refreshRequired)
+    }
+
+    @Test fun retiringTheDraftCannotFreeBytesHeldByAnActualUploadWriter() = retiringDraftDuringUpload(direct = false)
+    @Test fun retiringTheDraftCannotFreeBytesHeldByAnActualDirectUploadWriter() = retiringDraftDuringUpload(direct = true)
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun retiringDraftDuringUpload(direct: Boolean) = runTest {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val finish = java.util.concurrent.CountDownLatch(1)
+        client = client.newBuilder().addNetworkInterceptor { chain ->
+            val request = chain.request()
+            if (!request.url.encodedPath.endsWith("attachments/upload.php")) return@addNetworkInterceptor chain.proceed(request)
+            val original = checkNotNull(request.body)
+            val held = object : okhttp3.RequestBody() {
+                override fun contentType() = original.contentType()
+                override fun contentLength() = original.contentLength()
+                override fun isOneShot() = original.isOneShot()
+                override fun writeTo(sink: okio.BufferedSink) {
+                    original.writeTo(sink)
+                    entered.countDown()
+                    check(finish.await(5, TimeUnit.SECONDS)) { "Fixture writer not released" }
+                }
+            }
+            chain.proceed(request.newBuilder().post(held).build())
+        }.build()
+        login()
+        val uploads = io.github.thiesi.chitchat.core.media.SessionAttachmentRepository(sessions)
+        val budget = io.github.thiesi.chitchat.core.media.AttachmentMemoryBudget(128)
+        val ready = io.github.thiesi.chitchat.core.media.AttachmentPreparation.Ready(
+            PreparedAttachmentPayload.create("fixture", null, "bytes".encodeUtf8()),
+            io.github.thiesi.chitchat.core.media.AttachmentPhotoPrivacy.NON_PHOTO)
+        val retained = io.github.thiesi.chitchat.core.media.RetainedAttachmentPreparation(ready, checkNotNull(budget.reserve(128)))
+        val expected = sessions.state.value
+        server.enqueue(json(if (direct) """{"message":{"id":19,"sender":{"id":7},"recipient":{"id":8},"outgoing":true}}"""
+            else """{"message":{"id":19,"room_id":42,"sender_id":7,"type":"attachment","deleted":false}}""", 201))
+        val pending = launch {
+            if (direct) uploads.direct(expected, 8, retained, ready, "") else uploads.room(expected, 42, retained, ready, "")
+        }
+        try {
+            runCurrent()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { assertTrue(entered.await(5, TimeUnit.SECONDS)) }
+            retained.close() // A removed draft/session no longer owns these bytes; transport still does.
+            pending.cancel()
+            runCurrent()
+            assertFalse(pending.isCompleted)
+            assertEquals("The actual upload writer must keep its existing allocation charge", 128L, budget.reservedBytes)
+            assertNull(budget.reserve(1))
+        } finally {
+            finish.countDown()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { pending.cancelAndJoin() }
+            retained.close()
+        }
+        assertEquals(0L, budget.reservedBytes)
+        assertEquals(3, server.requestCount) // Login GET/POST and one upload; no replay.
+    }
+
+    private suspend fun retainedUploadFixture(): Triple<AttachmentMemoryBudget, AttachmentPreparation.Ready, RetainedAttachmentPreparation> {
+        val budget = AttachmentMemoryBudget(128)
+        val ready = AttachmentPreparation.Ready(PreparedAttachmentPayload.create("fixture", null, "bytes".encodeUtf8()),
+            AttachmentPhotoPrivacy.NON_PHOTO)
+        return Triple(budget, ready, RetainedAttachmentPreparation(ready, checkNotNull(budget.reserve(128))))
+    }
+
+    @Test fun retainedUploadsKeepTheDraftOnAckRefusalAndStaleAccess() = runTest {
+        login()
+        val uploads = SessionAttachmentRepository(sessions)
+        val expected = sessions.state.value
+        val (budget, ready, retained) = retainedUploadFixture()
+        try {
+            val before = server.requestCount
+            server.enqueue(json("""{"message":{"id":19,"room_id":42,"sender_id":7,"type":"attachment","deleted":false}}""", 201))
+            assertEquals(19L, uploads.room(expected, 42, retained, ready, "caption").messageId)
+            assertSame(ready, retained.preparation)
+            assertEquals(128L, budget.reservedBytes)
+            server.enqueue(error("file_too_large", 413))
+            try { uploads.direct(expected, 8, retained, ready, "caption"); fail("Server refusal must remain failed") }
+            catch (failure: ApiFailure) { assertEquals(413, failure.status) }
+            assertSame(ready, retained.preparation)
+            assertEquals(128L, budget.reservedBytes)
+            try { uploads.direct(expected.copy(generation = expected.generation - 1), 8, retained, ready, ""); fail("Stale access") }
+            catch (_: CancellationException) { }
+            assertEquals(before + 2, server.requestCount) // Exactly the two explicitly invoked POSTs.
+            assertSame(ready.payload, (retained.preparation as AttachmentPreparation.Ready).payload)
+        } finally { retained.close() }
+        assertEquals(0L, budget.reservedBytes)
+    }
+
+    @Test fun retainedUploadConstructionAndPolicyFailuresSpendNoAttemptAndLeakNoHold() = runTest {
+        login()
+        val uploads = SessionAttachmentRepository(sessions)
+        val (budget, ready, retained) = retainedUploadFixture()
+        try {
+            var before = server.requestCount
+            try { uploads.room(sessions.state.value, 42, retained, ready, "x".repeat(4001)); fail("Invalid caption") }
+            catch (_: IllegalArgumentException) { }
+            assertEquals(before, server.requestCount)
+            server.enqueue(json(attachmentBootstrap(policy = "null"))); sessions.refresh(); server.takeRequest()
+            before = server.requestCount
+            try { uploads.direct(sessions.state.value, 8, retained, ready, ""); fail("Unavailable policy") }
+            catch (_: IllegalStateException) { }
+            assertEquals(before, server.requestCount)
+            assertSame(ready, retained.preparation)
+            assertEquals(128L, budget.reservedBytes)
+        } finally { retained.close() }
+        assertEquals(0L, budget.reservedBytes)
     }
 
     @Test fun attachmentUploadUsesTheOriginalRuntimeAndNoImplicitBootstrap() = runTest {
