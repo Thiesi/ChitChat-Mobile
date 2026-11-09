@@ -57,7 +57,7 @@ class AttachmentUploadTest {
             assertEquals("application/json", request.headers["Accept"])
             assertTrue(request.headers["Cookie"]!!.contains("SITE=fixture"))
             assertTrue(request.headers["Content-Type"]!!.startsWith("multipart/form-data; boundary="))
-            val bytes = request.body!!.readByteString()
+            val bytes = request.body!!
             val body = bytes.utf8()
             assertTrue(body.contains("name=\"${if (direct) "recipient_user_id" else "room_id"}\"\r\n\r\n${if (direct) 8 else 42}\r\n"))
             assertFalse(body.contains("name=\"${if (direct) "room_id" else "recipient_user_id"}\""))
