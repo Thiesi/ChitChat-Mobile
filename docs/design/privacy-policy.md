@@ -6,7 +6,9 @@ the first Play upload is prepared, not before: several statements describe featu
 shipped yet (photo location removal, share copies, push and FCM). Any later factual change to
 this text goes back to the maintainer through the technical lead. Two factual changes (server
 rules and documents, ChitChat#160; reports about people, ChitChat#159) were approved by the
-maintainer on 2026-11-08 (issue #1, comment 6727725892).
+maintainer on 2026-11-08 (issue #1, comment 6727725892). The password-reset addition to Account
+details (ChitChat#155) was approved on 2026-11-09, the maintainer's local date (issue #1,
+comments 6728485518 and 6728505611, posted 2026-11-08 23:11 and 23:13 UTC).
 It is built from the approved data safety facts (`play-readiness.md` §4) and the existing
 in-app disclosures. It will be published at **https://ChitChat.NetWorkXXIII.de/app/privacy** (maintainer
 decision, 2026-11-08). Publisher (NetWork XXIII) and contact
@@ -47,8 +49,9 @@ document covers the app.]*
 ### What the app sends, and where
 
 **To the server you choose:**
-- **Account details:** your username and password when you sign in or register, and an optional
-  birth date, which the server uses for age-restricted rooms.
+- **Account details:** your username and password when you sign in or register, and, if you
+  reset a forgotten password, your recovery key and new password. Registration can also send an
+  optional birth date, which the server uses for age-restricted rooms.
 - **What you create:** messages, replies, reactions, edits and deletions; files and photos you
   send; reports you submit about messages or people (for a person: their name and profile
   picture as moderators see them).
