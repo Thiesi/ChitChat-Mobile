@@ -11,6 +11,15 @@ its queue section "Moderation queue" where CCM's screen title is "Reports", a pl
 difference, not a vocabulary one. Mockups: `AdminHome` (the steward section) and
 `ModerationCase` on the canvas.
 
+**Web-only split confirmed** by the maintainer on 2026-11-09 (issue #1, comment 6735056763):
+whole-conversation DM inspection and edit-history (revision) review stay on the web, with the
+other web-only tasks in administration.md. Where one would be looked for, the app shows "Do
+this on {installation}'s website." with an explicit **Open website** (administration.md).
+
+**Minimum server version.** The subject filter and `counts` (#191) are guaranteed by the
+minimum server version that includes #191, as in administration.md. There's no fallback for
+older servers and no per-field check.
+
 All moderation surfaces use the **steward** role color (Dusk) and the `steward` shield icon.
 Persimmon stays the person's own voice, and a moderator acting is not a personal action.
 
@@ -90,10 +99,11 @@ report." and refreshes. Closed cases can't be claimed.
 optional details as plain text, and the time. Details are participant-written and shown
 literally.
 
-**History:** when the subject filter is supported (`counts` present), a row "Earlier reports
-about {name}: {open} open, {resolved} resolved, {dismissed} dismissed." It opens the queue
-filtered to that person. Without `counts`, the row is absent: an unfiltered list is never
-presented as someone's history.
+**History:** a row "Earlier reports about {name}: {open} open, {resolved} resolved,
+{dismissed} dismissed.", from the subject filter's `counts`. It opens the queue filtered to that
+person. The filter and `counts` are guaranteed by the minimum server version (above). A
+response missing them is a server problem shown with the existing status ladder: the row is
+left out, and an unfiltered list is never presented as someone's history.
 
 **Take action** (button, steward outline) opens a sheet with only the actions this viewer can
 do, from `profile.moderation` for the subject (with the case's `room_id` for room cases), plus
@@ -107,8 +117,8 @@ message deletion by rank:
   picture? They'll be told it was removed." The account gets an `avatar_removed`
   notification.
 - **End guest visit** / **Block guests from this connection** (guest subjects): see "Guests".
-- **Review edit history**: not offered while it's recommended web-only (see "Reviewing edit
-  history").
+- **Review edit history**: web-only (confirmed). On a message case, a muted line "Reviewing
+  edit history: do this on {installation}'s website." with **Open website**.
 
 After an action, the case stays open and suggests resolving it, but never auto-resolves.
 
@@ -162,12 +172,42 @@ On a guest's profile card, when `moderation.guest` allows it:
   the address. Members on the same connection aren't affected."
 - Kick and ban aren't offered for guests. Muting is.
 
-## Reviewing edit history
+## Web only: DM inspection and edit-history review
 
-**Recommended web-only, pending the technical lead's and maintainer's confirmation** (agreed with
-the CC visual lead): an audited reason form of the same weight as DM inspection. Until confirmed,
-the app doesn't offer it, and Take action leaves it out. If it's confirmed for the app, it
-follows this design.
+Inspecting a whole conversation between two people (`admin/direct-messages/inspect.php`) and
+reviewing a message's edit history (`message-revision-review.md`) stay **on {installation}'s
+website**, not in the app (maintainer, 2026-11-09). Paging through someone's private
+conversation on a phone is hard to do carefully (shoulder-surfing, notifications, screenshots),
+and both are audited reason flows that the web console already carries with full disclosure.
+On the phone, a DM case shows only the reported message, plus "Do this on {installation}'s
+website." with **Open website** for anything further.
+
+## Tests
+
+- **Unit:** the card and queue appear only from server answers; filters map to one request each;
+  room-moderator empty copy; the history row from the subject filter's `counts`, left out when
+  a response lacks them; Take action lists only offered actions; resolve codes per outcome (`no_violation` only for dismissed,
+  `profile_picture_removed` only for people, a note for other); unknown re-reads; the case
+  avatar held in memory only.
+- **Compose:** steward styling; DM-case privacy line; disclosure lines in mute, ban and guest
+  forms; the web-only lines with an explicit Open website; plain-text evidence (links inert).
+- **Native:** reason and note fields follow the native input contracts.
+
+## Acceptance
+
+| ID | Requirement | Verify |
+|---|---|---|
+| P-200 | The steward section and Reports queue appear only when the server grants queue access. Rows show scope and counts but no evidence. Room moderators see only their rooms' cases. | U, C |
+| P-201 | Case evidence is shown as kept: plain literal text, a DM case limited to the reported message with its privacy line, person snapshots (name and picture at first report, memory only) and the changed-picture note. | U, C |
+| P-202 | Take action offers only server-allowed actions. Resolving records an outcome with the allowed codes, says reporters aren't told, and never performs or implies the action. | U, C |
+| P-203 | Mute, ban, kick, room role and guest actions disclose who learns what (reason to the person, the neutral room line), need a confirmation, and never resend on Unknown. | C |
+| P-204 | Whole-conversation DM inspection and edit-history review aren't offered in the app (web-only, confirmed). Where they'd be looked for, the app shows "Do this on {installation}'s website." with an explicit Open website, never an automatic browser. | U, C |
+
+## Appendix (parked): in-app edit-history review
+
+**Parked, not part of the active spec.** The maintainer confirmed edit-history review as
+web-only on 2026-11-09. This design is kept only for reference, in case that decision is ever
+revisited. Nothing here is built.
 
 Revision review is an opt-in, audited capability with disclosure duties. In the app it would be
 offered **only from a message case**, for that exact message, when `privacy.message_revisions`
@@ -185,34 +225,3 @@ is enabled and the viewer holds the configured role.
   "This message has no earlier versions."
 - Nothing is cached. Leaving the screen discards the content. Each new review asks for a reason
   again, because each is audited.
-
-## Direct-message inspection: web only
-
-Inspecting a whole conversation between two people (`admin/direct-messages/inspect.php`) stays
-**on {installation}'s website**, not in the app. Paging through someone's private conversation
-on a phone is hard to do carefully (shoulder-surfing, notifications, screenshots). The web
-console already carries the full disclosure and per-page audit. On the phone, a DM case shows
-only the reported message, and the only further step is the exact-message revision review
-above. This is the presentation lead's recommendation, recorded for the technical lead and
-maintainer to confirm.
-
-## Tests
-
-- **Unit:** the card and queue appear only from server answers; filters map to one request each;
-  room-moderator empty copy; the history row only with `counts`; Take action lists only
-  offered actions; resolve codes per outcome (`no_violation` only for dismissed,
-  `profile_picture_removed` only for people, a note for other); unknown re-reads; the case
-  avatar held in memory only.
-- **Compose:** steward styling; DM-case privacy line; disclosure lines in mute, ban, guest and
-  revision-review forms; plain-text evidence (links inert).
-- **Native:** reason and note fields follow the native input contracts.
-
-## Acceptance
-
-| ID | Requirement | Verify |
-|---|---|---|
-| P-200 | The steward section and Reports queue appear only when the server grants queue access. Rows show scope and counts but no evidence. Room moderators see only their rooms' cases. | U, C |
-| P-201 | Case evidence is shown as kept: plain literal text, a DM case limited to the reported message with its privacy line, person snapshots (name and picture at first report, memory only) and the changed-picture note. | U, C |
-| P-202 | Take action offers only server-allowed actions. Resolving records an outcome with the allowed codes, says reporters aren't told, and never performs or implies the action. | U, C |
-| P-203 | Mute, ban, kick, room role and guest actions disclose who learns what (reason to the person, the neutral room line), need a confirmation, and never resend on Unknown. | C |
-| P-204 | Whole-conversation DM inspection isn't offered in the app. Revision review isn't offered while it's recommended web-only. If confirmed for the app, it's offered only from a message case under its policy, requires a reason and step-up every time, discloses the participant notification, and keeps nothing. | U, C |
