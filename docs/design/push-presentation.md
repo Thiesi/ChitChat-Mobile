@@ -5,8 +5,8 @@ implements UnifiedPush/Web Push (see [push-architecture.md](../push-architecture
 decides presentation only. Transport, registration, key handling, instance and generation
 validation, and logout cleanup are M6 engineering under the existing architecture decision.
 Mockups: `PushShade` and `NotificationSettings` on the canvas. `NotificationSettings` shows the
-batch 3 target ("This phone", the quiet-hours line and the new honesty line), which depends on
-#147 and #148.
+batch 3 target: "This phone" depends on #147, and the quiet-hours and honesty lines need a
+server with #148.
 
 ## What a push contains today
 
@@ -23,13 +23,19 @@ Notification kinds are **not** in today's payload. Ordinary unmentioned DMs crea
 notification today. Quiet hours and the mention/ping mutes are applied by the server before
 sending.
 
-### Backend batch 3 (Dependency: ChitChat#148, #147, #150)
+### Backend batch 3 (ChitChat#148 merged; Dependency: #147, #150)
 
 The batch 3 design is approved on both sides (ChitChat#163, design comment 6729256820, final
-client-facing decisions 6729292941; CCM issue #1, comment 6729288173). **Nothing has merged
-yet.** Each part below names the issue it depends on. Leave it out of the build until that
-issue merges on ChitChat main, and keep today's behavior meanwhile. Merge order: #148, then
-#147, then #150.
+client-facing decisions 6729292941; CCM issue #1, comment 6729288173). **#148 has merged**
+(ChitChat#189, main `10edf42`; issue #1, comment 6730059848). #147 and
+#150 haven't. Each part below names the issue it depends on. Leave #147 and #150 parts out of
+the build until they merge, and keep today's behavior meanwhile.
+
+**#148 has no client check,** and the 3.4.0 minimum doesn't include it. So the two #148
+settings lines below (honesty and quiet hours) show only when the session's
+`application.version` is at least the first release that includes #148. That's an
+engineering constant, set when the release is tagged, compared like server-update.md's
+Detection. Older or unknown versions keep today's honesty line and no quiet-hours line.
 
 - **Delivery lifetime (#148):** mentions, pings and DM alerts live **30 minutes** from
   notification creation, with urgency `high`. Every other kind lives **6 hours**, with urgency
@@ -267,9 +273,9 @@ The screen shows:
   - **Off** clears the window (all three fields `null`);
   - the three values are always sent together (server rule);
   - copy: "Quiet hours are applied by your server, on all your devices."
-  - **with #148 (Dependency)**, a second line: "Alerts during quiet hours aren't sent later. You'll find them in
-    Activity." The server drops them for good (no morning replay), so the copy doesn't
-    promise a catch-up.
+  - **on a server with #148** (version gate above), a second line: "Alerts during quiet hours
+    aren't sent later. You'll find them in Activity." The server drops them for good (no
+    morning replay), so the copy doesn't promise a catch-up.
 - **Devices** (from `GET push/preferences.php`): one row per subscription, newest first.
   - Label: the stored `user_agent` string, shortened for display. A simple browser/OS summary
     such as "Firefox on Linux" may be used only when the string clearly contains both;
@@ -289,11 +295,14 @@ The screen shows:
   - With #147's cap of 20 devices, a subscribe refused with `409 push_subscription_conflict` is
     a definite refusal: "This delivery address is already used by another account. Choose a
     different delivery app or remove it there first." It's never retried automatically.
-- **Honesty line:** today, "Notifications can arrive a minute or so after the message. Open
-  the app to see everything." **With #148 (Dependency):** "Notifications usually arrive within
-  seconds, but can come later if your phone was offline, and some never arrive. Open the app
-  to see everything." Mentions, pings and DM alerts give up after 30 minutes and other
-  notices after 6 hours, so "later" stays bounded without the copy promising a number.
+- **Honesty line:** on a server with #148 (version gate above): "Notifications usually arrive
+  within seconds, sometimes a little longer, and later if your phone was offline. Some never
+  arrive. Open the app to see everything." Dispatch takes up to about 15 seconds unless the
+  operator runs the listening worker, hence "sometimes a little longer". Mentions, pings and
+  DM alerts give up after 30 minutes and other notices after 6 hours, so "later" stays
+  bounded without the copy promising a number. On older or unknown servers, today's line
+  stays: "Notifications can arrive a minute or so after the message. Open the app to see
+  everything."
 
 ## Tests (for the M6 slice)
 
@@ -314,6 +323,9 @@ The screen shows:
   - a stale-generation payload is dropped;
   - a mention-plus-DM event posts exactly one notification, in the channel of the kind that
     arrived.
+  - the honesty and quiet-hours lines follow the #148 version gate: the new lines at or above
+    the release constant, today's honesty line and no quiet-hours line below it or for an
+    unknown version.
 - **Instrumented:**
   - channels appear only after Turn on;
   - tap routes through the guarded destination flow and falls back to Activity;
@@ -335,5 +347,5 @@ The screen shows:
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
 | P-127 | Direct message alerts (after ChitChat#150 merges): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert never shows what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content. A mention-plus-DM event is one notification: `mentioned` in `mentions` when mention alerts are on, else `direct_message_received` in `direct`. | U, C |
 | P-128 | With #147, one notification per event: the tag is `event_id`, so a duplicate replaces and never stacks, and a bounded, memory-only recent-event set keeps a dismissed duplicate from reappearing within the process lifetime. | U |
-| P-129 | With #148 (Dependency): no per-notification "late" badge or label. The settings honesty line says alerts can come later or not arrive, and the quiet-hours line says they aren't sent after quiet hours. Until #148 merges, today's honesty line stays and the quiet-hours line is absent. | C, R |
+| P-129 | No per-notification "late" badge or label. On a server at or above the first release with #148 (version gate), the honesty line says alerts usually arrive within seconds, sometimes a little longer, can come later or not arrive, and the quiet-hours line says they aren't sent after quiet hours. Older or unknown servers keep today's honesty line and no quiet-hours line. | U, C |
 | P-126 | Settings offer only the mention and ping toggles (plus Direct messages per P-127) and whole-hour quiet hours with a time zone. Before #147, no device row is labelled as this phone; with #147, only the current-session row is, and its action is Turn off. Remove revokes by ID. Sign-out unsubscribes this device before the session ends. | C, R |
