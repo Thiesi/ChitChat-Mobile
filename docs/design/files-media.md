@@ -36,16 +36,30 @@ dependency choices are engineering decisions inside those slices. Mockups: `Room
 - **Throttling:** `429 rate_limited` carries `error.retry_after_seconds` (ChitChat#157, merged).
   It's phrased per `status-presentation.md` "Waiting times". When it's absent the wait is
   unknown, and the client never parses the English text.
-- **No image dimensions and no smaller renditions** (ChitChat#158).
-- **Metadata:** `{id, name, mime_type, size_bytes, sha256, previewable}`. Room history includes
-  it, and DM history needs the bounded metadata endpoint for visible IDs, which the client
-  already uses. There are **no thumbnails and no image dimensions**.
+- **Image dimensions and previews** (ChitChat#158, merged in ChitChat main `6e736be`; contract
+  and the technical lead's decisions in issue #1, comment 6729141144):
+  - `width` and `height` (integer or null) are the **oriented** display dimensions of the
+    original. They're null for non-images, older uploads and unreadable headers.
+  - `preview` is `{url, width, height, mime_type: "image/webp", size_bytes, sha256}` or null.
+    It's a WebP rendition with the long edge at most 1024 px, metadata stripped. A GIF's
+    preview is a **static first frame**. `url` is a same-origin relative path, resolved
+    against the chosen origin and used as given.
+  - `variant=preview` downloads have the same authorization, deletion and retention checks as
+    the original. They're `private, no-cache` with a quoted SHA-256 ETag (`If-None-Match` gets
+    `304`). A missing rendition is `404 attachment_preview_unavailable`, never the original.
+  - Client check: the presence of the `width`/`height` keys. A non-null `preview` advertises the
+    rendition. Missing keys mean an older server, so everything below falls back to the
+    no-dimensions behavior.
+- **Metadata:** `{id, name, mime_type, size_bytes, sha256, previewable, width, height,
+  preview}` in the upload response, room and DM history, realtime, search and export. DM
+  history still needs the bounded metadata endpoint for visible IDs, which the client already
+  uses.
 - **Download:** `GET …/download.php?id=…` with the session cookie, plus `inline=1` for previewable
   images only (JPEG, PNG, GIF, WebP). `410` for deleted. Authorization is re-checked on every
   request. Responses are `no-store`.
 - **Not end-to-end encrypted.** DM files follow DM retention. Guests can't upload.
 
-Anything not listed here (multi-file messages, thumbnails, video, audio) is out of scope
+Anything not listed here (multi-file messages, video, audio) is out of scope
 until the server offers it.
 
 ## Principles
@@ -53,8 +67,9 @@ until the server offers it.
 - **Your file, your explicit send.** Picking or sharing a file never sends it. Nothing is
   uploaded until the person presses Send, and an interrupted upload is never retried
   automatically.
-- **Pictures are worth their bytes, but only when wanted.** Without thumbnails, every preview
-  downloads the full image. Previews load automatically only when cheap (see Image loading).
+- **Pictures are worth their bytes, but only when wanted.** The transcript shows the server's
+  small preview, not the original. Images load automatically only when cheap (see Image
+  loading), and the original comes only when the person asks for it or it's cheap too.
 - **Files stay in the app unless the person moves them.** Bytes live in memory for display.
   Saving uses a document the person chooses, and sharing uses a temporary grant.
 
@@ -177,15 +192,26 @@ and [communication.md](communication.md). Nothing renders as a bubble before the
 Within the transcript spec's bubble, run and chit rules:
 
 - **Previewable images** (`previewable: true`):
-  - **A fixed frame, 240×180dp (4:3), that never changes size** (ChitChat#158: no dimensions
-    are known before download). The image is fitted inside with `contain` scaling on a `raised`
-    background, with 14dp inner corners and the caption below. Loading, failing or decoding an
-    image never resizes the message, so the transcript doesn't jump and read proof and anchors
-    aren't disturbed. The full image is seen in the viewer.
-  - If #158 adds dimensions later, the frame may adopt the real aspect ratio, still bounded,
-    known before load, and so never changing after layout.
-  - **GIFs** show their first frame, with a small "GIF" badge. They animate only in the viewer
-    (battery).
+  - **A frame sized before loading, that never changes size.** Its size comes from the
+    metadata, so loading, failing or decoding never resizes the message, the transcript doesn't
+    jump, and read proof and anchors aren't disturbed.
+    - **With `width` and `height`** (both positive integers): the frame takes the image's
+      aspect ratio. Its width is the bubble's content width, at most 280dp, and never wider than
+      the image's own width in pixels at 1px per dp (small images aren't upscaled). Its height
+      follows from the aspect ratio, clamped to **96–320dp**. When the height hits 320dp, the
+      width shrinks to keep the ratio, but never below 120dp. When a clamp applies (panoramas,
+      very tall images), the image is fitted inside with `contain` scaling on the `raised`
+      background, so nothing is cropped.
+    - **Without them** (null, zero, negative, or keys missing on an older server): the fixed
+      **240×180dp (4:3)** frame, with `contain` scaling on `raised`, as before.
+    - Either way: 14dp inner corners, the caption below, and the full image in the viewer.
+  - **What loads into the frame:** the **preview** (`variant=preview`) when `preview` is
+    non-null. It's decoded with downsampling to the frame size. With a null preview, the
+    original loads as before (`inline=1`), under the same auto-load rule.
+  - **GIFs:** the preview is a static first frame. The frame shows it with a small "GIF" badge
+    (Label style, on a scrim in the corner) and a centered play glyph. Tapping opens the viewer,
+    and that tap is the explicit request for the original, which animates there. The
+    transcript never animates (battery).
 - **Other files:** a file card inside the bubble: type icon, filename (two lines max, ellipsized
   in the middle so the extension stays visible), "PDF · 2.4 MB", plus **Open** and **Save**
   (48dp each). The caption goes below.
@@ -193,10 +219,11 @@ Within the transcript spec's bubble, run and chit rules:
 
   | State | Shows |
   |---|---|
-  | Not loaded (policy) | A `raised` box with a picture icon, "Photo · 3.4 MB" and **Show** |
+  | Not loaded (policy) | A `raised` box with a picture icon, "Photo · 3.4 MB" (the original's size) and **Show**. Show loads the preview when there is one |
   | Loading | The same box with a small static progress ring. No shimmer (P-34) |
   | Loaded | The image |
   | Failed (network) | The box with "Couldn't load the photo" and **Try again**, an explicit GET retry |
+  | Preview unavailable (`404 attachment_preview_unavailable`) | Not an error: the frame falls back to the original under the auto-load rule (loads if cheap, else **Show**). It's never retried as a preview in that session |
   | Gone (410) | A dashed box, "This file was deleted" |
   | Not allowed (403 or 404) | The box, "You can't open this file anymore" |
   | Offline | The box, "Photo · 3.4 MB · available when you're back online", with Show disabled |
@@ -210,13 +237,22 @@ Within the transcript spec's bubble, run and chit rules:
 
 The policy is local and read from existing system state, with no new requests:
 
-- **Automatic** loading only for previewable images ≤ **2 MiB** (from `size_bytes`) while the
-  network is **unmetered** (`ConnectivityManager` metered flag) and the message is on screen.
+- **Automatic** loading only for what the frame would load ≤ **2 MiB** while the network is
+  **unmetered** (`ConnectivityManager` metered flag) and the message is on screen. "What the
+  frame would load" is the preview when there is one (its `preview.size_bytes`), else the
+  original (`size_bytes`).
 - Otherwise **tap to show** (Show). Once shown, the image stays shown for that message during
   the session.
-- Requests use `inline=1`, the existing session transport and same-origin rules. No disk
-  cache: decoded bitmaps go into a bounded **memory-only** cache, cleared on sign-out, account
-  switch and generation change. Decode with downsampling to the displayed size.
+- Requests use the existing authenticated session transport and same-origin rules: the
+  preview URL is resolved against the chosen origin and is never followed elsewhere. Originals
+  use `inline=1`. No external image loader or loader cache.
+- **No disk cache** (technical lead decision, 2026-11-09, matching the approved privacy
+  policy's "in memory only"). The server allows caching previews on disk, and CCM doesn't. Decoded
+  previews and originals go into a bounded, account-scoped **memory-only** cache, cleared on
+  sign-out, account switch and generation change. A held preview's ETag is kept beside it, so
+  re-showing it within the process may revalidate with `If-None-Match`. A `304` keeps the held
+  bitmap, and nothing is revalidated once it's been evicted. Changing this needs a
+  maintainer-approved policy change.
 - **Setting deferred** (technical lead, 2026-11-07): a "Show photos automatically: on Wi-Fi /
   always / never" setting belongs to the later settings work. The files slice ships only the
   fixed default above.
@@ -224,6 +260,20 @@ The policy is local and read from existing system state, with no new requests:
 ## Full-screen viewer
 
 - Opened by tapping a loaded image, or a not-loaded one, which loads it first.
+- **Preview first, original on request.** When the transcript shows a preview, the viewer opens
+  on that preview at once (no second download).
+  - The original loads automatically only under the same rule: `size_bytes` ≤ 2 MiB on an
+    unmetered network.
+  - Otherwise the bottom bar shows **Load full image · 3.4 MB** (`primary` text button). Only
+    that tap fetches it, with a small static progress ring. A failure shows "Couldn't load the
+    full image" with **Try again**, and the preview stays.
+  - When the original arrives, it replaces the preview in place and zoom resets. Nothing loads
+    on its own after a failure.
+  - **GIFs:** opening the viewer from a GIF is the explicit request, so the original loads
+    straight away and animates when ready. Until then, and offline, the static preview shows
+    with the GIF badge.
+  - Without a preview, the viewer loads the original as before.
+- Save and Share always use the **original**, never the preview.
 - Black ground, edge-to-edge. Pinch and double-tap zoom, pan. Swipe down or Back closes.
 - The top bar is on a scrim: back, sender and time, **Save** and **Share**. The caption shows at
   the bottom on a scrim, expandable when long.
@@ -304,7 +354,15 @@ The policy is local and read from existing system state, with no new requests:
   - a JSON 413 shows `error.max_bytes`, and a non-JSON 413 is a definite refusal, never
     Unknown;
   - unknown never auto-retries, and Check history leads to the duplicate-risk dialog;
-  - the auto-load policy (size, metered, previewable);
+  - the auto-load policy (size, metered, previewable), applied to `preview.size_bytes` when a
+    preview exists and to `size_bytes` otherwise;
+  - frame sizing from `width`/`height`: aspect ratio, the 280dp, 96–320dp and 120dp bounds, no
+    upscaling, and the 240×180dp fallback for null, invalid or missing values;
+  - `404 attachment_preview_unavailable` falls back to the original under the rule;
+  - the viewer fetches the original only on Load full image, under the auto-load rule, or for
+    a GIF; Save and Share use the original;
+  - preview URLs resolve against the chosen origin only; the ETag is held only beside a held
+    bitmap;
   - memory-cache clearing on account change;
   - Cancel during body writing yields non-delivery, while a cancel or interruption after the
     full body is written yields Unknown;
@@ -331,7 +389,8 @@ The policy is local and read from existing system state, with no new requests:
 | P-151 | Cancel only while the body is still sending, and non-delivery is claimed only when the transport shows the body was still being written. Any cancel or interruption after the full body is written is Unknown. Unknown outcomes use Check history then the duplicate-risk dialog, never automatic retry. Attachments are never queued for Send when back online. | U, C |
 | P-152 | Server refusals show their meaning and keep the file attached. A JSON 413 shows the server's limit, and a non-JSON 413 is a definite "too large" refusal, never Unknown. No limit is ever guessed when the policy is missing. | C |
 | P-158 | With ChitChat#156's policy: pickers filter to allowed types, and attaching a file over `max_bytes` or of a reported, disallowed type shows the real figures ("This file is 14 MB. This server accepts files up to 10 MB.") and disables Send without any POST. `max_bytes: 0` keeps the paperclip with the reason "This server doesn't accept files." instead of a picker. Guests (`null`) see no paperclip. The policy comes only from the existing bootstrap. | U, C |
-| P-153 | Images follow the loading policy, use memory-only caching cleared on account change, render in a fixed frame that never resizes, and show every state in the table. | U, C |
+| P-153 | Images follow the loading policy, use memory-only caching cleared on account change, render in a frame sized before loading that never resizes, and show every state in the table. | U, C |
+| P-159 | With ChitChat#158: frames take the `width`/`height` aspect ratio within the stated bounds (240×180dp only when dimensions are null or invalid). The transcript loads the WebP preview, with the auto-load rule applied to its size and a fallback to the original when it's null or 404. The viewer fetches the original only on explicit request, under the auto-load rule, or when opened from a GIF. GIF frames are static with a badge. Previews are never cached on disk. | U, C |
 | P-157 | Photos are uploaded without location metadata by default, orientation kept. A cleaning failure requires an explicit Send anyway. The SHA-256 evidence covers the uploaded bytes. | U, C |
 | P-154 | Save uses a chosen document and never silently deletes it. Share-out uses read-only FileProvider grants on copies in a private cache subfolder, never hands out authenticated URLs, never deletes on chooser return, lets copies expire after 24 hours and deletes expired copies at the next start or share (no claim of deletion at exactly 24 hours), and deletes them at once on cancel before handoff and on sign-out or account removal. | U, C, R |
 | P-155 | Share-in never sends by itself, drops items across sign-in, and supports one file. | C |
