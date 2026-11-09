@@ -175,9 +175,11 @@ Presentation:
   payload `event_id`** (scoped by server and account), so a duplicate delivery **replaces**
   the earlier copy and never stacks. A small, bounded set of recently seen `event_id`s per
   account (sized to the 6-hour lifetime) also stops a duplicate from reappearing after the
-  person dismissed the first copy. That set holds only the opaque IDs, nothing displayable, and
-  it's cleared with the account's other local push state on sign-out or account removal.
-  Where it's stored is an engineering decision within those limits.
+  person dismissed the first copy. That set holds only the opaque IDs, is kept **in memory
+  only** (never on disk; technical lead decision, 2026-11-09), and is cleared with the
+  account's other local push state on sign-out or account removal. After process death the
+  set is empty, so a late duplicate of a dismissed alert can appear once. That's accepted:
+  it's rare, and it avoids storing new data.
 - Without `event_id` (before #147, or an older server), each push is a separate notification.
   Never deduplicate by comparing text.
 - Opening CCM does **not** automatically clear notifications. Viewing a destination may clear
@@ -329,6 +331,6 @@ The screen shows:
 | P-124 | Sign-out, account removal, account switch and generation change cancel that account's visible notifications locally at once and drop later pushes. A push whose `binding` doesn't match a signed-in account and generation is dropped silently (with #147). | U, C |
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
 | P-127 | Direct message alerts (after ChitChat#150 merges): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert never shows what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content. A mention-plus-DM event is one notification: `mentioned` in `mentions` when mention alerts are on, else `direct_message_received` in `direct`. | U, C |
-| P-128 | With #147, one notification per event: the tag is `event_id`, so a duplicate replaces and never stacks, and a bounded recent-event set keeps a dismissed duplicate from reappearing. | U |
+| P-128 | With #147, one notification per event: the tag is `event_id`, so a duplicate replaces and never stacks, and a bounded, memory-only recent-event set keeps a dismissed duplicate from reappearing within the process lifetime. | U |
 | P-129 | No "late" copy is shown. The honesty and quiet-hours lines say alerts can be late or not arrive, and aren't replayed after quiet hours. | C, R |
 | P-126 | Settings offer only the mention and ping toggles (plus Direct messages per P-127) and whole-hour quiet hours with a time zone. Before #147, no device row is labelled as this phone; with #147, only the current-session row is, and its action is Turn off. Remove revokes by ID. Sign-out unsubscribes this device before the session ends. | C, R |
