@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5g2a refusal metadata](milestones/M5g2a-attachment-refusal-metadata.md) retains bounded size/rate hints from existing HTTP errors without another request or native controls. Unknown/zero limits stay distinct, invalid optional hints preserve the refusal, and no write is replayed. Upload transport, attachment state and usable media/sharing remain pending.
+
 [M5g1 attachment policy](milestones/M5g1-attachment-policy.md) brings the released upload-policy facts into generation-scoped session memory through the existing bootstrap. Missing, null and zero remain distinct; an unusable advertised policy disables uploads without blocking session bootstrap. Refresh and retirement cannot retain obsolete policy. This prerequisite adds no upload, download, picker, image or sharing control, and grants no upload permission. Native files/media and live/provider/device acceptance remain pending.
 
 [Standalone IME measurements](milestones/standalone-ime-reproducer.md) add no product parity: opt-in app/server-free diagnostic APKs, fifty fresh-window cases per authorized arm, separate from ordinary native gates and real-device/live/release acceptance.
