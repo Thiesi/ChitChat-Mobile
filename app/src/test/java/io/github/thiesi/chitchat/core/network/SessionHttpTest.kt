@@ -36,6 +36,37 @@ class SessionHttpTest {
     private fun anonymous(csrf: String = token) = """{"csrf_token":"$csrf","user":null,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false},"future_field":true}"""
     private fun user() = """{"id":7,"username":"Alice","roles":["member"],"session_version":2,"guest":false}"""
 
+    @Test fun bootstrapCarriesAttachmentPolicyThroughTheExistingSingleGet() = runTest {
+        val policy = """{"max_bytes":0,"allowed_mime_types":["image/png"],"previewable_mime_types":["image/png"]}"""
+        server.enqueue(response(anonymous().dropLast(1) + """, "attachments":$policy}"""))
+        val before = server.requestCount
+        val value = api.bootstrap().attachmentPolicy as io.github.thiesi.chitchat.core.media.AttachmentPolicy.Known
+        assertEquals(0L, value.maxBytes)
+        assertEquals(before + 1, server.requestCount)
+        val request = server.takeRequest()
+        assertEquals("GET", request.method)
+        assertEquals("/api/v1/session.php", request.url.encodedPath)
+        assertNull(request.headers["X-CSRF-Token"])
+    }
+
+    @Test fun malformedAttachmentPolicyDisablesOnlyFilesWithoutLeakingOrRetrying() = runTest {
+        server.enqueue(response(anonymous().dropLast(1) + """, "attachments":{"private":"fixture-secret"}}"""))
+        val before = server.requestCount
+        val reply = api.bootstrap()
+        assertSame(io.github.thiesi.chitchat.core.media.AttachmentPolicy.Invalid, reply.attachmentPolicy)
+        assertEquals(token, reply.csrfToken)
+        assertFalse(reply.attachmentPolicy.toString().contains("fixture-secret"))
+        assertEquals(before + 1, server.requestCount)
+    }
+
+    @Test fun malformedJsonInsideAttachmentPolicyStillRejectsTheWholeDocument() = runTest {
+        server.enqueue(response(anonymous().dropLast(1) + """, "attachments":{"max_bytes":17,}"""))
+        val before = server.requestCount
+        try { api.bootstrap(); fail("Invalid JSON must not become a valid session") }
+        catch (failure: ApiFailure) { assertEquals(FailureKind.INCOMPATIBLE, failure.kind) }
+        assertEquals(before + 1, server.requestCount)
+    }
+
     @Test fun ignoreUsesExistingBooleanPostAndAuthoritativeCompleteList() = runTest {
         for (ignored in listOf(true, false)) {
             server.enqueue(response("""{"ignored_user_ids":[9,10]}"""))
