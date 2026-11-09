@@ -15,6 +15,7 @@ import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
 import io.github.thiesi.chitchat.feature.conversation.RoomAttachmentPhase
+import io.github.thiesi.chitchat.testing.pngWithPrivateText
 import java.io.ByteArrayInputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -284,6 +285,44 @@ class DirectAttachmentDraftTest {
         assertEquals(0,opens); assertSame(failure,model.drafts.value.getValue(8).attachment)
         assertTrue(pick("explicit new choice",original=failure)); assertEquals(DirectAttachmentPhase.READY,prepared().phase)
         assertTrue(budget.reservedBytes < budget.capacityBytes)
+    }
+
+    @Test fun currentPolicyFactsPreserveDraftActorAndMemoryWithoutGrantingSend() = runTest(dispatcher) {
+        open(); val owner = api.session.value
+        assertTrue(pick()); val ready = prepared()
+        val memo = model.drafts.value.getValue(8); val state = model.state.value
+        val charge = budget.reservedBytes; val calls = api.calls.toList()
+        api.session.value = owner.copy(attachmentPolicy=AttachmentPolicy.Known(5,emptySet(),emptySet(),null)); runCurrent()
+        val blocked = model.attachmentPolicyObservation(owner,8,ready) { true } as AttachmentPolicyObservation.TooLarge
+        assertEquals(6L,blocked.sizeBytes); assertEquals(5L,blocked.maxBytes)
+        api.session.value = owner.copy(attachmentPolicy=AttachmentPolicy.Known(6,emptySet(),emptySet(),null)); runCurrent()
+        assertSame(AttachmentPolicyObservation.WithinAdvertisedFacts,model.attachmentPolicyObservation(owner,8,ready) { true })
+        api.session.value = owner.copy(attachmentPolicy=AttachmentPolicy.Invalid); runCurrent()
+        assertSame(AttachmentPolicyObservation.Invalid,model.attachmentPolicyObservation(owner,8,ready) { true })
+        assertNull(model.attachmentPolicyObservation(owner,8,ready) { false })
+        assertNull(model.attachmentPolicyObservation(owner,9,ready) { true })
+        assertSame(memo,model.drafts.value.getValue(8)); assertSame(state,model.state.value)
+        assertEquals(charge,budget.reservedBytes); assertEquals(calls,api.calls)
+        assertFalse(model.canSend()); model.send(); assertEquals(0,api.sends); assertEquals(0,api.reads); assertEquals(0,api.blocks)
+        model.background(); assertNull(model.attachmentPolicyObservation(owner,8,ready) { true })
+    }
+
+    @Test fun directPolicyChecksOnlyFinalCleanedSizeAndRejectsRetiredSelections() = runTest(dispatcher) {
+        open(); val owner = api.session.value; val png = pngWithPrivateText(); assertTrue(png.size>80)
+        assertTrue(model.selectAttachment(owner,8,"entry-8",
+            PickedAttachmentRead("photo","image/png") { ByteArrayInputStream(png) },AttachmentPickSource.FILE) { true })
+        val clean=prepared(); assertEquals(AttachmentPhotoPrivacy.LOCATION_REMOVED,clean.privacy); assertTrue(clean.sizeBytes!!<=80)
+        api.session.value=owner.copy(attachmentPolicy=AttachmentPolicy.Known(80,setOf("image/png","image/gif"),emptySet(),null)); runCurrent()
+        assertSame(AttachmentPolicyObservation.WithinAdvertisedFacts,model.attachmentPolicyObservation(owner,8,clean) { true })
+        val gif="GIF89a"+"x".repeat(512)
+        assertTrue(model.selectAttachment(api.session.value,8,"entry-8",
+            PickedAttachmentRead("photo","image/gif") { ByteArrayInputStream(gif.toByteArray()) },
+            AttachmentPickSource.FILE,clean) { true })
+        val choice=prepared(); assertEquals(DirectAttachmentPhase.PRIVACY_CHOICE,choice.phase); assertTrue(choice.sizeBytes!!>80)
+        assertSame(AttachmentPolicyObservation.AwaitingFinalBytes,model.attachmentPolicyObservation(owner,8,choice) { true })
+        assertNull(model.attachmentPolicyObservation(owner,8,clean) { true })
+        api.session.value=owner.copy(generation=2); runCurrent()
+        assertNull(model.attachmentPolicyObservation(owner,8,choice) { true }); assertEquals(0,api.sends)
     }
 
     private class Held {

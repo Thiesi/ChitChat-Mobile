@@ -26,16 +26,12 @@ internal class SessionAttachmentRepository(private val sessions: SessionReposito
     private fun checkPolicy(upload: AttachmentUpload) {
         val current = sessions.state.value
         check(current.user?.guest == false) { "Uploads unavailable" }
-        when (val policy = current.attachmentPolicy) {
-            AttachmentPolicy.Unavailable, AttachmentPolicy.Invalid -> error("Uploads unavailable")
-            AttachmentPolicy.Unknown -> Unit // No invented limit or MIME allowlist.
-            is AttachmentPolicy.Known -> {
-                check(policy.maxBytes > 0 && upload.sizeBytes <= policy.maxBytes) { "Upload exceeds policy" }
-                val mime = upload.mimeType?.lowercase(java.util.Locale.ROOT)
-                check(mime == null || mime == "application/octet-stream" || mime in policy.allowedMimeTypes) {
-                    "Upload type outside policy"
-                }
-            }
+        when (observeAttachmentPolicy(current.attachmentPolicy, upload.sizeBytes, upload.mimeType)) {
+            AttachmentPolicyObservation.Unadvertised, AttachmentPolicyObservation.WithinAdvertisedFacts -> Unit
+            AttachmentPolicyObservation.Unavailable, AttachmentPolicyObservation.Invalid -> error("Uploads unavailable")
+            AttachmentPolicyObservation.UploadsDisabled, is AttachmentPolicyObservation.TooLarge -> error("Upload exceeds policy")
+            is AttachmentPolicyObservation.TypeNotAllowed -> error("Upload type outside policy")
+            AttachmentPolicyObservation.AwaitingFinalBytes -> error("Upload not prepared")
         }
     }
 }

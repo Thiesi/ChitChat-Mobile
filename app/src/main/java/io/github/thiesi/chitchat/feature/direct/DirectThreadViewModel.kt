@@ -799,6 +799,17 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         return attachments[peer]?.view?.takeIf { it.selection.matches(session.value) }
     }
 
+    /** Fresh display-only policy facts; preserve private bytes, draft and every actor marker. */
+    internal fun attachmentPolicyObservation(expected: SessionState, peer: Long, original: DirectAttachmentDraft,
+        isCurrentEntry: () -> Boolean): AttachmentPolicyObservation? {
+        val current = visibleAttachment(expected, peer, isCurrentEntry) ?: return null
+        val now = session.value
+        if (current.selection !== original.selection || savedDrafts.value[peer]?.slot !== current.selection.slot ||
+            !current.selection.matches(now)) return null
+        val finalSize = current.sizeBytes.takeIf { current.phase == DirectAttachmentPhase.READY }
+        return observeAttachmentPolicy(now.attachmentPolicy, finalSize, current.mimeType)
+    }
+
     internal fun removeAttachment(expected: SessionState, peer: Long, original: DirectAttachmentDraft,
         isCurrentEntry: () -> Boolean): Boolean {
         if (!isCurrentEntry() || !active || !selected(expected, peer) || mutable.value.busy || write != null ||
