@@ -57,6 +57,13 @@ This documentation does not implement those checks or claim live interoperabilit
 
 ## HTTP bootstrap, cookies, authentication
 
+[M5g2a refusal metadata](milestones/M5g2a-attachment-refusal-metadata.md) consumes
+released error.max_bytes for HTTP413 and positive JSON429 error.retry_after_seconds
+through the existing bounded error path. Unknown/invalid optional hints never erase
+the HTTP refusal/code. Retry-After keeps precedence and the existing86400-second
+bound; no POST is replayed. A non-JSON proxy413 has an unknown limit. These facts add
+no upload endpoint consumer, permission or live-media acceptance.
+
 Requests are relative to the selected installation's root `/api/v1/`; use actual `.php` routes. JSON success payloads are returned directly, not under a universal `data` envelope. Errors are `{"error":{"code":"machine_code","message":"explanation"}}`. `Endpoint::run` maps typed API exceptions and JSON errors; responses set `Cache-Control:no-store`. [Endpoint](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/Http/Endpoint.php), [response](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/Http/JsonResponse.php).
 
 `GET /api/v1/session.php` creates/reuses the PHP session cookie and returns CSRF. The v3.4.0 top-level fields are `application`, `capabilities`, `attachments`, `policies`, `csrf_token`, `user`, `preferences`, `ignored_user_ids`, `share_typing`, `muted_everywhere`, `sign_in_providers`, `pending_sign_up`, `guest_access`, `registration_enabled`, `lockdown`, `web_push`, `security`, `privacy`. User metadata includes ID/username/roles/session version and guest state/expiry. `application.name` is the effective installation name; `application.version` supplies the pending minimum-version comparison described above. The released capabilities have integer `schema_version=1` and Boolean `native_passkey_origins=false`, `native_auth_handoff=false`; the version does not authorize those unshipped native-auth contracts. `web_push.enabled` and its VAPID key do not imply FCM support. `/health.php` still returns configured application name/version without the DB-backed name override. This source inspection is not live-client acceptance. [Released bootstrap](https://github.com/Thiesi/ChitChat/blob/v3.4.0/public/api/v1/session.php), [metadata](https://github.com/Thiesi/ChitChat/blob/v3.4.0/src/Http/PublicSessionMetadata.php), [health](https://github.com/Thiesi/ChitChat/blob/v3.4.0/public/health.php).
