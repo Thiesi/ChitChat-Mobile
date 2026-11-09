@@ -4,7 +4,9 @@ Status: design specification for how background notifications look and behave on
 implements UnifiedPush/Web Push (see [push-architecture.md](../push-architecture.md)). It
 decides presentation only. Transport, registration, key handling, instance and generation
 validation, and logout cleanup are M6 engineering under the existing architecture decision.
-Mockups: `PushShade` and `NotificationSettings` on the canvas.
+Mockups: `PushShade` and `NotificationSettings` on the canvas. `NotificationSettings` shows the
+batch 3 target ("This phone", the quiet-hours line and the new honesty line), which depends on
+#147 and #148.
 
 ## What a push contains today
 
@@ -265,7 +267,7 @@ The screen shows:
   - **Off** clears the window (all three fields `null`);
   - the three values are always sent together (server rule);
   - copy: "Quiet hours are applied by your server, on all your devices."
-  - with #148, a second line: "Alerts during quiet hours aren't sent later. You'll find them in
+  - **with #148 (Dependency)**, a second line: "Alerts during quiet hours aren't sent later. You'll find them in
     Activity." The server drops them for good (no morning replay), so the copy doesn't
     promise a catch-up.
 - **Devices** (from `GET push/preferences.php`): one row per subscription, newest first.
@@ -287,10 +289,11 @@ The screen shows:
   - With #147's cap of 20 devices, a subscribe refused with `409 push_subscription_conflict` is
     a definite refusal: "This delivery address is already used by another account. Choose a
     different delivery app or remove it there first." It's never retried automatically.
-- **Honesty line:** "Notifications usually arrive within seconds, but can come later if your
-  phone was offline, and some never arrive. Open the app to see everything." (With #148,
-  mentions, pings and DM alerts give up after 30 minutes and other notices after 6 hours, so
-  "later" stays bounded without the copy promising a number.)
+- **Honesty line:** today, "Notifications can arrive a minute or so after the message. Open
+  the app to see everything." **With #148 (Dependency):** "Notifications usually arrive within
+  seconds, but can come later if your phone was offline, and some never arrive. Open the app
+  to see everything." Mentions, pings and DM alerts give up after 30 minutes and other
+  notices after 6 hours, so "later" stays bounded without the copy promising a number.
 
 ## Tests (for the M6 slice)
 
@@ -332,5 +335,5 @@ The screen shows:
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
 | P-127 | Direct message alerts (after ChitChat#150 merges): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert never shows what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content. A mention-plus-DM event is one notification: `mentioned` in `mentions` when mention alerts are on, else `direct_message_received` in `direct`. | U, C |
 | P-128 | With #147, one notification per event: the tag is `event_id`, so a duplicate replaces and never stacks, and a bounded, memory-only recent-event set keeps a dismissed duplicate from reappearing within the process lifetime. | U |
-| P-129 | No "late" copy is shown. The honesty and quiet-hours lines say alerts can be late or not arrive, and aren't replayed after quiet hours. | C, R |
+| P-129 | With #148 (Dependency): no per-notification "late" badge or label. The settings honesty line says alerts can come later or not arrive, and the quiet-hours line says they aren't sent after quiet hours. Until #148 merges, today's honesty line stays and the quiet-hours line is absent. | C, R |
 | P-126 | Settings offer only the mention and ping toggles (plus Direct messages per P-127) and whole-hour quiet hours with a time zone. Before #147, no device row is labelled as this phone; with #147, only the current-session row is, and its action is Turn off. Remove revokes by ID. Sign-out unsubscribes this device before the session ends. | C, R |
