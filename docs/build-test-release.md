@@ -91,22 +91,29 @@ API36's original process/test result remains visible and failed when it fails. R
 Additional or suppressed error causes in the same failed case are not classified as only the known IME signature; they block along with mixed failures across cases.
 Pinned DDMLib emits failure stack text without an exception-type attribute. The classifier requires an explicit AssertionError root in that text and rejects contradictory type attributes; it never infers the class merely from an inner timeout.
 
-The [maintainer's temporary API35 rule](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6727888625)
-and [cleanup extension](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6729587072),
-directly confirmed by the owner in the engineering thread on2026-11-09, apply to every PR.
-Its only pinned-API35 failures may be the recorded ReplyComposerJourneyTest
-DM-after-room-recreation signature (chooseReply, focused/displayed input, Compose IME0
-and native IME visible or shown), and/or CompletionJourneyTest's @After cleanup assertion
-at line167 (expected false, actual true, no other cause). Record each original test,
-run ID and signature on the PR, without retry or rewriting the failure status.
-Every other API35 case, api36-product-defects, JVM/lint/debug/release build gate and
-BOTH written current-head reviews must pass; the scope must be conflict-free. No other
-failure or API36/product defect is covered. The rule ends when fixed or immediately
-if user impact is shown. Release/device/accessibility gates remain required.
+The [maintainer's temporary API35 rule](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6727888625),
+directly confirmed by the owner in the engineering thread on2026-11-09, applies to every PR.
+Its only pinned-API35 failure may be the recorded ReplyComposerJourneyTest
+DM-after-room-recreation signature (chooseReply, focused/displayed input, Compose IME 0
+and native IME visible or shown). Record each original test, run ID and signature on
+the PR, without retry or rewriting the failure status. Every other API35 case,
+api36-product-defects, JVM/lint/debug/release build gate and BOTH written current-head
+reviews must pass; the scope must be conflict-free. No other failure or API36/product
+defect is covered. The rule ends when fixed or immediately if user impact is shown.
+Release/device/accessibility gates remain required.
+
+The earlier [Completion cleanup allowance](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6729587072)
+and its owner-confirmed [API36/product-guard extension](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6737201774)
+end when the [cleanup correction](milestones/completion-ime-cleanup.md) merges.
+They covered only the original @After line167 expected-false/actual-true assertion
+without another cause; original failures and development exceptions remain recorded.
+The corrected contract is hidden at cleanup completion: Compose IME 0 and both native
+observations hidden inside the same 5000ms wait, with no extra hide, tap or focus action.
+A later re-show from the test's own earlier tap is outside this completion-time contract.
 PR131's classifier is delivered; no manual-classifier deferral remains. The bounded
 pre-theme/current and real-MainActivity observations are recorded on issue69; the latter
-covers only its measured synthetic API35 path. The cleanup-race investigation remains
-a separate low-priority follow-up, without changing assertions or retrying failed runs.
+covers only its measured synthetic API35 path. The separate ReplyComposer investigation
+remains lower priority and is not scheduled.
 
 The reporter can be manually dispatched with a completed Android PR run ID to report existing artifacts idempotently; it never invokes tests or changes a result. The privileged job checks out only the default branch, validates the originating workflow/PR/head and bounds/checksums the single JSON artifact. Raw assertions, messages, logcat and credentials are not copied into PR comments.
 

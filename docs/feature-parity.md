@@ -98,6 +98,10 @@ Native keyboard/navigation verification also covers one-tap input focus and actu
 
 Unsupported conveniences such as reliable automatic send retry, more than 100 recent DM conversations, exact bounded DM read acknowledgments, snapshot cursor/reset, or fast around-message lookup are recorded in [limitations](known-limitations.md). They do not prevent implementing the existing browser model.
 
+Test-only [completion cleanup correction](milestones/completion-ime-cleanup.md) keeps the
+existing completion-time IME proof and5000ms deadline. It adds no product capability
+and establishes no production keyboard fix or physical-device acceptance.
+
 The v3.5.0 baseline includes batch3 push and #191 staff fields, not implemented native
 parity. Native passkeys (#145) and browser handoff (#146) are for the next release,
 not v3.5.0.
