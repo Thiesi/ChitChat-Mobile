@@ -68,6 +68,12 @@ class AttachmentUploadTest {
             assertTrue(body.contains("Content-Type: application/octet-stream"))
             assertTrue(bytes.indexOf(byteArrayOf(0, 1, 127, -1).toByteString()) >= 0)
             assertFalse(upload.toString().contains("fixture.bin"))
+            val facts = upload.transferFacts.value
+            assertEquals(upload.sizeBytes, facts.fileBytesBuffered)
+            assertEquals(bytes.size.toLong(), facts.multipartSizeBytes)
+            assertEquals(bytes.size.toLong(), facts.requestBodyEndBytes)
+            assertTrue(facts.fullBodyReported)
+            assertTrue(facts.stopped); assertFalse(facts.writerRunning)
         }
         assertEquals(2, server.requestCount) // No automatic policy or enrichment GET.
     }
@@ -118,6 +124,7 @@ class AttachmentUploadTest {
                 assertEquals(if (status == 429) 19L else null, e.retryAfterSeconds)
                 assertFalse(e.toString().contains("private"))
             }
+            assertTrue(upload.transferFacts.value.stopped)
             try { api.uploadDirectAttachment(8, upload, token, 7); fail() }
             catch (_: IllegalStateException) { }
             assertEquals(before + 1, server.requestCount)
