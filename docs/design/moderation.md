@@ -5,8 +5,11 @@ slices (technical lead, 2026-11-09). It's grounded in the ChitChat API at main `
 `moderation-reports.md` (queue, person cases from #159, subject filter from #191), `admin.md`
 ("Moderating in place", mutes, bans), `rooms.md` (ranks), `guest-access.md` (guest actions),
 `message-revision-review.md` and `direct-messages.md` (inspection). Vocabulary is being aligned
-with the ChitChat web admin rework (#191) through the CC visual lead. Mockups: `AdminHome` (the
-steward section) and `ModerationCase` on the canvas.
+with the ChitChat web admin rework (#191, web S6 #172) through the CC visual lead: both clients
+use the same status, action, resolution, snapshot, scope and restriction words. The web calls
+its queue section "Moderation queue" where CCM's screen title is "Reports", a platform-context
+difference, not a vocabulary one. Mockups: `AdminHome` (the steward section) and
+`ModerationCase` on the canvas.
 
 All moderation surfaces use the **steward** role color (Dusk) and the `steward` shield icon.
 Persimmon stays the person's own voice, and a moderator acting is not a personal action.
@@ -30,6 +33,8 @@ Persimmon stays the person's own voice, and a moderator acting is not a personal
   that can review cases or moderate. The server decides: the card appears when a
   `moderation/cases.php` request (`status=open`, `limit=1`) succeeds, or the profile reports
   moderation powers.
+- Tapping it opens the staff area, titled **Stewarding** (the web's name for the same place),
+  with the subline "{installation} · {name}, {role}".
 - Rows: **Reports** with "{n} open" (counted from the open queue, shown as "50+" past one page),
   and for administrators **People** and **Rooms** (administration spec).
 - The You tab gets a steward-colored dot while open cases exist, refreshed only on existing
@@ -55,7 +60,8 @@ Persimmon stays the person's own voice, and a moderator acting is not a personal
 
 ## A case (mockup `ModerationCase`)
 
-**Header:** the summary row, status chip and **Claim** (when open), or **Release** (when it's
+**Header:** the summary row, a small reference line "Case #{id}" (staff quote it to each other),
+the status chip and **Claim** (when open), or **Release** (when it's
 yours, or you're global staff). `moderation_case_assigned` says "{name} already claimed this
 report." and refreshes. Closed cases can't be claimed.
 
@@ -71,8 +77,8 @@ report." and refreshes. Closed cases can't be claimed.
 
 **Person case evidence:**
 
-- "**Name at first report**": `snapshot.username`. If it differs from the current name, the
-  current one follows ("now {name}").
+- "**Name then**": `snapshot.username`, and "**Name now**": the current name, as two lines (only
+  the first when they're the same).
 - "**Picture at first report**": loaded from `snapshot.avatar_url` only when the case opens,
   through the session transport, held in memory only (the server sends `no-store`). Without
   one: "No picture at first report."
@@ -101,8 +107,8 @@ message deletion by rank:
   picture? They'll be told it was removed." The account gets an `avatar_removed`
   notification.
 - **End guest visit** / **Block guests from this connection** (guest subjects): see "Guests".
-- **Review edit history** (message cases, only when `privacy.message_revisions` says this viewer
-  may): see "Reviewing edit history".
+- **Review edit history**: not offered while it's recommended web-only (see "Reviewing edit
+  history").
 
 After an action, the case stays open and suggests resolving it, but never auto-resolves.
 
@@ -158,7 +164,12 @@ On a guest's profile card, when `moderation.guest` allows it:
 
 ## Reviewing edit history
 
-Revision review is an opt-in, audited capability with disclosure duties. On the phone it's
+**Recommended web-only, pending the technical lead's and maintainer's confirmation** (agreed with
+the CC visual lead): an audited reason form of the same weight as DM inspection. Until confirmed,
+the app doesn't offer it, and Take action leaves it out. If it's confirmed for the app, it
+follows this design.
+
+Revision review is an opt-in, audited capability with disclosure duties. In the app it would be
 offered **only from a message case**, for that exact message, when `privacy.message_revisions`
 is enabled and the viewer holds the configured role.
 
@@ -204,4 +215,4 @@ maintainer to confirm.
 | P-201 | Case evidence is shown as kept: plain literal text, a DM case limited to the reported message with its privacy line, person snapshots (name and picture at first report, memory only) and the changed-picture note. | U, C |
 | P-202 | Take action offers only server-allowed actions. Resolving records an outcome with the allowed codes, says reporters aren't told, and never performs or implies the action. | U, C |
 | P-203 | Mute, ban, kick, room role and guest actions disclose who learns what (reason to the person, the neutral room line), need a confirmation, and never resend on Unknown. | C |
-| P-204 | Revision review is offered only from a message case under its policy, requires a reason and step-up every time, discloses the participant notification, and keeps nothing. Whole-conversation DM inspection isn't offered in the app. | U, C |
+| P-204 | Whole-conversation DM inspection isn't offered in the app. Revision review isn't offered while it's recommended web-only. If confirmed for the app, it's offered only from a message case under its policy, requires a reason and step-up every time, discloses the participant notification, and keeps nothing. | U, C |
