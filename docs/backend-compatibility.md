@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g3h memory reservations](milestones/M5g3h-attachment-memory-budget.md) is a local allocation-ledger prerequisite, without endpoint, backend baseline or server-limit changes. Client charges must cover retained and preparing memory, not infer upload permission or server policy. Actual original-owner/native integration remains pending.
+
 [M5g3e WebP privacy](milestones/M5g3e-webp-photo-privacy.md) is local static-WebP preparation without endpoint, policy, dependency or baseline changes. Future reconciliation and server size/type checks still apply to exactly the uploaded immutable bytes. No live upload or native provider authority is introduced.
 
 [M5g3d PNG privacy](milestones/M5g3d-png-photo-privacy.md) is local static-PNG/TIFF preparation without endpoint, dependency or baseline changes. The future upload, size/type pre-checks and reconciliation evidence must still use exactly the immutable cleaned bytes. No native or live upload authority is added.

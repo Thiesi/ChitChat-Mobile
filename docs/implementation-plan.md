@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g3h memory reservations](milestones/M5g3h-attachment-memory-budget.md) supplies the shared allocation ledger before actual original-owner attachment state. Next integrate conservative input/output/workspace charges and delayed producer release into that owner, then native/provider controls with explicit privacy-failure consent. Cancellation proof still needs full-multipart writer termination; no silent eviction, raw-photo fallback or native files/media completion is implied.
+
 [M5g3g preparation routing](milestones/M5g3g-attachment-preparation-routing.md) applies the approved magic/MIME/Picker classification boundary and routes supported photos to cleaning and final-byte evidence. Unsupported/image-hinted unknowns retain an original snapshot choice; opaque non-photo files remain unchanged without another prompt. Continue actual aggregate-budget/original-owner consent state and native/provider controls; no silent raw-photo fallback or complete files/media claim.
 
 [M5g3f upload-byte evidence](milestones/M5g3f-upload-byte-evidence.md) binds SHA-256 and size to the exact final immutable upload payload. Photo classification/cleaning orchestration, original explicit fallback consent, aggregate-budget/original-owner state and native/provider consumers remain separate. Evidence never deduplicates or authorizes a send.
