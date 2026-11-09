@@ -325,6 +325,121 @@ class DirectAttachmentDraftTest {
         assertNull(model.attachmentPolicyObservation(owner,8,choice) { true }); assertEquals(0,api.sends)
     }
 
+    @Test fun explicitOriginalChoicePreparesOnlyItsOwnBytesAndNeverSendsTheCaption() = runTest(dispatcher) {
+        open(); model.updateDraft("caption")
+        assertTrue(model.replyTo(api.session.value, 8, model.state.value.messages.first()))
+        val reply = model.state.value.composerReply
+        assertTrue(pick("GIF89a")); val choice = prepared(); runCurrent()
+        val memo = model.drafts.value.getValue(8); val calls = api.calls.toList()
+        assertTrue(model.prepareOriginalPhoto(api.session.value, 8, choice) { true })
+        assertFalse(model.prepareOriginalPhoto(api.session.value, 8, choice) { true })
+        model.updateDraft("edited during preparation")
+        val ready = prepared()
+        assertSame(choice.selection, ready.selection); assertSame(memo.slot, model.drafts.value.getValue(8).slot)
+        assertEquals(DirectAttachmentPhase.READY, ready.phase)
+        assertEquals(AttachmentPhotoPrivacy.UNCHANGED_AFTER_CHOICE, ready.privacy)
+        assertEquals(6L, ready.sizeBytes)
+        assertEquals("edited during preparation", model.drafts.value.getValue(8).body)
+        assertSame(reply, model.drafts.value.getValue(8).composerReply)
+        assertEquals(calls, api.calls); assertTrue(budget.reservedBytes > 0)
+        assertFalse(model.prepareOriginalPhoto(api.session.value, 8, choice) { true })
+        assertFalse(model.canSend()); model.send(); assertEquals(0, api.sends)
+    }
+
+    @Test fun originalChoiceRejectsFalseEntryWrongOwnerTargetAndFabricatedSameSelectionView() = runTest(dispatcher) {
+        open(); val owner = api.session.value
+        assertTrue(pick("GIF89a")); val choice = prepared(); runCurrent()
+        val memo = model.drafts.value.getValue(8); val charge = budget.reservedBytes
+        assertFalse(model.prepareOriginalPhoto(owner, 8, choice) { false })
+        assertFalse(model.prepareOriginalPhoto(owner.copy(generation = 0), 8, choice) { true })
+        assertFalse(model.prepareOriginalPhoto(owner, 9, choice) { true })
+        val imitation = DirectAttachmentDraft(choice.selection, DirectAttachmentPhase.PRIVACY_CHOICE,
+            sizeBytes = choice.sizeBytes, privacyFailure = choice.privacyFailure)
+        assertFalse(model.prepareOriginalPhoto(owner, 8, imitation) { true })
+        assertSame(memo, model.drafts.value.getValue(8)); assertEquals(charge, budget.reservedBytes)
+        model.background()
+        assertFalse(model.prepareOriginalPhoto(owner, 8, choice) { true })
+        assertEquals(0, api.sends)
+    }
+
+    @Test fun disabledOrUnreadablePolicyCannotAuthorizeOriginalPhotoPreparation() = runTest(dispatcher) {
+        open(); val owner = api.session.value
+        assertTrue(pick("GIF89a")); val choice = prepared(); runCurrent()
+        val memo = model.drafts.value.getValue(8); val charge = budget.reservedBytes
+        for (policy in listOf(AttachmentPolicy.Invalid, AttachmentPolicy.Unavailable,
+            AttachmentPolicy.Known(0, emptySet(), emptySet(), null))) {
+            api.session.value = owner.copy(attachmentPolicy = policy); runCurrent()
+            assertFalse(model.prepareOriginalPhoto(owner, 8, choice) { true })
+            assertSame(memo, model.drafts.value.getValue(8)); assertEquals(charge, budget.reservedBytes)
+        }
+        api.session.value = owner.copy(attachmentPolicy = AttachmentPolicy.Known(5, emptySet(), emptySet(), null)); runCurrent()
+        // A server-size limit is not a local cleaning bypass. Only final bytes are compared.
+        assertTrue(model.prepareOriginalPhoto(owner, 8, choice) { true })
+        val ready = prepared()
+        assertTrue(model.attachmentPolicyObservation(owner, 8, ready) { true } is AttachmentPolicyObservation.TooLarge)
+        assertEquals(0, api.sends)
+    }
+
+    @Test fun alreadyStartedOriginalPreparationFinishesOnlyItsPrivateSlotAfterNavigation() = runTest(dispatcher) {
+        open(); model.updateDraft("original caption")
+        assertTrue(pick("GIF89a")); val choice = prepared(); runCurrent()
+        assertTrue(model.prepareOriginalPhoto(api.session.value, 8, choice) { true })
+        open(9); model.updateDraft("other conversation")
+        val active = model.state.value; val calls = api.calls.toList()
+        val ready = prepared()
+        assertSame(choice.selection, ready.selection)
+        assertEquals(AttachmentPhotoPrivacy.UNCHANGED_AFTER_CHOICE, ready.privacy)
+        assertEquals("original caption", model.drafts.value.getValue(8).body)
+        assertSame(active, model.state.value); assertEquals(calls, api.calls)
+        assertNull(model.visibleAttachment(api.session.value, 8) { true })
+        assertEquals(0, api.sends)
+    }
+
+    @Test fun originalPreparationSurvivesBackgroundButDisplayRequiresANewActualEntryCheck() = runTest(dispatcher) {
+        open(); assertTrue(pick("GIF89a")); val choice = prepared(); runCurrent()
+        assertTrue(model.prepareOriginalPhoto(api.session.value, 8, choice) { true })
+        entry = null; model.background(); val calls = api.calls.toList()
+        val ready = prepared()
+        assertEquals(AttachmentPhotoPrivacy.UNCHANGED_AFTER_CHOICE, ready.privacy)
+        assertNull(model.visibleAttachment(api.session.value, 8) { true })
+        assertEquals(calls, api.calls) // Before ordinary foreground GET reconciliation.
+        model.foreground(); runCurrent()
+        assertNull(model.visibleAttachment(api.session.value, 8) { entry != null })
+        entry = "fresh-entry"
+        assertSame(ready, model.visibleAttachment(api.session.value, 8) { entry == "fresh-entry" })
+        assertEquals(0, api.sends)
+    }
+
+    @Test fun replaceAndDiscardRetireAnOriginalTaskBeforeItsQueuedEntryWithoutAStaleAdoption() = runTest(dispatcher) {
+        open(); assertTrue(pick("GIF89a")); val choice = prepared(); runCurrent()
+        assertTrue(model.prepareOriginalPhoto(api.session.value, 8, choice) { true })
+        val preparing = model.drafts.value.getValue(8).attachment!!
+        assertTrue(pick("successor", original = preparing))
+        assertTrue(budget.reservedBytes > 0) // Cancel is not producer completion.
+        val ready = prepared()
+        assertNotSame(choice.selection, ready.selection)
+        assertEquals(AttachmentPhotoPrivacy.NON_PHOTO, ready.privacy)
+        assertFalse(model.prepareOriginalPhoto(api.session.value, 8, choice) { true })
+        assertTrue(pick("GIF89a", original = ready)); val second = prepared(); runCurrent()
+        assertTrue(model.prepareOriginalPhoto(api.session.value, 8, second) { true })
+        assertTrue(model.discardSavedDraft(model.drafts.value.getValue(8)) { true })
+        assertTrue(budget.reservedBytes > 0)
+        runCurrent()
+        assertTrue(model.drafts.value.isEmpty()); assertEquals(0L, budget.reservedBytes)
+        assertEquals(0, api.sends)
+    }
+
+    @Test fun sessionRetirementRejectsAnOriginalTaskEvenIfQueuedBeforeTheOwnerChanges() = runTest(dispatcher) {
+        open(); val owner = api.session.value
+        assertTrue(pick("GIF89a")); val choice = prepared(); runCurrent()
+        assertTrue(model.prepareOriginalPhoto(owner, 8, choice) { true })
+        api.session.value = owner.copy(generation = 2); runCurrent()
+        assertTrue(model.drafts.value.isEmpty())
+        assertFalse(model.prepareOriginalPhoto(owner, 8, choice) { true })
+        store.clear(); model.viewModelScope.coroutineContext[Job]!!.join()
+        assertEquals(0L, budget.reservedBytes); assertEquals(0, api.sends)
+    }
+
     private class Held {
         val started = CountDownLatch(1); val finish = CountDownLatch(1); val opens = AtomicInteger()
         fun source() = PickedAttachmentRead("private-held",null) {

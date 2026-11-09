@@ -1,7 +1,6 @@
 package io.github.thiesi.chitchat.core.media
 
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,24 +11,6 @@ import kotlinx.coroutines.launch
 internal sealed interface AttachmentPreparationOutcome {
     class Prepared(val retained: RetainedAttachmentPreparation) : AttachmentPreparationOutcome
     class Failed(val kind: PreparationFailureKind) : AttachmentPreparationOutcome
-}
-
-/** Owned bytes plus their conservative charge, not send or privacy-bypass authority.
- * The feature owner must keep this alive while any draft/worker/upload uses its bytes.
- * Close discards this handle's reference; callers must not retain byte references after close.
- */
-internal class RetainedAttachmentPreparation internal constructor(
-    preparation: AttachmentPreparation,
-    private val reservation: AttachmentMemoryBudget.Reservation,
-) : AutoCloseable {
-    private val value = AtomicReference<AttachmentPreparation?>(preparation)
-    val preparation: AttachmentPreparation? get() = value.get()
-    val reservedBytes: Long get() = reservation.reservedBytes
-
-    override fun close() {
-        value.set(null)
-        reservation.close()
-    }
 }
 
 /** One frozen source, one bounded producer, one synchronous Main-thread adoption decision.
@@ -95,8 +76,10 @@ internal class AttachmentPreparationTask(
                 // withContext children have ended before this finally, even if provider IO ignored
                 // cancellation temporarily. Never free a producer's charge from Job.cancel().
                 if (!adopted) {
-                    retained?.close()
-                    reservation?.close()
+                    // Once wrapped, the handle owns the lease. Its exclusive successor may
+                    // already own it; the old reservation alias must not free that successor.
+                    val owner = retained
+                    if (owner == null) reservation?.close() else owner.close()
                 }
             }
         }

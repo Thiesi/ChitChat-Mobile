@@ -56,7 +56,8 @@ check is still required before visible-pane adoption/display or any action,
 including explicit Send anyway. No network or consent follows private completion.
 The consumer must preserve successor selections and account for actual retained
 and preparing memory. Only a fresh action may prepare unchanged original bytes;
-this helper never does so for a failed photo. No source is reopened and no POST,
+[M5g4d](M5g4d-explicit-original-photo-preparation.md) now supplies that exact-choice
+private state consumer. This routing helper never does so for a failed photo. No source is reopened and no POST,
 quota attempt, history reconciliation or retry is triggered here.
 
 ## Header references

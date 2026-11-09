@@ -1,6 +1,8 @@
 # Feature-parity matrix
 
-[Completion cleanup observations](milestones/completion-ime-cleanup-observations.md) add test-only timeout scalars. Files/media remains incomplete; PR176 original-photo preparation is held pending the diagnostic and its fresh-head gates/reviews. No new user control or keyboard-fix acceptance is claimed.
+[M5g4d explicit original-photo preparation](milestones/M5g4d-explicit-original-photo-preparation.md) connects exact current room/DM privacy choices to bounded local unchanged-byte hashing. It preserves original private slots, latest captions/replies, allocation lifetime and fresh entry guards, without network/send effects. Native Send anyway controls, serialized attachment POST/reconciliation and provider/sharing consumers remain pending; files/media is not usable yet.
+
+[Completion cleanup observations](milestones/completion-ime-cleanup-observations.md) add test-only timeout scalars. Files/media remains incomplete; PR178 delivered the diagnostic; PR176 original-photo preparation now requires its own fresh-content gates/reviews, preserving the old failed head. No new user control or keyboard-fix acceptance is claimed.
 
 [M5g4c final-byte policy](milestones/M5g4c-attachment-policy-state.md) gives original-bound room/DM state current cached-policy observations using the same predicates as transport. Size checks use READY final bytes, not unchosen originals; policy changes create no private-state, memory or network effects. These facts grant no send/privacy consent. Original-photo choice preparation, upload/reconciliation and native controls remain pending; files/media is not usable yet.
 
