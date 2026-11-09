@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g3b JPEG privacy](milestones/M5g3b-jpeg-photo-privacy.md) starts photo preparation with a bounded lossless ordinary-JPEG rewrite. Continue PNG/WebP, safe fallback/explicit failure consent and final cleaned-byte evidence, then bounded original-owner attachment state and native/provider controls; this foundation does not complete P-157 or files/media.
+
 [M5g3a picked-file snapshot](milestones/M5g3a-picked-file-snapshot.md) bounds one raw in-memory source read without URI reopen or automatic retry. Continue photo location removal/orientation preservation and cleaned-byte evidence, then original-owner serialized pending/unknown state and native/provider controls as independently reviewable slices.
 
 [M5g2b upload protocol](milestones/M5g2b-attachment-upload-protocol.md) adds explicit original-session room/DM multipart and namespace-specific ACKs. After its own gates/reviews, continue bounded preparation/photo privacy, serialized pending/uncertain attachment state and native consumers, with downloads and sharing as separate slices.

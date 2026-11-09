@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [M5g3b JPEG privacy](docs/milestones/M5g3b-jpeg-photo-privacy.md) is a bounded ordinary-JPEG container rewrite, retaining coded pixels, colour markers and valid EXIF orientation while removing other metadata throughout all scans. Reject malformed/ambiguous/multi-image layouts; no silent raw fallback, send consent or complete photo-readiness claim. PNG/WebP, fallback/explicit failure consent, cleaned-byte evidence, provider/native controls and acceptance remain separate prerequisites.
+
 - [M5g3a picked-file snapshot](docs/milestones/M5g3a-picked-file-snapshot.md) reads one frozen selection once into bounded immutable raw bytes, closes after success/failure/cancellation when the provider returns, and retains only safe failure kinds. The client allocation ceiling is not a server policy. No URI reopen, photo-clean/readiness claim, original-byte reconciliation hash or native Send; provider-specific cancellation and cleaned-byte privacy/consent remain separate prerequisites.
 
 - [M5g2b upload protocol](docs/milestones/M5g2b-attachment-upload-protocol.md) is explicit original-session multipart only. Keep immutable prepared bytes, one-use attempt/body, exact room/DM receipt identity and ACK before optional enrichment. No POST replay or cancellation/non-delivery inference. Known unusable policy disables uploads only; preparation/photo privacy, serialized pending/unknown state and native consumers remain separate. No live upload authority is granted.
