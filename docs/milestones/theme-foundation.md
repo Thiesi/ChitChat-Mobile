@@ -161,7 +161,8 @@ live, complete accessibility, third-party-license-screen, signing or distributio
 
 ## Follow-on order
 
-Delivered A/B → this documentation → approved API35/API36 CI change → files/media/sharing
+Delivered A/B, API35/API36 infrastructure PR129/131 and reduced PR133 test-host hygiene →
+this documentation PR126 → review-bootstrap PR128 after main merge/revalidation → files/media/sharing
 protocol/state/native slices → M6 push
 push categories → onboarding → navigation shell → reporting → transcript/lists/status/
 modals → separate Send when back online → CI41/IME → remaining M6 → M7 → M8, per the
@@ -169,7 +170,10 @@ modals → separate Send when back online → CI41/IME → remaining M6 → M7 �
 IME diagnostics A delivered in PR113 and the standalone reproducer in PR121. Its a/b/c
 measurements are consumed49/50,50/50,48/50, with all failures retained and cause unproven.
 The maintainer's separate [gate-platform decision](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6720079251)
-authorizes the CI follow-up, preserving strict inputs and API36/release acceptance.
+authorized the delivered CI follow-up, preserving strict inputs and API36/release acceptance.
+The [current bounded alignment](https://github.com/Thiesi/ChitChat-Mobile/issues/69#issuecomment-6728241370)
+has one ordinary candidate run; the [temporary gate rule](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6727888625)
+covers only its named signature and ends on a fixture fix or demonstrated user impact.
 M6 includes the approved opt-in/off-by-default ordinary DM alert once its backend
 contract merges, plus the existing UnifiedPush Web Push path and embedded FCM distributor
 fallback; see the [current plan](../implementation-plan.md) and
