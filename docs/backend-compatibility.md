@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g4b DM attachment drafts](milestones/M5g4b-direct-attachment-draft-state.md) adds local DM ownership and shared room/DM allocation accounting, with no endpoint, backend baseline, server-limit or upload change. Local readiness never authorizes a POST; current original-session, final-byte policy and uncertainty contracts still bind the following upload consumer.
+
 [M5g4a room attachment drafts](milestones/M5g4a-room-attachment-draft-state.md) adds local room draft ownership and process allocation accounting, with no endpoint, backend baseline, server-limit or POST change. Local completion grants no send/privacy consent; final uploaded-byte policy validation and serialized upload uncertainty remain separate consumers.
 
 [M5g3i owned preparation](milestones/M5g3i-owned-preparation-task.md) connects local snapshot/cleaning/hash work to client memory reservations only. It changes no endpoint, baseline, server limit or upload authority. Original-session/native consent and final-byte server-policy checks remain feature-owned.

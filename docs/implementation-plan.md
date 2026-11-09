@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g4b DM attachment drafts](milestones/M5g4b-direct-attachment-draft-state.md) integrates local preparation into both conversation owners using the same process budget. Next implement final-byte server-policy checks and fresh explicit privacy-choice state, then serialized attachment POST/unknown-delivery reconciliation and native picker/attach controls. Preserve private original slots, actual-entry actions and producer lifetime; no files/media completion is claimed.
+
 [M5g4a room attachment drafts](milestones/M5g4a-room-attachment-draft-state.md) integrates local preparation into the real room VM and existing100-draft table with a shared process budget. Continue DM ownership, final-byte policy and explicit privacy-choice state, then serialized attachment POST/unknown-delivery handling and native picker/attach controls. Preserve the accepted private-slot lifecycle and actual-entry action fences; do not declare files/media complete.
 
 [M5g3i owned preparation](milestones/M5g3i-owned-preparation-task.md) connects snapshot/classification/cleaning/evidence to a reservation-owning task. Next integrate its original-task adoption with real session/entry/conversation draft owners and a shared device budget, preserving draft capacity, original privacy choice and serialized POST uncertainty. Native picker/attach controls and full-multipart cancellation proof remain separate; no file feature is declared complete.

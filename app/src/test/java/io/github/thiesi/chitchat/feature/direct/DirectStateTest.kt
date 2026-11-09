@@ -315,7 +315,7 @@ class DirectStateTest {
         thread.open(108); runCurrent(); thread.updateDraft("New fixture")
         assertTrue(thread.state.value.draftLimit); assertEquals("", thread.state.value.draft)
         assertEquals("Draft 8", thread.drafts.value[8]?.body)
-        thread.discardSavedDraft(8); thread.updateDraft("New fixture")
+        thread.discardSavedDraft(thread.drafts.value.getValue(8)) { true }; thread.updateDraft("New fixture")
         assertEquals(100, thread.drafts.value.size); assertEquals("New fixture", thread.drafts.value[108]?.body)
     }
 
@@ -328,7 +328,7 @@ class DirectStateTest {
         thread.open(8); runCurrent(); assertSame(first, thread.state.value.composerReply)
         assertEquals("", thread.drafts.value.getValue(8).body)
         thread.open(9); runCurrent(); assertSame(second, thread.state.value.composerReply)
-        thread.discardSavedDraft(9); assertNull(thread.state.value.composerReply)
+        thread.discardSavedDraft(thread.drafts.value.getValue(9)) { true }; assertNull(thread.state.value.composerReply)
         assertSame(first, thread.drafts.value.getValue(8).composerReply); assertEquals(0, api.sends)
     }
     @Test fun oldReplyCancelAndReplacedRowsCannotChangeTheSuccessor() = runTest(dispatcher) {
@@ -372,7 +372,7 @@ class DirectStateTest {
         assertFalse(thread.canReplyTo(api.session.value, 108, thread.state.value.messages.first()))
         assertFalse(thread.replyTo(api.session.value, 108, thread.state.value.messages.first()))
         assertEquals(100, thread.drafts.value.size)
-        assertNotNull(thread.drafts.value[8]?.composerReply); thread.discardSavedDraft(8)
+        assertNotNull(thread.drafts.value[8]?.composerReply); thread.discardSavedDraft(thread.drafts.value.getValue(8)) { true }
         assertTrue(thread.replyTo(api.session.value, 108, thread.state.value.messages.first()))
         assertEquals(100, thread.drafts.value.size)
     }
