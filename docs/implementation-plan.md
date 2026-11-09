@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g3e WebP privacy](milestones/M5g3e-webp-photo-privacy.md) completes the three initial static container-cleaning helpers, including bounded WebP framing, colour/alpha and known EXIF payload forms. After its own gates/reviews, continue exact immutable cleaned-byte evidence and policy checks, then aggregate-budget/original-owner attachment state and native/provider controls with explicit failure consent/fallback. Unsupported animation/extensions are never flattened or silently uploaded; no full P-157 or files/media acceptance is implied.
+
 [M5g3d PNG privacy](milestones/M5g3d-png-photo-privacy.md) adds bounded static-PNG metadata cleanup using shared classic-TIFF handling and unchanged JPEG coverage. After its own gates/reviews, continue WebP privacy and final cleaned-byte evidence, then bounded original-owner attachment state, explicit failure consent/fallback and native/provider controls. Animation/unknown layouts remain unsupported; do not flatten them or claim complete P-157.
 
 [M5g3c JPEG colour metadata](milestones/M5g3c-jpeg-colour-metadata.md) extends the lossless rewrite with exact EXIF colour-space and known interoperability preservation. After its own gates/reviews, continue PNG/WebP privacy, safe fallback/explicit failure consent and final cleaned-byte evidence, then bounded original-owner attachment state and native/provider controls. No full photo or files/media acceptance is implied.

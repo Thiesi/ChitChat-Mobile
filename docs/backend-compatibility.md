@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g3e WebP privacy](milestones/M5g3e-webp-photo-privacy.md) is local static-WebP preparation without endpoint, policy, dependency or baseline changes. Future reconciliation and server size/type checks still apply to exactly the uploaded immutable bytes. No live upload or native provider authority is introduced.
+
 [M5g3d PNG privacy](milestones/M5g3d-png-photo-privacy.md) is local static-PNG/TIFF preparation without endpoint, dependency or baseline changes. The future upload, size/type pre-checks and reconciliation evidence must still use exactly the immutable cleaned bytes. No native or live upload authority is added.
 
 [M5g3c JPEG colour metadata](milestones/M5g3c-jpeg-colour-metadata.md) is local container preparation, without an endpoint, dependency or backend baseline change. Exact eventual uploaded bytes remain authoritative for policy checks and reconciliation; no live upload, native media or provider acceptance is added.
