@@ -39,6 +39,7 @@ a substitute.
 | [lists-restyle.md](lists-restyle.md) | Implementation spec for the room directory, DM inbox, Activity and search lists |
 | [transcript-restyle.md](transcript-restyle.md) | Implementation spec for room and DM transcripts and composers: runs, bubbles, chit, actions, composer delivery states |
 | [navigation-shell.md](navigation-shell.md) | Implementation spec for D3: bottom bar, You hub, tab and Back behavior under existing navigation contracts |
+| [installation-icon.md](installation-icon.md) | The operator's installation icon (ChitChat#211) in the installation lantern at step 3, the You hub's Server row, the server update notice and the Invite screen: drawing, same-origin fetch checks, memory-only cache |
 | [gap-audit.md](gap-audit.md) | Audit of today's app against Lantern (2026-11-09 captures): what matches, gaps per restyle slice ranked by impact, A-* violations, adopted order, the A-floor fixes brief and the modal capture note |
 | [theme-foundation.md](theme-foundation.md) | Implementation spec for the first slice: tokens, Material mapping, wrappers, font, settings, window, icon |
 | [amoled-black.md](amoled-black.md) | The true-black dark variant required before going live |
@@ -69,6 +70,8 @@ rather than fake it:
   time only.
 - Admin "Looking after this server" card, guest visits and moderation actions: M7.
 - Invite QR codes: specified in invite-codes.md (D5), not yet implemented or scheduled.
+- Installation icon: ChitChat#211 (open), designed in installation-icon.md. Until the minimum
+  includes it, the installation lantern keeps its initial.
 
 ## Approved decisions (maintainer, 2026-11-07)
 
