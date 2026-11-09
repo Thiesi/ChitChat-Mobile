@@ -1,8 +1,10 @@
 # Independently verifiable implementation milestones
 
+[M5g5a upload exchange evidence](milestones/M5g5a-upload-exchange-evidence.md) supplies the actual transport-stop boundary and distinct file/full-multipart facts. After its gates/reviews, integrate retained READY ownership with serialized room/DM upload/unknown-delivery state, then native picker/card/consent controls. Facts never grant non-delivery, retry or send authority. Preserve frozen original owner/entry/attempt and no POST replay.
+
 [M5g4d explicit original-photo preparation](milestones/M5g4d-explicit-original-photo-preparation.md) completes the local original-bound privacy-choice state prerequisite for both private owners. Next implement serialized attachment POST/unknown-delivery state, then native picker/card/consent controls. Keep actual worker lifetime, final-byte policy and explicit original-session send authority separate; prove multipart termination before any non-delivery claim.
 
-[Completion cleanup observations](milestones/completion-ime-cleanup-observations.md) were delivered in PR178 at a0a1fd6. The four requested main API35 runs contain0/4 cleanup-timeout recurrences; preserve PR17614ac780 as failed. PR176 incorporates this diagnostic as new content with ordinary fresh CI and two reviews; stop if that new head recurs. Files/media resumes afterward; no retry or exception for14ac780.
+[Completion cleanup observations](milestones/completion-ime-cleanup-observations.md) were delivered in PR178 at a0a1fd6. The four requested main API35 runs contain0/4 cleanup-timeout recurrences; preserve PR17614ac780 as failed. PR176 incorporated it as new content, passed its fresh Completion gates/two reviews and delivered asfe4b5d7. Files/media now resumes; no retry, exception, erasure or root-cause inference for14ac780.
 
 [M5g4c final-byte policy](milestones/M5g4c-attachment-policy-state.md) exposes current policy observations for READY final bytes while preserving original private drafts and actual-entry guards. Next implement explicit original-photo choice preparation and serialized upload/unknown-delivery state, then native picker/attach controls. Keep policy facts separate from consent/authority, and prove actual multipart termination before non-delivery claims.
 

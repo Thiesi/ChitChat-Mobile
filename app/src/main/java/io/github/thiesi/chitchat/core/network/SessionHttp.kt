@@ -34,6 +34,7 @@ import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -509,10 +510,17 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
             .apply { upload.replyId?.let { addFormDataPart("reply_to_message_id", it.toString()) } }
             .addFormDataPart("file", upload.filename, upload.claimBody()).build()
         val request = Request.Builder().url(origin.resolve("api/v1/$path")!!)
-            .header("Accept", "application/json").header("X-CSRF-Token", csrf).post(body).build()
+            .header("Accept", "application/json").header("X-CSRF-Token", csrf).post(upload.wrapMultipart(body)).build()
         // Same runtime/jar/pool/dispatcher. One bounded write budget, no follow-up GET or replay.
         val transport = client.newBuilder().writeTimeout(120, TimeUnit.SECONDS).callTimeout(120, TimeUnit.SECONDS).build()
-        val raw = execute(transport.newCall(request))
+        val call = transport.newCall(request)
+        upload.bindCall(call)
+        val raw = try { execute(call, upload = upload) }
+        finally {
+            // Cancel requests socket shutdown; it does not synchronously stop the writer or
+            // response callback. The future private byte owner must retain its charge until here.
+            withContext(NonCancellable) { upload.awaitTransportStopped() }
+        }
         if (jar.invalid) throw ApiFailure(FailureKind.INCOMPATIBLE)
         return raw
     }
@@ -587,11 +595,13 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         return raw
     }
 
-    private suspend fun execute(call: Call, maxBytes: Long = 1_048_576): RawReply = suspendCancellableCoroutine { continuation ->
+    private suspend fun execute(call: Call, maxBytes: Long = 1_048_576, upload: AttachmentUpload? = null): RawReply = suspendCancellableCoroutine { continuation ->
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                if (continuation.isActive) continuation.resumeWithException(if (e is ApiFailure) e else ApiFailure(transportKind(e)))
+                try {
+                    if (continuation.isActive) continuation.resumeWithException(if (e is ApiFailure) e else ApiFailure(transportKind(e)))
+                } finally { upload?.transportCallbackFinished() }
             }
             override fun onResponse(call: Call, response: Response) {
                 try {
@@ -615,7 +625,7 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
                     if (continuation.isActive) continuation.resumeWithException(failure)
                 } catch (failure: IOException) {
                     if (continuation.isActive) continuation.resumeWithException(ApiFailure(transportKind(failure)))
-                }
+                } finally { upload?.transportCallbackFinished() }
             }
         })
     }

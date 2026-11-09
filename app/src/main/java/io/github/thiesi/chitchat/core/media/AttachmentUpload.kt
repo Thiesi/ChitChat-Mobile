@@ -2,6 +2,9 @@ package io.github.thiesi.chitchat.core.media
 
 import io.github.thiesi.chitchat.core.conversation.phpTrim
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import java.io.IOException
+import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody
 import okio.BufferedSink
@@ -11,15 +14,18 @@ import okio.BufferedSink
  * Keep this and its receipt out of saved state/logs; neither has a content-bearing toString.
  */
 internal class AttachmentUpload(
-    private val payload: PreparedAttachmentPayload,
+    payload: PreparedAttachmentPayload,
     caption: String,
     val replyId: Long? = null,
 ) {
     val caption = caption.phpTrim()
-    val filename: String get() = payload.filename
-    val mimeType: String? get() = payload.mimeType
-    val sizeBytes: Long get() = payload.sizeBytes
-    val sha256: String get() = payload.sha256
+    val filename = payload.filename
+    val mimeType = payload.mimeType
+    val sizeBytes = payload.sizeBytes
+    val sha256 = payload.sha256
+    private val source = AtomicReference<PreparedAttachmentPayload?>(payload)
+    private val exchange = UploadExchange(sizeBytes) { source.set(null) }
+    val transferFacts = exchange.facts
     private val claimed = AtomicBoolean()
 
     init {
@@ -37,10 +43,22 @@ internal class AttachmentUpload(
             override fun isOneShot() = true
             override fun writeTo(sink: BufferedSink) {
                 check(written.compareAndSet(false, true)) { "Upload body already written" }
-                sink.write(payload.bytes)
+                val payload = source.get() ?: throw IOException("Upload body unavailable")
+                var offset = 0
+                while (offset < payload.bytes.size) {
+                    val end = minOf(offset + 8192, payload.bytes.size)
+                    sink.write(payload.bytes.substring(offset, end))
+                    exchange.fileBuffered((end - offset).toLong())
+                    offset = end
+                }
             }
         }
     }
+
+    internal fun wrapMultipart(body: RequestBody) = exchange.wrapMultipart(body)
+    internal fun bindCall(call: Call) = exchange.bind(call)
+    internal fun transportCallbackFinished() = exchange.callbackFinished()
+    internal suspend fun awaitTransportStopped() = exchange.awaitStopped()
 }
 
 /** Namespace-specific confirmed POST IDs, not canonical history or attachment metadata. */
