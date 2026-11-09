@@ -264,7 +264,8 @@ Details trigger conditions stay as they are, because the status slice owns them.
     color difference.
   - **Uncertain:** the Lantern `help` icon (question mark, 12dp in a 16dp `ground`-ringed badge)
     in `unsureLine`.
-  - **Failed:** the Lantern `warning` icon in the same badge, in `error`.
+  - **Failed:** the Lantern `error` icon (octagon with "!", ChitChat #225 v3) in the same badge,
+    in `error`.
   - **Glyph:** replace the ⋮ text glyph with the Lantern `more` icon (24dp, `textMuted`, at
     least 3:1). The button keeps its 48dp target, label and test tag.
   - **State descriptions,** one per state (new strings):
@@ -276,7 +277,7 @@ Details trigger conditions stay as they are, because the status slice owns them.
     realtime isn't LIVE, and the status slice decides that later.
 - **Acceptance:**
   - In a grayscale capture, the three states are distinguishable by shape (dot, question,
-    warning) (A-05). Each marker and the `more` icon measure at least 3:1 against `ground` in
+    octagon) (A-05). Each marker and the `more` icon measure at least 3:1 against `ground` in
     light, dark and Pure black (A-02), checked in the token contrast test.
   - A Compose test asserts each state's state description and that uncertain takes precedence
     over failed (today's `AttentionBadge` rule).

@@ -75,7 +75,8 @@ its own row-10 notice, so there is never a second status line.
   or two sentences, using the title in bold. Backgrounds:
   - `raised` for offline and reconnecting;
   - `presenceWash` for uncertainty and refresh needs;
-  - `surface` with an `error` icon for stream errors.
+  - `surface` with the `error` glyph (octagon) in `error` for stream errors. Warning-level
+    notices use the `warning` triangle in `warning`, and information uses `info`.
 
   It announces through a polite live region, once per change of notice, not on every
   recomposition.

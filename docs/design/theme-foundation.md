@@ -42,7 +42,8 @@ Create a `core/theme` package (name is the implementer's choice) containing:
    `AmoledBlack` is `Dark` with the four overrides from amoled-black.md and nothing else.
 2. **`ChitChatColors`**: the extended tokens Material has no role for, provided through a
    `staticCompositionLocalOf`: `signature`, `onSignature`, `signatureText`, `outgoing`,
-   `onOutgoing`, `presence`, `presenceWash`, `steward`, `onSteward`, `unsureLine`, `raised`,
+   `onOutgoing`, `presence`, `presenceWash`, `steward`, `onSteward`, `unsureLine`, `warning` (an alias
+   that returns `unsureLine`'s value, not a separate color), `raised`,
    `line`, `fieldLine`, `textMuted`, `identityHues`. Read through an accessor such as
    `ChitChatTheme.colors`.
 3. **`ChitChatTheme(appearance, content)`**: chooses the palette, builds the Material

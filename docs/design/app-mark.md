@@ -41,9 +41,10 @@ SVG.
 
 ## Small-size and in-app versions
 
-- At 24dp and below (notification icon, Rooms tab icon), the eyes shrink to radius 1.3 at
+- At 24dp and below (the notification small icon), the eyes shrink to radius 1.3 at
   (7.4, 9.5) and (12.6, 9.5) on a 24dp canvas, and the chit to radius 2.1. Smaller eyes
-  would close up.
+  would close up. The Rooms tab doesn't use this silhouette: it's the stroke glyph `nav-rooms`
+  (bubble and chit outline, no eyes) from the icon set.
 - The in-app Welcome mark may add the honey radial glow behind the bubble (visual-vocabulary.md).
   It is the only place the glow belongs to the mark.
 
