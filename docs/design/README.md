@@ -26,6 +26,7 @@ a substitute.
 | [privacy-policy.md](privacy-policy.md) | App privacy policy (approved 2026-11-08; published with the first Play build after its pre-publication checklist passes) |
 | [server-update.md](server-update.md) | The "This server needs an update" state at setup and on revalidation (minimum server version) |
 | [play-readiness.md](play-readiness.md) | Google Play: guidelines acceptance, in-app account deletion, deletion web page content, privacy surfaces |
+| [account-security.md](account-security.md) | M6 account and security: Privacy and security layout, profile picture, password, two-step sign-in, recovery codes, sign-in methods, sessions |
 | [recovery-key.md](recovery-key.md) | Recovery key display after sign-up and reset, native password reset, and key management in Privacy and security (ChitChat#155) |
 | [guests.md](guests.md) | M7 guest visits: starting, the reduced shell, limits as honest copy, ending, becoming a member |
 | [reporting.md](reporting.md) | M5 participant reporting: entry, form, who-sees-what, outcomes, follow-up actions |
