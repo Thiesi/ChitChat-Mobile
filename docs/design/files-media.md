@@ -25,6 +25,12 @@ dependency choices are engineering decisions inside those slices. Mockups: `Room
     is unknown.
   - `max_bytes` is the effective limit, enforced exactly as advertised. **`max_bytes: 0` means
     uploads are unavailable on this server.**
+  - **Invalid** (client state, M5g1/PR #143): the block is valid JSON but its settings can't be
+    used (for example an impossible limit or inconsistent type lists). The client then disables
+    **only uploads**. Sign-in, rooms, DMs and viewing files keep working. It's distinct from a
+    missing key (Unknown), `null` (guests, Unavailable) and `max_bytes: 0`. The client knows only
+    that it **couldn't read** the settings, not that the server refuses files, so the copy never
+    says the server refuses them.
   - It is read from the existing bootstrap and refreshed with it. No new requests.
 - **Refusals:** every size rejection is `413 attachment_too_large` with an integer
   `error.max_bytes`, including bodies PHP discarded (the old misleading 400 is gone). A reverse
@@ -104,6 +110,19 @@ upload:
   pressing it shows a level-1 line above the composer instead of the sheet: "This server
   doesn't accept files." No picker opens and nothing is requested. Share-in treats files the
   same way (see Share in).
+- **Unreadable file settings (Invalid policy):** the paperclip stays visible, labelled
+  "Attach, not available right now". Pressing it shows a level-1 line above the composer instead
+  of the sheet: "**The app couldn't read {installation}'s file settings, so sending files is off
+  for now.** Messages work as usual." with **Check again**.
+  - **Check again** is the existing explicit session refresh (one GET). If the next bootstrap
+    has a usable policy, the paperclip works again. If it's still Invalid, the same line returns.
+    Nothing is retried automatically, and no other request is made.
+  - It's never phrased as the server refusing files, and it never shows a limit or a type list,
+    because none could be read.
+  - If it persists, a second sentence appears after a Check again that's still Invalid: "If this
+    keeps happening, tell the person who runs {installation}."
+  - Downloading, viewing, saving and sharing out files that are already in conversations are
+    unaffected.
 - **Choice sheet** (modals spec), two rows:
   - **Photo**: the system Photo Picker, images only, no storage permission;
   - **File**: the system document picker.
@@ -339,6 +358,9 @@ The policy is local and read from existing system state, with no new requests:
   "Send to…" shows a notice, "This server doesn't accept files. You can still share text.",
   and offers shared text alone when the share contained any. A shared file that's too large or
   of a refused type goes through the normal pre-send checks once it's attached.
+- **With unreadable file settings (Invalid policy),** "Send to…" shows "The app couldn't read
+  this server's file settings, so files can't be sent right now. You can still share text." It
+  offers shared text alone when there is any. The file isn't kept for later.
 - Direct-share shortcuts in the system share sheet are out of scope for this slice.
 
 ## Tests
@@ -348,7 +370,8 @@ The policy is local and read from existing system state, with no new requests:
     unknown;
   - Cancel is allowed only before the body completes;
   - policy parsing: `null` (guest), missing (unknown, no pre-checks), `max_bytes: 0`
-    (unavailable);
+    (unavailable), Invalid (uploads off with the "couldn't read" line and Check again, the rest of
+    the session usable, no automatic refresh);
   - the size and type pre-checks block Send without a POST, unknown types pass, and size text
     never shows equal figures;
   - a JSON 413 shows `error.max_bytes`, and a non-JSON 413 is a definite refusal, never
@@ -388,7 +411,7 @@ The policy is local and read from existing system state, with no new requests:
 | P-150 | Only explicit Send uploads. One file per message. Nothing renders before 201. | C |
 | P-151 | Cancel only while the body is still sending, and non-delivery is claimed only when the transport shows the body was still being written. Any cancel or interruption after the full body is written is Unknown. Unknown outcomes use Check history then the duplicate-risk dialog, never automatic retry. Attachments are never queued for Send when back online. | U, C |
 | P-152 | Server refusals show their meaning and keep the file attached. A JSON 413 shows the server's limit, and a non-JSON 413 is a definite "too large" refusal, never Unknown. No limit is ever guessed when the policy is missing. | C |
-| P-158 | With ChitChat#156's policy: pickers filter to allowed types, and attaching a file over `max_bytes` or of a reported, disallowed type shows the real figures ("This file is 14 MB. This server accepts files up to 10 MB.") and disables Send without any POST. `max_bytes: 0` keeps the paperclip with the reason "This server doesn't accept files." instead of a picker. Guests (`null`) see no paperclip. The policy comes only from the existing bootstrap. | U, C |
+| P-158 | With ChitChat#156's policy: pickers filter to allowed types, and attaching a file over `max_bytes` or of a reported, disallowed type shows the real figures ("This file is 14 MB. This server accepts files up to 10 MB.") and disables Send without any POST. `max_bytes: 0` keeps the paperclip with the reason "This server doesn't accept files." instead of a picker. Guests (`null`) see no paperclip. The policy comes only from the existing bootstrap. An Invalid policy keeps the paperclip with "Attach, not available right now", explains that the app couldn't read the file settings (never that the server refuses files), offers an explicit Check again, and leaves messages and viewing files working. | U, C |
 | P-153 | Images follow the loading policy, use memory-only caching cleared on account change, render in a frame sized before loading that never resizes, and show every state in the table. | U, C |
 | P-159 | With ChitChat#158: frames take the `width`/`height` aspect ratio within the stated bounds (240×180dp only when dimensions are null or invalid). The transcript loads the WebP preview, with the auto-load rule applied to its size and a fallback to the original when it's null or 404. The viewer fetches the original only on explicit request, under the auto-load rule, or when opened from a GIF. GIF frames are static with a badge. Previews are never cached on disk. | U, C |
 | P-157 | Photos are uploaded without location metadata by default, orientation kept. A cleaning failure requires an explicit Send anyway. The SHA-256 evidence covers the uploaded bytes. | U, C |
