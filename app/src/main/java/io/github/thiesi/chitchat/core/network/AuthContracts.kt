@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import io.github.thiesi.chitchat.core.conversation.DisplayPreferences
 import io.github.thiesi.chitchat.core.conversation.RoomMute
 import io.github.thiesi.chitchat.core.direct.MessagePrivacy
+import io.github.thiesi.chitchat.core.media.AttachmentPolicy
 
 internal val apiJson = Json { ignoreUnknownKeys = true }
 
@@ -37,6 +38,8 @@ internal class SessionReply(
     val preferences: DisplayPreferences? = null,
     val privacy: MessagePrivacy? = null,
     @SerialName("share_typing") @Serializable(with = StrictJsonBoolean::class) val shareTyping: Boolean? = null,
+    @SerialName("attachments") @Serializable(with = AttachmentPolicySerializer::class)
+    val attachmentPolicy: AttachmentPolicy = AttachmentPolicy.Unknown,
 )
 
 @Serializable
