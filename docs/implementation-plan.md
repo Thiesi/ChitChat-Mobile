@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g2b upload protocol](milestones/M5g2b-attachment-upload-protocol.md) adds explicit original-session room/DM multipart and namespace-specific ACKs. After its own gates/reviews, continue bounded preparation/photo privacy, serialized pending/uncertain attachment state and native consumers, with downloads and sharing as separate slices.
+
 [M5g2a refusal metadata](milestones/M5g2a-attachment-refusal-metadata.md) consumes released size/rate error hints through the existing transport only. After its own gates/reviews, continue explicit upload/download transport and scoped pending/uncertain state; no media controls or live acceptance are implied.
 
 [M5g1 attachment policy](milestones/M5g1-attachment-policy.md) is the first files/media prerequisite: consume only the released v3.4.0 baseline attachment-policy bootstrap facts in original-runtime session memory, without another request or native controls. After its own gates/reviews, continue explicit upload/download transport, scoped pending/unknown attachment state and native consumers as reviewable slices. Photo privacy, cancellation proof, reconciliation, image memory policy, SAF and temporary sharing retain their separate contracts and acceptance gates.
