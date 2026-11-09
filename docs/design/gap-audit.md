@@ -318,8 +318,9 @@ modals slice is scoped, the fixture needs modal scenes.
   - `.github/scripts/theme_comparison.py` lists `SCENES` and asserts exactly 7 `// THEME_ONLY`
     markers for the pre-theme adaptation. Add the modal scenes to the helper's validation and
     its tests (`test_theme_comparison.py`).
-  - Decide explicitly how the "before" side handles modals that don't exist on the pre-theme
-    base: skip them with a reviewed marker, or limit modal scenes to the "after" side. Don't
-    weaken the existing count assertions.
+  - **Before side** (technical lead, 2026-11-09): modal comparisons use current main at the
+    time of the modal slice as the before ref, not the pre-theme base. A modal that doesn't
+    exist on the before ref is captured after-only and labelled "new" in the provenance and file
+    listing, with no synthetic before image. Don't weaken the existing count assertions.
 - **Bounds:** this stays the manual, review-only capture workflow with the same retention and
   provenance. It's not part of the native acceptance gate and doesn't change it.
