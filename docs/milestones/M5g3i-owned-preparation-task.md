@@ -22,8 +22,12 @@ capacity. It creates no upload, privacy-bypass consent or usable file control.
   cleaned logical size alone is insufficient. This is conservative client accounting,
   not a measurement or universal guarantee of actual JVM/Android heap usage.
 - Delivery is one synchronous Main-thread callback with the **original task object**.
-  The feature owner must check its actual entry/session/selection and atomically
-  retain the handle before returning true. False rejects and discards it. There is
+  The feature owner must check its original session/slot/selection and atomically
+  retain the handle before returning true. Explicitly started local work may finish
+  in that private slot across navigation/background under the accepted
+  [lifecycle decision](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6743408023).
+  Visible-pane adoption/display and every action still need a fresh actual-entry
+  check. Replace, discard or session retirement rejects completion. False discards it. There is
   no suspension after that transfer. A throwing callback releases the handle and
   never receives a second fallback outcome.
 - Cancellation before worker entry allocates/opens nothing. Cancellation during a

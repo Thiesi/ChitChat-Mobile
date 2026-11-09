@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g4a room attachment drafts](milestones/M5g4a-room-attachment-draft-state.md) adds local room draft ownership and process allocation accounting, with no endpoint, backend baseline, server-limit or POST change. Local completion grants no send/privacy consent; final uploaded-byte policy validation and serialized upload uncertainty remain separate consumers.
+
 [M5g3i owned preparation](milestones/M5g3i-owned-preparation-task.md) connects local snapshot/cleaning/hash work to client memory reservations only. It changes no endpoint, baseline, server limit or upload authority. Original-session/native consent and final-byte server-policy checks remain feature-owned.
 
 [M5g3h memory reservations](milestones/M5g3h-attachment-memory-budget.md) is a local allocation-ledger prerequisite, without endpoint, backend baseline or server-limit changes. Client charges must cover retained and preparing memory, not infer upload permission or server policy. Actual original-owner/native integration remains pending.

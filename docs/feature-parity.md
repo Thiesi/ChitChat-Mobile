@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5g4a room attachment drafts](milestones/M5g4a-room-attachment-draft-state.md) connects local preparation to the real room VM, original private slots, existing100-draft capacity and a process-scoped memory ledger. Navigation/background may finish only in the original private slot; display/actions need fresh entry proof. Replacement/discard/session retirement rejects late results and preserves charges until actual producer end. DM ownership, final policy checks, consent, upload and native picker/card controls remain pending; this is not usable files/media acceptance.
+
 [M5g3i owned preparation](milestones/M5g3i-owned-preparation-task.md) adds an internal one-shot producer with pre-open reservation, conservative retained-byte charges and synchronous original-task adoption/discard. It does not yet connect actual app picker/draft/process ownership or expose file controls. No silent raw-photo fallback, send consent, provider acceptance or cancellation/non-delivery claim is added.
 
 [M5g3h memory reservations](milestones/M5g3h-attachment-memory-budget.md) adds an internal shared-capacity lease primitive with atomic growth/release and stale-lease protection. It does not yet bound actual app allocations: process ownership, correct buffer costing, original-owner attachment state and native/provider consumers must adopt it. No usable media control, send consent or cancellation/non-delivery claim is added.

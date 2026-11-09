@@ -40,6 +40,24 @@ class AttachmentPreparationTaskTest {
     private fun task(read: PickedAttachmentRead, budget: AttachmentMemoryBudget, limit: Long = 8192) =
         AttachmentPreparationTask(read, AttachmentPickSource.FILE, budget, limit)
 
+    @Test fun availableMemoryAllowsAnotherSmallFileBesideARetainedDraft() = runTest {
+        val budget = AttachmentMemoryBudget(capacity)
+        val retained = mutableListOf<RetainedAttachmentPreparation>()
+        try {
+            repeat(2) {
+                AttachmentPreparationTask.forAvailableMemory(read(byteArrayOf(1)), AttachmentPickSource.FILE, budget)
+                    .start(this) { _, outcome ->
+                        retained += (outcome as AttachmentPreparationOutcome.Prepared).retained
+                        true
+                    }.join()
+            }
+            assertEquals(2, retained.size)
+            assertEquals(retained.sumOf { it.reservedBytes }, budget.reservedBytes)
+            assertTrue(budget.reservedBytes < capacity)
+        } finally { retained.forEach { it.close() } }
+        assertEquals(0L, budget.reservedBytes)
+    }
+
     @Test fun adoptedFinalBytesKeepAConservativeChargeAfterTheProducerEnds() = runTest {
         val budget = AttachmentMemoryBudget(capacity)
         val bytes = "opaque fixture".encodeUtf8()

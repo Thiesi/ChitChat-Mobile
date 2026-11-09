@@ -46,11 +46,16 @@ a choice, never a flattened image or an unchanged ready photo. Empty and local
 budget failures retain EMPTY/CLIENT_BUDGET and do not offer a cleaning bypass.
 Cancellation propagates without publishing either result.
 
-`NeedsChoice` supplies no payload, consent or send authority. The later native
-consumer must fence the actual entry/session/owner and original choice/selection
-before the explicit Send anyway action and after every preparation await. It must
-retire old results, preserve successor selections, and account for actual retained
-and preparing memory. Only that fresh action may prepare unchanged original bytes;
+`NeedsChoice` supplies no payload, consent or send authority. Per the accepted
+[local-work lifecycle decision](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6743408023),
+already-started local read/clean/hash may finish across navigation/background into
+its exact original private draft slot. Every completion must recheck frozen
+server/account/generation/version, room-or-peer, slot and selection references;
+replace, discard or session retirement prevents adoption. A fresh actual-entry
+check is still required before visible-pane adoption/display or any action,
+including explicit Send anyway. No network or consent follows private completion.
+The consumer must preserve successor selections and account for actual retained
+and preparing memory. Only a fresh action may prepare unchanged original bytes;
 this helper never does so for a failed photo. No source is reopened and no POST,
 quota attempt, history reconciliation or retry is triggered here.
 

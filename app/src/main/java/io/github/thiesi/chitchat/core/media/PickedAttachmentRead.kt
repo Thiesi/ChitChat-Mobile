@@ -15,8 +15,8 @@ import okio.ByteString
  * Nothing here persists a URI/grant, opens HTTP or gives permission to send.
  */
 internal class PickedAttachmentRead(
-    private val filename: String,
-    private val mimeType: String?,
+    internal val filename: String,
+    internal val mimeType: String?,
     open: () -> InputStream,
 ) {
     private val source = AtomicReference<(() -> InputStream)?>(open)

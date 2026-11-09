@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g4a room attachment drafts](milestones/M5g4a-room-attachment-draft-state.md) integrates local preparation into the real room VM and existing100-draft table with a shared process budget. Continue DM ownership, final-byte policy and explicit privacy-choice state, then serialized attachment POST/unknown-delivery handling and native picker/attach controls. Preserve the accepted private-slot lifecycle and actual-entry action fences; do not declare files/media complete.
+
 [M5g3i owned preparation](milestones/M5g3i-owned-preparation-task.md) connects snapshot/classification/cleaning/evidence to a reservation-owning task. Next integrate its original-task adoption with real session/entry/conversation draft owners and a shared device budget, preserving draft capacity, original privacy choice and serialized POST uncertainty. Native picker/attach controls and full-multipart cancellation proof remain separate; no file feature is declared complete.
 
 [M5g3h memory reservations](milestones/M5g3h-attachment-memory-budget.md) supplies the shared allocation ledger before actual original-owner attachment state. Next integrate conservative input/output/workspace charges and delayed producer release into that owner, then native/provider controls with explicit privacy-failure consent. Cancellation proof still needs full-multipart writer termination; no silent eviction, raw-photo fallback or native files/media completion is implied.

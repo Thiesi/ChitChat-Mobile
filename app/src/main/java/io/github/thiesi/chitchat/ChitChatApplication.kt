@@ -42,6 +42,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 class ChitChatApplication : Application() {
+    // Numeric accounting survives retired sessions/workers; private payloads remain in draft owners.
+    internal val attachmentMemory by lazy {
+        io.github.thiesi.chitchat.core.media.AttachmentMemoryBudget(
+            (Runtime.getRuntime().maxMemory() / 8).coerceIn(1L, 96L * 1024 * 1024))
+    }
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
     private val sessionRepository by lazy { SessionRepository(KeystoreSessionVault(this)) }
     val sessions: SessionController get() = sessionRepository
