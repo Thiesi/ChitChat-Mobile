@@ -97,3 +97,7 @@ Native keyboard/navigation verification also covers one-tap input focus and actu
 | Server installation, DB migrations, CLI backup/restore/maintenance and service timers | Excluded operator activities: no participant API authorizes running server shell tasks. Native admin can inspect exposed status, not remotely execute CLI | [README operations](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/README.md#installation-and-operation) | Document only |
 
 Unsupported conveniences such as reliable automatic send retry, more than 100 recent DM conversations, exact bounded DM read acknowledgments, snapshot cursor/reset, or fast around-message lookup are recorded in [limitations](known-limitations.md). They do not prevent implementing the existing browser model.
+
+Test-only [completion cleanup correction](milestones/completion-ime-cleanup.md) keeps the
+existing completion-time IME proof and5000ms deadline. It adds no product capability
+and establishes no production keyboard fix or physical-device acceptance.
