@@ -94,10 +94,21 @@ upload:
   otherwise. Then keep quality high and dimensions unchanged.
 - **Which bytes:** the upload sends the cleaned bytes, and the SHA-256 reconciliation evidence
   is computed over **exactly the bytes uploaded**.
+- **Which files are photos** (technical lead, issue #1, comment 6739224912): the file's own
+  header (its magic bytes) decides. The provider's type or the Photo Picker can only make a
+  file count as a photo, never stop it counting as one.
 - **Presentation:** the pending card for a photo shows a small line, "Location removed",
-  after cleaning. If cleaning fails, the photo is **not** sent silently with its location.
-  Instead the card reads "Couldn't remove the location from this photo." with **Send anyway**
-  and **Remove**, an explicit choice. Non-image files are sent unchanged.
+  after cleaning. A photo is **never** sent silently with its location. Each case below gets
+  an explicit choice, **Send anyway** or **Remove**:
+  - **cleaning failed** (JPEG, PNG or WebP): "Couldn't remove the location from this photo.";
+  - **a photo the app can't clean:** a recognized but unsupported image format (HEIC/HEIF,
+    AVIF, GIF, BMP, TIFF or raw), or an item from the Photo Picker, or with an image type,
+    whose header isn't recognized. The card reads: "The app can't remove location from this
+    kind of photo, so it may show where it was taken." It says "may" because the app can't
+    tell whether location is there, and it never names a format it couldn't recognize.
+  - **Not a photo:** a file whose header isn't an image and whose type isn't an image (or is
+    unknown) is sent unchanged, with **no line and no prompt**: PDFs, ZIPs and other ordinary
+    files go straight to the normal send flow.
 - A per-send or global opt-out (keep location) isn't part of this slice.
 
 ## Composer: attaching
@@ -389,6 +400,9 @@ The policy is local and read from existing system state, with no new requests:
     the session usable, no automatic refresh);
   - the size and type pre-checks block Send without a POST, unknown types pass, and size text
     never shows equal figures;
+  - photo classification: header-first, with type and Picker only escalating; one test per
+    image signature, including truncated or garbage headers; the can't-clean line and Send
+    anyway for unsupported or unrecognized images; no line or prompt for non-photos;
   - a JSON 413 shows `error.max_bytes`, and a non-JSON 413 is a definite refusal, never
     Unknown;
   - unknown never auto-retries, and Check history leads to the duplicate-risk dialog;
@@ -430,7 +444,7 @@ The policy is local and read from existing system state, with no new requests:
 | P-153 | Images follow the loading policy, use memory-only caching cleared on account change, render in a frame sized before loading that never resizes, and show every state in the table. | U, C |
 | P-159 | With ChitChat#158: frames take the `width`/`height` aspect ratio within the stated bounds (240×180dp only when dimensions are null or invalid). The transcript loads the WebP preview, with the auto-load rule applied to its size and a fallback to the original when it's null or 404. The viewer fetches the original only on explicit request, under the auto-load rule, or when opened from a GIF. GIF frames are static with a badge. Previews are never cached on disk. | U, C |
 | P-168 | Local preparation failures (an unreadable or empty file, or one over the app's memory budget) disable Send with their own copy, state that nothing was uploaded by never using server-refusal wording, show no number for the memory budget, and are never retried. | U, C |
-| P-157 | Photos are uploaded without location metadata by default, orientation kept. A cleaning failure requires an explicit Send anyway. The SHA-256 evidence covers the uploaded bytes. | U, C |
+| P-157 | Photos are uploaded without location metadata by default, orientation kept. The file's header decides what's a photo, and the provider's type or the Photo Picker can only escalate. A cleaning failure, an unsupported image format or an unrecognized image requires an explicit Send anyway with its own line. Non-photos are sent unchanged with no prompt. The SHA-256 evidence covers the uploaded bytes. | U, C |
 | P-154 | Save uses a chosen document and never silently deletes it. Share-out uses read-only FileProvider grants on copies in a private cache subfolder, never hands out authenticated URLs, never deletes on chooser return, lets copies expire after 24 hours and deletes expired copies at the next start or share (no claim of deletion at exactly 24 hours), and deletes them at once on cancel before handoff and on sign-out or account removal. | U, C, R |
 | P-155 | Share-in never sends by itself, drops items across sign-in, and supports one file. | C |
 | P-156 | The viewer suppresses read and typing proof and offers zoom alternatives. | C |
