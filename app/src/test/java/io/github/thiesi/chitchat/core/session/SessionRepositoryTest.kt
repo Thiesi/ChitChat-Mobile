@@ -57,6 +57,9 @@ class SessionRepositoryTest {
         .apply { cookie?.let { addHeader("Set-Cookie", it) } }.build()
     private fun bootstrapBody(user: String = "null", csrf: String = a) =
         """{"csrf_token":"$csrf","user":$user,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}"""
+    private val attachmentPolicy = """{"max_bytes":17,"allowed_mime_types":["image/png"],"previewable_mime_types":["image/png"]}"""
+    private fun attachmentBootstrap(person: String = user, policy: String = attachmentPolicy) =
+        bootstrapBody(person).dropLast(1) + """, "attachments":$policy}"""
     private fun signedIn() = json("""{"csrf_token":"$b","user":$user,"mfa_required":false}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/")
     private fun error(code: String, status: Int) = json("""{"error":{"code":"$code","message":"fixture failure"}}""", status)
     private suspend fun anonymous() {
@@ -71,6 +74,48 @@ class SessionRepositoryTest {
         sessions.signIn("Alice", "fixture-password")
         server.takeRequest(5, TimeUnit.SECONDS)
         assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+    }
+
+    @Test fun attachmentPolicyRefreshReplacesRatherThanRetainsMissingOrNullFacts() = runTest {
+        login()
+        val before = server.requestCount
+        server.enqueue(json(attachmentBootstrap())); sessions.refresh(); server.takeRequest()
+        assertEquals(17L, (sessions.state.value.attachmentPolicy as
+            io.github.thiesi.chitchat.core.media.AttachmentPolicy.Known).maxBytes)
+        server.enqueue(json(attachmentBootstrap(policy = attachmentPolicy.replace(":17", ":0"))))
+        sessions.refresh(); server.takeRequest()
+        assertEquals(0L, (sessions.state.value.attachmentPolicy as
+            io.github.thiesi.chitchat.core.media.AttachmentPolicy.Known).maxBytes)
+        server.enqueue(json(bootstrapBody(user))); sessions.refresh(); server.takeRequest()
+        assertSame(io.github.thiesi.chitchat.core.media.AttachmentPolicy.Unknown, sessions.state.value.attachmentPolicy)
+        server.enqueue(json(attachmentBootstrap(policy = "null"))); sessions.refresh(); server.takeRequest()
+        assertSame(io.github.thiesi.chitchat.core.media.AttachmentPolicy.Unavailable, sessions.state.value.attachmentPolicy)
+        assertEquals(before + 4, server.requestCount) // No policy-specific request or replay.
+    }
+
+    @Test fun anonymousAndGuestBootstrapCannotPublishMemberUploadPolicy() = runTest {
+        for (person in listOf("null", user.replace("\"guest\":false", "\"guest\":true"))) {
+            server.enqueue(json(attachmentBootstrap(person)))
+            sessions.connect(address()); server.takeRequest()
+            assertSame(io.github.thiesi.chitchat.core.media.AttachmentPolicy.Unavailable, sessions.state.value.attachmentPolicy)
+            sessions.connect(null)
+        }
+    }
+
+    @Test fun delayedAttachmentBootstrapCannotRepopulateARetiredSession() = runTest {
+        login()
+        server.enqueue(json(attachmentBootstrap())); sessions.refresh(); server.takeRequest()
+        assertTrue(sessions.state.value.attachmentPolicy is io.github.thiesi.chitchat.core.media.AttachmentPolicy.Known)
+        server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
+            .body(attachmentBootstrap()).bodyDelay(400, TimeUnit.MILLISECONDS).build())
+        val pending = async { runCatching { sessions.refresh() } }
+        kotlinx.coroutines.yield(); assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        assertSame(io.github.thiesi.chitchat.core.media.AttachmentPolicy.Unknown, sessions.state.value.attachmentPolicy)
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut()
+        pending.await()
+        assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
+        assertSame(io.github.thiesi.chitchat.core.media.AttachmentPolicy.Unknown, sessions.state.value.attachmentPolicy)
+        assertNull(vault.saved)
     }
 
     private fun sse(body: String) = MockResponse.Builder().addHeader("Content-Type", "text/event-stream")

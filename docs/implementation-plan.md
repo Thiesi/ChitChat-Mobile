@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g1 attachment policy](milestones/M5g1-attachment-policy.md) is the first files/media prerequisite: consume only the released v3.3.0 attachment-policy bootstrap facts in original-runtime session memory, without another request or native controls. After its own gates/reviews, continue explicit upload/download transport, scoped pending/unknown attachment state and native consumers as reviewable slices. Photo privacy, cancellation proof, reconciliation, image memory policy, SAF and temporary sharing retain their separate contracts and acceptance gates.
+
 [Issue69 standalone IME reproducer](milestones/standalone-ime-reproducer.md) is a separately authorized parallel track while theme PR114 is held: app/server-free50-case measurements, arms a/b/c once each, never a replacement for a failed full gate. Results and platform disposition stay on69; no device run or inferred release acceptance.
 
 [Lantern theme foundation](milestones/theme-foundation.md) follows delivered PR97/main3093e71 and consumes approved design contracts and PR103 assets. Phase A defines primitives, local preference storage and assets; phase B integrates the root, appearance controls and existing components and supplies full captures. Each PR needs its own full build/JVM/lint/unfiltered-native/written-review and applicable J gates. No future-head or manual/device/live/release waiver transfers.

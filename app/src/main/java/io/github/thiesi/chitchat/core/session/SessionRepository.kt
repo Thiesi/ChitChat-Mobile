@@ -12,6 +12,7 @@ import io.github.thiesi.chitchat.core.server.ServerAddress
 import io.github.thiesi.chitchat.core.conversation.ChatPolicy
 import io.github.thiesi.chitchat.core.conversation.DisplayPreferences
 import io.github.thiesi.chitchat.core.direct.MessagePrivacy
+import io.github.thiesi.chitchat.core.media.AttachmentPolicy
 import java.io.IOException
 import java.time.Clock
 import kotlinx.coroutines.CancellationException
@@ -55,6 +56,7 @@ data class SessionState(
     val chatPolicy: ChatPolicy? = null,
     val privacy: MessagePrivacy? = null,
     val shareTyping: Boolean? = null,
+    val attachmentPolicy: AttachmentPolicy = AttachmentPolicy.Unknown,
 ) {
     val canChangeServer get() = phase !in setOf(SessionPhase.AUTHENTICATED, SessionPhase.PENDING_MFA, SessionPhase.GUEST) && !storageWarning && !busy
 }
@@ -138,7 +140,7 @@ class SessionRepository internal constructor(
                 invalidate(active, ApiFailure(FailureKind.EXPIRED))
                 return@withLock null
             }
-            mutable.value = mutable.value.copy(busy = true, error = null)
+            mutable.value = mutable.value.copy(busy = true, error = null, attachmentPolicy = AttachmentPolicy.Unknown)
             active
         } ?: return
         bootstrap(active)
@@ -289,6 +291,8 @@ class SessionRepository internal constructor(
                     registrationMayHaveSucceeded = if (reply.user != null) false else mutable.value.registrationMayHaveSucceeded,
                     privacy = reply.privacy.takeIf { reply.user != null },
                     shareTyping = reply.shareTyping.takeIf { reply.user != null },
+                    attachmentPolicy = if (reply.user != null && !reply.user.guest) reply.attachmentPolicy
+                        else AttachmentPolicy.Unavailable,
                 )
                 active.bootstrapActive = false
                 persist(active, reply.user)
@@ -303,7 +307,7 @@ class SessionRepository internal constructor(
                     active.csrf = null
                     active.bootstrapActive = false
                     mutable.value = current.copy(busy = false, refreshRequired = true,
-                        shareTyping = null,
+                        shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown,
                         phase = if (current.phase == SessionPhase.CONNECTING) SessionPhase.INVALIDATED else current.phase,
                         error = if (current.phase == SessionPhase.CONNECTING) current.error ?: ApiFailure(FailureKind.NETWORK) else current.error)
                 }
@@ -317,14 +321,15 @@ class SessionRepository internal constructor(
         active.csrf = reply.csrfToken
         if (reply.mfaRequired) {
             mutable.value = mutable.value.copy(phase = SessionPhase.PENDING_MFA, user = null, busy = true,
-                error = null, recoveryCodesRemaining = null, chatPolicy = null, privacy = null, shareTyping = null)
+                error = null, recoveryCodesRemaining = null, chatPolicy = null, privacy = null, shareTyping = null,
+                attachmentPolicy = AttachmentPolicy.Unknown)
             persist(active, null)
         } else {
             active.signedInAt = clock.millis()
             active.expectedUserId = reply.user!!.id
             mutable.value = mutable.value.copy(phase = SessionPhase.AUTHENTICATED, user = reply.user,
                 busy = true, error = null, recoveryCodesRemaining = reply.recoveryCodesRemaining,
-                chatPolicy = null, privacy = null, shareTyping = null,
+                chatPolicy = null, privacy = null, shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown,
                 accountRestored = reply.restored, registrationMayHaveSucceeded = false)
             persist(active, reply.user)
         }
