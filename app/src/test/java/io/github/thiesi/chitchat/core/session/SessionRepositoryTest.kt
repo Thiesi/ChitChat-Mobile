@@ -1,5 +1,8 @@
 package io.github.thiesi.chitchat.core.session
 
+import io.github.thiesi.chitchat.core.media.AttachmentUpload
+import io.github.thiesi.chitchat.core.media.PreparedAttachmentPayload
+
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.RealtimeSignal
@@ -1121,7 +1124,8 @@ class SessionRepositoryTest {
         val before = server.requestCount
         server.enqueue(json("""{"message":{"id":19,"room_id":42,"sender_id":7,"type":"attachment","deleted":false}}""", 201))
         val result = uploads.room(original, 42,
-            io.github.thiesi.chitchat.core.media.AttachmentUpload("fixture.txt", "text/plain", "bytes".encodeUtf8(), ""))
+            AttachmentUpload(
+                PreparedAttachmentPayload.create("fixture.txt", "text/plain", "bytes".encodeUtf8()), ""))
         assertEquals(19L, result.messageId)
         assertEquals(before + 1, server.requestCount)
         val request = server.takeRequest()
@@ -1129,7 +1133,8 @@ class SessionRepositoryTest {
         assertEquals(b, request.headers["X-CSRF-Token"])
         try {
             uploads.direct(original.copy(generation = original.generation - 1), 8,
-                io.github.thiesi.chitchat.core.media.AttachmentUpload("fixture.txt", null, "bytes".encodeUtf8(), ""))
+                AttachmentUpload(
+                    PreparedAttachmentPayload.create("fixture.txt", null, "bytes".encodeUtf8()), ""))
             fail("Stale entry must not acquire replacement access")
         } catch (_: CancellationException) { }
         assertEquals(before + 1, server.requestCount)
@@ -1149,7 +1154,8 @@ class SessionRepositoryTest {
             val before = server.requestCount
             try {
                 uploads.room(sessions.state.value, 42,
-                    io.github.thiesi.chitchat.core.media.AttachmentUpload("fixture", mime, bytes.encodeUtf8(), ""))
+                    AttachmentUpload(
+                        PreparedAttachmentPayload.create("fixture", mime, bytes.encodeUtf8()), ""))
                 fail("No upload with unusable or exceeded policy")
             } catch (_: IllegalStateException) { }
             assertEquals(before, server.requestCount)
@@ -1164,8 +1170,9 @@ class SessionRepositoryTest {
         server.enqueue(MockResponse.Builder().code(201).addHeader("Content-Type", "application/json")
             .body("""{"message":{"id":23,"sender":{"id":7},"recipient":{"id":8},"outgoing":true}}""")
             .bodyDelay(400, TimeUnit.MILLISECONDS).build())
-        val pending = async { runCatching { uploads.direct(original, 8,
-            io.github.thiesi.chitchat.core.media.AttachmentUpload("fixture", null, "bytes".encodeUtf8(), "")) } }
+        val upload = AttachmentUpload(
+            PreparedAttachmentPayload.create("fixture", null, "bytes".encodeUtf8()), "")
+        val pending = async { runCatching { uploads.direct(original, 8, upload) } }
         kotlinx.coroutines.yield()
         assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
         server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut()
