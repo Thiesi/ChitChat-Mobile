@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g3c JPEG colour metadata](milestones/M5g3c-jpeg-colour-metadata.md) is local container preparation, without an endpoint, dependency or backend baseline change. Exact eventual uploaded bytes remain authoritative for policy checks and reconciliation; no live upload, native media or provider acceptance is added.
+
 [M5g3b JPEG privacy](milestones/M5g3b-jpeg-photo-privacy.md) is local preparation only, with no endpoint or policy change. The server stores the actual uploaded bytes; eventual size/type checks and reconciliation evidence must use the cleaned output. No native/live upload or universal photo acceptance is added.
 
 [M5g3a picked-file snapshot](milestones/M5g3a-picked-file-snapshot.md) is local raw preparation only: no endpoint, request or server policy change. Its client memory budget is distinct from advertised upload limits, which apply to actual post-cleaning bytes. Photo/privacy, native provider and upload acceptance remain separate.

@@ -1,6 +1,8 @@
 # Feature-parity matrix
 
-[M5g3b JPEG privacy](milestones/M5g3b-jpeg-photo-privacy.md) adds an internal lossless ordinary-JPEG metadata rewrite preserving valid orientation and colour/coded image data within its supported implicit/sRGB EXIF layouts. Non-sRGB/calibrated, unsupported or malformed layouts return safe failure, never upload consent. PNG/WebP, colour-preserving fallback, final cleaned-byte readiness/hash, provider/native controls and complete photo acceptance remain pending.
+[M5g3c JPEG colour metadata](milestones/M5g3c-jpeg-colour-metadata.md) extends the internal JPEG rewrite to retain the exact standard EXIF colour-space value and known R98/R03 interoperability/version fields, including uncalibrated colour backed by an unchanged ICC profile. It neither invents a profile nor changes coded image bytes. Calibration, unknown interoperability and malformed layouts still fail safely. PNG/WebP, fallback/explicit failure consent, final cleaned-byte readiness/hash, provider/native controls and complete photo acceptance remain pending.
+
+[M5g3b JPEG privacy](milestones/M5g3b-jpeg-photo-privacy.md) adds the bounded ordinary-JPEG metadata rewrite, removing private metadata while retaining valid orientation, coded scans and recognised colour markers. M5g3c extends its initially conservative EXIF colour support; neither foundation is a usable native attachment control or upload consent.
 
 [M5g3a picked-file snapshot](milestones/M5g3a-picked-file-snapshot.md) adds internal bounded single-read raw preparation, immutable bytes, safe failures and cancellation fences. This creates no upload-ready photo, reconciliation digest, picker/provider adapter or usable native media control. Photo cleaning and cleaned-byte evidence remain pending.
 

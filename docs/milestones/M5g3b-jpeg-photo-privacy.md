@@ -20,13 +20,15 @@ the original GPS/sub-IFDs, thumbnails, XMP and other EXIF facts. No private meta
 is decoded into strings, logged, persisted or put into generated debug output.
 
 EXIF can also specify colour interpretation independently of APP2 ICC. Validate
-the bounded EXIF/interoperability directory pointers before discarding them. This
-limited rewrite accepts implicit/explicit sRGB EXIF and its R98 interoperability
-index. Non-sRGB/uncalibrated colour-space values, calibration/gamma fields,
-non-default chroma positioning or non-sRGB interoperability return unsupported
-layout, even if another colour marker exists. They require a colour-preserving
-path/fallback before native use, not an orientation-only record and a false
-lossless claim. Directory cycles, invalid pointers/types/counts fail safely.
+the bounded EXIF/interoperability directory pointers. The original M5g3b guard
+accepted implicit/explicit sRGB and R98, rejecting other colour layouts rather
+than discarding them. [M5g3c](M5g3c-jpeg-colour-metadata.md) extends this with exact
+colour-space and known R98/R03 interoperability/version preservation in minimal
+directories. Calibration/gamma, non-default chroma positioning and unknown
+interoperability remain unsupported even when another colour marker exists.
+Directory cycles, invalid pointers/types/counts still fail safely. Unsupported
+layouts require a colour-preserving path/fallback or explicit cleaning-failure
+consent before native use, never a false lossless claim.
 
 Reject malformed lengths/offsets/orientation, duplicate EXIF, unsupported frame or
 marker layouts and MPF/multi-image/non-padding trailers. This prevents dropping a
