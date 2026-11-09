@@ -21,12 +21,17 @@ the later native consumer; this prerequisite changes no layout or presentation.
 - A known object preserves integer `max_bytes` exactly, including zero and limits below
   1 KiB. Zero means uploads are unavailable; it is distinct from an unknown limit or guest
   restriction so the eventual UI can explain it.
-- Preserve the allowed and previewable MIME sets. Previewable types must also be allowed.
+- Preserve the allowed and previewable MIME sets, canonicalizing case-insensitive
+  type/subtype tokens to lowercase without adding types ([HTTP media types](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.3.1)).
+  Previewable types must also be allowed.
   If advertised, preserve the independent positive room/direct quotas as attempt counts and
   window seconds. Absent quota metadata stays unknown; there is no local live quota counter.
-- Reject malformed objects, negative or quoted/fractional/out-of-range integers and invalid
-  MIME values through the existing content-safe incompatible-response error. Unknown future
-  fields do not cause rejection. No assertion or exception retains the received policy body.
+- An unusable advertised policy becomes **Invalid**: uploads are disabled without blocking
+  the rest of session bootstrap or retaining old known settings. This includes malformed
+  valid-JSON values, negative or quoted/fractional/out-of-range integers and invalid MIME
+  values. Unknown future fields are ignored. Invalid JSON syntax still rejects the whole
+  response through the existing content-safe incompatible-response path; CSRF and other
+  required session validation remain unchanged. No diagnostic retains the policy body.
 
 The policy lives only in generation-scoped session memory. The existing bootstrap runtime
 fence applies before publication. Refresh clears the old policy while revalidating; a missing
@@ -43,7 +48,10 @@ post-cleaning bytes actually uploaded; this slice performs no file read or pre-c
 
 Focused JVM tests cover missing/null/zero distinctions, actual operator values and independent
 attempt quotas, malformed types, the existing single bootstrap GET and safe errors, policy
-replacement, guest/signed-out isolation and a late response after session retirement.
+replacement, authenticated-session survival with an Invalid policy, guest/signed-out
+isolation and a late response after session retirement. Invalid is not a guessed limit,
+an older-server fallback or permission to upload. Future controls must disable uploads
+for Invalid while preserving unrelated rooms/DMs.
 Current-head full builds/JVM/lint, original unfiltered native CI and both written reviews
 remain delivery gates. Mocked bootstrap tests are not live server or native-media acceptance.
 

@@ -6,6 +6,8 @@ sealed interface AttachmentPolicy {
     data object Unknown : AttachmentPolicy
     /** Explicit null from bootstrap, also used for signed-out and guest sessions. */
     data object Unavailable : AttachmentPolicy
+    /** Unusable advertised settings disable uploads without invalidating the session. */
+    data object Invalid : AttachmentPolicy
     class Known internal constructor(
         val maxBytes: Long,
         val allowedMimeTypes: Set<String>,

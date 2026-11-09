@@ -2,7 +2,6 @@ package io.github.thiesi.chitchat.core.network
 
 import io.github.thiesi.chitchat.core.media.AttachmentPolicy
 import io.github.thiesi.chitchat.core.media.UploadRateLimit
-import kotlinx.serialization.SerializationException
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -41,7 +40,14 @@ class AttachmentPolicyTest {
         assertTrue(value.previewableMimeTypes.isEmpty())
     }
 
-    @Test fun malformedPolicyNeverBecomesPermissionOrAParsedDefault() {
+    @Test fun mediaTypeTokensAreCaseInsensitiveWithoutGuessingAdditionalTypes() {
+        val value = session(",\"attachments\":" + policy.replace("image/png", "IMAGE/PNG")
+            .replace("application/pdf", "Application/PDF")) as AttachmentPolicy.Known
+        assertEquals(setOf("image/png", "application/pdf"), value.allowedMimeTypes)
+        assertEquals(setOf("image/png"), value.previewableMimeTypes)
+    }
+
+    @Test fun unusablePolicyDisablesOnlyUploadsWithoutGuessedDefaults() {
         val invalid = listOf("true", "[]", "{}", "\"policy\"",
             policy.replace("2097152", "\"2097152\""), policy.replace("2097152", "-1"),
             policy.replace("2097152", "1.5"), policy.replace("2097152", "9223372036854775808"),
@@ -51,10 +57,7 @@ class AttachmentPolicyTest {
             policy.replace("\"image/png\"", "false"),
             policy.replace("\"image/png\"", "\"image/png;secret=private\""))
         for (body in invalid) {
-            try { session(",\"attachments\":$body"); fail("Malformed policy accepted") }
-            catch (failure: SerializationException) {
-                assertFalse(failure.toString().contains("secret=private"))
-            }
+            assertSame(AttachmentPolicy.Invalid, session(",\"attachments\":$body"))
         }
     }
 }

@@ -93,6 +93,24 @@ class SessionRepositoryTest {
         assertEquals(before + 4, server.requestCount) // No policy-specific request or replay.
     }
 
+    @Test fun invalidPolicyReplacesKnownFactsWithoutBlockingTheAuthenticatedSession() = runTest {
+        login()
+        server.enqueue(json(attachmentBootstrap())); sessions.refresh(); server.takeRequest()
+        assertTrue(sessions.state.value.attachmentPolicy is io.github.thiesi.chitchat.core.media.AttachmentPolicy.Known)
+        val before = server.requestCount
+        server.enqueue(json(attachmentBootstrap(policy = """{"max_bytes":"private-invalid-setting"}""")))
+        sessions.refresh(); server.takeRequest()
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertNotNull(sessions.state.value.user)
+        assertFalse(sessions.state.value.busy)
+        assertNull(sessions.state.value.error)
+        assertFalse(sessions.state.value.refreshRequired)
+        assertSame(io.github.thiesi.chitchat.core.media.AttachmentPolicy.Invalid, sessions.state.value.attachmentPolicy)
+        assertEquals(before + 1, server.requestCount)
+        server.enqueue(json(attachmentBootstrap())); sessions.refresh(); server.takeRequest()
+        assertTrue(sessions.state.value.attachmentPolicy is io.github.thiesi.chitchat.core.media.AttachmentPolicy.Known)
+    }
+
     @Test fun anonymousAndGuestBootstrapCannotPublishMemberUploadPolicy() = runTest {
         for (person in listOf("null", user.replace("\"guest\":false", "\"guest\":true"))) {
             server.enqueue(json(attachmentBootstrap(person)))

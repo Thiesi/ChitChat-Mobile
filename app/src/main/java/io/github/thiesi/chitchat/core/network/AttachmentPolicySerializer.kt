@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import java.util.Locale
 
 /** Preserve missing/null/zero without accepting quoted numbers or inventing operator limits. */
 internal object AttachmentPolicySerializer : KSerializer<AttachmentPolicy> {
@@ -24,6 +25,12 @@ internal object AttachmentPolicySerializer : KSerializer<AttachmentPolicy> {
 
     override fun deserialize(decoder: Decoder): AttachmentPolicy {
         val element = (decoder as? JsonDecoder)?.decodeJsonElement() ?: invalid()
+        // Invalid JSON still invalidates the response. A valid JSON value with unusable
+        // feature settings disables only uploads, never the rest of session bootstrap.
+        return try { policy(element) } catch (_: SerializationException) { AttachmentPolicy.Invalid }
+    }
+
+    private fun policy(element: JsonElement): AttachmentPolicy {
         if (element === JsonNull) return AttachmentPolicy.Unavailable
         val policy = element as? JsonObject ?: invalid()
         val allowed = mimeTypes(policy["allowed_mime_types"])
@@ -48,13 +55,13 @@ internal object AttachmentPolicySerializer : KSerializer<AttachmentPolicy> {
         return value.longOrNull?.takeIf { it >= minimum } ?: invalid()
     }
 
-    private val mime = Regex("[!#$%&'*+.^_`|~0-9a-z-]+/[!#$%&'*+.^_`|~0-9a-z-]+")
+    private val mime = Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]+/[!#$%&'*+.^_`|~0-9A-Za-z-]+")
     private fun mimeTypes(element: JsonElement?): Set<String> {
         val values = element as? JsonArray ?: invalid()
         return values.map { element ->
             val value = element as? JsonPrimitive ?: invalid()
             if (!value.isString || !mime.matches(value.content)) invalid()
-            value.content
+            value.content.lowercase(Locale.ROOT)
         }.toSet()
     }
 

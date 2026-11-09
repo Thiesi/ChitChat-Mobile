@@ -49,14 +49,21 @@ class SessionHttpTest {
         assertNull(request.headers["X-CSRF-Token"])
     }
 
-    @Test fun malformedAttachmentPolicyFailsWithoutLeakingItsFieldsOrRetrying() = runTest {
+    @Test fun malformedAttachmentPolicyDisablesOnlyFilesWithoutLeakingOrRetrying() = runTest {
         server.enqueue(response(anonymous().dropLast(1) + """, "attachments":{"private":"fixture-secret"}}"""))
         val before = server.requestCount
-        try { api.bootstrap(); fail("Malformed policy must not be adopted") }
-        catch (failure: ApiFailure) {
-            assertEquals(FailureKind.INCOMPATIBLE, failure.kind)
-            assertFalse(failure.toString().contains("fixture-secret"))
-        }
+        val reply = api.bootstrap()
+        assertSame(io.github.thiesi.chitchat.core.media.AttachmentPolicy.Invalid, reply.attachmentPolicy)
+        assertEquals(token, reply.csrfToken)
+        assertFalse(reply.attachmentPolicy.toString().contains("fixture-secret"))
+        assertEquals(before + 1, server.requestCount)
+    }
+
+    @Test fun malformedJsonInsideAttachmentPolicyStillRejectsTheWholeDocument() = runTest {
+        server.enqueue(response(anonymous().dropLast(1) + """, "attachments":{"max_bytes":17,}"""))
+        val before = server.requestCount
+        try { api.bootstrap(); fail("Invalid JSON must not become a valid session") }
+        catch (failure: ApiFailure) { assertEquals(FailureKind.INCOMPATIBLE, failure.kind) }
         assertEquals(before + 1, server.requestCount)
     }
 
