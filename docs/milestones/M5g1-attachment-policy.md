@@ -7,8 +7,8 @@ disclosures stay accurate; native files/media and their own acceptance gates fol
 ## Contract and scope
 
 Consume only the existing top-level `attachments` field from the ordinary session bootstrap,
-as released in [ChitChat v3.3.0](https://github.com/Thiesi/ChitChat/blob/v3.3.0/docs/api/attachments.md)
-after backend #156. Use the existing chosen-origin HTTP client, size bound, session cookie,
+originally released after backend #156 and present in the
+[minimum ChitChat v3.4.0 contract](https://github.com/Thiesi/ChitChat/blob/v3.4.0/docs/api/attachments.md). Use the existing chosen-origin HTTP client, size bound, session cookie,
 runtime fence and refresh operation. Do not add a policy endpoint, request, cache or timer.
 The [files/media presentation contract](../design/files-media.md) remains authoritative for
 the later native consumer; this prerequisite changes no layout or presentation.
