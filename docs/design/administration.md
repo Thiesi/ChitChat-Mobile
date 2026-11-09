@@ -9,10 +9,9 @@ Mockup: `StaffPeople` on the canvas. Moderation (the Reports queue, acting on a 
 moderation.md.
 
 **Minimum server version.** The #191 fields (directory `counts`, `next_cursor`, `active_ban`,
-`active_mute`, `closing`, and the subject case counts) merged after v3.4.0. The staff screens
-that use them ship only against a minimum server version that includes #191. The technical
-lead raises the minimum when that release is tagged. There's no fallback for older servers and
-no per-field version check (one rule: the minimum version).
+`active_mute`, `closing`, and the subject case counts) shipped in v3.5.0, which is CCM's
+minimum server version since 2026-11-09. The staff screens rely on them. There's no fallback
+for older servers and no per-field version check (one rule: the minimum version).
 
 ## What belongs on a phone
 
@@ -151,7 +150,7 @@ An emergency switch, so it's on the phone, behind step-up.
 | ID | Requirement | Verify |
 |---|---|---|
 | P-205 | Stewarding shows only the rows the viewer's role allows. Web-only tasks show "Do this on {installation}'s website." with an explicit Open website, never an automatic browser. | U, C |
-| P-206 | People uses search, the Everyone/Staff/Banned/Muted/Closing chips with server counts, the two sorts and cursor paging, and ships only against a minimum server version that includes #191 (no older-server fallback). Rows show the most important restriction or sign-in fact. | U, C |
+| P-206 | People uses search, the Everyone/Staff/Banned/Muted/Closing chips with server counts, the two sorts and cursor paging, and relies on the 3.5.0 minimum server version, which includes #191 (no older-server fallback). Rows show the most important restriction or sign-in fact. | U, C |
 | P-207 | A person's staff view shows roles, dates, active ban and mute, closing date and report counts, with only the server-allowed everywhere actions. Roles, password reset and audit stay web-only. | U, C |
 | P-208 | Room settings send the full editable state, warn before removing guests, and never resend. Members and invitations follow the ranks. Delete and restore stay web-only. | U, C |
 | P-209 | Server status is read-only and shows no personal data. Lockdown is Super-Administrator-only, explains its effects, needs step-up, and reports the sign-out count. | U, C |

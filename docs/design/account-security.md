@@ -9,9 +9,11 @@ engineering slices (technical lead, 2026-11-09). It's grounded in the ChitChat A
 Maintainer decisions on 2026-11-09 (issue #1, comment 6734871007): authenticator-app codes
 (TOTP) are wanted as an additional method (**Dependency ChitChat#204**), and a signed-in
 sessions list is wanted (**Dependency ChitChat#205**). Native passkeys (B1, ChitChat#145) are
-merged on the backend and ship in v3.5.0. The browser sign-in handoff (ChitChat#146) is next.
-Like every feature from a release after 3.4.0, these ship only once the technical lead raises
-the minimum server version. There are no per-feature version checks or older-server fallbacks.
+merged on the backend but **not in v3.5.0**. They and the browser sign-in handoff (ChitChat#146)
+come in the next release. CCM's minimum is 3.5.0 since 2026-11-09 (issue #1, comment
+6737288486). Like every feature from a later release, these ship only once the technical lead
+raises the minimum server version again. There are no per-feature version checks or
+older-server fallbacks.
 
 Existing contracts stay in force: the generic step-up dialog and `withStepUp` (M2b2: only
 `403 step_up_required`, one retry), emergency recovery-code consent and counts, export (M2b2),
@@ -43,11 +45,12 @@ account deletion (play-readiness.md §2).
 - **Sign-in methods:** `GET account/identities/list.php` returns `{providers, identities,
   has_password}`. Unlink needs step-up, and `409 last_sign_in_method` protects the last way in.
   Linking is a browser round trip.
-- **Native passkeys (B1, ChitChat#145, merged, v3.5.0):** WebAuthn ceremonies also accept the
-  app's `android:apk-key-hash` origin when the operator lists the app in `NATIVE_ANDROID_APPS`.
+- **Native passkeys (B1, ChitChat#145, merged, next release after 3.5.0):** WebAuthn
+  ceremonies also accept the app's `android:apk-key-hash` origin when the operator lists the app
+  in `NATIVE_ANDROID_APPS`.
   `capabilities.native_passkey_origins === true` says this server is configured for it. That's
-  an operator setting, not a version check: on a server at the raised minimum that hasn't
-  configured the app, passkey actions keep the "on {installation}'s website" lines.
+  an operator setting, not a version check: on a server at a minimum that includes #145
+  but hasn't configured the app, passkey actions keep the "on {installation}'s website" lines.
 - **Sessions:** **there's no API yet to list or end your login sessions** (**Dependency
   ChitChat#205**). The only device list today is push subscriptions, with `current_session`
   (#147). A password change ends all other sessions.
@@ -143,7 +146,7 @@ people who don't expect the header to be tappable.
     last passkey, with the note "To remove your last passkey, turn off two-step sign-in."
   - **Add a passkey**: **Dependency B1** (native passkeys through Credential Manager, trusted
     app origins and each server's Digital Asset Links). The backend half (ChitChat#145) is
-    merged for v3.5.0. It activates with the raised minimum, on servers where
+    merged for the release after 3.5.0. It activates once the minimum includes it, on servers where
     `native_passkey_origins` is true. Until then, the row reads "Adding passkeys in the app is
     coming. You can add one on {installation}'s website." It never opens a browser by itself.
 - **Recovery codes:** "{n} of your recovery codes are left." When it's 3 or fewer, add "Make new
