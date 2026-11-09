@@ -205,3 +205,9 @@ SHA-256/size evidence over the eventual immutable file bytes. Multipart fields a
 original-session authorization are unchanged; no digest parameter, deduplication
 endpoint or implicit retry is introduced. Native reconciliation/consent remains
 a separate consumer of the existing history attachment metadata.
+
+[M5g3g preparation routing](milestones/M5g3g-attachment-preparation-routing.md) is
+local-only signature/cleaner selection. It neither changes multipart/session APIs
+nor promotes unknown MIME into a server-policy fact. Size/type checks still apply
+to the eventual payload; classification grants no membership, upload or retry
+authority. Native original-choice handling and provider acceptance remain separate.
