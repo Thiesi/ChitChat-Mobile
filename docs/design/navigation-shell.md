@@ -74,7 +74,7 @@ any control does:
   - Privacy and security (account: sign-in, devices, typing preference, ignores, export and
     delete account, laid out in [account-security.md](account-security.md));
   - Export my data (account);
-  - Server (shows the host; Change server stays disabled while signed in, with the existing
+  - Server (the installation lantern, see [installation-icon.md](installation-icon.md), and the host; Change server stays disabled while signed in, with the existing
     "Sign out to change server" text).
 - Session section, from `AuthScreen`'s authenticated state:
   - signed-in-as;
