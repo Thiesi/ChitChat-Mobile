@@ -282,6 +282,13 @@
       "w": 390,
       "h": 844,
       "title": "Save your recovery key, shown once (dark, #155)"
+    },
+    "GuestVisit.dc.html": {
+      "x": 470,
+      "y": 11300,
+      "w": 390,
+      "h": 844,
+      "title": "Guest visit: You tab (M7)"
     }
   },
   "order": [
