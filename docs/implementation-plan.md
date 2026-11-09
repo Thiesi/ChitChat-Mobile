@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[Completion cleanup observations](milestones/completion-ime-cleanup-observations.md) precede held PR176. The four requested main API35 runs contain0/4 cleanup-timeout recurrences; preserve the original PR176 failure. Deliver the diagnostic under normal gates/reviews, incorporate it into PR176 as new content, then stop if that new head recurs. Files/media resumes afterward; no retry or exception for14ac780.
+
 [M5g4c final-byte policy](milestones/M5g4c-attachment-policy-state.md) exposes current policy observations for READY final bytes while preserving original private drafts and actual-entry guards. Next implement explicit original-photo choice preparation and serialized upload/unknown-delivery state, then native picker/attach controls. Keep policy facts separate from consent/authority, and prove actual multipart termination before non-delivery claims.
 
 [M5g4b DM attachment drafts](milestones/M5g4b-direct-attachment-draft-state.md) integrates local preparation into both conversation owners using the same process budget. Next implement final-byte server-policy checks and fresh explicit privacy-choice state, then serialized attachment POST/unknown-delivery reconciliation and native picker/attach controls. Preserve private original slots, actual-entry actions and producer lifetime; no files/media completion is claimed.
