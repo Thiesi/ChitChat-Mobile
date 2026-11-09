@@ -10,6 +10,20 @@ The earlier PR45 local full run also failed 112/113 at the second DM-composer ta
 
 ## What is collected
 
+The [2026-11-09 source-frame follow-up](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6728676407)
+adds a failure-only, best-effort summary from the original invocation's JUnit XML.
+It retains only validated static test identity and up to four distinct own-test source
+file/line locations per case (maximum32cases), printing them in CI and writing
+`device/test-failure-sources.json` into the existing report artifact. No assertion
+message, method payload, foreign frame or raw stack is retained by this summary.
+Inputs are bounded to64files/16MiB and must have modification times inside this
+invocation. Retire the previous derived summary before the ordinary run and include
+the current invocation's start/end timestamps; if retirement fails, emit only a fixed
+warning to verify those timestamps and still run the original gate. Unavailable/malformed/stale input stays unavailable. Frame order is report
+order, not a causal or deadline claim. Summary failure cannot replace the original
+exit status. The shared run_once path and separate opt-in observation remain unchanged;
+no device command, test invocation, predicate or deadline is added.
+
 The [issue69 diagnostics follow-up](ime-reproducible-diagnostics.md) adds fixed progress/reason names, suite-level environment setup/preconditions and pinned infrastructure. It retains this wrapper's one-call behavior,2,000-record output cap and original-failure preservation. Verification below remains historical evidence for the original slice.
 
 - The shared `androidTest` input helper takes a scalar native Activity/window snapshot before its single tap and after a timeout: monotonic uptime, resumed-Activity count, window/view focus, attachment, text-editor Boolean, native IME visibility/bottom inset and soft-input mode. Ambiguous/unavailable metadata remains null. No Activity/View, editor contents, title or input-method object is retained or logged.

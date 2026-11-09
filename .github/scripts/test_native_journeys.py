@@ -2,6 +2,9 @@
 
 from pathlib import Path
 import subprocess
+import json
+import io
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -104,12 +107,26 @@ class GateTests(unittest.TestCase):
         self.run = self.enterContext(patch.object(runner.subprocess, "run"))
         self.mkdir = self.enterContext(patch.object(Path, "mkdir"))
         self.write = self.enterContext(patch.object(Path, "write_text"))
+        self.unlink = self.enterContext(patch.object(Path, "unlink"))
+        self.sources = self.enterContext(patch.object(runner, "save_failure_sources"))
 
     def test_success_runs_once_without_capture_or_report_writes(self):
         self.run.return_value = subprocess.CompletedProcess(runner.GRADLE, 0)
         self.assertEqual(0, runner.main())
         self.run.assert_called_once_with(runner.GRADLE, cwd=runner.ROOT, check=False)
         self.mkdir.assert_not_called(); self.write.assert_not_called()
+        self.unlink.assert_called_once_with(missing_ok=True)
+        self.sources.assert_not_called()
+
+    def test_stale_source_cleanup_failure_does_not_prevent_or_rewrite_the_gate(self):
+        self.unlink.side_effect = OSError("private-body-canary")
+        self.run.return_value = subprocess.CompletedProcess(runner.GRADLE, 0)
+        with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            self.assertEqual(0, runner.main())
+        self.run.assert_called_once_with(runner.GRADLE, cwd=runner.ROOT, check=False)
+        self.sources.assert_not_called()
+        self.assertIn("verify invocation timestamps", stderr.getvalue())
+        self.assertNotIn("canary", stderr.getvalue())
 
     def test_failure_keeps_original_status_and_saves_only_filtered_capture(self):
         self.run.side_effect = [subprocess.CompletedProcess(runner.GRADLE, 7),
@@ -141,6 +158,86 @@ class GateTests(unittest.TestCase):
     def test_launch_failure_stays_nonzero(self):
         self.run.side_effect = OSError()
         self.assertEqual(1, runner.main())
+
+    def test_source_metadata_failure_cannot_replace_original_status(self):
+        self.run.side_effect = [subprocess.CompletedProcess(runner.GRADLE, 41), OSError()]
+        self.sources.side_effect = RuntimeError("private-body-canary")
+        self.assertEqual(41, runner.main())
+        self.sources.assert_called_once()
+
+
+class FailureSourceTests(unittest.TestCase):
+    CLASS = "io.github.thiesi.chitchat.feature.completion.CompletionJourneyTest"
+
+    def page(self, stack, cls=CLASS, test="visibleComponentKeysSelectAndDismissWithoutSending"):
+        import xml.etree.ElementTree as ET
+        suite = ET.Element("testsuite")
+        case = ET.SubElement(suite, "testcase", classname=cls, name=test)
+        ET.SubElement(case, "failure").text = stack
+        return ET.tostring(suite)
+
+    def test_retains_cleanup_frame_behind_assert_fail_without_any_error_payload(self):
+        stack = ("java.lang.AssertionError: expected:false actual:true private-body-canary\n"
+            "\tat org.junit.Assert.fail(Assert.java:89)\n"
+            f"\tat {self.CLASS}.close(CompletionJourneyTest.kt:167)\n")
+        summary = runner.failure_sources([self.page(stack)])
+        self.assertEqual([{"file": "CompletionJourneyTest.kt", "line": 167}], summary["cases"][0]["frames"])
+        self.assertNotIn("canary", json.dumps(summary))
+        self.assertNotIn("Assert.java", json.dumps(summary))
+
+    def test_wrong_namespace_filename_or_parameter_content_is_never_serialized(self):
+        stack = (f"\tat {self.CLASS}.privateCanary(privateCanary.kt:7)\n"
+                 "\tat other.package.CompletionJourneyTest.close(CompletionJourneyTest.kt:167)\n")
+        summary = runner.failure_sources([self.page(stack), self.page(stack, test="parameter[privateCanary]")])
+        self.assertEqual([], summary["cases"][0]["frames"])
+        self.assertEqual(1, summary["omittedCases"])
+        self.assertNotIn("privateCanary", json.dumps(summary))
+
+    def test_source_frames_are_deduplicated_bounded_and_truncation_is_explicit(self):
+        stack = "\n".join(f"\tat {self.CLASS}.close(CompletionJourneyTest.kt:{line})" for line in (1,1,2,3,4,5))
+        case = runner.failure_sources([self.page(stack)])["cases"][0]
+        self.assertEqual([1,2,3,4], [frame["line"] for frame in case["frames"]])
+        self.assertTrue(case["framesTruncated"])
+
+    def test_malformed_entities_and_excess_input_fail_closed(self):
+        with self.assertRaises(ValueError): runner.failure_sources([b"<!DOCTYPE testsuite><testsuite/>"])
+        with patch.object(runner, "MAX_SOURCE_BYTES", 2):
+            with self.assertRaises(ValueError): runner.failure_sources([b"<testsuite/>"])
+
+    def test_old_xml_is_not_read_after_a_new_launch_failure(self):
+        from unittest.mock import Mock
+        path = Mock()
+        path.is_symlink.return_value = False
+        path.is_file.return_value = True
+        path.stat.return_value = SimpleNamespace(st_mtime_ns=9, st_size=1)
+        with patch.object(Path, "rglob", return_value=[path]):
+            with self.assertRaises(ValueError): runner.save_failure_sources(10, 20)
+        path.open.assert_not_called()
+
+    def test_fresh_cleanup_location_is_saved_and_printed_without_payload(self):
+        from unittest.mock import Mock
+        page = self.page(f"java.lang.AssertionError: private-body-canary\n\tat {self.CLASS}.close(CompletionJourneyTest.kt:167)\n")
+        path = Mock()
+        path.is_symlink.return_value = False
+        path.is_file.return_value = True
+        path.stat.return_value = SimpleNamespace(st_mtime_ns=15, st_size=len(page))
+        path.open.return_value = io.BytesIO(page)
+        with patch.object(Path, "rglob", return_value=[path]), patch.object(Path, "mkdir"), \
+                patch.object(Path, "write_text") as write, patch("builtins.print") as emit:
+            runner.save_failure_sources(10, 20)
+            saved = write.call_args.args[0]
+            self.assertNotIn("canary", saved)
+            self.assertEqual(167, json.loads(saved)["cases"][0]["frames"][0]["line"])
+            self.assertEqual(10, json.loads(saved)["invocationStartedUnixNs"])
+            self.assertEqual(20, json.loads(saved)["invocationFinishedUnixNs"])
+            self.assertIn("CompletionJourneyTest.kt:167", emit.call_args.args[0])
+
+    def test_file_count_is_bounded_before_reading_any_input(self):
+        from unittest.mock import Mock
+        path = Mock()
+        with patch.object(Path, "rglob", return_value=iter([path] * 65)):
+            with self.assertRaises(ValueError): runner.save_failure_sources(10, 20)
+        path.stat.assert_not_called()
 
 
 if __name__ == "__main__":
