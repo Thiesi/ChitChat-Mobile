@@ -22,14 +22,14 @@ Notification kinds are **not** in today's payload. Ordinary unmentioned DMs crea
 notification today. Quiet hours and the mention/ping mutes are applied by the server before
 sending.
 
-### Backend batch 3 (ChitChat#148 and #147 merged; Dependency: #150)
+### Backend batch 3 (ChitChat#148, #147 and #150 merged)
 
 The batch 3 design is approved on both sides (ChitChat#163, design comment 6729256820, final
 client-facing decisions 6729292941; CCM issue #1, comment 6729288173). **#148 has merged**
 (ChitChat#189, main `10edf42`; issue #1, comment 6730059848), and so has **#147**
-(ChitChat#193, main `e042e6a`; issue #1, comment 6731145024; ChitChat `docs/api/web-push.md`).
-#150 hasn't: leave its parts out of the build until it merges, and keep today's behavior
-meanwhile.
+(ChitChat#193, main `e042e6a`; issue #1, comment 6731145024; ChitChat `docs/api/web-push.md`),
+and **#150** (ChitChat#194, main `6c4c475`; issue #1, comment 6731766402). The batch 3 backend
+is complete.
 
 **One rule: the minimum server version.** #148 has no client check, and the 3.4.0 minimum
 doesn't include it. All batch 3 push behavior, including the two settings lines below
@@ -136,8 +136,8 @@ Built with `NotificationCompat`:
 
 ## Direct message alerts
 
-**Dependency: ChitChat#150** (accepted, backend batch 3 with #147/#148). Leave all of this out
-until it merges on ChitChat main. Server semantics, which presentation never changes:
+**ChitChat#150, merged** (ChitChat#194, main `6c4c475`). It ships with the batch 3 minimum
+server version, like the rest of batch 3. Server semantics, which presentation never changes:
 
 - kind `direct_message_received`; account preference `direct_message_push_enabled`,
   **default false**;
@@ -147,8 +147,12 @@ until it merges on ChitChat main. Server semantics, which presentation never cha
 - a DM that also mentions the recipient produces **one** alert per event (see "Mention plus
   DM");
 - edits, reactions and messages from before opting in produce none;
-- the alert names the current sender in the server's rendered text, or "Someone" for a closed
-  or deleted account, and never carries content;
+- the alert names the current sender in the server's rendered text ("Rowan sent you a direct
+  message"), or "Someone" for a closed or deleted account, and never carries content;
+- the `link` is `/messages.php?with=<sender_id>`, or `/messages.php` for a closed or deleted
+  sender. DM mention links carry `with` too;
+- never across a block in either direction, an active ban on either side, or a globally muted
+  sender;
 - eligibility (membership, blocks, closure, guests, revoked devices) is rechecked at dispatch.
 
 Presentation:
@@ -157,16 +161,20 @@ Presentation:
   title and text, `app_name` as sub-text, no large icon or avatar, no MessagingStyle, no
   Reply or Mark read, and tap goes through the guarded destination flow (nothing marked read).
   A DM alert is still a doorbell. CCM never shows or fetches the message for it.
+- **Tap:** the native link parser reads `/messages.php?with=<id>` as a hint for that DM. The
+  guarded flow re-checks access and opens the thread. `/messages.php` without `with` (a closed
+  sender) opens the Direct inbox. Neither marks anything read.
 - **Channel:** `direct` when the payload carries `kind = direct_message_received`. CCM never
   guesses from the text that a push is a DM.
-- **Lock screen:** the public version reads "{installation name}" / "New direct message" when
-  the kind is known, otherwise "New notification".
+- **Lock screen:** the public version reads "{installation name}" / "**New direct message**",
+  **without the sender's name**. The rendered title with the name shows only when the device
+  is unlocked, or when the person's system settings show all notification content.
 - **Mention plus DM (final #150 semantics):** both timeline rows are kept, and the server
   pushes **one** alert for the event, choosing at dispatch:
-  - **mention preferred:** with mention alerts on, the alert is `mentioned`, shown in
-    `mentions` with the "New mention" public text;
-  - with mention alerts off and Direct messages on, it's `direct_message_received`, shown in
-    `direct` with the "New direct message" public text;
+  - **mention preferred:** when the mention alert will actually be sent, the alert is
+    `mentioned`, shown in `mentions` with the "New mention" public text;
+  - otherwise, with Direct messages on (including mention alerts off), it's
+    `direct_message_received`, shown in `direct` with the "New direct message" public text;
   - with both off, there's no alert, and both rows stay in Activity.
 
   The choice is frozen once any device accepted it, and both kinds share the same
@@ -204,7 +212,7 @@ Presentation:
 
 - Channel visibility is `VISIBILITY_PRIVATE`, with a public version whose title is the
   installation name and whose text follows the `kind`: "New mention", "New ping", "New direct
-  message" (with #150), and "New notification" for everything else.
+  message", and "New notification" for everything else.
   Rendered notices can contain usernames and moderation reasons (M4c4a), so the full text
   shows only when unlocked or when the person's system settings allow it.
 - The setting text says so plainly: "On the lock screen, ChitChat shows only that something
@@ -257,12 +265,13 @@ The screen shows:
   Battery-optimization exemptions belong to the distributor, not CCM. CCM never asks for one
   for itself.
 - **What you get:** toggles for **mentions** and **pings** (`mentioned_push_enabled`,
-  `pinged_push_enabled`) and, once ChitChat#150 merges, **Direct messages**
-  (`direct_message_push_enabled`). Under them, a fixed line: "Account, security and moderation
+  `pinged_push_enabled`) and **Direct messages** (`direct_message_push_enabled`, ChitChat#150). Under them, a fixed line: "Account, security and moderation
   notices always arrive while notifications are on." Those kinds are not optional on the server.
   - **Direct messages** toggle: **off by default**, label "Direct messages", hint "When someone
-    writes to you directly. The alert never shows what they wrote." When switched on, one
-    line below it: "You'll only get alerts for new messages from now on."
+    writes to you directly. The alert shows who it's from, never what they wrote." When
+    switched on, one line below it: "You'll only get alerts for new messages from now on."
+    The hint names the sender part honestly, because the unlocked alert shows the sender's
+    name. The lock screen shows only "New direct message".
   - The toggle is shown **only when the preferences response actually contains**
     `direct_message_push_enabled` as a Boolean. Missing or null means the server doesn't
     offer it: hide the row, never show it as Off.
@@ -321,8 +330,9 @@ The screen shows:
 - **Unit:**
   - payload to notification mapping: title, text (including server-trimmed "…" text shown as
     received), sub-text;
-  - with #150: `direct_message_received` maps to `direct` with the "New direct message" public
-    version;
+  - `direct_message_received` maps to `direct` with the "New direct message" public version
+    (no sender name); `/messages.php?with=<id>` opens that DM through the guarded flow, and
+    `/messages.php` opens the Direct inbox;
   - the Direct messages toggle is hidden when the preference field is missing or null;
   - the public lock-screen version;
   - group key per account and server;
@@ -359,7 +369,7 @@ The screen shows:
 | P-123 | Lock-screen visibility is private with a generic public version. | U, M |
 | P-124 | Sign-out, account removal, account switch and generation change cancel that account's visible notifications locally at once and drop later pushes. A push whose `binding` doesn't match a signed-in account and generation is dropped silently. | U, C |
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
-| P-127 | Direct message alerts (after ChitChat#150 merges): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert never shows what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content. A mention-plus-DM event is one notification: `mentioned` in `mentions` when mention alerts are on, else `direct_message_received` in `direct`. | U, C |
+| P-127 | Direct message alerts (ChitChat#150): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert shows who it's from, never what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content, and the lock-screen public version is "New direct message" without the sender. A mention-plus-DM event is one notification: `mentioned` in `mentions` when the mention alert is sent, else `direct_message_received` in `direct`. | U, C |
 | P-128 | One notification per event: the tag is `event_id`, so a duplicate replaces and never stacks, and a bounded, memory-only recent-event set keeps a dismissed duplicate from reappearing within the process lifetime. | U |
 | P-129 | No per-notification "late" badge or label. The honesty line says alerts usually arrive within seconds, sometimes a little longer, can come later or not arrive, and the quiet-hours line says they aren't sent after quiet hours. Both ship with the batch 3 minimum server version, with no per-line version check. | C, R |
 | P-126 | Settings offer only the mention and ping toggles (plus Direct messages per P-127) and whole-hour quiet hours with a time zone. Only the `current_session` row is labelled "This phone", and its action is Turn off. Remove revokes by ID. CCM sends the fixed `device_label` "ChitChat for Android". Turn on refusals show their copy and are never retried. Sign-out revokes this device by ID before the session ends. | C, R |
