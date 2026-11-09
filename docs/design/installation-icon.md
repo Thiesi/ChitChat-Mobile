@@ -48,7 +48,9 @@ It doesn't appear anywhere else:
 - **When:** only after a successful bootstrap reports `application.icon` with a URL, at step 3
   (anonymous) or in the signed-in session. `null` or a missing field means the initial lantern,
   silently, and a missing field never triggers the server update notice (it isn't a
-  session-level feature key).
+  session-level feature key). The web's "ChitChat icon" preset (ChitChat #226, approved) is a
+  reset to `null`, never a stored copy, so it also shows the initial lantern. The app never shows
+  the ChitChat mark as a server's icon.
 - **Where from:** the URL is resolved against the chosen origin through the existing session
   transport and same-origin rules. A URL that resolves to another origin isn't fetched.
   Redirects stay off. At step 3 this is the same server the person just chose, so no new party
