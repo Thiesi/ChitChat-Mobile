@@ -2,7 +2,7 @@
 
 [M5d4c native mention completion](milestones/M5d4c-native-mention-completion.md) uses the reviewed M5d4b state and existing original-session GET. Room broadcasts remain explicit; DM and local Tab completion use only their intended names. UI changes grant no send/read/typing/notification authority and add no backend API.
 
-[M5d4a room mention candidates](milestones/M5d4a-room-mention-protocol.md) reuses existing GET rooms/mentionable-users.php and the same original-session transport, without another endpoint/cache or policy mutation. Current underscore LIKE behavior is retained as a compatible response shape and tracked in [backend152](https://github.com/Thiesi/ChitChat/issues/152); native controls remain separate.
+[M5d4a room mention candidates](milestones/M5d4a-room-mention-protocol.md) reuses existing GET rooms/mentionable-users.php and the same original-session transport, without another endpoint/cache or policy mutation. The slice's historical underscore LIKE behavior ([backend152](https://github.com/Thiesi/ChitChat/issues/152)) is fixed in the minimum v3.3.0 backend. Preserve server order; do not add a client-side prefix filter or query replay. Native controls are delivered in M5d4c.
 
 [M5f2 native basic profiles](milestones/M5f2-native-basic-profiles.md) consumes existing M5f1 GET facts without another endpoint, transport, image URL, policy or management mutation. Original session/target/context and runtime fences remain authoritative; native controls never turn server hints into permissions.
 
@@ -28,13 +28,26 @@
 
 [M4c4c1](milestones/M4c4c1-notification-state.md) consumes the existing notification page/read contracts through scoped presentation state and bounded canonical GET reconciliation, now used by M4c4c2's native list/read/count controls. Counts remain independent of loaded rows; View message and Mark as read stay separate. Its bounds/coverage/confirmed-read overlay are local state, not server fields or timestamps. No new endpoint, SSE event, authorization mechanism or backend checkout change is introduced; general-link consumption remains pending.
 
-Verified source baseline: **v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf0d1`**. This is a source audit, not a claim of tested installation compatibility. Source links pin the baseline; proposed APIs appear only in [backend issues](backend-dependencies.md).
+Documented minimum backend: **v3.3.0**, released tag `v3.3.0` / `687898f`, per the
+[maintainer's baseline decision](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6726312269)
+and [release](https://github.com/Thiesi/ChitChat/releases/tag/v3.3.0). There are no v3.2.1 fallbacks.
+The source links below retain the original **v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf0d1`**
+audit; they are historical evidence, not a current minimum or tested-installation claim.
+Only merged backend contracts may be adopted; pending work appears in [backend issues](backend-dependencies.md).
+
+Released batch1 includes #149 application/capability metadata, #152 literal mention-prefix
+matching, #153/#154 list enrichment and the merged #156/#157 contracts for files/media.
+These additions do not authorize native client behavior before its own slice. In particular,
+the setup/revalidation server-update state and capability check remain pending with
+[onboarding/server-update](design/server-update.md): a missing capabilities.schema_version
+or application marks the server as needing an update; application.version is display-only.
+This documentation does not implement that check or claim live interoperability.
 
 ## HTTP bootstrap, cookies, authentication
 
 Requests are relative to the selected installation's root `/api/v1/`; use actual `.php` routes. JSON success payloads are returned directly, not under a universal `data` envelope. Errors are `{"error":{"code":"machine_code","message":"explanation"}}`. `Endpoint::run` maps typed API exceptions and JSON errors; responses set `Cache-Control:no-store`. [Endpoint](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/Http/Endpoint.php), [response](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/Http/JsonResponse.php).
 
-`GET /api/v1/session.php` creates/reuses the PHP session cookie and returns CSRF. Actual top-level fields are `csrf_token`, `user`, `preferences`, `ignored_user_ids`, `share_typing`, `muted_everywhere`, `sign_in_providers`, `pending_sign_up`, `guest_access`, `registration_enabled`, `lockdown`, `web_push`, `security`, `privacy`. User metadata includes ID/username/roles/session version and guest state/expiry. `web_push.enabled` and its VAPID key do not imply FCM support. Neither native capability version nor effective installation-name override appears in this response. `/health.php` returns configured application name and version, without the DB-backed name override. [Bootstrap implementation](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/api/v1/session.php#L41).
+`GET /api/v1/session.php` creates/reuses the PHP session cookie and returns CSRF. The v3.3.0 top-level fields are `application`, `capabilities`, `attachments`, `csrf_token`, `user`, `preferences`, `ignored_user_ids`, `share_typing`, `muted_everywhere`, `sign_in_providers`, `pending_sign_up`, `guest_access`, `registration_enabled`, `lockdown`, `web_push`, `security`, `privacy`. User metadata includes ID/username/roles/session version and guest state/expiry. `application.name` is the effective installation name; `application.version` is informational. The released capabilities have integer `schema_version=1` and Boolean `native_passkey_origins=false`, `native_auth_handoff=false`; the version does not authorize those unshipped native-auth contracts. `web_push.enabled` and its VAPID key do not imply FCM support. `/health.php` still returns configured application name/version without the DB-backed name override. This source inspection is not live-client acceptance. [Released bootstrap](https://github.com/Thiesi/ChitChat/blob/v3.3.0/public/api/v1/session.php), [metadata](https://github.com/Thiesi/ChitChat/blob/v3.3.0/src/Http/PublicSessionMetadata.php), [health](https://github.com/Thiesi/ChitChat/blob/v3.3.0/public/health.php).
 
 Send the current `X-CSRF-Token` on POST, including anonymous login/register/restore, searches, inspection and multipart upload. CSRF uses the same cookie jar as the request. Cookies have lifetime zero, configurable name and Secure behavior, HttpOnly and SameSite attributes; native bounded persistence is specified in [architecture](architecture.md#network-and-session-security). The server validates account/session version, bans and guest expiry on authenticated access. Do not assume CORS or browser SameSite supplies native client authorization; ordinary native HTTP does not need browser CORS permission. [SessionManager](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/Auth/SessionManager.php#L15), [CSRF header](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/Http/Request.php#L134).
 
@@ -143,4 +156,11 @@ Moderation queues expose exact submitted evidence within current role scope, not
 
 ## Compatibility policy
 
-Initial source target is v3.2.1, not every historical `/api/v1` deployment. Unknown JSON fields are tolerated, required security fields validated, unknown roles grant no privilege. `/health.php` version helps explain compatibility but does not prove feature availability. A missing proposed capability disables only its feature with actionable text; it does not trigger endpoint guessing. B5 asks for additive capability discovery and policy consistency. Record server version, configured optional features and actual integration results per tested installation, without secrets.
+The supported minimum is v3.3.0; historical `/api/v1` deployments receive no guessed fallback.
+Unknown JSON fields are tolerated, required security fields validated, unknown roles grant no
+privilege. Version strings from health/application metadata are informational. The pending
+onboarding/server-update slice enforces the session application/capabilities contract at
+setup/revalidation; network failures keep their existing error handling, not a guessed
+server-too-old result. Optional capability false/unknown states grant no permission and do
+not trigger endpoint guessing. Record configured optional features and actual integration
+results per tested installation, without secrets.
