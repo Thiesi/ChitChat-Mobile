@@ -33,8 +33,10 @@ internal class RetainedAttachmentPreparation internal constructor(
 }
 
 /** One frozen source, one bounded producer, one synchronous Main-thread adoption decision.
- * The later feature owner must recheck the original session/actual entry/selection in
- * deliver and return true only after atomically retaining the handle. False discards it.
+ * The feature owner must recheck the original session/slot/selection in deliver and return
+ * true only after atomically retaining the handle. Explicitly started local work may finish
+ * into that private slot across navigation/background; visible-pane adoption and actions
+ * still require a fresh actual-entry check. False discards the result.
  * Never store a handle and then suspend before deciding. This task grants no consent,
  * draft-slot capacity, upload or retry authority, and never reopens a provider.
  */
@@ -102,10 +104,21 @@ internal class AttachmentPreparationTask(
 
     private fun rounded(bytes: Long) = ((bytes + 8191) / 8192) * 8192
 
-    private companion object {
-        const val WORKSPACE_BYTES = 4L * 1024 * 1024
+    companion object {
+        /** Freeze a conservative read ceiling from currently free process memory. The later
+         * atomic reservation can still lose a race; denial never opens or retries the source.
+         */
+        fun forAvailableMemory(read: PickedAttachmentRead, source: AttachmentPickSource,
+            budget: AttachmentMemoryBudget): AttachmentPreparationTask {
+            val available = budget.capacityBytes - budget.reservedBytes
+            val limit = ((available - WORKSPACE_BYTES).coerceAtLeast(0) / 2)
+                .coerceIn(1, MAX_ATTACHMENT_SNAPSHOT_BYTES)
+            return AttachmentPreparationTask(read, source, budget, limit)
+        }
+
+        private const val WORKSPACE_BYTES = 4L * 1024 * 1024
         // Padding for backing-array headers, directories and the bounded chunk/segment tables;
         // logical bytes alone undercount sliced, segmented photo outputs.
-        const val RETAINED_OVERHEAD_BYTES = 1024L * 1024
+        private const val RETAINED_OVERHEAD_BYTES = 1024L * 1024
     }
 }

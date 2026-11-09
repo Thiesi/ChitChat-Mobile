@@ -6,8 +6,11 @@ import io.github.thiesi.chitchat.core.conversation.ComposerReply
 
 /** Unsent input, never server message storage or saved-instance state. No generated content string. */
 class RoomDraft internal constructor(private val owner: RoomDraftAccount, val roomId: Long,
-    val roomName: String?, val body: String, val uncertain: Boolean, val composerReply: ComposerReply? = null) {
+    val roomName: String?, val body: String, val uncertain: Boolean, val composerReply: ComposerReply? = null,
+    internal val attachment: RoomAttachmentDraft? = null, internal val slot: Any = Any()) {
     internal fun matches(session: SessionState) = owner == session.roomDraftAccount()
+    internal fun withAttachment(value: RoomAttachmentDraft) =
+        RoomDraft(owner, roomId, roomName, body, uncertain, composerReply, value, slot)
 }
 
 internal data class RoomDraftAccount(val server: String?, val generation: Long, val user: Long, val version: Int)
