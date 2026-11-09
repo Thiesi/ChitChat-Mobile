@@ -28,6 +28,7 @@ a substitute.
 | [play-readiness.md](play-readiness.md) | Google Play: guidelines acceptance, in-app account deletion, deletion web page content, privacy surfaces |
 | [account-security.md](account-security.md) | M6 account and security: Privacy and security layout, profile picture, password, two-step sign-in, recovery codes, sign-in methods, sessions |
 | [recovery-key.md](recovery-key.md) | Recovery key display after sign-up and reset, native password reset, and key management in Privacy and security (ChitChat#155) |
+| [moderation.md](moderation.md) | M7 moderation: Reports queue, message and person cases, acting within ranks, guests, edit-history review, DM inspection stays web-only |
 | [reporting.md](reporting.md) | M5 participant reporting: entry, form, who-sees-what, outcomes, follow-up actions |
 | [files-media.md](files-media.md) | M5 files, images and sharing: attach, upload states, inline images, viewer, save, share in/out |
 | [push-presentation.md](push-presentation.md) | M6 design for background notifications: channels, layout, grouping, lock screen, settings |

@@ -200,8 +200,8 @@ and the profile says `can_report`.
 
 ## Moderator side (M7, not in scope)
 
-The moderation queue (cases, claim, resolve) is M7. It will live in the steward section of You
-("Reports waiting", admin mockup) and in a steward-colored queue screen. This spec adds nothing
+The moderation queue (cases, claim, resolve) is M7, specified in [moderation.md](moderation.md):
+the steward section of You and a steward-colored queue screen. This spec adds nothing
 for it.
 
 ## Tests
