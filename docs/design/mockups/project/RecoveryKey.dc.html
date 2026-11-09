@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recovery key</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="ccm dark">
+  <div class="inset"></div>
+  <div style="padding: 24px 24px 0; display: flex; flex-direction: column; gap: 16px; flex-grow: 1;">
+    <h1 class="display" style="margin: 0; font-size: 32px; font-weight: 800; line-height: 1.1;">Save your recovery key</h1>
+    <p style="margin: 0; font-size: 15px;">If you forget your password, this key is the only way to reset it yourself. Without it, only the people who run Schmidt Family Chat can help. You'll only see it once.</p>
+    <div class="card" style="background: var(--raised); border: 0; font-family: ui-monospace, 'Roboto Mono', monospace; font-size: 22px; letter-spacing: 0.04em; line-height: 1.6; text-align: center;" aria-label="Recovery key">A7K2-9QMX-T4WB<br>H8R3-ZC6N-P1VD</div>
+    <div style="display: flex; gap: 10px;">
+      <button class="btn ghost sm" style="flex: 1;"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 20px; height: 20px; margin-right: 6px;"><rect x="8.5" y="8.5" width="11" height="11" rx="2"></rect><path d="M15.5 8.5V6A1.5 1.5 0 0 0 14 4.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"></path></svg>Copy</button>
+      <button class="btn ghost sm" style="flex: 1;">Save to a file</button>
+    </div>
+    <div class="hint" style="margin: -6px 0 0;">The file isn't encrypted. Keep it somewhere only you can open.</div>
+    <span class="spacer"></span>
+  </div>
+  <div style="padding: 0 24px 28px; display: flex; flex-direction: column; gap: 8px;">
+    <a class="btn" href="Guidelines.dc.html">Continue</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

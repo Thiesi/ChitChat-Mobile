@@ -100,8 +100,11 @@ transcript, lists, status and modals → Send when back online.
 
 - Server chip at the top (lantern plus host, not interactive), display title "Welcome back",
   username and password fields (56dp, labels above, password visibility toggle with the label
-  "Show password"), full-width **Sign in**, and a text button "Forgot your password? Ask the
-  person who runs the server." (static text: today only administrators can reset a forgotten password). When the server offers self-service reset ([ChitChat#155](https://github.com/Thiesi/ChitChat/issues/155)), replace it with a **Forgot password?** button leading to that flow.
+  "Show password"), full-width **Sign in**, and below it either a **Forgot password?** text
+  button or the static line "Forgot your password? Ask the person who runs the server." The
+  button appears only when the server supports self-service reset (ChitChat#155, merged),
+  detected by a successful reset challenge. It leads to the native reset flow in
+  [recovery-key.md](recovery-key.md).
 - Existing rules stay: the password lives only in composition memory, is cleared on
   `ON_STOP` and is never saved in bundles. `contentType` hints for autofill remain.
   Rate-limit (`login_throttled` or `rate_limited`) shows as a level-1 line under the button:
@@ -132,8 +135,10 @@ transcript, lists, status and modals → Send when back online.
 - The ambiguous-result warning (`registration_unknown`) becomes a level-2 notice at the top
   of the form with a **Sign in instead** action. The request is never repeated automatically
   (existing rule).
-- After success, go to step 5. "Registered in this session" is VM memory only, never
-  persisted, and is cleared on sign-out.
+- After success, show the one-time **recovery key display** when `register.php` returned a
+  `recovery_key` (ChitChat#155, [recovery-key.md](recovery-key.md)), then the guidelines
+  screen, then step 5. "Registered in this session" is VM memory only, never persisted, and is
+  cleared on sign-out.
 
 ### 4c One more step (restyled PENDING_MFA)
 

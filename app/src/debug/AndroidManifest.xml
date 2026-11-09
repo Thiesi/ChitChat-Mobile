@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <application>
         <!-- The Compose test-manifest host must match MainActivity before its window attaches. -->
         <activity android:name="androidx.activity.ComponentActivity"
-            android:windowSoftInputMode="adjustResize" />
+            android:theme="@style/Theme.ChitChat" android:windowSoftInputMode="adjustResize"
+            tools:replace="android:theme" />
     </application>
 </manifest>
