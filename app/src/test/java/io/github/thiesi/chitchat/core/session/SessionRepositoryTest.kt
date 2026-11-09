@@ -23,6 +23,7 @@ import mockwebserver3.MockWebServer
 import okhttp3.OkHttpClient
 import okhttp3.tls.HandshakeCertificates
 import okhttp3.tls.HeldCertificate
+import okio.ByteString.Companion.encodeUtf8
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -1111,6 +1112,66 @@ class SessionRepositoryTest {
         assertEquals("GET", server.takeRequest().method)
         assertEquals(setOf(8L), sessions.state.value.chatPolicy!!.ignoredUserIds)
         assertFalse(sessions.state.value.refreshRequired)
+    }
+
+    @Test fun attachmentUploadUsesTheOriginalRuntimeAndNoImplicitBootstrap() = runTest {
+        login()
+        val uploads = io.github.thiesi.chitchat.core.media.SessionAttachmentRepository(sessions)
+        val original = sessions.state.value
+        val before = server.requestCount
+        server.enqueue(json("""{"message":{"id":19,"room_id":42,"sender_id":7,"type":"attachment","deleted":false}}""", 201))
+        val result = uploads.room(original, 42,
+            io.github.thiesi.chitchat.core.media.AttachmentUpload("fixture.txt", "text/plain", "bytes".encodeUtf8(), ""))
+        assertEquals(19L, result.messageId)
+        assertEquals(before + 1, server.requestCount)
+        val request = server.takeRequest()
+        assertEquals("POST", request.method)
+        assertEquals(b, request.headers["X-CSRF-Token"])
+        try {
+            uploads.direct(original.copy(generation = original.generation - 1), 8,
+                io.github.thiesi.chitchat.core.media.AttachmentUpload("fixture.txt", null, "bytes".encodeUtf8(), ""))
+            fail("Stale entry must not acquire replacement access")
+        } catch (_: CancellationException) { }
+        assertEquals(before + 1, server.requestCount)
+    }
+
+    @Test fun unavailableInvalidZeroAndKnownPrechecksSpendNoUploadAttempt() = runTest {
+        login()
+        val uploads = io.github.thiesi.chitchat.core.media.SessionAttachmentRepository(sessions)
+        for ((policy, mime, bytes) in listOf(
+            Triple("null", "image/png", "x"),
+            Triple("""{"max_bytes":"invalid"}""", "image/png", "x"),
+            Triple(attachmentPolicy.replace(":17", ":0"), "image/png", "x"),
+            Triple(attachmentPolicy, "text/plain", "x"),
+            Triple(attachmentPolicy, "image/png", "x".repeat(18)),
+        )) {
+            server.enqueue(json(attachmentBootstrap(policy = policy))); sessions.refresh(); server.takeRequest()
+            val before = server.requestCount
+            try {
+                uploads.room(sessions.state.value, 42,
+                    io.github.thiesi.chitchat.core.media.AttachmentUpload("fixture", mime, bytes.encodeUtf8(), ""))
+                fail("No upload with unusable or exceeded policy")
+            } catch (_: IllegalStateException) { }
+            assertEquals(before, server.requestCount)
+            assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        }
+    }
+
+    @Test fun lateUploadAcknowledgmentCannotReturnIntoASignedOutSession() = runTest {
+        login()
+        val uploads = io.github.thiesi.chitchat.core.media.SessionAttachmentRepository(sessions)
+        val original = sessions.state.value
+        server.enqueue(MockResponse.Builder().code(201).addHeader("Content-Type", "application/json")
+            .body("""{"message":{"id":23,"sender":{"id":7},"recipient":{"id":8},"outgoing":true}}""")
+            .bodyDelay(400, TimeUnit.MILLISECONDS).build())
+        val pending = async { runCatching { uploads.direct(original, 8,
+            io.github.thiesi.chitchat.core.media.AttachmentUpload("fixture", null, "bytes".encodeUtf8(), "")) } }
+        kotlinx.coroutines.yield()
+        assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut()
+        assertTrue(pending.await().exceptionOrNull() is CancellationException)
+        assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
+        assertNull(vault.saved)
     }
 
     private class MemoryVault : SessionVault {

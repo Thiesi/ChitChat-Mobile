@@ -1,5 +1,11 @@
 # Backend contract and compatibility
 
+[M5g3b JPEG privacy](milestones/M5g3b-jpeg-photo-privacy.md) is local preparation only, with no endpoint or policy change. The server stores the actual uploaded bytes; eventual size/type checks and reconciliation evidence must use the cleaned output. No native/live upload or universal photo acceptance is added.
+
+[M5g3a picked-file snapshot](milestones/M5g3a-picked-file-snapshot.md) is local raw preparation only: no endpoint, request or server policy change. Its client memory budget is distinct from advertised upload limits, which apply to actual post-cleaning bytes. Photo/privacy, native provider and upload acceptance remain separate.
+
+[M5g2b upload protocol](milestones/M5g2b-attachment-upload-protocol.md) uses existing released v3.4.0 multipart room/DM endpoints through the chosen-origin session transport. Exact original namespace/viewer/peer/reply201 receipts precede optional enrichment; DM metadata remains a later GET. No new API, automatic POST replay, live mutation authority or native file control is introduced.
+
 [M5d4c native mention completion](milestones/M5d4c-native-mention-completion.md) uses the reviewed M5d4b state and existing original-session GET. Room broadcasts remain explicit; DM and local Tab completion use only their intended names. UI changes grant no send/read/typing/notification authority and add no backend API.
 
 [M5d4a room mention candidates](milestones/M5d4a-room-mention-protocol.md) reuses existing GET rooms/mentionable-users.php and the same original-session transport, without another endpoint/cache or policy mutation. The slice's historical underscore LIKE behavior ([backend152](https://github.com/Thiesi/ChitChat/issues/152)) is fixed since v3.3.0 and retained in the minimum v3.4.0 backend. Preserve server order; do not add a client-side prefix filter or query replay. Native controls are delivered in M5d4c.

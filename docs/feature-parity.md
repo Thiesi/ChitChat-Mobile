@@ -1,5 +1,11 @@
 # Feature-parity matrix
 
+[M5g3b JPEG privacy](milestones/M5g3b-jpeg-photo-privacy.md) adds an internal lossless ordinary-JPEG metadata rewrite preserving valid orientation and colour/coded image data within its supported implicit/sRGB EXIF layouts. Non-sRGB/calibrated, unsupported or malformed layouts return safe failure, never upload consent. PNG/WebP, colour-preserving fallback, final cleaned-byte readiness/hash, provider/native controls and complete photo acceptance remain pending.
+
+[M5g3a picked-file snapshot](milestones/M5g3a-picked-file-snapshot.md) adds internal bounded single-read raw preparation, immutable bytes, safe failures and cancellation fences. This creates no upload-ready photo, reconciliation digest, picker/provider adapter or usable native media control. Photo cleaning and cleaned-byte evidence remain pending.
+
+[M5g2b upload protocol](milestones/M5g2b-attachment-upload-protocol.md) adds internal explicit room/DM multipart using original-session capabilities, immutable prepared bytes and one-use attempts. Confirmed message IDs precede optional enrichment; no write is replayed. Preparation/photo cleaning, serialized attachment state, native media/sharing and live acceptance remain pending.
+
 [M5g2a refusal metadata](milestones/M5g2a-attachment-refusal-metadata.md) retains bounded size/rate hints from existing HTTP errors without another request or native controls. Unknown/zero limits stay distinct, invalid optional hints preserve the refusal, and no write is replayed. Upload transport, attachment state and usable media/sharing remain pending.
 
 [M5g1 attachment policy](milestones/M5g1-attachment-policy.md) brings the released upload-policy facts into generation-scoped session memory through the existing bootstrap. Missing, null and zero remain distinct; an unusable advertised policy disables uploads without blocking session bootstrap. Refresh and retirement cannot retain obsolete policy. This prerequisite adds no upload, download, picker, image or sharing control, and grants no upload permission. Native files/media and live/provider/device acceptance remain pending.

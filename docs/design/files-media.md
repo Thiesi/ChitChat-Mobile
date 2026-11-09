@@ -167,6 +167,21 @@ upload:
     policy, and the card then shows the server's figure.
 - **Without a policy** (an older server): no size or type pre-check and no guessed limit. The
   server's refusal is shown.
+- **Local preparation failures.** Before any upload, the app reads the picked file into a
+  bounded in-memory copy (and removes photo location). Two failures can happen there. **No
+  upload occurred** in either case, and neither is a server refusal:
+  - **Unreadable or empty file:** the provider can't be read, the file has no bytes, or the
+    permission was lost. The card shows a level-2 line, "This file can't be read. Choose it
+    again, or pick another." Send is disabled for it, and Remove or Replace is offered.
+  - **Too large for this phone to prepare:** the copy would exceed the app's memory budget,
+    which is an engineering bound per file (up to 32 MiB, lower on some devices or callers),
+    **never a server limit**. The card says "This file is too large for this phone to prepare
+    for sending. Try a smaller file." It shows **no number**, because the budget varies by
+    device and isn't the server's limit. It never uses the server's "This server accepts files
+    up to …" wording. Send is disabled for it.
+  - Both happen locally and immediately, cost no quota attempt and are never retried
+    automatically. The server's own `413` refusal keeps its separate copy (P-152).
+  - Share-in shows the same lines on the "Send to…" card.
 
 ## Sending and delivery states
 
@@ -414,6 +429,7 @@ The policy is local and read from existing system state, with no new requests:
 | P-158 | With ChitChat#156's policy: pickers filter to allowed types, and attaching a file over `max_bytes` or of a reported, disallowed type shows the real figures ("This file is 14 MB. This server accepts files up to 10 MB.") and disables Send without any POST. `max_bytes: 0` keeps the paperclip with the reason "This server doesn't accept files." instead of a picker. Guests (`null`) see no paperclip. The policy comes only from the existing bootstrap. An Invalid policy keeps the paperclip with "Attach, not available right now", explains that the app couldn't read the file settings (never that the server refuses files), offers an explicit Check again, and leaves messages and viewing files working. | U, C |
 | P-153 | Images follow the loading policy, use memory-only caching cleared on account change, render in a frame sized before loading that never resizes, and show every state in the table. | U, C |
 | P-159 | With ChitChat#158: frames take the `width`/`height` aspect ratio within the stated bounds (240×180dp only when dimensions are null or invalid). The transcript loads the WebP preview, with the auto-load rule applied to its size and a fallback to the original when it's null or 404. The viewer fetches the original only on explicit request, under the auto-load rule, or when opened from a GIF. GIF frames are static with a badge. Previews are never cached on disk. | U, C |
+| P-168 | Local preparation failures (an unreadable or empty file, or one over the app's memory budget) disable Send with their own copy, state that nothing was uploaded by never using server-refusal wording, show no number for the memory budget, and are never retried. | U, C |
 | P-157 | Photos are uploaded without location metadata by default, orientation kept. A cleaning failure requires an explicit Send anyway. The SHA-256 evidence covers the uploaded bytes. | U, C |
 | P-154 | Save uses a chosen document and never silently deletes it. Share-out uses read-only FileProvider grants on copies in a private cache subfolder, never hands out authenticated URLs, never deletes on chooser return, lets copies expire after 24 hours and deletes expired copies at the next start or share (no claim of deletion at exactly 24 hours), and deletes them at once on cancel before handoff and on sign-out or account removal. | U, C, R |
 | P-155 | Share-in never sends by itself, drops items across sign-in, and supports one file. | C |
