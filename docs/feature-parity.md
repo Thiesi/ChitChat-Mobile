@@ -111,3 +111,9 @@ prepared immutable payload's SHA-256 and size to the existing one-shot upload bo
 Photo preparation/explicit fallback orchestration, bounded aggregate attachment
 ownership, reconciliation choices and native controls remain pending. This is no
 new user-facing attachment capability or live/provider acceptance.
+
+[M5g3g attachment preparation routing](milestones/M5g3g-attachment-preparation-routing.md)
+selects JPEG/PNG/WebP cleaners by signature and returns ready final-byte evidence
+or an original-bound privacy choice. Unsupported images never become ready raw
+files automatically. Native choice/owner/budget state and attachment controls remain
+pending; this core prerequisite adds no user-facing picker or send capability.

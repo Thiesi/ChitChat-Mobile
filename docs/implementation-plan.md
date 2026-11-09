@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g3g preparation routing](milestones/M5g3g-attachment-preparation-routing.md) applies the approved magic/MIME/Picker classification boundary and routes supported photos to cleaning and final-byte evidence. Unsupported/image-hinted unknowns retain an original snapshot choice; opaque non-photo files remain unchanged without another prompt. Continue actual aggregate-budget/original-owner consent state and native/provider controls; no silent raw-photo fallback or complete files/media claim.
+
 [M5g3f upload-byte evidence](milestones/M5g3f-upload-byte-evidence.md) binds SHA-256 and size to the exact final immutable upload payload. Photo classification/cleaning orchestration, original explicit fallback consent, aggregate-budget/original-owner state and native/provider consumers remain separate. Evidence never deduplicates or authorizes a send.
 
 [M5g3e WebP privacy](milestones/M5g3e-webp-photo-privacy.md) completes the three initial static container-cleaning helpers, including bounded WebP framing, colour/alpha and known EXIF payload forms. After its own gates/reviews, continue exact immutable cleaned-byte evidence and policy checks, then aggregate-budget/original-owner attachment state and native/provider controls with explicit failure consent/fallback. Unsupported animation/extensions are never flattened or silently uploaded; no full P-157 or files/media acceptance is implied.
