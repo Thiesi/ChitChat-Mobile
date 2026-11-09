@@ -164,7 +164,11 @@ class CompletionJourneyTest {
     @After fun cleanup() {
         mentions.gate?.complete(Unit);compose.waitForIdle()
         if (ime>0 || nativeInputWindow().imeVisible!=false) Espresso.closeSoftKeyboard()
-        compose.waitUntil(5_000) { ime==0 && nativeInputWindow().imeVisible==false };assertEquals(false,nativeInputWindow().imeVisible)
+        awaitCompletionImeHidden(
+            waitUntil = { timeout, condition -> compose.waitUntil(timeout, condition) },
+            composeImeBottom = { ime },
+            nativeImeVisible = { nativeInputWindow().imeVisible },
+        )
     }
 
     @Test fun roomChoiceReplacesOnlyTheCaretTokenAndPreservesEverySuffixCharacter() {
