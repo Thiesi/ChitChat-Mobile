@@ -105,3 +105,9 @@ and establishes no production keyboard fix or physical-device acceptance.
 The v3.5.0 baseline includes batch3 push and #191 staff fields, not implemented native
 parity. Native passkeys (#145) and browser handoff (#146) are for the next release,
 not v3.5.0.
+
+[M5g3f final upload-byte evidence](milestones/M5g3f-upload-byte-evidence.md) binds a
+prepared immutable payload's SHA-256 and size to the existing one-shot upload body.
+Photo preparation/explicit fallback orchestration, bounded aggregate attachment
+ownership, reconciliation choices and native controls remain pending. This is no
+new user-facing attachment capability or live/provider acceptance.

@@ -199,3 +199,9 @@ above; no enforcement is claimed today. Network failures keep their existing err
 not a guessed server-too-old result. Optional capability false/unknown states grant no permission and do
 not trigger endpoint guessing. Record configured optional features and actual integration
 results per tested installation, without secrets.
+
+[M5g3f upload-byte evidence](milestones/M5g3f-upload-byte-evidence.md) adds only local
+SHA-256/size evidence over the eventual immutable file bytes. Multipart fields and
+original-session authorization are unchanged; no digest parameter, deduplication
+endpoint or implicit retry is introduced. Native reconciliation/consent remains
+a separate consumer of the existing history attachment metadata.

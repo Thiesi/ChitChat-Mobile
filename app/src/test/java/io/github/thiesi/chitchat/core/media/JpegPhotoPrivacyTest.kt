@@ -27,6 +27,25 @@ class JpegPhotoPrivacyTest {
         assertFalse(result.toString().contains(privateText))
     }
 
+    @Test fun cleanedPhotoEvidenceMatchesTheExactUploadBodyRatherThanThePickedOriginal() = runTest {
+        val original = insert(exif(6), xmp, comment)
+        val cleaned = cleaned(original)
+        val payload = PreparedAttachmentPayload.create("fixture.jpg", "image/jpeg", cleaned.bytes)
+        val upload = AttachmentUpload(payload, "caption")
+        val body = upload.claimBody()
+        val sink = Buffer(); body.writeTo(sink)
+        val eventual = sink.readByteString()
+        assertEquals(cleaned.bytes, eventual)
+        assertEquals(6, cleaned.exifOrientation)
+        assertEquals(eventual.sha256().hex(), upload.sha256)
+        assertNotEquals(original.sha256().hex(), upload.sha256)
+        assertEquals(eventual.size.toLong(), upload.sizeBytes)
+        assertTrue(body.isOneShot())
+        assertFalse(upload.toString().contains(upload.sha256))
+        try { upload.claimBody(); fail("Evidence does not authorize another attempt") }
+        catch (_: IllegalStateException) { }
+    }
+
     @Test fun allEightLittleAndBigEndianOrientationsRetainOnlyTheRequiredValue() = runTest {
         for (little in listOf(true, false)) for (orientation in 1..8) {
             val result = cleaned(insert(exif(orientation, little), xmp))

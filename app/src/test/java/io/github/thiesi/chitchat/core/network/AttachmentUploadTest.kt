@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.core.network
 
 import io.github.thiesi.chitchat.core.media.AttachmentUpload
+import io.github.thiesi.chitchat.core.media.PreparedAttachmentPayload
 import io.github.thiesi.chitchat.core.server.AddressResult
 import io.github.thiesi.chitchat.core.server.ServerAddress
 import kotlinx.coroutines.test.runTest
@@ -21,8 +22,8 @@ class AttachmentUploadTest {
     private lateinit var server: MockWebServer
     private lateinit var api: SessionHttp
     private val token = "a".repeat(64)
-    private fun attempt(caption: String = "", reply: Long? = null) =
-        AttachmentUpload("fixture.bin", null, byteArrayOf(0, 1, 127, -1).toByteString(), caption, reply)
+    private suspend fun attempt(caption: String = "", reply: Long? = null) =
+        AttachmentUpload(PreparedAttachmentPayload.create("fixture.bin", null, byteArrayOf(0, 1, 127, -1).toByteString()), caption, reply)
     private fun roomAck(room: Long = 42, sender: Long = 7, id: Long = 19, reply: String = "null") =
         """{"message":{"id":$id,"room_id":$room,"sender_id":$sender,"type":"attachment","deleted":false,"reply_to":$reply}}"""
     private fun directAck(sender: Long = 7, recipient: Long = 8, outgoing: String = "true", reply: String = "null") =
@@ -137,21 +138,24 @@ class AttachmentUploadTest {
         assertEquals(1, server.requestCount)
     }
 
-    @Test fun bodyIsOneShotAndValidationNeverPublishesFileOrCaptionInAnError() {
+    @Test fun bodyIsOneShotAndValidationNeverPublishesFileOrCaptionInAnError() = runTest {
         val bytes = "prepared".encodeUtf8()
-        val upload = AttachmentUpload("private-name.txt", "text/plain", bytes, "private-caption")
+        val upload = AttachmentUpload(PreparedAttachmentPayload.create("private-name.txt", "text/plain", bytes), "private-caption")
         val body = upload.claimBody()
         assertTrue(body.isOneShot())
         val buffer = Buffer(); body.writeTo(buffer)
-        assertEquals(bytes, buffer.readByteString())
+        val written = buffer.readByteString()
+        assertEquals(bytes, written)
+        assertEquals(written.sha256().hex(), upload.sha256)
+        assertEquals(written.size.toLong(), upload.sizeBytes)
         try { body.writeTo(Buffer()); fail() } catch (_: IllegalStateException) { }
         for (name in listOf("../private.txt", "private\r\nname", "..", "private/name")) {
-            try { AttachmentUpload(name, null, bytes, "private-caption"); fail() }
+            try { AttachmentUpload(PreparedAttachmentPayload.create(name, null, bytes), "private-caption"); fail() }
             catch (e: IllegalArgumentException) { assertFalse(e.toString().contains(name)) }
         }
-        try { AttachmentUpload("private", null, bytes, "x".repeat(4001)); fail() }
+        try { AttachmentUpload(PreparedAttachmentPayload.create("private", null, bytes), "x".repeat(4001)); fail() }
         catch (_: IllegalArgumentException) { }
         // Supplementary Unicode counts as one server character, not two UTF-16 code units.
-        AttachmentUpload("private", null, bytes, "\uD83D\uDE00".repeat(4000))
+        AttachmentUpload(PreparedAttachmentPayload.create("private", null, bytes), "\uD83D\uDE00".repeat(4000))
     }
 }
