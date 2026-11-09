@@ -18,6 +18,33 @@ TRACE = """10-21 05:20:00.498  4531  4531 I ImeTracker: io.github.thiesi.chitcha
 
 
 class TraceTests(unittest.TestCase):
+    def test_cleanup_timeout_retains_only_fixed_last_wait_scalars(self):
+        raw = "11-09 19:30:00.000 123 456 W CCMCompletionIme: sample=last_wait_predicate compose=0 native1=hidden native2=visible\n"
+        self.assertEqual("11-09 19:30:00.000 CCMCompletionIme: sample=last_wait_predicate compose=0 native1=hidden native2=visible\n", runner.filtered_trace(raw))
+        self.assertIn("CCMCompletionIme:W", runner.LOGCAT)
+
+    def test_cleanup_unknown_and_unobserved_are_distinct_and_tails_are_rejected(self):
+        prefix = "11-09 19:30:00.000 123 456 W CCMCompletionIme: "
+        good = "sample=last_wait_predicate compose=unobserved native1=unknown native2=unobserved"
+        self.assertIn(good, runner.filtered_trace(prefix + good))
+        for bad in [good + " private-body-canary", good.replace("unknown", "private-body-canary"),
+                    good.replace("compose=unobserved", "compose=2147483648"),
+                    good.replace("compose=unobserved", "compose=-2147483649"),
+                    good.replace("last_wait_predicate", "post_timeout"),
+                    good.replace("native1=unknown", "native2=unknown")]:
+            self.assertEqual("", runner.filtered_trace(prefix + bad))
+
+    def test_cleanup_records_share_the_existing_cap_and_failure_window_priority(self):
+        prefix = "11-09 19:30:00.000 123 456 I "
+        name = "presentationDarkFont200(io.github.thiesi.chitchat.feature.completion.CompletionJourneyTest)"
+        scalar = "CCMCompletionIme: sample=last_wait_predicate compose=0 native1=hidden native2=visible"
+        raw = prefix + "TestRunner: started: " + name + "\n" + prefix + scalar + "\n"
+        raw += prefix + "TestRunner: failed: " + name + "\n" + prefix + "TestRunner: finished: " + name + "\n"
+        raw += (prefix + "ImeTracker: system_server:abc: onProgress PHASE_SERVER_IME_INVOKER\n") * 2500
+        retained = runner.filtered_trace(raw)
+        self.assertEqual(2000, len(retained.splitlines()))
+        self.assertIn(scalar, retained)
+
     @staticmethod
     def failed_window(name="failure"):
         return [(name + "-start", "started:", name), (name + "-progress", "onProgress", None),

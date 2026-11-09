@@ -20,7 +20,7 @@ MAX_SOURCE_BYTES = 16 * 1024 * 1024
 SOURCE_NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9.$]{0,255}")
 GRADLE = ["./gradlew", ":app:connectedDebugAndroidTest",
           "-Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true", "--max-workers=2"]
-LOGCAT = ["adb", "logcat", "-d", "-v", "threadtime", "-s", "ImeTracker:I", "TestRunner:I", "*:S"]
+LOGCAT = ["adb", "logcat", "-d", "-v", "threadtime", "-s", "ImeTracker:I", "TestRunner:I", "CCMCompletionIme:W", "*:S"]
 
 # Do not serialize raw logcat, exception text, editor objects, window titles or arbitrary tails.
 # Unknown platform reasons remain omitted, rather than expanding a privacy boundary implicitly.
@@ -30,6 +30,9 @@ TOKEN = re.compile(r"(?:io\.github\.thiesi\.chitchat\.debug(?:\.test)?|system_se
 METHOD = re.compile(r"[A-Za-z_][A-Za-z_0-9]*\(io\.github\.thiesi\.chitchat\.[A-Za-z_0-9.$]+\)")
 DATE = re.compile(r"[0-9]{2}-[0-9]{2}")
 TIME = re.compile(r"[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}")
+CLEANUP_COMPOSE = re.compile(r"compose=(?:unobserved|-?(?:0|[1-9][0-9]{0,9}))")
+CLEANUP_FIRST = re.compile(r"native1=(?:unobserved|unknown|hidden|visible)")
+CLEANUP_SECOND = re.compile(r"native2=(?:unobserved|unknown|hidden|visible)")
 
 
 def selected_records(records: list[tuple[str, str, str | None]]) -> list[str]:
@@ -82,6 +85,12 @@ def filtered_trace(raw: str, *, token_pattern: re.Pattern[str] = TOKEN) -> str:
         elif (fields[5] == "TestRunner:" and fields[6] in {"started:", "finished:", "failed:"}
               and METHOD.fullmatch(fields[7])):
             records.append((" ".join(fields[:2] + fields[5:8]), fields[6], fields[7]))
+        elif (len(fields) == 10 and fields[5] == "CCMCompletionIme:" and
+              fields[6] == "sample=last_wait_predicate" and CLEANUP_COMPOSE.fullmatch(fields[7]) and
+              CLEANUP_FIRST.fullmatch(fields[8]) and CLEANUP_SECOND.fullmatch(fields[9])):
+            value = fields[7].removeprefix("compose=")
+            if value == "unobserved" or -2_147_483_648 <= int(value) <= 2_147_483_647:
+                records.append((" ".join(fields[:2] + fields[5:10]), "cleanupTimeout", None))
     selected = selected_records(records)
     return "\n".join(selected) + ("\n" if selected else "")
 

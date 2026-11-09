@@ -66,6 +66,24 @@ result. These semantics are pinned to the existing coroutines1.10.2
 and [Job completion contract](https://github.com/Kotlin/kotlinx.coroutines/blob/1.10.2/kotlinx-coroutines-core/common/src/Job.kt).
 No dependency upgrade is included.
 
+## Diagnostic-main integration
+
+Original PR17614ac780 remains FAILED: API35 had the covered ReplyComposer
+signature plus an uncovered Completion.presentationDarkFont200 combined cleanup
+timeout; the second review never started because of GitHub internal errors.
+No old-head retry, review replay or exception applies. PR178 delivered bounded
+last-in-wait scalar diagnostics at a0a1fd6 after its own full gates/two reviews.
+The requested four main reports contained0/4 recurrences; no cause or fix follows.
+
+Per [disposition](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6749161777),
+this branch incorporates that diagnostic main as new content, preserving published
+history with a normal merge under the no-force-push rule. App production and JVM
+test Kotlin remain identical to14ac780; the new native diagnostics/cases are exact
+main content. Only the three documentation-prefix conflicts needed resolution,
+retaining both contracts and recording delivery here. This head needs ordinary
+fresh full CI and both written reviews. A recurring Completion timeout means STOP
+with its new scalars and no further heads for this; original negatives stay failed.
+
 ## Verification and boundaries
 
 Negative first: a real initial read produced a GIF choice; its callback moved
