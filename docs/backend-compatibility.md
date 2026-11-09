@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g3d PNG privacy](milestones/M5g3d-png-photo-privacy.md) is local static-PNG/TIFF preparation without endpoint, dependency or baseline changes. The future upload, size/type pre-checks and reconciliation evidence must still use exactly the immutable cleaned bytes. No native or live upload authority is added.
+
 [M5g3c JPEG colour metadata](milestones/M5g3c-jpeg-colour-metadata.md) is local container preparation, without an endpoint, dependency or backend baseline change. Exact eventual uploaded bytes remain authoritative for policy checks and reconciliation; no live upload, native media or provider acceptance is added.
 
 [M5g3b JPEG privacy](milestones/M5g3b-jpeg-photo-privacy.md) is local preparation only, with no endpoint or policy change. The server stores the actual uploaded bytes; eventual size/type checks and reconciliation evidence must use the cleaned output. No native/live upload or universal photo acceptance is added.
