@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g3c JPEG colour metadata](milestones/M5g3c-jpeg-colour-metadata.md) extends the lossless rewrite with exact EXIF colour-space and known interoperability preservation. After its own gates/reviews, continue PNG/WebP privacy, safe fallback/explicit failure consent and final cleaned-byte evidence, then bounded original-owner attachment state and native/provider controls. No full photo or files/media acceptance is implied.
+
 [M5g3b JPEG privacy](milestones/M5g3b-jpeg-photo-privacy.md) starts photo preparation with a bounded lossless ordinary-JPEG rewrite. Continue PNG/WebP, safe fallback/explicit failure consent and final cleaned-byte evidence, then bounded original-owner attachment state and native/provider controls; this foundation does not complete P-157 or files/media.
 
 [M5g3a picked-file snapshot](milestones/M5g3a-picked-file-snapshot.md) bounds one raw in-memory source read without URI reopen or automatic retry. Continue photo location removal/orientation preservation and cleaned-byte evidence, then original-owner serialized pending/unknown state and native/provider controls as independently reviewable slices.
