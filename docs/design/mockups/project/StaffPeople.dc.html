@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Staff people directory</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}
+.chips{display:flex;gap:8px;overflow:hidden}
+.ch{flex:none;font-size:13px;font-weight:600;padding:6px 12px;border-radius:16px;border:1.5px solid var(--field-line);color:var(--text)}
+.ch.on{border-color:var(--link);color:var(--link);background:rgba(61,82,196,.10)}
+.pr{display:flex;gap:12px;align-items:center;min-height:60px;border-top:1px solid var(--line)}
+.ln{font-size:13px;color:var(--text-2)}
+.role{font-size:11px;padding:1px 7px;border-radius:9px;margin-left:6px;vertical-align:2px}
+</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div class="appbar" style="padding-left: 4px; gap: 8px;">
+    <a class="icon-btn" href="AdminHome.dc.html" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <h1 class="display" style="font-size: 24px; color: var(--link);">People</h1>
+  </div>
+  <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 10px; flex-grow: 1; overflow: hidden;">
+    <div class="field" style="border-radius: 14px; min-height: 48px;"><span class="v" style="color: var(--text-2);">Search by username</span></div>
+    <div class="chips"><span class="ch on">Everyone · 1,284</span><span class="ch">Staff · 7</span><span class="ch">Banned · 3</span><span class="ch">Muted · 2</span><span class="ch">Closing · 1</span></div>
+    <div style="font-size: 13px; color: var(--text-2);">Sorted by: <b style="color: var(--link);">Recently signed in</b></div>
+    <div>
+    <div class="pr"><span class="av sm h-sky">A</span><div style="flex-grow: 1; min-width: 0;"><div style="font-weight: 600; font-size: 16px;">anna_k <span class="role admin">Administrator</span></div><div class="ln">Signed in 5 minutes ago</div></div></div>
+    <div class="pr"><span class="av sm h-rose">R</span><div style="flex-grow: 1; min-width: 0;"><div style="font-weight: 600; font-size: 16px;">rowan</div><div class="ln" style="color: var(--rose);">Banned until 12 Nov</div></div></div>
+    <div class="pr"><span class="av sm h-lime">T</span><div style="flex-grow: 1; min-width: 0;"><div style="font-weight: 600; font-size: 16px;">tom.b</div><div class="ln">Muted in Kitchen and 1 more room</div></div></div>
+    <div class="pr"><span class="av sm h-clay">M</span><div style="flex-grow: 1; min-width: 0;"><div style="font-weight: 600; font-size: 16px;">mara <span class="role mod">Global Moderator</span></div><div class="ln">Signed in yesterday</div></div></div>
+    <div class="pr"><span class="av sm h-lilac">S</span><div style="flex-grow: 1; min-width: 0;"><div style="font-weight: 600; font-size: 16px;">sparkle_99</div><div class="ln">Closing on 22 Nov</div></div></div>
+    </div>
+    <span class="spacer"></span>
+    <button class="btn text" style="align-self: center; color: var(--link);">More</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
