@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g3i owned preparation](milestones/M5g3i-owned-preparation-task.md) connects local snapshot/cleaning/hash work to client memory reservations only. It changes no endpoint, baseline, server limit or upload authority. Original-session/native consent and final-byte server-policy checks remain feature-owned.
+
 [M5g3h memory reservations](milestones/M5g3h-attachment-memory-budget.md) is a local allocation-ledger prerequisite, without endpoint, backend baseline or server-limit changes. Client charges must cover retained and preparing memory, not infer upload permission or server policy. Actual original-owner/native integration remains pending.
 
 [M5g3e WebP privacy](milestones/M5g3e-webp-photo-privacy.md) is local static-WebP preparation without endpoint, policy, dependency or baseline changes. Future reconciliation and server size/type checks still apply to exactly the uploaded immutable bytes. No live upload or native provider authority is introduced.
