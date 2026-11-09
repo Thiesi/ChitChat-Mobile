@@ -65,7 +65,7 @@ The signed-in parts of `home`, `account` and `settings`, reorganized without cha
 any control does:
 
 - Profile header: initial pebble, username, and a global role badge (steward style) derived from the session user's existing `roles`, shown only for roles the server reports. The badge is display only and grants nothing.
-- **Looking after this server** card for roles that can moderate. Dependency: M7. Omit it
+- **Looking after this server** card for roles that can moderate ([moderation.md](moderation.md)). Dependency: M7. Omit it
   until those features exist.
 - **Invite someone**, once [invite codes](invite-codes.md) ship. Omit until then.
 - Rows that open today's screens unchanged in behavior:

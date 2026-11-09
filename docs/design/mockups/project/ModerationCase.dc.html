@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Moderation case</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 10px;border-radius:12px;border:1.5px solid var(--link);color:var(--link)}
+.lbl{font-size:12px;font-weight:600;color:var(--text-2);letter-spacing:.02em;text-transform:uppercase}
+.rep{border-top:1px solid var(--line);padding:10px 0;font-size:14px}
+.rep b{font-weight:600}
+</style>
+</helmet>
+<div class="ccm dark">
+  <div class="inset"></div>
+  <div class="appbar" style="padding-left: 4px; gap: 8px;">
+    <a class="icon-btn" href="AdminHome.dc.html" aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <h1 class="display" style="font-size: 22px; color: var(--link);">Report about a person</h1>
+  </div>
+  <div style="padding: 0 20px 20px; display: flex; flex-direction: column; gap: 12px; flex-grow: 1; overflow: hidden;">
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;"><span class="chip">In review · Claimed by you</span><span style="font-size: 12px; color: var(--text-2);">Case #42</span><span style="font-size: 13px; color: var(--text-2);">In Kitchen · 3 reports</span></div>
+    <div class="card" style="display: flex; gap: 14px; align-items: center; background: var(--raised); border: 0;">
+      <span style="width: 64px; height: 64px; border-radius: 32px; background: linear-gradient(135deg,#F29BC4,#B7A3F5); flex: none;" role="img" aria-label="Picture at first report"></span>
+      <div style="font-size: 14px;"><div class="lbl">Name then</div><b style="font-size: 16px;">glitter_unicorn</b><div class="lbl" style="margin-top: 4px;">Name now</div><b style="font-size: 16px;">sparkle_99</b><div style="margin-top: 6px; color: var(--honey);">Their picture has changed since the first report.</div></div>
+    </div>
+    <div class="lbl" style="margin-top: 4px;">Reports</div>
+    <div class="rep"><b>Lena</b> · Offensive username · 18:02<div style="color: var(--text-2); margin-top: 2px;">Changed their name to an insult about me</div></div>
+    <div class="rep"><b>Tom</b> · Offensive profile picture · 18:10</div>
+    <div class="rep"><b>Ana</b> · Harassment or bullying · 18:31</div>
+    <div class="rep" style="color: var(--link);">Earlier reports about sparkle_99: 0 open, 1 resolved, 1 dismissed</div>
+    <span class="spacer"></span>
+    <div style="font-size: 13px; color: var(--text-2);">Resolving records what happened. The people who reported this aren't told the outcome.</div>
+    <div style="display: flex; gap: 10px;">
+      <button class="btn ghost" style="flex: 1; border-color: var(--link); color: var(--link);">Take action</button>
+      <button class="btn" style="flex: 1; background: var(--link); color: var(--ink);">Resolve</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
