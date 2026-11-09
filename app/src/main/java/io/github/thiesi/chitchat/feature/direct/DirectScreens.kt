@@ -86,7 +86,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel,
-    onRefreshSession: () -> Unit, onSelect: (Long) -> Unit) {
+    onRefreshSession: () -> Unit, isCurrentEntry: () -> Boolean, onSelect: (Long) -> Unit) {
     val session by model.session.collectAsStateWithLifecycle()
     key(session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
         val connection = thread.realtime?.state?.collectAsStateWithLifecycle()?.value?.takeIf { it.generation == session.generation }
@@ -97,7 +97,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
         val ready = sessionReady(session, now)
         val focus = LocalFocusManager.current
         val submit = { model.search(); if (!model.state.value.invalidQuery) focus.clearFocus() }
-        var discard by remember { mutableStateOf<Long?>(null) }
+        var discard by remember { mutableStateOf<DirectDraft?>(null) }
         var detailsOpen by remember { mutableStateOf(false) }
         DirectLifecycle(model::foreground, model::background, model::invalidate)
         val list = rememberLazyListState()
@@ -139,7 +139,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
                     TextButton(onClick = { onSelect(draft.peer) }, enabled = ready) { Text(draft.name ?: stringResource(R.string.dm_draft_peer, draft.peer)) }
                     if (draft.uncertain) Text(stringResource(R.string.dm_unknown))
                     draft.composerReply?.let { Text(stringResource(R.string.composer_reply_id, it.messageId)) }
-                    TextButton(onClick = { discard = draft.peer }) { Text(stringResource(R.string.dm_discard_draft)) }
+                    TextButton(onClick = { if (isCurrentEntry()) discard = draft }) { Text(stringResource(R.string.dm_discard_draft)) }
                 }
             }
             item { Text(stringResource(R.string.dm_inbox_cap), style = MaterialTheme.typography.bodySmall) }
@@ -160,10 +160,14 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
                 }
             }
         }
-        if (discard != null) AlertDialog(onDismissRequest = { discard = null },
+        val originalDiscard = discard
+        if (originalDiscard != null) AlertDialog(onDismissRequest = { if (discard === originalDiscard) discard = null },
             title = { Text(stringResource(R.string.dm_discard_draft)) }, text = { Text(stringResource(R.string.dm_discard_warning)) },
-            confirmButton = { TextButton(onClick = { thread.discardSavedDraft(discard!!); discard = null }) { Text(stringResource(R.string.dm_discard_draft)) } },
-            dismissButton = { TextButton(onClick = { discard = null }) { Text(stringResource(R.string.cancel)) } }, modifier = Modifier.lanternDialogEdge())
+            confirmButton = { TextButton(onClick = {
+                thread.discardSavedDraft(originalDiscard, isCurrentEntry)
+                if (discard === originalDiscard) discard = null
+            }) { Text(stringResource(R.string.dm_discard_draft)) } },
+            dismissButton = { TextButton(onClick = { if (discard === originalDiscard) discard = null }) { Text(stringResource(R.string.cancel)) } }, modifier = Modifier.lanternDialogEdge())
     }
 }
 

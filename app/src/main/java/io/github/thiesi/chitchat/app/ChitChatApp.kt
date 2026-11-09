@@ -496,7 +496,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             val args = destination.arguments
                             if (directInbox != null && directThread != null && args != null && matchesDirectScope(session,
                                 args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
-                                DirectInboxScreen(directInbox, directThread, auth::refresh) { openDirect(it) }
+                                DirectInboxScreen(directInbox, directThread, auth::refresh, isCurrentEntry = {
+                                    nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+                                }) { openDirect(it) }
                         }
                         composable(DIRECT_THREAD_ROUTE, arguments = directArguments(thread = true)) { destination ->
                             val args = destination.arguments

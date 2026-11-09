@@ -63,7 +63,7 @@ class DirectAuthorChangeTest {
         model.updateDraft("Ordinary\ndraft"); val request = choose()
         model.updateAuthorBody(request, "Private proposal")
         assertFalse(model.updateDraft(owner, 8, "Stale composer callback"))
-        model.cancelReply(owner, 8, checkNotNull(reply)); model.discardSavedDraft(8)
+        model.cancelReply(owner, 8, checkNotNull(reply)); model.discardSavedDraft(model.drafts.value.getValue(8)) { true }
         model.send(); model.setBlocked(owner, 8, true)
         model.viewport(DirectAnchor(11, 0), setOf(11), 11, true); runCurrent()
         assertEquals("Ordinary\ndraft", model.state.value.draft); assertSame(reply, model.state.value.composerReply)

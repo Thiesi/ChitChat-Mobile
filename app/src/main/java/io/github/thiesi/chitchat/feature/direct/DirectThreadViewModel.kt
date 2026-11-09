@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.thiesi.chitchat.core.direct.*
+import io.github.thiesi.chitchat.core.media.*
 import io.github.thiesi.chitchat.core.conversation.ComposerReply
 import io.github.thiesi.chitchat.core.conversation.phpTrim
 import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
@@ -33,8 +34,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class DirectAnchor(val id: Long, val offset: Int, val revision: Long = 0)
-class DirectDraft(val peer: Long, val name: String?, val body: String, val uncertain: Boolean, val checked: Boolean,
-    val composerReply: ComposerReply? = null)
 data class DirectAttention(val ids: Set<Long> = emptySet(), val additionalMayBeRead: Boolean = false) {
     override fun toString() = "DirectAttention"
 }
@@ -61,7 +60,8 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     val realtime: RealtimeController? = null,
     val typing: TypingController? = null,
     private val mutations: MessageMutationOperations? = null,
-    private val reactions: MessageReactionOperations? = null) : ViewModel() {
+    private val reactions: MessageReactionOperations? = null,
+    private val attachmentBudget: AttachmentMemoryBudget? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(DirectThreadState())
     val state = mutable.asStateFlow()
@@ -87,9 +87,17 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     private var reactionPosting: DirectReactionWrite? = null
     private val unknownReactions = mutableMapOf<Long, DirectReactionUnknown>()
 
+    private class AttachmentWork(val selection: DirectAttachmentSelection) {
+        var view = DirectAttachmentDraft(selection, DirectAttachmentPhase.PREPARING)
+        var job: Job? = null
+        var producerEnd: Job? = null
+        var retained: RetainedAttachmentPreparation? = null
+    }
+    private val attachments = mutableMapOf<Long, AttachmentWork>()
+
     init { viewModelScope.launch { session.collect {
         if (it.directIdentity() != identity) {
-            retire(); identity = it.directIdentity(); mutable.value = DirectThreadState()
+            retireAttachments(); retire(); identity = it.directIdentity(); mutable.value = DirectThreadState()
             savedDrafts.value = emptyMap(); localAttention.value = emptyMap(); unknownAuthors.clear(); unknownReactions.clear(); seen = emptySet()
         } else drain()
     } } }
@@ -98,7 +106,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         val owner = expected.directIdentity() ?: return
         if (owner != session.value.directIdentity() || peer <= 0 || peer == owner.user) return
         if (owner != identity) {
-            retire(); identity = owner; mutable.value = DirectThreadState()
+            retireAttachments(); retire(); identity = owner; mutable.value = DirectThreadState()
             savedDrafts.value = emptyMap(); localAttention.value = emptyMap(); unknownAuthors.clear(); unknownReactions.clear(); seen = emptySet()
         }
         if (mutable.value.peerId != peer) {
@@ -643,7 +651,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             value.messages.any { it === message } && !message.deleted && message.id > 0
     }
     fun canReplyTo(expected: SessionState, peer: Long?, message: DirectMessage) =
-        canUseMessage(expected, peer, message) && canSend() && canEditDraft() && !mutable.value.sending
+        canUseMessage(expected, peer, message) && composerCanSend() && canEditDraft() && !mutable.value.sending
     fun replyTo(expected: SessionState, peer: Long?, message: DirectMessage): Boolean {
         if (!canReplyTo(expected, peer, message)) return false
         mutable.value = mutable.value.copy(composerReply = ComposerReply(message.id), validation = null,
@@ -657,21 +665,36 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             error = value.error?.takeUnless { it.code == "invalid_reply_target" })
         rememberDraft()
     }
-    fun discardSavedDraft(peer: Long) {
-        if (!currentIdentity() || mutable.value.sending || mutable.value.authorDialog != null || authorPosting != null ||
-            mutable.value.reactionDialog != null || reactionPosting != null) return
+    fun discardSavedDraft(original: DirectDraft, isCurrentEntry: () -> Boolean): Boolean {
+        val peer = original.peer
+        val current = savedDrafts.value[peer] ?: return false
+        if (!isCurrentEntry() || !currentIdentity() || !original.matches(session.value) || !current.matches(session.value) ||
+            !current.sameDiscardChoice(original) || mutable.value.sending || write != null ||
+            mutable.value.authorDialog != null || authorPosting != null ||
+            mutable.value.reactionDialog != null || reactionPosting != null) return false
+        removeAttachmentWork(peer)
         savedDrafts.value = savedDrafts.value - peer
         if (mutable.value.peerId == peer) mutable.value = mutable.value.copy(draft = "", composerReply = null, uncertainSend = false,
             checkedUnknown = false, draftLimit = false)
+        return true
     }
     private fun rememberDraft() {
         if (!currentIdentity()) return
         val value = mutable.value; val peer = value.peerId ?: return
-        savedDrafts.value = if (value.draft.isEmpty() && !value.uncertainSend && value.composerReply == null) savedDrafts.value - peer else
-            savedDrafts.value + (peer to DirectDraft(peer, value.context?.peer?.username, value.draft,
-                value.uncertainSend, value.checkedUnknown, value.composerReply))
+        val owner = session.value.directIdentity() ?: return
+        val previous = savedDrafts.value[peer]
+        val attachment = attachments[peer]?.view
+        val name = value.context?.peer?.username ?: previous?.name
+        if (previous != null && previous.matches(session.value) && previous.attachment === attachment &&
+            previous.name == name && previous.body == value.draft && previous.uncertain == value.uncertainSend &&
+            previous.checked == value.checkedUnknown && previous.composerReply === value.composerReply) return
+        savedDrafts.value = if (value.draft.isEmpty() && !value.uncertainSend && value.composerReply == null && attachment == null)
+            savedDrafts.value - peer else savedDrafts.value + (peer to DirectDraft(owner, peer, name, value.draft,
+                value.uncertainSend, value.checkedUnknown, value.composerReply, attachment,
+                previous?.slot ?: attachment?.selection?.slot ?: Any()))
     }
-    fun canSend() = active && ready() && mutable.value.let { !it.busy && it.authorDialog == null && it.reactionDialog == null && !it.stale && it.loaded &&
+    fun canSend() = attachments[mutable.value.peerId] == null && composerCanSend()
+    private fun composerCanSend() = active && ready() && mutable.value.let { !it.busy && it.authorDialog == null && it.reactionDialog == null && !it.stale && it.loaded &&
         !it.uncertainSend && !it.uncertainBlock && it.context?.relationship?.messagingAvailable == true &&
         it.context.mutedEverywhere == null }
     fun send(expected: SessionState, peer: Long?) { if (selected(expected, peer)) send() }
@@ -715,14 +738,94 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         }
     }
     private fun retire() { sequence++; job?.cancel(); job = null; write = null; authorPosting = null; reactionPosting = null; requested = 0; attempted = 0 }
+
+    /** A first pick or an explicit original-bound Replace; the root supplies fresh entry proof. */
+    internal fun selectAttachment(expected: SessionState, peer: Long, sourceEntryId: String,
+        read: PickedAttachmentRead, source: AttachmentPickSource, original: DirectAttachmentDraft? = null,
+        isCurrentEntry: () -> Boolean): Boolean {
+        val budget = attachmentBudget ?: return false
+        val owner = expected.directIdentity() ?: return false
+        if (!isCurrentEntry() || sourceEntryId.isBlank() || !selected(expected, peer) || !composerCanSend() ||
+            !canEditDraft() || write != null) return false
+        val policy = session.value.attachmentPolicy
+        if (policy == AttachmentPolicy.Invalid || policy == AttachmentPolicy.Unavailable ||
+            (policy is AttachmentPolicy.Known && policy.maxBytes == 0L)) return false
+        val previous = attachments[peer]
+        if (original?.selection !== previous?.selection || (original == null && previous != null)) return false
+        val slot = savedDrafts.value[peer]?.slot ?: Any()
+        val selection = DirectAttachmentSelection(owner, peer, slot, sourceEntryId, read.filename, read.mimeType)
+        val retiredProducer = removeAttachmentWork(peer)
+        val work = AttachmentWork(selection).also { it.producerEnd = retiredProducer }
+        attachments[peer] = work
+        rememberDraft()
+        val pending = viewModelScope.launch {
+            retiredProducer?.join()
+            val memo = savedDrafts.value[peer]
+            if (attachments[peer] !== work || !selection.matches(session.value) || memo == null ||
+                !memo.matches(session.value) || memo.slot !== slot) return@launch
+            val task = AttachmentPreparationTask.forAvailableMemory(read, source, budget)
+            val producer = task.start(this) { completed, outcome ->
+                val current = savedDrafts.value[peer]
+                if (completed !== task || attachments[peer] !== work || !selection.matches(session.value) ||
+                    current == null || !current.matches(session.value) || current.slot !== slot) false
+                else {
+                    work.view = when (outcome) {
+                        is AttachmentPreparationOutcome.Failed -> DirectAttachmentDraft(selection, DirectAttachmentPhase.FAILED,
+                            failure = outcome.kind)
+                        is AttachmentPreparationOutcome.Prepared -> {
+                            work.retained = outcome.retained
+                            when (val prepared = checkNotNull(outcome.retained.preparation)) {
+                                is AttachmentPreparation.Ready -> DirectAttachmentDraft(selection, DirectAttachmentPhase.READY,
+                                    sizeBytes = prepared.payload.sizeBytes, privacy = prepared.privacy)
+                                is AttachmentPreparation.NeedsChoice -> DirectAttachmentDraft(selection, DirectAttachmentPhase.PRIVACY_CHOICE,
+                                    sizeBytes = prepared.original.bytes.size.toLong(), privacyFailure = prepared.kind)
+                            }
+                        }
+                    }
+                    savedDrafts.value = savedDrafts.value + (peer to current.withAttachment(work.view))
+                    outcome is AttachmentPreparationOutcome.Prepared
+                }
+            }
+            work.producerEnd = producer
+            producer.join()
+        }
+        work.job = pending.takeUnless { it.isCompleted }
+        return true
+    }
+
+    internal fun visibleAttachment(expected: SessionState, peer: Long,
+        isCurrentEntry: () -> Boolean): DirectAttachmentDraft? {
+        if (!isCurrentEntry() || !active || !selected(expected, peer)) return null
+        return attachments[peer]?.view?.takeIf { it.selection.matches(session.value) }
+    }
+
+    internal fun removeAttachment(expected: SessionState, peer: Long, original: DirectAttachmentDraft,
+        isCurrentEntry: () -> Boolean): Boolean {
+        if (!isCurrentEntry() || !active || !selected(expected, peer) || mutable.value.busy || write != null ||
+            mutable.value.sending || attachments[peer]?.selection !== original.selection) return false
+        removeAttachmentWork(peer)
+        rememberDraft()
+        return true
+    }
+
+    private fun removeAttachmentWork(peer: Long): Job? {
+        val retired = attachments.remove(peer) ?: return null
+        retired.job?.cancel()
+        retired.retained?.close()
+        retired.retained = null
+        return retired.producerEnd
+    }
+    private fun retireAttachments() { attachments.keys.toList().forEach { removeAttachmentWork(it) } }
+    override fun onCleared() { retireAttachments(); super.onCleared() }
     private class IncompleteRange : Exception()
     private fun ApiFailure.ambiguous() = kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.TLS,
         FailureKind.REDIRECT, FailureKind.INCOMPATIBLE, FailureKind.TOO_LARGE) || (status ?: 0) >= 500
     companion object {
         internal fun factory(operations: DirectOperations, realtime: RealtimeController? = null,
             typing: TypingController? = null, mutations: MessageMutationOperations? = null,
-            reactions: MessageReactionOperations? = null): ViewModelProvider.Factory = viewModelFactory {
-            initializer { DirectThreadViewModel(operations, realtime, typing, mutations, reactions) }
+            reactions: MessageReactionOperations? = null,
+            attachmentBudget: AttachmentMemoryBudget? = null): ViewModelProvider.Factory = viewModelFactory {
+            initializer { DirectThreadViewModel(operations, realtime, typing, mutations, reactions, attachmentBudget) }
         }
     }
 }
