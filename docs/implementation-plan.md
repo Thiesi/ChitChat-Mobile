@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g4c final-byte policy](milestones/M5g4c-attachment-policy-state.md) exposes current policy observations for READY final bytes while preserving original private drafts and actual-entry guards. Next implement explicit original-photo choice preparation and serialized upload/unknown-delivery state, then native picker/attach controls. Keep policy facts separate from consent/authority, and prove actual multipart termination before non-delivery claims.
+
 [M5g4b DM attachment drafts](milestones/M5g4b-direct-attachment-draft-state.md) integrates local preparation into both conversation owners using the same process budget. Next implement final-byte server-policy checks and fresh explicit privacy-choice state, then serialized attachment POST/unknown-delivery reconciliation and native picker/attach controls. Preserve private original slots, actual-entry actions and producer lifetime; no files/media completion is claimed.
 
 [M5g4a room attachment drafts](milestones/M5g4a-room-attachment-draft-state.md) integrates local preparation into the real room VM and existing100-draft table with a shared process budget. Continue DM ownership, final-byte policy and explicit privacy-choice state, then serialized attachment POST/unknown-delivery handling and native picker/attach controls. Preserve the accepted private-slot lifecycle and actual-entry action fences; do not declare files/media complete.

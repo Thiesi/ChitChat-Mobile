@@ -3,6 +3,8 @@ package io.github.thiesi.chitchat.feature.conversation
 import io.github.thiesi.chitchat.core.media.AttachmentMemoryBudget
 import io.github.thiesi.chitchat.core.media.AttachmentPickSource
 import io.github.thiesi.chitchat.core.media.AttachmentPolicy
+import io.github.thiesi.chitchat.core.media.AttachmentPolicyObservation
+import io.github.thiesi.chitchat.core.media.observeAttachmentPolicy
 import io.github.thiesi.chitchat.core.media.AttachmentPreparation
 import io.github.thiesi.chitchat.core.media.AttachmentPreparationOutcome
 import io.github.thiesi.chitchat.core.media.AttachmentPreparationTask
@@ -323,6 +325,19 @@ class ConversationViewModel internal constructor(private val operations: Convers
         isCurrentEntry: () -> Boolean): RoomAttachmentDraft? {
         if (!isCurrentEntry() || !foreground || mutable.value.roomId != roomId || !belongsTo(expected)) return null
         return attachments[roomId]?.view?.takeIf { it.selection.matches(session.value) }
+    }
+
+    /** Display facts for the current original selection, without mutating its private draft.
+     * Recompute from current policy; neither an earlier result nor these facts authorize Send.
+     */
+    internal fun attachmentPolicyObservation(expected: SessionState, roomId: Long, original: RoomAttachmentDraft,
+        isCurrentEntry: () -> Boolean): AttachmentPolicyObservation? {
+        val current = visibleAttachment(expected, roomId, isCurrentEntry) ?: return null
+        val now = session.value
+        if (current.selection !== original.selection || savedDrafts.value[roomId]?.slot !== current.selection.slot ||
+            !current.selection.matches(now)) return null
+        val finalSize = current.sizeBytes.takeIf { current.phase == RoomAttachmentPhase.READY }
+        return observeAttachmentPolicy(now.attachmentPolicy, finalSize, current.mimeType)
     }
 
     internal fun removeAttachment(expected: SessionState, roomId: Long, original: RoomAttachmentDraft,

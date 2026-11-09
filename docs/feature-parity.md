@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5g4c final-byte policy](milestones/M5g4c-attachment-policy-state.md) gives original-bound room/DM state current cached-policy observations using the same predicates as transport. Size checks use READY final bytes, not unchosen originals; policy changes create no private-state, memory or network effects. These facts grant no send/privacy consent. Original-photo choice preparation, upload/reconciliation and native controls remain pending; files/media is not usable yet.
+
 [M5g4b DM attachment drafts](milestones/M5g4b-direct-attachment-draft-state.md) connects owned local preparation to real DM private slots and the same process budget as rooms, preserving100-draft capacity, captions/replies and serialized-operation uncertainty. Inbox discard now binds the original draft and actual entry. Final policy checks, explicit privacy consent, attachment POST and native/provider controls remain pending; files/media is not yet usable.
 
 [M5g4a room attachment drafts](milestones/M5g4a-room-attachment-draft-state.md) connects local preparation to the real room VM, original private slots, existing100-draft capacity and a process-scoped memory ledger. Navigation/background may finish only in the original private slot; display/actions need fresh entry proof. Replacement/discard/session retirement rejects late results and preserves charges until actual producer end. DM ownership, final policy checks, consent, upload and native picker/card controls remain pending; this is not usable files/media acceptance.

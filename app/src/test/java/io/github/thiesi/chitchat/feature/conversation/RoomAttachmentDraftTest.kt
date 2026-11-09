@@ -12,6 +12,7 @@ import io.github.thiesi.chitchat.core.server.AddressResult
 import io.github.thiesi.chitchat.core.server.ServerAddress
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
+import io.github.thiesi.chitchat.testing.pngWithPrivateText
 import java.io.ByteArrayInputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -291,6 +292,46 @@ class RoomAttachmentDraftTest {
         source.finish.countDown(); prepared()
         assertSame(slot, model.drafts.value.getValue(42).slot)
         assertEquals("updated while preparing", model.drafts.value.getValue(42).body)
+    }
+
+    @Test fun currentPolicyFactsDoNotMutateThePrivateDraftOrGrantSend() = runTest(dispatcher) {
+        open(); val owner = api.session.value
+        assertTrue(pick()); val ready = prepared()
+        val memo = model.drafts.value.getValue(42); val charge = budget.reservedBytes; val calls = api.calls.toList()
+        api.session.value = owner.copy(attachmentPolicy = AttachmentPolicy.Known(5,emptySet(),emptySet(),null)); runCurrent()
+        val blocked = model.attachmentPolicyObservation(owner,42,ready) { true } as AttachmentPolicyObservation.TooLarge
+        assertEquals(6L,blocked.sizeBytes); assertEquals(5L,blocked.maxBytes)
+        api.session.value = owner.copy(attachmentPolicy = AttachmentPolicy.Known(6,emptySet(),emptySet(),null)); runCurrent()
+        assertSame(AttachmentPolicyObservation.WithinAdvertisedFacts,model.attachmentPolicyObservation(owner,42,ready) { true })
+        api.session.value = owner.copy(attachmentPolicy = AttachmentPolicy.Invalid); runCurrent()
+        assertSame(AttachmentPolicyObservation.Invalid,model.attachmentPolicyObservation(owner,42,ready) { true })
+        api.session.value = owner; runCurrent()
+        assertSame(AttachmentPolicyObservation.Unadvertised,model.attachmentPolicyObservation(owner,42,ready) { true })
+        assertNull(model.attachmentPolicyObservation(owner,42,ready) { false })
+        assertNull(model.attachmentPolicyObservation(owner,43,ready) { true })
+        assertSame(memo,model.drafts.value.getValue(42)); assertEquals(charge,budget.reservedBytes)
+        assertEquals(calls,api.calls); assertFalse(model.canSend()); model.send(); assertEquals(0,api.sends)
+        model.background(); assertNull(model.attachmentPolicyObservation(owner,42,ready) { true })
+    }
+
+    @Test fun policyUsesCleanedPhotoBytesAndNeverTheUnchosenOriginalSize() = runTest(dispatcher) {
+        open(); val owner = api.session.value; val png = pngWithPrivateText()
+        assertTrue(png.size>80)
+        assertTrue(model.selectAttachment(owner,42,"entry-42",
+            PickedAttachmentRead("photo","image/png") { ByteArrayInputStream(png) },AttachmentPickSource.FILE) { true })
+        val clean = prepared(); assertEquals(AttachmentPhotoPrivacy.LOCATION_REMOVED,clean.privacy)
+        assertTrue(clean.sizeBytes!!<=80)
+        api.session.value = owner.copy(attachmentPolicy=AttachmentPolicy.Known(80,setOf("image/png","image/gif"),emptySet(),null)); runCurrent()
+        assertSame(AttachmentPolicyObservation.WithinAdvertisedFacts,model.attachmentPolicyObservation(owner,42,clean) { true })
+        val gif = "GIF89a" + "x".repeat(512)
+        assertTrue(model.selectAttachment(api.session.value,42,"entry-42",
+            PickedAttachmentRead("photo","image/gif") { ByteArrayInputStream(gif.toByteArray()) },
+            AttachmentPickSource.FILE,clean) { true })
+        val choice = prepared(); assertEquals(RoomAttachmentPhase.PRIVACY_CHOICE,choice.phase); assertTrue(choice.sizeBytes!!>80)
+        assertSame(AttachmentPolicyObservation.AwaitingFinalBytes,model.attachmentPolicyObservation(owner,42,choice) { true })
+        assertNull(model.attachmentPolicyObservation(owner,42,clean) { true })
+        api.session.value = owner.copy(generation=2); runCurrent()
+        assertNull(model.attachmentPolicyObservation(owner,42,choice) { true }); assertEquals(0,api.sends)
     }
 
     private class Held {
