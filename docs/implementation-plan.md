@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g3i owned preparation](milestones/M5g3i-owned-preparation-task.md) connects snapshot/classification/cleaning/evidence to a reservation-owning task. Next integrate its original-task adoption with real session/entry/conversation draft owners and a shared device budget, preserving draft capacity, original privacy choice and serialized POST uncertainty. Native picker/attach controls and full-multipart cancellation proof remain separate; no file feature is declared complete.
+
 [M5g3h memory reservations](milestones/M5g3h-attachment-memory-budget.md) supplies the shared allocation ledger before actual original-owner attachment state. Next integrate conservative input/output/workspace charges and delayed producer release into that owner, then native/provider controls with explicit privacy-failure consent. Cancellation proof still needs full-multipart writer termination; no silent eviction, raw-photo fallback or native files/media completion is implied.
 
 [M5g3g preparation routing](milestones/M5g3g-attachment-preparation-routing.md) applies the approved magic/MIME/Picker classification boundary and routes supported photos to cleaning and final-byte evidence. Unsupported/image-hinted unknowns retain an original snapshot choice; opaque non-photo files remain unchanged without another prompt. Continue actual aggregate-budget/original-owner consent state and native/provider controls; no silent raw-photo fallback or complete files/media claim.

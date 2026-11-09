@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5g3i owned preparation](milestones/M5g3i-owned-preparation-task.md) adds an internal one-shot producer with pre-open reservation, conservative retained-byte charges and synchronous original-task adoption/discard. It does not yet connect actual app picker/draft/process ownership or expose file controls. No silent raw-photo fallback, send consent, provider acceptance or cancellation/non-delivery claim is added.
+
 [M5g3h memory reservations](milestones/M5g3h-attachment-memory-budget.md) adds an internal shared-capacity lease primitive with atomic growth/release and stale-lease protection. It does not yet bound actual app allocations: process ownership, correct buffer costing, original-owner attachment state and native/provider consumers must adopt it. No usable media control, send consent or cancellation/non-delivery claim is added.
 
 [M5g3e WebP privacy](milestones/M5g3e-webp-photo-privacy.md) adds internal static-WebP metadata cleanup preserving coded pixels, ICC, alpha and supported orientation/colour, with original RIFF/feature validation and known raw/prefixed TIFF handling. JVM container regressions and a real Android codec test distinguish byte retention from decoder proof. Animation/unknown layouts remain safe failures; final ready-byte hashing, aggregate memory/state, explicit failure consent/fallback and native/provider controls remain pending. This is not complete photo/files/media acceptance.

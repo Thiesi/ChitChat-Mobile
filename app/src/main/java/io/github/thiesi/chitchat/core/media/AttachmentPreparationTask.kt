@@ -1,0 +1,111 @@
+package io.github.thiesi.chitchat.core.media
+
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+
+internal sealed interface AttachmentPreparationOutcome {
+    class Prepared(val retained: RetainedAttachmentPreparation) : AttachmentPreparationOutcome
+    class Failed(val kind: PreparationFailureKind) : AttachmentPreparationOutcome
+}
+
+/** Owned bytes plus their conservative charge, not send or privacy-bypass authority.
+ * The feature owner must keep this alive while any draft/worker/upload uses its bytes.
+ * Close discards this handle's reference; callers must not retain byte references after close.
+ */
+internal class RetainedAttachmentPreparation internal constructor(
+    preparation: AttachmentPreparation,
+    private val reservation: AttachmentMemoryBudget.Reservation,
+) : AutoCloseable {
+    private val value = AtomicReference<AttachmentPreparation?>(preparation)
+    val preparation: AttachmentPreparation? get() = value.get()
+    val reservedBytes: Long get() = reservation.reservedBytes
+
+    override fun close() {
+        value.set(null)
+        reservation.close()
+    }
+}
+
+/** One frozen source, one bounded producer, one synchronous Main-thread adoption decision.
+ * The later feature owner must recheck the original session/actual entry/selection in
+ * deliver and return true only after atomically retaining the handle. False discards it.
+ * Never store a handle and then suspend before deciding. This task grants no consent,
+ * draft-slot capacity, upload or retry authority, and never reopens a provider.
+ */
+internal class AttachmentPreparationTask(
+    private val read: PickedAttachmentRead,
+    private val source: AttachmentPickSource,
+    private val budget: AttachmentMemoryBudget,
+    private val readLimitBytes: Long,
+) {
+    private val claimed = AtomicBoolean()
+
+    init { require(readLimitBytes in 1..MAX_ATTACHMENT_SNAPSHOT_BYTES) { "Invalid attachment read budget" } }
+
+    fun start(scope: CoroutineScope,
+        deliver: (AttachmentPreparationTask, AttachmentPreparationOutcome) -> Boolean,
+    ): Job {
+        check(claimed.compareAndSet(false, true)) { "Attachment preparation already started" }
+        return scope.launch(Dispatchers.Main.immediate) {
+            var reservation: AttachmentMemoryBudget.Reservation? = null
+            var retained: RetainedAttachmentPreparation? = null
+            var adopted = false
+            try {
+                ensureActive()
+                val outcome = try {
+                    // Both possible byte sets plus bounded parser/hash/segment working space.
+                    // Client allocation costs never use provider size hints or server limits.
+                    val peak = readLimitBytes * 2 + WORKSPACE_BYTES
+                    reservation = budget.reserve(peak)
+                        ?: throw AttachmentPreparationFailure(PreparationFailureKind.CLIENT_BUDGET)
+                    val original = read.snapshot(readLimitBytes)
+                    ensureActive()
+                    val prepared = prepareAttachment(original, source)
+                    ensureActive()
+                    val outputBytes = (prepared as? AttachmentPreparation.Ready)?.payload?.sizeBytes ?: 0
+                    // Keep the source allocation charge even when cleaned views share its backing
+                    // segments. Only the now-finished producer's working charge is released.
+                    val charge = rounded(original.bytes.size.toLong()) + rounded(outputBytes) + RETAINED_OVERHEAD_BYTES
+                    if (charge > peak) throw AttachmentPreparationFailure(PreparationFailureKind.CLIENT_BUDGET)
+                    check(reservation!!.resize(charge)) { "Attachment reservation retired" }
+                    val handle = RetainedAttachmentPreparation(prepared, reservation!!)
+                    retained = handle
+                    AttachmentPreparationOutcome.Prepared(handle)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: AttachmentPreparationFailure) {
+                    AttachmentPreparationOutcome.Failed(failure.kind)
+                } catch (_: Exception) {
+                    // Provider/parser implementation messages can contain private input.
+                    AttachmentPreparationOutcome.Failed(PreparationFailureKind.READ_FAILED)
+                }
+                ensureActive()
+                // No suspension after adoption: a cancelled dispatcher handoff cannot lose a
+                // resource that only the receiving caller knew it was supposed to close.
+                adopted = deliver(this@AttachmentPreparationTask, outcome) && retained != null
+            } finally {
+                // withContext children have ended before this finally, even if provider IO ignored
+                // cancellation temporarily. Never free a producer's charge from Job.cancel().
+                if (!adopted) {
+                    retained?.close()
+                    reservation?.close()
+                }
+            }
+        }
+    }
+
+    private fun rounded(bytes: Long) = ((bytes + 8191) / 8192) * 8192
+
+    private companion object {
+        const val WORKSPACE_BYTES = 4L * 1024 * 1024
+        // Padding for backing-array headers, directories and the bounded chunk/segment tables;
+        // logical bytes alone undercount sliced, segmented photo outputs.
+        const val RETAINED_OVERHEAD_BYTES = 1024L * 1024
+    }
+}
