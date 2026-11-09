@@ -8,6 +8,12 @@ matches the web's Stewarding rework (#191, web S6 #172), as agreed with the CC v
 Mockup: `StaffPeople` on the canvas. Moderation (the Reports queue, acting on a person) is in
 moderation.md.
 
+**Minimum server version.** The #191 fields (directory `counts`, `next_cursor`, `active_ban`,
+`active_mute`, `closing`, and the subject case counts) merged after v3.4.0. The staff screens
+that use them ship only against a minimum server version that includes #191. The technical
+lead raises the minimum when that release is tagged. There's no fallback for older servers and
+no per-field version check (one rule: the minimum version).
+
 ## What belongs on a phone
 
 An administrator on a phone is usually responding to something: a report, a troublemaker, an
@@ -51,8 +57,8 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
   - otherwise "Signed in {relative time}" or "Never signed in".
 - **Paging:** **More** from `next_cursor`. Changing search, chip or sort starts over. The list
   doesn't claim a frozen order: sign-in sorting can shift while someone is paging (server note).
-- **Client check:** `counts` and `next_cursor` present. On an older server, there are no chips,
-  no sort and no restriction lines, only search and ID order with **More**.
+- These fields are guaranteed by the minimum server version (above). A response missing them
+  is a server problem shown with the existing status ladder, never a reduced directory.
 - Guests aren't in the directory (server rule). Guest actions live on their profile cards.
 
 **A person (staff view)** opens from a row: the profile card's facts, plus:
@@ -132,7 +138,7 @@ An emergency switch, so it's on the phone, behind step-up.
 ## Tests
 
 - **Unit:** Stewarding rows per role; chips, counts and cursor reset on any change; the
-  older-server fallback without chips; row secondary-line priority; staff facts from
+  row secondary-line priority; staff facts from
   `active_ban`, `active_mute` and `closing`; room settings send the full state; guest-removal
   warning conditions; lockdown sign-out count only when requested; no automatic resend
   anywhere; web-only rows never open a browser by themselves.
@@ -145,7 +151,7 @@ An emergency switch, so it's on the phone, behind step-up.
 | ID | Requirement | Verify |
 |---|---|---|
 | P-205 | Stewarding shows only the rows the viewer's role allows. Web-only tasks show "Do this on {installation}'s website." with an explicit Open website, never an automatic browser. | U, C |
-| P-206 | People uses search, the Everyone/Staff/Banned/Muted/Closing chips with server counts, the two sorts and cursor paging, and falls back to search and ID order on older servers. Rows show the most important restriction or sign-in fact. | U, C |
+| P-206 | People uses search, the Everyone/Staff/Banned/Muted/Closing chips with server counts, the two sorts and cursor paging, and ships only against a minimum server version that includes #191 (no older-server fallback). Rows show the most important restriction or sign-in fact. | U, C |
 | P-207 | A person's staff view shows roles, dates, active ban and mute, closing date and report counts, with only the server-allowed everywhere actions. Roles, password reset and audit stay web-only. | U, C |
 | P-208 | Room settings send the full editable state, warn before removing guests, and never resend. Members and invitations follow the ranks. Delete and restore stay web-only. | U, C |
 | P-209 | Server status is read-only and shows no personal data. Lockdown is Super-Administrator-only, explains its effects, needs step-up, and reports the sign-out count. | U, C |
