@@ -2,7 +2,9 @@
 
 Status: presentation lead's audit of today's app against the Lantern specs, written for the
 technical lead to sequence and scope the restyle slices after files/media and push (technical
-lead, 2026-11-09). It describes what the app shows now. It changes no contract.
+lead, 2026-11-09). It describes what the app shows now. It changes no contract. The
+technical lead adopted it on 2026-11-09. It ends with the A-floor fixes brief and the modal
+capture note for Codex.
 
 ## Evidence
 
@@ -185,3 +187,139 @@ Ordered for user impact per unit of work, and to avoid restyling a screen twice:
 Accessibility work that isn't a slice: add a capture or Compose check that the bar title stays
 on one line at 2.0, and make the clipped-header check from gap 4 an explicit test once the
 status slice lands. Both are A-04.
+
+**Adopted order** (technical lead, issue #1, comment 6735584703), after files/media:
+
+1. the A-floor fixes slice below;
+2. push;
+3. status plus the copy deck, with condensed development disclosures;
+4. nav shell;
+5. onboarding (including the recovery-key display, rules acceptance and server update);
+6. transcript, lists, reporting and modals.
+
+## A-floor fixes slice (brief for Codex)
+
+A small, self-contained presentation slice that fixes the three A-floor violations above before
+the larger slices. It changes no behavior contract: no navigation, request, read-proof, send,
+focus or IME behavior changes. The development disclosures, the bounded-header rule and the
+Details trigger conditions stay as they are, because the status slice owns them.
+
+### F1. Top-bar titles never break mid-word (A-04)
+
+- **Where:** the single `TopAppBar` in `app/ChitChatApp.kt` (title chosen by route), on every
+  screen. Seen on home at 2.0: "ChitChat" splits as "ChitC / hat" next to Account and Settings.
+  At 2.0 "Search messages" also wraps to two lines.
+- **Direction:**
+  - **The wordmark** (`R.string.app_name`, home and signed-out screens) is a logotype. It's
+    drawn on one line at a fixed size that doesn't follow the font scale (the display face at
+    today's 1.0 size), with the semantics heading and content description "ChitChat". It never
+    wraps or ellipsizes.
+  - **Every other bar title** is one line (`maxLines = 1`, `TextOverflow.Ellipsis`), follows
+    the font scale, and keeps its full text in semantics (heading), so TalkBack reads it whole.
+  - Account, Settings and Back stay text buttons with their current labels and tests. The nav
+    shell replaces them later.
+- **Acceptance:**
+  - At font scale 2.0 on 360×640dp, light and dark: the home capture shows "ChitChat" on one
+    line, uncut, with Account and Settings fully visible. No bar title wraps to a second line on
+    any of the 11 capture screens.
+  - A Compose test at 2.0 asserts the wordmark lays out on one line without ellipsis on home,
+    and that a long title is one line with its full text in semantics.
+  - At 1.0 the captures are unchanged apart from these titles.
+
+### F2. Bounded room and DM headers show they continue (A-04)
+
+- **Where:** the header column bounded to 30% of the height in
+  `feature/conversation/ConversationScreen.kt` (`headerLimit`, the room header) and
+  `feature/direct/DirectScreens.kt` (`headerLimit`, the DM thread header). At 2.0, a line is
+  cut off at the bottom edge ("47 new here (local"), which reads as broken text.
+- **Direction:** keep the 30% bound and its scrolling. The composer must stay visible, and that
+  contract wins. When the content overflows:
+  - draw a **bottom fade** over the last 24dp of the header, from transparent to `ground`, so
+    the cut reads as "continues", not "broken";
+  - add a **More** text button (48dp target, `signatureText`) at the header's bottom-end. It
+    scrolls the header by one viewport height, and at the end it becomes **Back to top**;
+  - the header column exposes scroll semantics (TalkBack announces it as scrollable).
+
+  When the content fits, there's no fade and no button. Don't change the header text, the status
+  precedence or what the header contains. The status slice shortens it later.
+- **Acceptance:**
+  - At 2.0 on 360×640dp, room and DM thread captures show the fade and More whenever the header
+    overflows, and no hard-cut line without the fade. At 1.0 with fitting content, neither
+    appears.
+  - A Compose test: an overflowing header shows More (48dp touch target). Each press scrolls
+    without moving the composer, and the composer and Send stay displayed together (A-04). A
+    fitting header shows neither.
+  - The existing composer, input, read-proof and landscape tests pass unchanged.
+
+### F3. The Details marker isn't color-only (A-05, A-02)
+
+- **Where:** `AttentionBadge` in `core/ui/CountBadge.kt`, used on the ⋮ Details button in
+  `ConversationScreen.kt` (room composer) and `DirectScreens.kt` (`DirectPrivacyNotice`). Today
+  the dot's color alone separates generic (persimmon, 2.9:1 on paper), uncertain
+  (`unsureLine`) and failed (`error`). TalkBack hears the same "Updates or actions need
+  attention" for all three.
+- **Direction:**
+  - **Generic attention:** keep a dot, but in `signatureText` (5.3:1 on paper, 6.1:1 on night
+    ink) instead of the `signature` fill. Its presence is the signal, so it's a shape, not a
+    color difference.
+  - **Uncertain:** the Lantern `help` icon (question mark, 12dp in a 16dp `ground`-ringed badge)
+    in `unsureLine`.
+  - **Failed:** the Lantern `warning` icon in the same badge, in `error`.
+  - **Glyph:** replace the ⋮ text glyph with the Lantern `more` icon (24dp, `textMuted`, at
+    least 3:1). The button keeps its 48dp target, label and test tag.
+  - **State descriptions,** one per state (new strings):
+    - generic keeps "Updates or actions need attention";
+    - uncertain: "Not sure something went through. Open details to check.";
+    - failed: "Something didn't work. Open details for what happened.";
+    - the existing "Sending unavailable…" description stays for the blocked case.
+  - The conditions that turn the marker on don't change in this slice. Today it's on whenever
+    realtime isn't LIVE, and the status slice decides that later.
+- **Acceptance:**
+  - In a grayscale capture, the three states are distinguishable by shape (dot, question,
+    warning) (A-05). Each marker and the `more` icon measure at least 3:1 against `ground` in
+    light, dark and Pure black (A-02), checked in the token contrast test.
+  - A Compose test asserts each state's state description and that uncertain takes precedence
+    over failed (today's `AttentionBadge` rule).
+  - The Details button stays at least 48×48dp. Existing Details, composer and input tests pass
+    unchanged.
+
+### Slice evidence
+
+One dispatch of the capture workflow on the slice head against main, presented for J review with
+the 2.0 home, room and DM captures in light and dark. The ordinary full gates apply as usual.
+
+## Modal capture fixture extension (spec note for Codex)
+
+Today's capture fixture (`theme/ThemePresentationJourneyTest.kt`) photographs only the
+`theme_capture_root` node and **refuses popups**: its `capture()` checks that no ancestor is
+`IsPopup`. Dialogs and sheets live in their own windows, so they can't appear. Before the
+modals slice is scoped, the fixture needs modal scenes.
+
+- **Scenes** (one per modal kind from modals-restyle.md, opened from existing fixture screens,
+  never confirmed):
+  - **choice sheet:** message actions on a room message (with the reaction row), and the DM
+    privacy details;
+  - **profile card:** a room author's card;
+  - **decision dialog:** Leave room (opened, then cancelled) and Mark all read;
+  - **form dialog:** author edit on an own message (needs an own message in the room fixture),
+    and the step-up dialog if it can be opened without a POST.
+- **Capture:** each modal over its scrim and the screen behind it, at the same 360×640dp bounds
+  and in the same palettes and font scales. For example, a whole-display screenshot through
+  `UiAutomation`, cropped to the app window, or each dialog root's `captureToImage` composited
+  over the screen behind. The method is Codex's choice. The image must match what a person sees,
+  including the scrim.
+  - File names: `theme-{label}-modal-{scene}.png`.
+  - Configuration JSON and the accessibility checks run as for the screen scenes. The modal's
+    own root is checked too.
+- **No writes:** keep the existing zero-POST assertions (`sends`, `posts`) and add the
+  membership, delete, edit and read counters touched by these modals. Every modal is dismissed
+  by Cancel or Back, never confirmed.
+- **Helper and baseline:**
+  - `.github/scripts/theme_comparison.py` lists `SCENES` and asserts exactly 7 `// THEME_ONLY`
+    markers for the pre-theme adaptation. Add the modal scenes to the helper's validation and
+    its tests (`test_theme_comparison.py`).
+  - Decide explicitly how the "before" side handles modals that don't exist on the pre-theme
+    base: skip them with a reviewed marker, or limit modal scenes to the "after" side. Don't
+    weaken the existing count assertions.
+- **Bounds:** this stays the manual, review-only capture workflow with the same retention and
+  provenance. It's not part of the native acceptance gate and doesn't change it.
