@@ -22,13 +22,14 @@ Notification kinds are **not** in today's payload. Ordinary unmentioned DMs crea
 notification today. Quiet hours and the mention/ping mutes are applied by the server before
 sending.
 
-### Backend batch 3 (ChitChat#148 merged; Dependency: #147, #150)
+### Backend batch 3 (ChitChat#148 and #147 merged; Dependency: #150)
 
 The batch 3 design is approved on both sides (ChitChat#163, design comment 6729256820, final
 client-facing decisions 6729292941; CCM issue #1, comment 6729288173). **#148 has merged**
-(ChitChat#189, main `10edf42`; issue #1, comment 6730059848). #147 and
-#150 haven't. Each part below names the issue it depends on. Leave #147 and #150 parts out of
-the build until they merge, and keep today's behavior meanwhile.
+(ChitChat#189, main `10edf42`; issue #1, comment 6730059848), and so has **#147**
+(ChitChat#193, main `e042e6a`; issue #1, comment 6731145024; ChitChat `docs/api/web-push.md`).
+#150 hasn't: leave its parts out of the build until it merges, and keep today's behavior
+meanwhile.
 
 **One rule: the minimum server version.** #148 has no client check, and the 3.4.0 minimum
 doesn't include it. All batch 3 push behavior, including the two settings lines below
@@ -50,14 +51,19 @@ per-feature version checks.
   their meaning:
   - `kind`: the exact timeline kind (string);
   - `notification_id`: the selected timeline row (integer);
-  - `event_id`: opaque ASCII, at most 64 characters, stable across retries and the mention or
-    DM choice;
-  - `binding`: opaque ASCII, at most 64 characters, compared exactly. It's present on every
-    push from a bound subscription.
+  - `event_id`: a UUID (opaque ASCII, at most 64 characters), stable across retries and the
+    mention or DM choice;
+  - `binding`: 64 hex characters, compared exactly. It's present on every push from a bound
+    subscription.
+  - The plaintext payload stays at or under 2,999 bytes. When it would be over, the server
+    trims `body`, then `title`, then `app_name`, ending each with "…". Identifiers and
+    `link` are never trimmed. CCM shows the trimmed text as received, and never treats the
+    "…" as an error or tries to restore the text.
 - **Subscription lifecycle (#147):** subscribe returns `{subscribed: true, id, binding}`.
-  Revoking by `id` works for the owning session even after the endpoint rotated. Logout
-  removes that login session's registrations on the server. The device list adds an
-  optional `device_label` and a current-session flag.
+  The client check is `id` and `binding` in that response. Revoking by `id` works for the
+  owning session even after the endpoint rotated. Logout removes that login session's
+  registrations on the server. The device list adds an optional `device_label` and
+  `current_session`.
 - **Opt-in DM alerts (#150):** see "Direct message alerts".
 - **Wake latency (#148):** with the optional listening worker, a push leaves the server within
   a few hundred milliseconds. With the timer only, it leaves within about 15 seconds. Which
@@ -81,19 +87,20 @@ user settings per channel ID.
 
 | Channel ID | Name | Importance | Created | Receives |
 |---|---|---|---|---|
-| `mentions` | Mentions and pings | High (heads-up, sound) | When push is enabled | `mentioned` and `pinged`. **Without a payload `kind` (before #147, or an older server), every push goes here** |
-| `account` | Account and server notices | Default | When push is enabled on a server whose payloads carry `kind` | Every other pushed kind: security, account, moderation of your own content and server notices, plus **any kind CCM doesn't know** |
+| `mentions` | Mentions and pings | High (heads-up, sound) | When push is enabled | `mentioned` and `pinged` |
+| `account` | Account and server notices | Default | When push is enabled | Every other pushed kind: security, account, moderation of your own content and server notices, plus **any kind CCM doesn't know** |
 | `moderation` | Moderation | Default | Only once the server pushes a moderator-facing kind (M7). None exists today, so the channel isn't created | Moderator queue notices |
 | `direct` | Direct messages | High | When the person turns on Direct messages, or on the first `direct_message_received` push if the preference was turned on from another device | `direct_message_received` (ChitChat#150) |
 
-**Choosing the channel (Dependency: ChitChat#147).** The channel comes **only from the explicit
+**Choosing the channel (ChitChat#147, merged).** The channel comes **only from the explicit
 payload `kind`**, through a fixed table in code:
 
 - `mentioned` and `pinged` go to `mentions`;
 - `direct_message_received` goes to `direct`;
 - every other kind, known or unknown, goes to `account`. An unknown kind never gets a
   high-importance channel;
-- no `kind` (older server) goes to `mentions`, as today.
+- a push without `kind` can't come from a server at the batch 3 minimum. If one arrives
+  anyway, it goes to `account` (default importance), never to a high-importance channel.
 
 CCM never guesses a kind from the title, body or link text. A timeline-only kind
 (`privacy_policy_updated`) is never pushed, so it needs no mapping.
@@ -150,9 +157,8 @@ Presentation:
   title and text, `app_name` as sub-text, no large icon or avatar, no MessagingStyle, no
   Reply or Mark read, and tap goes through the guarded destination flow (nothing marked read).
   A DM alert is still a doorbell. CCM never shows or fetches the message for it.
-- **Channel:** `direct` when the payload carries `kind = direct_message_received`. Without a
-  `kind` (an older server, or #147 not yet shipped), it posts in `mentions` like every other
-  push. CCM never guesses from the text that a push is a DM.
+- **Channel:** `direct` when the payload carries `kind = direct_message_received`. CCM never
+  guesses from the text that a push is a DM.
 - **Lock screen:** the public version reads "{installation name}" / "New direct message" when
   the kind is known, otherwise "New notification".
 - **Mention plus DM (final #150 semantics):** both timeline rows are kept, and the server
@@ -179,7 +185,7 @@ Presentation:
 - All notifications for one account on one server share a group key, scoped by server and
   account. When two or more are showing, a summary notification reads "{n} new in
   {app_name}", without listing names.
-- **One notification per event (Dependency: ChitChat#147).** The notification **tag is the
+- **One notification per event (ChitChat#147, merged).** The notification **tag is the
   payload `event_id`** (scoped by server and account), so a duplicate delivery **replaces**
   the earlier copy and never stacks. A small, bounded set of recently seen `event_id`s per
   account (sized to the 6-hour lifetime) also stops a duplicate from reappearing after the
@@ -188,8 +194,8 @@ Presentation:
   account's other local push state on sign-out or account removal. After process death the
   set is empty, so a late duplicate of a dismissed alert can appear once. That's accepted:
   it's rare, and it avoids storing new data.
-- Without `event_id` (before #147, or an older server), each push is a separate notification.
-  Never deduplicate by comparing text.
+- A push without `event_id` can't come from a server at the batch 3 minimum. If one arrives
+  anyway, it's a separate notification. Never deduplicate by comparing text.
 - Opening CCM does **not** automatically clear notifications. Viewing a destination may clear
   only that destination's own notification, once `notification_id` or the tag makes it
   identifiable.
@@ -197,8 +203,8 @@ Presentation:
 ## Lock screen
 
 - Channel visibility is `VISIBILITY_PRIVATE`, with a public version whose title is the
-  installation name and whose text is "New notification", or by `kind`, once it exists: "New
-  mention", "New ping", "New direct message", and "New notification" for everything else.
+  installation name and whose text follows the `kind`: "New mention", "New ping", "New direct
+  message" (with #150), and "New notification" for everything else.
   Rendered notices can contain usernames and moderation reasons (M4c4a), so the full text
   shows only when unlocked or when the person's system settings allow it.
 - The setting text says so plainly: "On the lock screen, ChitChat shows only that something
@@ -210,13 +216,12 @@ Presentation:
   **cancels that account's visible notifications locally, at once**, with no network
   needed. Later pushes for it are dropped silently (M6 contract).
 - **Sign-out unregisters this device itself, immediately.** While the session is still valid,
-  it revokes this phone's subscription (by its `id` once #147 provides it, else
-  `POST push/unsubscribe.php` with its endpoint), then unregisters the distributor connection
-  and discards the keys and binding. **With #147, the server also removes this login session's
-  registrations at logout.** CCM doesn't rely on that: an offline sign-out can't confirm
+  it revokes this phone's subscription by its `id` (`POST push/revoke-device.php`), then
+  unregisters the distributor connection and discards the keys and binding. **The server also
+  removes this login session's registrations at logout (#147).** CCM doesn't rely on that: an offline sign-out can't confirm
   anything, and the local drop rule keeps the account's pushes hidden either way. Sign-out
   copy never claims the device was removed from the server.
-- **Binding check (Dependency: ChitChat#147).** CCM keeps the `binding` returned at subscribe
+- **Binding check (ChitChat#147, merged).** CCM keeps the `binding` returned at subscribe
   with the account and session generation it belongs to. A push is shown only when its
   `binding` matches the binding of a currently signed-in account and generation exactly. A
   mismatched or unknown binding, or a missing one once this device holds a binding, is
@@ -282,19 +287,27 @@ The screen shows:
     otherwise show the raw string truncated.
   - Secondary line: "Added {date} · last used {date}".
   - **Remove** (decision dialog) calls `POST push/revoke-device.php` with the row's ID.
-  - **Before #147, the API can't identify which row is this phone** (no endpoint in the
-    list), so no row is labelled "This phone". Removing this phone's own subscription is done
-    with **Turn off**, which unsubscribes by endpoint.
-  - **With #147:** the row whose current-session flag is true is labelled "**This phone**" and
-    sorted first. Its Remove action becomes **Turn off**. The label comes from `device_label`
-    when present, else the shortened user agent. CCM sends the fixed `device_label` "ChitChat
-    for Android", never the device model or name, so no new device detail leaves the phone.
+  - **This phone:** the row with `current_session: true` is labelled "**This phone**" and
+    sorted first. Its Remove action becomes **Turn off**. Other rows' labels come from
+    `device_label` when present, else the shortened user agent. CCM sends the fixed
+    `device_label` "ChitChat for Android", never the device model or name, so no new device
+    detail leaves the phone.
   - Engineering note: sending a recognizable User-Agent from the push registration request
     (for example including "ChitChat Android") makes the rows readable. That is an
     engineering choice, not a presentation requirement.
-  - With #147's cap of 20 devices, a subscribe refused with `409 push_subscription_conflict` is
-    a definite refusal: "This delivery address is already used by another account. Choose a
-    different delivery app or remove it there first." It's never retried automatically.
+  - **Turn on refusals** are definite and never retried automatically:
+    - `409 push_subscription_conflict`: "This delivery address is already used by another
+      account. Choose a different delivery app or remove it there first."
+    - `409 push_subscription_limit` (20 devices): "Your account already has 20 devices with
+      notifications. Remove one below, then try again."
+    - `503 push_provider_unavailable`: "Your delivery app's server couldn't be reached. Try
+      again in a moment." with an explicit Try again.
+    - `400 validation_error` (forbidden or invalid destination): "This delivery app's address
+      can't be used with {installation}. If it runs on a private network, the person who runs
+      {installation} has to allow it."
+    - `429`: the waiting-time copy (status-presentation.md).
+  - Endpoint rotation by the distributor uses `replaces_id`, so it never counts toward the
+    cap twice. A retry after a lost response returns the same `id` and `binding`.
 - **Honesty line** (batch 3 minimum, above): "Notifications usually arrive
   within seconds, sometimes a little longer, and later if your phone was offline. Some never
   arrive. Open the app to see everything." Dispatch takes up to about 15 seconds unless the
@@ -306,17 +319,22 @@ The screen shows:
 ## Tests (for the M6 slice)
 
 - **Unit:**
-  - payload to notification mapping: title, text, sub-text, channel `mentions` without a kind;
+  - payload to notification mapping: title, text (including server-trimmed "…" text shown as
+    received), sub-text;
   - with #150: `direct_message_received` maps to `direct` with the "New direct message" public
-    version, and without a kind it maps to `mentions`;
+    version;
   - the Direct messages toggle is hidden when the preference field is missing or null;
   - the public lock-screen version;
   - group key per account and server;
   - tag from `event_id` only when present; a duplicate `event_id` replaces and a dismissed one
     doesn't reappear; the recent-event set is bounded and cleared on sign-out;
   - channel from the explicit `kind` table (`mentioned`/`pinged` to `mentions`,
-    `direct_message_received` to `direct`, any other or unknown kind to `account`, no kind to
-    `mentions`), never from text;
+    `direct_message_received` to `direct`, any other, unknown or missing kind to `account`),
+    never from text;
+  - each Turn on refusal (`409 push_subscription_conflict`, `409 push_subscription_limit`,
+    `503 push_provider_unavailable`, `400 validation_error`, `429`) shows its copy and is never
+    retried automatically;
+  - sign-out revokes this phone by `id` and discards the keys and binding;
   - a push with a mismatched, unknown or missing binding (when this device holds one) is
     dropped without posting;
   - a stale-generation payload is dropped;
@@ -335,13 +353,13 @@ The screen shows:
 
 | ID | Requirement | Verify |
 |---|---|---|
-| P-120 | Channels are created only on Turn on (or `direct` on the first DM alert) with stable IDs. The channel comes only from the explicit payload `kind` through the fixed table: unknown kinds go to `account`, and without a kind every push uses `mentions`. The kind is never guessed from text. | U, C |
+| P-120 | Channels are created only on Turn on (or `direct` on the first DM alert) with stable IDs. The channel comes only from the explicit payload `kind` through the fixed table: unknown or missing kinds go to `account`, never a high-importance channel. The kind is never guessed from text. | U, C |
 | P-121 | The notification shows the payload title and text, `app_name` as sub-text, the mark and persimmon accent, with no large icon, no action buttons and no MessagingStyle. | U, S |
 | P-122 | Tap routes through native link parsing and the guarded destination flow (no read, no browser), falling back to Activity. | C |
 | P-123 | Lock-screen visibility is private with a generic public version. | U, M |
-| P-124 | Sign-out, account removal, account switch and generation change cancel that account's visible notifications locally at once and drop later pushes. A push whose `binding` doesn't match a signed-in account and generation is dropped silently (with #147). | U, C |
+| P-124 | Sign-out, account removal, account switch and generation change cancel that account's visible notifications locally at once and drop later pushes. A push whose `binding` doesn't match a signed-in account and generation is dropped silently. | U, C |
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
 | P-127 | Direct message alerts (after ChitChat#150 merges): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert never shows what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content. A mention-plus-DM event is one notification: `mentioned` in `mentions` when mention alerts are on, else `direct_message_received` in `direct`. | U, C |
-| P-128 | With #147, one notification per event: the tag is `event_id`, so a duplicate replaces and never stacks, and a bounded, memory-only recent-event set keeps a dismissed duplicate from reappearing within the process lifetime. | U |
+| P-128 | One notification per event: the tag is `event_id`, so a duplicate replaces and never stacks, and a bounded, memory-only recent-event set keeps a dismissed duplicate from reappearing within the process lifetime. | U |
 | P-129 | No per-notification "late" badge or label. The honesty line says alerts usually arrive within seconds, sometimes a little longer, can come later or not arrive, and the quiet-hours line says they aren't sent after quiet hours. Both ship with the batch 3 minimum server version, with no per-line version check. | C, R |
-| P-126 | Settings offer only the mention and ping toggles (plus Direct messages per P-127) and whole-hour quiet hours with a time zone. Before #147, no device row is labelled as this phone; with #147, only the current-session row is, and its action is Turn off. Remove revokes by ID. Sign-out unsubscribes this device before the session ends. | C, R |
+| P-126 | Settings offer only the mention and ping toggles (plus Direct messages per P-127) and whole-hour quiet hours with a time zone. Only the `current_session` row is labelled "This phone", and its action is Turn off. Remove revokes by ID. CCM sends the fixed `device_label` "ChitChat for Android". Turn on refusals show their copy and are never retried. Sign-out revokes this device by ID before the session ends. | C, R |
