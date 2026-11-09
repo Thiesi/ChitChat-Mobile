@@ -303,6 +303,13 @@
       "w": 390,
       "h": 844,
       "title": "Stewarding: People directory (M7)"
+    },
+    "ModerationCase.dc.html": {
+      "x": 940,
+      "y": 11300,
+      "w": 390,
+      "h": 844,
+      "title": "Moderation: a person case (dark, M7)"
     }
   },
   "order": [

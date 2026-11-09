@@ -29,6 +29,7 @@ a substitute.
 | [account-security.md](account-security.md) | M6 account and security: Privacy and security layout, profile picture, password, two-step sign-in, recovery codes, sign-in methods, sessions |
 | [recovery-key.md](recovery-key.md) | Recovery key display after sign-up and reset, native password reset, and key management in Privacy and security (ChitChat#155) |
 | [guests.md](guests.md) | M7 guest visits: starting, the reduced shell, limits as honest copy, ending, becoming a member |
+| [moderation.md](moderation.md) | M7 moderation: Reports queue, message and person cases, acting within ranks, guests; DM inspection and edit-history review stay web-only |
 | [administration.md](administration.md) | M7 administration: what's on the phone versus web-only, Stewarding, People, Rooms, server status, lockdown |
 | [reporting.md](reporting.md) | M5 participant reporting: entry, form, who-sees-what, outcomes, follow-up actions |
 | [files-media.md](files-media.md) | M5 files, images and sharing: attach, upload states, inline images, viewer, save, share in/out |
