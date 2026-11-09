@@ -22,6 +22,9 @@ import io.github.thiesi.chitchat.core.mentions.ROOM_MENTION_LIMIT
 import io.github.thiesi.chitchat.core.mentions.RoomMentionUser
 import io.github.thiesi.chitchat.core.mentions.normalizedRoomMentionPrefix
 import io.github.thiesi.chitchat.core.mutations.validateEditedBody
+import io.github.thiesi.chitchat.core.media.AttachmentUpload
+import io.github.thiesi.chitchat.core.media.RoomUploadReceipt
+import io.github.thiesi.chitchat.core.media.DirectUploadReceipt
 import io.github.thiesi.chitchat.core.reactions.ReactionEmoji
 import java.io.IOException
 import java.io.InterruptedIOException
@@ -46,6 +49,7 @@ import okhttp3.Dispatcher
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.MultipartBody
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
@@ -472,6 +476,45 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         requireDirectWire(message, viewer, peer)
         incompatibleUnless(message.outgoing && message.replyTo?.messageId == replyId)
         return message.id // Do not hide a known POST acknowledgment behind a fallible enrichment GET.
+    }
+
+    suspend fun uploadRoomAttachment(room: Long, upload: AttachmentUpload, csrf: String, viewer: Long): RoomUploadReceipt {
+        require(room > 0 && viewer > 0)
+        val raw = multipartUpload("attachments/upload.php", "room_id", room, upload, csrf)
+        incompatibleUnless(raw.status == 201)
+        val message = decode<RoomUploadReply>(raw).message
+        incompatibleUnless(message.id > 0 && message.roomId == room && message.senderId == viewer &&
+            message.type == "attachment" && !message.deleted &&
+            message.replyTo?.messageId == upload.replyId &&
+            (message.replyTo == null || message.replyTo.kind == "room"))
+        return RoomUploadReceipt(room, message.id)
+    }
+
+    suspend fun uploadDirectAttachment(peer: Long, upload: AttachmentUpload, csrf: String, viewer: Long): DirectUploadReceipt {
+        requireDirectPeer(peer, viewer)
+        val raw = multipartUpload("direct-messages/attachments/upload.php", "recipient_user_id", peer, upload, csrf)
+        incompatibleUnless(raw.status == 201)
+        val message = decode<DirectUploadReply>(raw).message
+        incompatibleUnless(message.id > 0 && message.sender.id == viewer && message.recipient.id == peer &&
+            message.outgoing && message.replyTo?.messageId == upload.replyId &&
+            (message.replyTo == null || message.replyTo.kind == "direct"))
+        return DirectUploadReceipt(peer, message.id)
+    }
+
+    private suspend fun multipartUpload(path: String, targetField: String, target: Long, upload: AttachmentUpload, csrf: String): RawReply {
+        requireValidCsrf(csrf)
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart(targetField, target.toString())
+            .addFormDataPart("caption", upload.caption)
+            .apply { upload.replyId?.let { addFormDataPart("reply_to_message_id", it.toString()) } }
+            .addFormDataPart("file", upload.filename, upload.claimBody()).build()
+        val request = Request.Builder().url(origin.resolve("api/v1/$path")!!)
+            .header("Accept", "application/json").header("X-CSRF-Token", csrf).post(body).build()
+        // Same runtime/jar/pool/dispatcher. One bounded write budget, no follow-up GET or replay.
+        val transport = client.newBuilder().writeTimeout(120, TimeUnit.SECONDS).callTimeout(120, TimeUnit.SECONDS).build()
+        val raw = execute(transport.newCall(request))
+        if (jar.invalid) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        return raw
     }
 
     suspend fun directRead(peer: Long, csrf: String, viewer: Long): Int {
