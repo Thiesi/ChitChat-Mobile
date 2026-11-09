@@ -52,3 +52,17 @@ Actions are pinned to immutable revisions. Update pins deliberately against upst
 - [Action inputs and examples](https://github.com/anthropics/claude-code-action)
 - [Action security and permissions](https://github.com/anthropics/claude-code-action/blob/main/docs/security.md)
 - [GitHub token override and App bootstrap validation](https://github.com/anthropics/claude-code-action/blob/5eb090f3c3afd701a0672cd32981197ca27688f6/src/github/token.ts)
+
+## Runtime bootstrap
+
+PR126's first two review attempts failed before Claude started because the pinned
+action's Bun1.3.14 GitHub release-asset download returned HTTP504. They remain failed
+infrastructure attempts, not written reviews. The review workflow now obtains the same
+Bun version from the [official @oven npm package](https://registry.npmjs.org/@oven%2fbun-linux-x64/1.3.14),
+pins its published SHA-512 integrity, reads only the bounded executable member, and
+checks the actual version before passing the path through the pinned action's supported
+`path_to_bun_executable` input. No package lifecycle scripts or unverified fallback run.
+
+Keep the Bun version/integrity aligned with the deliberately pinned Claude action when
+updating that action. The normal credential, tool-exposure, complete-output, current-head
+and publication checks remain mandatory; a successful bootstrap is not a written review.
