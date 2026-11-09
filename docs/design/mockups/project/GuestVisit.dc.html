@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Guest visit</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="lantern.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Roboto:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<div class="ccm light">
+  <div class="inset"></div>
+  <div class="appbar"><h1 class="display">You</h1></div>
+  <div style="padding: 0 20px; display: flex; flex-direction: column; gap: 14px; flex-grow: 1;">
+    <div class="card" style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; gap: 14px; align-items: center;">
+        <span class="av" style="width: 56px; height: 56px; background: var(--raised); border: 1.5px dashed var(--field-line); color: var(--text-2); font-size: 20px;">G</span>
+        <div><div class="display" style="font-size: 22px; font-weight: 700;">Guest 4821</div><span class="role guest" style="font-size: 12px; padding: 2px 8px; border-radius: 10px;">Guest</span></div>
+      </div>
+      <div style="font-size: 15px;"><b>Visiting until 18:40</b><div class="hint" style="margin-top: 2px;">Ends sooner after two hours without activity.</div></div>
+      <a class="btn" href="CreateAccount.dc.html">Create an account</a>
+      <button class="btn text" style="color: var(--text);">Leave visit</button>
+    </div>
+    <div class="hint">As a guest you can read open rooms, and write where a room allows guests. Direct messages, pings, files, search and phone notifications need an account.</div>
+    <div class="section" style="padding: 6px 0 0;"><span>THIS PHONE</span></div>
+    <div style="display: flex; justify-content: space-between; align-items: center; min-height: 52px; font-size: 16px; font-weight: 600;">Appearance<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--text-2);"><path d="M9 5l7 7-7 7"></path></svg></div>
+    <div style="display: flex; justify-content: space-between; align-items: center; min-height: 52px; font-size: 16px; font-weight: 600;">About and privacy<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--text-2);"><path d="M9 5l7 7-7 7"></path></svg></div>
+    <span class="spacer"></span>
+  </div>
+  <nav class="navbar" aria-label="Main">
+    <a class="tab" href="Home.dc.html"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="13" rx="6"></rect><circle cx="19" cy="20" r="1.8"></circle></svg></span>Rooms</a>
+    <a class="tab" href="Activity.dc.html"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"></path><path d="M10 20.5a2 2 0 0 0 4 0"></path></svg></span>Activity<span class="dot">1</span></a>
+    <a class="tab on" href="GuestVisit.dc.html" aria-current="page"><span class="pip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="10" r="3"></circle><path d="M6.5 18.2a6.5 6.5 0 0 1 11 0"></path></svg></span>You</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
