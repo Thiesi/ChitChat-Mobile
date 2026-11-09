@@ -82,8 +82,9 @@ transcript, lists, status and modals → Send when back online.
     off. Otherwise replace it with the line "Sign-up is closed on this server. Ask the person
     who runs it for an invite."
   - **I already have one, sign in**.
-  - **Look around as a guest**, only once guest visits exist (M7) and the server allows
-    them. Omit it until then.
+  - **Look around as a guest**, only when the anonymous session reports `guest_access: true`.
+    It leads to the guest explainer in [guests.md](guests.md) (M7). Omit it until that slice
+    ships.
   - A quiet text link **Restore a closed account** (existing RESTORE flow).
 - Level-2 notices on this screen as needed, at most one at a time, in this precedence:
   maintenance lockdown (with the server's message if any), then providers-unavailable.
