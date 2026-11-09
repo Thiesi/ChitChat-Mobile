@@ -71,8 +71,8 @@ any control does:
 - Rows that open today's screens unchanged in behavior:
   - Notifications and push (settings);
   - Appearance (settings: Theme radios and the Pure black switch);
-  - Privacy and security (account: typing preference, ignores, sign-in, and the Recovery
-    key row from [recovery-key.md](recovery-key.md) for password accounts);
+  - Privacy and security (account: sign-in, devices, typing preference, ignores, export and
+    delete account, laid out in [account-security.md](account-security.md));
   - Export my data (account);
   - Server (shows the host; Change server stays disabled while signed in, with the existing
     "Sign out to change server" text).
