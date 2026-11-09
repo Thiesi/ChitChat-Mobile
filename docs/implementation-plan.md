@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g3a picked-file snapshot](milestones/M5g3a-picked-file-snapshot.md) bounds one raw in-memory source read without URI reopen or automatic retry. Continue photo location removal/orientation preservation and cleaned-byte evidence, then original-owner serialized pending/unknown state and native/provider controls as independently reviewable slices.
+
 [M5g2b upload protocol](milestones/M5g2b-attachment-upload-protocol.md) adds explicit original-session room/DM multipart and namespace-specific ACKs. After its own gates/reviews, continue bounded preparation/photo privacy, serialized pending/uncertain attachment state and native consumers, with downloads and sharing as separate slices.
 
 [M5g2a refusal metadata](milestones/M5g2a-attachment-refusal-metadata.md) consumes released size/rate error hints through the existing transport only. After its own gates/reviews, continue explicit upload/download transport and scoped pending/uncertain state; no media controls or live acceptance are implied.

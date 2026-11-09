@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g3a picked-file snapshot](milestones/M5g3a-picked-file-snapshot.md) is local raw preparation only: no endpoint, request or server policy change. Its client memory budget is distinct from advertised upload limits, which apply to actual post-cleaning bytes. Photo/privacy, native provider and upload acceptance remain separate.
+
 [M5g2b upload protocol](milestones/M5g2b-attachment-upload-protocol.md) uses existing released v3.4.0 multipart room/DM endpoints through the chosen-origin session transport. Exact original namespace/viewer/peer/reply201 receipts precede optional enrichment; DM metadata remains a later GET. No new API, automatic POST replay, live mutation authority or native file control is introduced.
 
 [M5d4c native mention completion](milestones/M5d4c-native-mention-completion.md) uses the reviewed M5d4b state and existing original-session GET. Room broadcasts remain explicit; DM and local Tab completion use only their intended names. UI changes grant no send/read/typing/notification authority and add no backend API.

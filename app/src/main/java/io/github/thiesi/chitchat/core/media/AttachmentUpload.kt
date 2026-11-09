@@ -23,12 +23,7 @@ internal class AttachmentUpload(
     private val claimed = AtomicBoolean()
 
     init {
-        require(filename.isNotBlank() && filename.length <= 255 && filename !in setOf(".", "..") &&
-            filename.none { it.isISOControl() || it == '/' || it == '\\' }) { "Invalid upload basename" }
-        require(mimeType == null || (mimeType.matches(Regex("[!#\$%&'*+.^_`|~0-9A-Za-z-]+/[!#\$%&'*+.^_`|~0-9A-Za-z-]+")) &&
-            '*' !in mimeType)) {
-            "Invalid upload media type"
-        }
+        validateAttachmentMetadata(filename, mimeType)
         require(bytes.size > 0) { "Empty upload" }
         require(this.caption.codePointCount(0, this.caption.length) <= 4000) { "Upload caption too long" }
         require(replyId == null || replyId > 0) { "Invalid upload reply" }

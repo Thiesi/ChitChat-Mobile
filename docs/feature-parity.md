@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5g3a picked-file snapshot](milestones/M5g3a-picked-file-snapshot.md) adds internal bounded single-read raw preparation, immutable bytes, safe failures and cancellation fences. This creates no upload-ready photo, reconciliation digest, picker/provider adapter or usable native media control. Photo cleaning and cleaned-byte evidence remain pending.
+
 [M5g2b upload protocol](milestones/M5g2b-attachment-upload-protocol.md) adds internal explicit room/DM multipart using original-session capabilities, immutable prepared bytes and one-use attempts. Confirmed message IDs precede optional enrichment; no write is replayed. Preparation/photo cleaning, serialized attachment state, native media/sharing and live acceptance remain pending.
 
 [M5g2a refusal metadata](milestones/M5g2a-attachment-refusal-metadata.md) retains bounded size/rate hints from existing HTTP errors without another request or native controls. Unknown/zero limits stay distinct, invalid optional hints preserve the refusal, and no write is replayed. Upload transport, attachment state and usable media/sharing remain pending.

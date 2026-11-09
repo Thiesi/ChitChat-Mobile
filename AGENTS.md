@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [M5g3a picked-file snapshot](docs/milestones/M5g3a-picked-file-snapshot.md) reads one frozen selection once into bounded immutable raw bytes, closes after success/failure/cancellation when the provider returns, and retains only safe failure kinds. The client allocation ceiling is not a server policy. No URI reopen, photo-clean/readiness claim, original-byte reconciliation hash or native Send; provider-specific cancellation and cleaned-byte privacy/consent remain separate prerequisites.
+
 - [M5g2b upload protocol](docs/milestones/M5g2b-attachment-upload-protocol.md) is explicit original-session multipart only. Keep immutable prepared bytes, one-use attempt/body, exact room/DM receipt identity and ACK before optional enrichment. No POST replay or cancellation/non-delivery inference. Known unusable policy disables uploads only; preparation/photo privacy, serialized pending/unknown state and native consumers remain separate. No live upload authority is granted.
 
 - [M5g2a refusal metadata](docs/milestones/M5g2a-attachment-refusal-metadata.md) preserves HTTP413 error.max_bytes zero versus unknown and positive JSON429 retry delay through the existing bounded transport. Bad optional hints never erase status/code; a non-JSON413 remains a definite size refusal for the later upload consumer. Keep Retry-After precedence and the existing86400-second delay cap, original runtime/request fences and no POST replay. No upload request, picker, file state or native control is implemented by these facts.
