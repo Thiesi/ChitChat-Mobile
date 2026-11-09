@@ -76,7 +76,12 @@ internal class RecoveryRequest(@SerialName("recovery_code") val code: String)
 internal class ErrorEnvelope(val error: ServerError)
 
 @Serializable
-internal class ServerError(val code: String, val message: String)
+internal class ServerError(
+    val code: String,
+    val message: String,
+    @SerialName("max_bytes") @Serializable(with = AdvisoryErrorInteger::class) val maxBytes: Long? = null,
+    @SerialName("retry_after_seconds") @Serializable(with = AdvisoryErrorInteger::class) val retryAfterSeconds: Long? = null,
+)
 
 enum class FailureKind { NETWORK, TLS, TIMEOUT, REDIRECT, INCOMPATIBLE, HTTP, STORAGE, EXPIRED, TOO_LARGE }
 
@@ -86,6 +91,7 @@ class ApiFailure(
     val status: Int? = null,
     val code: String? = null,
     val retryAfterSeconds: Long? = null,
+    val maxBytes: Long? = null,
 ) : java.io.IOException(kind.name)
 
 internal fun requireValidCsrf(value: String) {

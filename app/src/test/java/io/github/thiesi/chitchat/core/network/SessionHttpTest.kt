@@ -202,6 +202,61 @@ class SessionHttpTest {
         } finally { untrusted.close() }
     }
 
+    @Test fun json429DelayIsBoundedAndNeverReplaysThePost() = runTest {
+        for ((value, expected) in listOf("90" to 90L, "9223372036854775807" to 86_400L,
+                "0" to null, "\"90\"" to null, "-1" to null)) {
+            server.enqueue(response("""{"error":{"code":"rate_limited","message":"private-body",
+                "retry_after_seconds":$value}}""", 429))
+            val before = server.requestCount
+            val failure = try { api.password("Alice", "private-test-password", token); error("Expected refusal") }
+                catch (failure: ApiFailure) { failure }
+            assertEquals(FailureKind.HTTP, failure.kind)
+            assertEquals(429, failure.status)
+            assertEquals("rate_limited", failure.code)
+            assertEquals(expected, failure.retryAfterSeconds)
+            assertEquals(before + 1, server.requestCount)
+            assertFalse(failure.toString().contains("private-body"))
+        }
+    }
+
+    @Test fun retryAfterHeaderKeepsItsExistingPrecedenceOverJsonHints() = runTest {
+        server.enqueue(MockResponse.Builder().code(429).addHeader("Retry-After", "45")
+            .body("""{"error":{"code":"rate_limited","message":"private-body","retry_after_seconds":90}}""").build())
+        val before = server.requestCount
+        val failure = try { api.bootstrap(); error("Expected refusal") } catch (failure: ApiFailure) { failure }
+        assertEquals(45L, failure.retryAfterSeconds)
+        assertEquals(before + 1, server.requestCount)
+    }
+
+    @Test fun sizeRefusalsPreserveKnownZeroOrUnknownLimitWithoutRetainingTheBody() = runTest {
+        val cases = listOf(
+            Triple("""{"error":{"code":"attachment_too_large","message":"private-body","max_bytes":0}}""", "attachment_too_large", 0L),
+            Triple("""{"error":{"code":"attachment_too_large","message":"private-body","max_bytes":"private-size"}}""", "attachment_too_large", null),
+            Triple("<html>private-proxy-body</html>", null, null),
+        )
+        for ((body, code, limit) in cases) {
+            server.enqueue(if (code == null) MockResponse.Builder().code(413).body(body)
+                .addHeader("Content-Type", "text/html").build() else response(body, 413))
+            val before = server.requestCount
+            val failure = try { api.bootstrap(); error("Expected refusal") } catch (failure: ApiFailure) { failure }
+            assertEquals(FailureKind.HTTP, failure.kind)
+            assertEquals(413, failure.status)
+            assertEquals(code, failure.code)
+            assertEquals(limit, failure.maxBytes)
+            assertEquals(before + 1, server.requestCount)
+            assertFalse(failure.toString().contains("private"))
+        }
+    }
+
+    @Test fun metadataIsScopedToTheResponseStatusThatDefinesIt() = runTest {
+        server.enqueue(response("""{"error":{"code":"forbidden","message":"private-body",
+            "max_bytes":17,"retry_after_seconds":90}}""", 403))
+        val failure = try { api.bootstrap(); error("Expected refusal") } catch (failure: ApiFailure) { failure }
+        assertEquals(403, failure.status)
+        assertNull(failure.maxBytes)
+        assertNull(failure.retryAfterSeconds)
+    }
+
     @Test fun trustingACertificateDoesNotDisableHostnameVerification() = runTest {
         val mismatched = (ServerAddress.parse(server.url("/").newBuilder().host("127.0.0.1").build().toString()) as AddressResult.Valid).address
         val wrongHost = SessionHttp(mismatched, trustedClient)

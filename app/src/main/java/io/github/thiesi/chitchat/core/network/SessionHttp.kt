@@ -377,7 +377,7 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
                     else {
                         val error = try { apiJson.decodeFromString<ErrorEnvelope>(source.readUtf8()).error }
                             catch (_: SerializationException) { null }
-                        ApiFailure(FailureKind.HTTP, response.code, error?.code?.take(100), retryAfter(response.header("Retry-After")))
+                        httpFailure(response.code, error, response.header("Retry-After"))
                     }
                 }
             } else when (cause) {
@@ -562,7 +562,7 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
                         val body = source.buffer.readUtf8()
                         if (!it.isSuccessful) {
                             val error = try { apiJson.decodeFromString<ErrorEnvelope>(body).error } catch (_: SerializationException) { null }
-                            throw ApiFailure(FailureKind.HTTP, it.code, error?.code?.take(100), retryAfter(it.header("Retry-After")))
+                            throw httpFailure(it.code, error, it.header("Retry-After"))
                         }
                         if (it.body.contentType()?.subtype != "json") throw ApiFailure(FailureKind.INCOMPATIBLE)
                         RawReply(it.code, body)
@@ -614,6 +614,13 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
             current.suppressed.take(32).forEach(pending::add)
         }
         return if (timeout) FailureKind.TIMEOUT else FailureKind.NETWORK
+    }
+
+    private fun httpFailure(status: Int, error: ServerError?, retryHeader: String?): ApiFailure {
+        val wait = retryAfter(retryHeader) ?: error?.retryAfterSeconds
+            ?.takeIf { status == 429 && it > 0 }?.coerceAtMost(86_400)
+        return ApiFailure(FailureKind.HTTP, status, error?.code?.take(100),
+            retryAfterSeconds = wait, maxBytes = error?.maxBytes?.takeIf { status == 413 })
     }
 
     private fun retryAfter(value: String?): Long? {
