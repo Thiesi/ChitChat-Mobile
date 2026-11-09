@@ -19,8 +19,13 @@ eXIf through the same bounded classic-TIFF payload helper as JPEG: preserve supp
 orientation and exact colour/interoperability fields, remove GPS, MakerNotes, other
 private directories and thumbnails. PNG eXIf contains TIFF directly, without JPEG's
 APP1 length/Exif-ID prefix; recompute the rewritten chunk CRC. An omitted default
-orientation1 remains1. A textual XMP/raw-EXIF profile without an explicit valid EXIF
-orientation is unsupported, never an invented rotation from unparsed text.
+orientation1 remains1. Textual XMP without an explicit valid EXIF orientation is
+unsupported, never an invented rotation from unparsed text. All legacy "Raw profile
+type " keywords (ASCII case-insensitive) are unsupported even alongside eXIf: APP1,
+generic, ICC/ICM and Photoshop profiles can carry additional rendering facts that an
+orientation value alone cannot prove. Never decompress/drop such a profile and claim
+unchanged rendering. The [ExifTool PNG tag reference](https://exiftool.org/TagNames/PNG.html)
+documents these actual legacy profile containers.
 
 Validate signature, unsigned chunk bounds, names and CRCs, required header/palette
 relationships, singleton/order rules for retained rendering facts, contiguous image
@@ -39,7 +44,9 @@ adapter retains all16 existing JPEG methods unchanged; no input helper, test pre
 deadline, gate or backend behavior changes.
 
 JVM fixtures are generated entirely in memory. RGB/RGBA/indexed transparency cases
-compare exact coded bytes and actual JDK-decoded pixels/dimensions. EXIF fixtures cover
+compare exact coded bytes and independently inflated filter-zero scanlines/pixels and
+dimensions, without unavailable JDK-desktop classes on the Android test classpath.
+Opaque ICC payloads test byte retention, not profile validity. EXIF fixtures cover
 both byte orders/all eight orientations, private GPS/MakerNote removal, colour retention
 and idempotence. Other cases cover retained ICC/HDR/order, unproven textual orientation,
 CRC/length/header/palette/order/duplicate/truncation failures, unsupported animation/
@@ -47,6 +54,13 @@ extensions/trailers and resource limits. Synthetic HDR retention is not calibrat
 or Android decoder acceptance. Current-head full JVM/lint/debug/release, unfiltered
 native CI and both written reviews are separate required gates. No provider, live,
 native media or all-photo acceptance follows from these container fixtures.
+
+Review's APP1 gap was first reproduced against unchanged published production
+sources:25 focused tests ran, exactly the expanded textual-profile regression failed.
+The correction guards the bounded profile family rather than an incomplete suffix
+list. The matrix includes all three text chunk types, mixed-case APP1, generic,
+EXIF/XMP/ICC/ICM/Photoshop profiles, with and without a separate eXIf orientation.
+This is focused parser evidence, not a native/full-suite retry or acceptance transfer.
 
 Primary format contract: [PNG third edition](https://www.w3.org/TR/png/) (chunk framing,
 rendering facts, textual metadata and eXIf). Shared EXIF details remain in

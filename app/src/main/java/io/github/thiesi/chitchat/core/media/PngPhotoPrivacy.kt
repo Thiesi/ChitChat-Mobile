@@ -114,7 +114,11 @@ private class PngRewrite(private val input: ByteString) {
                     while (separator < end && separator - payload < 80 && u8(separator) != 0) separator++
                     if (separator == payload || separator == end || separator - payload > 79) rejectPng()
                     val keyword = input.substring(payload, separator)
-                    if (keyword in ORIENTATION_KEYWORDS) unparsedOrientation = true
+                    // Legacy profiles can contain EXIF, XMP, ICC or Photoshop rendering
+                    // facts. A separate eXIf orientation cannot prove all of those facts.
+                    if (startsWithAsciiIgnoreCase(keyword, RAW_PROFILE_PREFIX)) rejectPng(PngCleaningFailure.UNSUPPORTED_LAYOUT)
+                    if (keyword.size == XMP_KEYWORD.size && startsWithAsciiIgnoreCase(keyword, XMP_KEYWORD))
+                        unparsedOrientation = true
                     retain = false
                 }
                 "tIME", "hIST", "sPLT" -> retain = false
@@ -172,6 +176,15 @@ private class PngRewrite(private val input: ByteString) {
     }
 
     private fun unique(type: String) { if (!seen.add(type)) rejectPng() }
+    private fun startsWithAsciiIgnoreCase(value: ByteString, prefix: ByteString): Boolean {
+        if (value.size < prefix.size) return false
+        for (index in 0 until prefix.size) {
+            val byte = value[index].toInt() and 255
+            val lower = if (byte in 65..90) byte + 32 else byte
+            if (lower != (prefix[index].toInt() and 255)) return false
+        }
+        return true
+    }
     private fun u8(at: Int) = input[at].toInt() and 255
     private fun u32(at: Int): Long = (u8(at).toLong() shl 24) or (u8(at + 1).toLong() shl 16) or
         (u8(at + 2).toLong() shl 8) or u8(at + 3).toLong()
@@ -191,8 +204,8 @@ private class PngRewrite(private val input: ByteString) {
     companion object {
         private val SIGNATURE = "89504e470d0a1a0a".decodeHex()
         private val COLOUR_CHUNKS = setOf("gAMA", "cHRM", "iCCP", "sRGB", "sBIT", "cICP", "mDCV", "cLLI")
-        private val ORIENTATION_KEYWORDS = setOf("XML:com.adobe.xmp", "Raw profile type exif", "Raw profile type xmp")
-            .map { it.encodeUtf8() }.toSet()
+        private val RAW_PROFILE_PREFIX = "raw profile type ".encodeUtf8()
+        private val XMP_KEYWORD = "xml:com.adobe.xmp".encodeUtf8()
 
         private fun exifChunk(tiff: ByteString): ByteString {
             val type = "eXIf".encodeUtf8()

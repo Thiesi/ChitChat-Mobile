@@ -1,14 +1,12 @@
 package io.github.thiesi.chitchat.core.media
 
-import java.awt.color.ColorSpace
-import java.awt.color.ICC_Profile
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.CRC32
 import java.util.zip.DeflaterOutputStream
-import javax.imageio.ImageIO
+import java.util.zip.InflaterInputStream
 import kotlinx.coroutines.test.runTest
 import okio.Buffer
 import okio.ByteString
@@ -25,7 +23,7 @@ class PngPhotoPrivacyTest {
     private val rgba = image(6, byteArrayOf(0, -1, 0, 0, -1, 0, 0, -1, 0))
     private val text get() = chunk("tEXt", ("Location\u0000" + privateText).encodeUtf8())
 
-    @Test fun removesAllTextAndTimeWithoutChangingCodedOrDecodedPixels() = runTest {
+    @Test fun removesAllTextAndTimeWithoutChangingCodedOrInflatedPixels() = runTest {
         val compressed = chunk("zTXt", Buffer().writeUtf8("Comment\u0000").writeByte(0)
             .write(deflate(privateText.encodeToByteArray())).readByteString())
         val international = chunk("iTXt", ("Description\u0000\u0000\u0000\u0000\u0000" + privateText).encodeUtf8())
@@ -76,13 +74,12 @@ class PngPhotoPrivacyTest {
         val result = cleaned(source)
         assertEquals(base, result.bytes)
         samePixels(source, result.bytes)
-        val decoded = ImageIO.read(ByteArrayInputStream(result.bytes.toByteArray()))
-        assertEquals(255, decoded.getRGB(0, 0) ushr 24)
-        assertEquals(0, decoded.getRGB(1, 0) ushr 24)
+        assertArrayEquals(intArrayOf(0xffff0000.toInt(), 0x000000ff), fixturePixels(result.bytes))
     }
 
     @Test fun iccAndAllRecognizedColourAndHdrChunksAreRetainedInOrder() = runTest {
-        val profile = ICC_Profile.getInstance(ColorSpace.CS_sRGB).data
+        // Opaque profile bytes prove exact retention, not profile validity/decoder acceptance.
+        val profile = "opaque-icc-profile-fixture".encodeToByteArray()
         val icc = chunk("iCCP", Buffer().writeUtf8("fixture\u0000").writeByte(0).write(deflate(profile)).readByteString())
         val gamma = chunk("gAMA", Buffer().writeInt(45455).readByteString())
         val chromaticity = chunk("cHRM", Buffer().apply { repeat(8) { writeInt(10000 + it) } }.readByteString())
@@ -99,15 +96,27 @@ class PngPhotoPrivacyTest {
         }
     }
 
-    @Test fun unparsedXmpOrRawProfileOrientationRequiresAnExplicitExifValue() = runTest {
-        for (keyword in listOf("XML:com.adobe.xmp", "Raw profile type exif", "Raw profile type xmp")) {
-            val metadata = chunk("iTXt", (keyword + "\u0000\u0000\u0000\u0000\u0000" + privateText).encodeUtf8())
+    @Test fun textualProfilesNeverLoseUnprovenOrientationOrColourInformation() = runTest {
+        // APP1 is the original review regression; generic/ICC/Photoshop profiles can
+        // contain further rendering facts that a separate orientation alone cannot prove.
+        for (keyword in listOf("Raw profile type APP1", "Raw profile type generic", "Raw profile type exif",
+            "Raw profile type xmp", "Raw profile type icc", "Raw profile type icm", "Raw profile type 8bim",
+            "rAW pROFILE tYPE app1")) for (type in listOf("tEXt", "zTXt", "iTXt")) {
+            val payload = Buffer().writeUtf8(keyword).writeByte(0)
+            when (type) {
+                "tEXt" -> payload.writeUtf8(privateText)
+                "zTXt" -> payload.writeByte(0).write(deflate(privateText.encodeToByteArray()))
+                else -> payload.writeByte(0).writeByte(0).writeByte(0).writeByte(0).writeUtf8(privateText)
+            }
+            val metadata = chunk(type, payload.readByteString())
             failed(PngCleaningFailure.UNSUPPORTED_LAYOUT, insert(rgb, metadata))
-            failed(PngCleaningFailure.UNSUPPORTED_LAYOUT,
-                insert(rgb, metadata, chunk("eXIf", "49492a0008000000000000000000".decodeHex())))
-            val source = insert(rgb, metadata, chunk("eXIf", exif(1, true)))
-            assertEquals(1, cleaned(source).exifOrientation)
+            failed(PngCleaningFailure.UNSUPPORTED_LAYOUT, insert(rgb, metadata, chunk("eXIf", exif(1, true))))
         }
+        val xmp = chunk("iTXt", ("XML:com.adobe.xmp\u0000\u0000\u0000\u0000\u0000" + privateText).encodeUtf8())
+        failed(PngCleaningFailure.UNSUPPORTED_LAYOUT, insert(rgb, xmp))
+        failed(PngCleaningFailure.UNSUPPORTED_LAYOUT,
+            insert(rgb, xmp, chunk("eXIf", "49492a0008000000000000000000".decodeHex())))
+        assertEquals(1, cleaned(insert(rgb, xmp, chunk("eXIf", exif(1, true)))).exifOrientation)
     }
 
     @Test fun corruptLengthsCrcHeadersOrderAndDuplicateFactsFailSafely() = runTest {
@@ -170,11 +179,33 @@ class PngPhotoPrivacyTest {
         assertEquals(kind, (result as PngPhotoCleaning.Failed).kind)
     }
     private fun samePixels(before: ByteString, after: ByteString) {
-        val first = ImageIO.read(ByteArrayInputStream(before.toByteArray()))
-        val second = ImageIO.read(ByteArrayInputStream(after.toByteArray()))
-        assertEquals(2, first.width); assertEquals(1, first.height)
-        assertEquals(first.width, second.width); assertEquals(first.height, second.height)
-        assertArrayEquals(first.getRGB(0, 0, 2, 1, null, 0, 2), second.getRGB(0, 0, 2, 1, null, 0, 2))
+        assertArrayEquals(fixturePixels(before), fixturePixels(after))
+    }
+    private fun fixturePixels(png: ByteString): IntArray {
+        // Independent inflater for these own 2x1/filter-zero/8-bit fixtures only.
+        // It is not a general PNG decoder or production code.
+        val values = chunks(png)
+        val header = ByteBuffer.wrap(values.getValue("IHDR").toByteArray())
+        assertEquals(2, header.getInt(0)); assertEquals(1, header.getInt(4))
+        assertEquals(8, header.get(8).toInt()); assertEquals(0, header.get(12).toInt())
+        val type = header.get(9).toInt()
+        val channels = when (type) { 2 -> 3; 6 -> 4; 3 -> 1; else -> error("Unexpected fixture") }
+        val row = InflaterInputStream(ByteArrayInputStream(values.getValue("IDAT").toByteArray())).use { it.readBytes() }
+        assertEquals(1 + 2 * channels, row.size); assertEquals(0, row[0].toInt())
+        fun byte(at: Int) = row[at].toInt() and 255
+        return IntArray(2) { pixel ->
+            val at = 1 + pixel * channels
+            if (type == 3) {
+                val palette = values.getValue("PLTE")
+                val index = byte(at)
+                val alpha = values["tRNS"]?.takeIf { index < it.size }?.get(index)?.toInt()?.and(255) ?: 255
+                (alpha shl 24) or ((palette[index * 3].toInt() and 255) shl 16) or
+                    ((palette[index * 3 + 1].toInt() and 255) shl 8) or (palette[index * 3 + 2].toInt() and 255)
+            } else {
+                val alpha = if (type == 6) byte(at + 3) else 255
+                (alpha shl 24) or (byte(at) shl 16) or (byte(at + 1) shl 8) or byte(at + 2)
+            }
+        }
     }
     private fun deflate(bytes: ByteArray): ByteString {
         val output = ByteArrayOutputStream()
