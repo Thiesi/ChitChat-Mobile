@@ -46,9 +46,13 @@ The setup/revalidation check and server-update state remain pending with
 [onboarding/server-update](design/server-update.md). The newer baseline decision above
 supersedes the brief's earlier version-informational-only wording: compare numeric
 major.minor.patch from application.version (reliable since3.3.0). Unparseable versions are
-unknown; show the update notice for unknown only when required feature keys are also absent.
-Missing capabilities.schema_version identifies pre3.3.0. Keep per-feature presence checks
-for policies, user.recovery_key, profile can_report and attachment width/height.
+unknown; show the update notice for unknown only when **all observable session-level
+feature keys** are absent: policies at setup, plus user.recovery_key when signed in.
+Any of those keys being present prevents the unknown-version trigger. Missing
+capabilities.schema_version identifies pre3.3.0. Keep per-feature presence checks
+for policies, user.recovery_key, profile can_report and attachment width/height; a missing
+feature key alone disables only its own feature, never the whole client. Later profile
+or attachment responses do not decide this session-level update state.
 This documentation does not implement those checks or claim live interoperability.
 
 ## HTTP bootstrap, cookies, authentication
