@@ -6,6 +6,13 @@ engineering slices (technical lead, 2026-11-09). It's grounded in the ChitChat A
 `web-push.md`). It designs only what those APIs offer, and marks anything missing as a
 **Dependency**. Mockup: `PrivacySecurity` on the canvas.
 
+Maintainer decisions on 2026-11-09 (issue #1, comment 6734871007): authenticator-app codes
+(TOTP) are wanted as an additional method (**Dependency ChitChat#204**), and a signed-in
+sessions list is wanted (**Dependency ChitChat#205**). Native passkeys (B1, ChitChat#145) are
+merged on the backend and ship in v3.5.0. The browser sign-in handoff (ChitChat#146) is next.
+Like every feature from a release after 3.4.0, these ship only once the technical lead raises
+the minimum server version. There are no per-feature version checks or older-server fallbacks.
+
 Existing contracts stay in force: the generic step-up dialog and `withStepUp` (M2b2: only
 `403 step_up_required`, one retry), emergency recovery-code consent and counts, export (M2b2),
 restoration (M2b1), the recovery key (recovery-key.md), push devices (push-presentation.md) and
@@ -22,8 +29,10 @@ account deletion (play-readiness.md §2).
   other session**, rotates this one and clears step-up. A provider-only account sets its first
   password with step-up instead of a current password. The recovery key survives an ordinary
   change.
-- **Two-step sign-in (MFA):** **passkeys (WebAuthn) plus single-use recovery codes. There is no
-  authenticator-app (TOTP) option on the server**, so CCM doesn't design one.
+- **Two-step sign-in (MFA):** passkeys (WebAuthn) plus single-use recovery codes today.
+  **Authenticator-app codes (TOTP) are a Dependency on ChitChat#204** (requested by the
+  maintainer). The TOTP design below follows the issue's proposed shape and is adjusted to the
+  merged contract before it's built.
   - `GET account/mfa/status.php` returns `{available, enabled, required_by_admin_policy,
     recovery_codes_remaining, credentials: [{id, label, transports, algorithm, backup_eligible,
     backup_state, created_at, last_used_at}]}`.
@@ -34,11 +43,17 @@ account deletion (play-readiness.md §2).
 - **Sign-in methods:** `GET account/identities/list.php` returns `{providers, identities,
   has_password}`. Unlink needs step-up, and `409 last_sign_in_method` protects the last way in.
   Linking is a browser round trip.
-- **Sessions:** **there's no API to list or end your login sessions.** The only device list is
-  push subscriptions, with `current_session` (#147). A password change ends all other sessions.
+- **Native passkeys (B1, ChitChat#145, merged, v3.5.0):** WebAuthn ceremonies also accept the
+  app's `android:apk-key-hash` origin when the operator lists the app in `NATIVE_ANDROID_APPS`.
+  `capabilities.native_passkey_origins === true` says this server is configured for it. That's
+  an operator setting, not a version check: on a server at the raised minimum that hasn't
+  configured the app, passkey actions keep the "on {installation}'s website" lines.
+- **Sessions:** **there's no API yet to list or end your login sessions** (**Dependency
+  ChitChat#205**). The only device list today is push subscriptions, with `current_session`
+  (#147). A password change ends all other sessions.
 - **Step-up:** password accounts use `step-up.php`. MFA accounts use a passkey
-  (`mfa/step-up-*`) or a recovery code (`mfa/step-up-recovery.php`). Step-up lasts 10 minutes by
-  default and is bound to this session.
+  (`mfa/step-up-*`) or a recovery code (`mfa/step-up-recovery.php`), and an authenticator code
+  once #204 exists. Step-up lasts 10 minutes by default and is bound to this session.
 
 ## Where it lives
 
@@ -48,14 +63,16 @@ settings row (title, supporting text, chevron when it opens a screen).
 1. **Sign-in**
    - **Password**: "Change password", or "Set a password" for a provider-only account.
    - **Two-step sign-in**: "On · 2 passkeys · 7 recovery codes left", "Off", or "Required by
-     {installation}". Hidden when `available` is false.
+     {installation}". With #204: "On · Authenticator app · 2 passkeys · 7 recovery codes
+     left". Hidden when `available` is false.
    - **Recovery key** (recovery-key.md).
    - **Sign-in methods**: "Password and Google", for example. Shown only when the server
      offers providers or the account has a linked identity.
 2. **Devices**
    - **Notification devices**: opens You → Notifications → Devices (push-presentation.md), where
      "This phone" is marked.
-   - **Signed-in sessions**: **Dependency (no backend API)**. Leave it out. See "Sessions".
+   - **Signed-in sessions**: **Dependency ChitChat#205**. Leave it out until then. See
+     "Sessions".
 3. **Privacy** (existing): typing indicator, ignored people.
 4. **Your data** (existing): **Export my data**.
 5. **Delete account** (play-readiness.md §2), an `error`-colored text row at the bottom.
@@ -112,7 +129,9 @@ people who don't expect the header to be tappable.
 **Screen** "Two-step sign-in":
 
 - Lead: "Two-step sign-in asks for your security key or passkey after your password. If you
-  can't use it, a recovery code gets you in once."
+  can't use it, a recovery code gets you in once." With #204: "Two-step sign-in asks for a
+  second step after your password: a code from your authenticator app, or your passkey. If you
+  can't use either, a recovery code gets you in once."
 - **Status card:** "On", "Off" or "Required by {installation}" (when
   `required_by_admin_policy`; then Turn off is absent and a line says "Your role on
   {installation} requires two-step sign-in.").
@@ -123,9 +142,10 @@ people who don't expect the header to be tappable.
     dialog: "Remove {label}? You won't be able to use it to sign in."). Remove is absent on the
     last passkey, with the note "To remove your last passkey, turn off two-step sign-in."
   - **Add a passkey**: **Dependency B1** (native passkeys through Credential Manager, trusted
-    app origins and each server's Digital Asset Links). Until B1, the row reads "Adding passkeys
-    in the app is coming. You can add one on {installation}'s website." It never opens a
-    browser by itself.
+    app origins and each server's Digital Asset Links). The backend half (ChitChat#145) is
+    merged for v3.5.0. It activates with the raised minimum, on servers where
+    `native_passkey_origins` is true. Until then, the row reads "Adding passkeys in the app is
+    coming. You can add one on {installation}'s website." It never opens a browser by itself.
 - **Recovery codes:** "{n} of your recovery codes are left." When it's 3 or fewer, add "Make new
   codes soon." in honey.
   - **Make new recovery codes**: a decision dialog first, "Replace your recovery codes? Your
@@ -135,8 +155,34 @@ people who don't expect the header to be tappable.
   A decision dialog says "Turn off two-step sign-in? Your passkeys and recovery codes will be
   removed, and you'll be signed out on your other devices." (**Cancel** / **Turn off**), then
   `withStepUp`. Afterwards normal revalidation runs. If this session ended too, sign-in follows.
-- **Turning it on** happens by adding the first passkey, so it waits for **B1**. Until then, the
-  Off state shows the same "on {installation}'s website" line.
+- **Turning it on** happens by adding the first passkey (B1) or, with #204, by setting up an
+  authenticator app. Until either is available, the Off state shows the same "on
+  {installation}'s website" line.
+
+**Authenticator app** (**Dependency ChitChat#204**; leave it out until the API exists):
+
+- **Row** in Two-step sign-in, above Passkeys: "Authenticator app", with "Set up" or "On ·
+  added {date}".
+- **Set up** (form screen, through `withStepUp`), titled "Set up an authenticator app", with
+  `FLAG_SECURE` for the whole screen:
+  - lead: "Scan this code with an authenticator app, then enter the 6-digit code it shows.";
+  - the **QR code** of the server's `otpauth://` data, drawn on the device at 200dp or larger
+    on a white tile in both themes (scanners need the contrast), described for screen readers
+    as "QR code for your authenticator app";
+  - **Can't scan it?** expands the **setup key** in the monospace face, grouped in fours, with
+    **Copy key** (sensitive flag) and the account line "{username} on {installation}";
+  - **Code** field (6 digits, numeric keyboard, one-time-code autofill hint), then **Turn on**.
+  - A wrong code: "That code didn't match. Check your phone's time is set automatically, then
+    try the newest code." Nothing is retried for them.
+- The secret and the URI are **memory only**: never in saved state, logs, screenshots or the
+  clipboard beyond the explicit Copy. Leaving the screen before confirming discards them, and
+  setup starts over with new data.
+- If this enrollment turns two-step sign-in on and the server returns recovery codes, the
+  **codes display** follows.
+- **Remove** (row overflow): a decision dialog, "Remove the authenticator app? Its codes will
+  stop working." (**Cancel** / **Remove**, `error`), then `withStepUp`. Absent when it's the
+  last method and admin policy requires two-step sign-in, with the same note as the last
+  passkey.
 
 **Codes display** (after regenerate, and after a first enrollment once B1 exists) reuses the
 recovery-key display rules (recovery-key.md, "Handling the key"):
@@ -151,8 +197,16 @@ recovery-key display rules (recovery-key.md, "Handling the key"):
 
 **Step-up for MFA accounts** uses the existing dialog. A passkey needs B1. Until then, a
 recovery code is the only option, with the existing emergency warning and remaining count
-verbatim. When an account has passkeys but B1 isn't built, the dialog says so plainly: "Use a
-recovery code, or do this on {installation}'s website."
+verbatim. When an account has passkeys but B1 isn't available, the dialog says so plainly: "Use
+a recovery code, or do this on {installation}'s website."
+
+**Authenticator codes in step-up and MFA sign-in** (**Dependency ChitChat#204**): when the
+account has an authenticator app, the first choice is "Enter the code from your authenticator
+app" (6 digits, numeric, one-time-code autofill hint), with "Use your passkey" (B1) and "Use a
+recovery code" as alternatives below. The same field appears in the MFA sign-in step,
+restoration and the password-reset MFA step. A wrong or reused code: "That code didn't work.
+Wait for a new one and try again." The 429 and lockdown copy stay as they are. Codes are never
+saved, and a submitted code is never resent.
 
 ## Sign-in methods
 
@@ -164,13 +218,29 @@ recovery code, or do this on {installation}'s website."
 
 ## Sessions
 
-- **There's no backend API to list or end login sessions.** CCM doesn't show a sessions list
-  and never implies one exists.
-- Honest guidance in the Devices group, under Notification devices, as a muted line: "To sign
-  out everywhere else, change your password."
-- **Dependency:** a "Signed-in sessions" screen (device, last active, sign out one or all)
-  needs a backend issue. The technical lead decides whether to file it. The push device list's
-  `current_session` is not a session list and isn't presented as one.
+- **There's no backend API yet to list or end login sessions.** CCM doesn't show a sessions
+  list and never implies one exists.
+- Until then, honest guidance in the Devices group, under Notification devices, as a muted
+  line: "To sign out everywhere else, change your password."
+- The push device list's `current_session` is not a session list and isn't presented as one.
+
+**Signed-in sessions** (**Dependency ChitChat#205**; leave it out until the API exists, then
+adjust to the merged contract):
+
+- **Screen** "Where you're signed in". Lead: "These are the places your account is signed in
+  right now."
+- **This device** first: the server's client label (for example "ChitChat for Android"),
+  "Signed in {date}", and the tag "This phone". It has no sign-out action here (Sign out lives
+  on the You tab).
+- **Other sessions** below, newest activity first: the label, "Last active {coarse time}" and
+  "Signed in {date}". Only server-derived labels are shown, never raw addresses. Each row has
+  **Sign out** (decision dialog: "Sign out {label}? It will need to sign in again." with
+  **Cancel** / **Sign out**).
+- **Sign out all other sessions** (`error` text at the bottom, only when others exist): a
+  decision dialog, "Sign out everywhere else? Every other device will need to sign in again,
+  and their notifications stop." Then `withStepUp` if the server requires it.
+- After either action the list re-reads. Unknown results re-read and never resend. The muted
+  password line is removed once this screen exists.
 
 ## Account closure placement
 
@@ -182,19 +252,22 @@ Delete account stays where play-readiness.md §2 puts it: the last row of Privac
 - **Unit:** row visibility (`available`, `required_by_admin_policy`, `has_password`, providers,
   `avatars_available`); the last passkey has no Remove; the recovery-code count line and its
   low-count threshold; Unknown outcomes check by GET and never resend; codes and keys never in
-  saved state; the 409 last-method mapping; no sessions row.
+  saved state; the 409 last-method mapping; no sessions row until #205; no authenticator rows
+  until #204; passkey actions only with `native_passkey_origins`; the TOTP secret and URI held
+  in memory only and discarded when setup is left.
 - **Compose:** the crop screen with button alternatives; dialogs' copy and `error` actions; the
   codes display rules (Copy sensitive, Save warning, Saved? confirmation); B1 placeholders never
-  open a browser.
-- **Native:** password fields follow the native input contracts.
+  open a browser; the TOTP setup screen with `FLAG_SECURE`, the QR description and the setup
+  key alternative.
+- **Native:** password and code fields follow the native input contracts.
 
 ## Acceptance
 
 | ID | Requirement | Verify |
 |---|---|---|
-| P-142 | Privacy and security groups Sign-in, Devices, Privacy, Your data and Delete account as specified. Rows hide when the server doesn't offer them. No sessions list exists until a backend API does. | C |
+| P-142 | Privacy and security groups Sign-in, Devices, Privacy, Your data and Delete account as specified. Rows hide when the server doesn't offer them. No sessions list exists until ChitChat#205 is available. Then "Where you're signed in" shows this device and other sessions with server labels only, and signs out one or all others after a confirmation, never resending on Unknown. | U, C |
 | P-143 | Profile pictures are cropped and re-encoded on the device (square, at most 1024 px, metadata dropped) before one explicit upload. Remove asks first. Unknown results re-read the profile, never resend. Provider import is left out until its dependency is built. | U, C |
 | P-144 | Changing the password says it signs out other devices, keeps the password out of saved state, and never resends on Unknown. | U, C |
-| P-145 | Two-step sign-in shows passkeys (label and dates only), protects the last passkey and admin-required MFA, regenerates codes only after a confirmation and step-up, and shows no TOTP option. Adding passkeys and passkey step-up are B1 dependencies and never open a browser. | U, C |
+| P-145 | Two-step sign-in shows passkeys (label and dates only), protects the last passkey and admin-required MFA, and regenerates codes only after a confirmation and step-up. Adding passkeys and passkey step-up are B1 dependencies, need `native_passkey_origins`, and never open a browser. No authenticator option appears until ChitChat#204 is available. Then setup runs under step-up and `FLAG_SECURE` with a QR code and a copyable setup key held in memory only, is confirmed by a first code, and authenticator codes are offered in step-up, MFA sign-in, restoration and reset without saving or resending them. | U, C |
 | P-146 | Recovery codes are shown once under the recovery-key display rules (memory only, `FLAG_SECURE`, sensitive Copy, explicit unencrypted Save, a Saved? confirmation) and are distinguished from the recovery key. | U, C |
 | P-147 | Sign-in methods list identities and the password. Disconnect needs step-up and maps `409 last_sign_in_method`. Connecting is left out until its dependency is built. | U, C |

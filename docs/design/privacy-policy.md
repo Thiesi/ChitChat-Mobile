@@ -9,6 +9,8 @@ rules and documents, ChitChat#160; reports about people, ChitChat#159) were appr
 maintainer on 2026-11-08 (issue #1, comment 6727725892). The password-reset addition to Account
 details (ChitChat#155) was approved on 2026-11-09, the maintainer's local date (issue #1,
 comments 6728485518 and 6728505611, posted 2026-11-08 23:11 and 23:13 UTC).
+The profile-picture addition to "What you create" was approved on 2026-11-09 (issue #1,
+comment 6734871007).
 It is built from the approved data safety facts (`play-readiness.md` §4) and the existing
 in-app disclosures. It will be published at **https://ChitChat.NetWorkXXIII.de/app/privacy** (maintainer
 decision, 2026-11-08). Publisher (NetWork XXIII) and contact
@@ -53,7 +55,7 @@ document covers the app.]*
   reset a forgotten password, your recovery key and new password. Registration can also send an
   optional birth date, which the server uses for age-restricted rooms.
 - **What you create:** messages, replies, reactions, edits and deletions; files and photos you
-  send; reports you submit about messages or people (for a person: their name and profile
+  send, and your profile picture if you add one; reports you submit about messages or people (for a person: their name and profile
   picture as moderators see them).
 - **Session data:** cookies and security tokens the server uses to keep you signed in.
 - **Notification settings:** if you turn notifications on, the delivery address and encryption
