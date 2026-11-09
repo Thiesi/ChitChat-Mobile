@@ -20,7 +20,7 @@ class AttachmentPhotoKindTest {
     }
 
     @Test fun unsupportedBinaryImagesCannotBeDowngradedByNonImageMime() = runTest {
-        val headers = listOf("GIF87a".encodeUtf8(), "GIF89a".encodeUtf8(), "BM".encodeUtf8(),
+        val headers = listOf("GIF87a".encodeUtf8(), "GIF89a".encodeUtf8(), bmp(40),
             "49492a00".decodeHex(), "4d4d002a".decodeHex(), "49492b00".decodeHex(), "4d4d002b".decodeHex(),
             "4949524f".decodeHex(), "49495253".decodeHex(), "4d4d4f52".decodeHex(), "4d4d5352".decodeHex(),
             "49495500".decodeHex(), "4d4d0055".decodeHex(), "FUJIFILMCCD-RAW".encodeUtf8())
@@ -55,6 +55,32 @@ class AttachmentPhotoKindTest {
                 attachmentPhotoKind("opaque file".encodeUtf8(), mime, AttachmentPickSource.FILE))
     }
 
+    @Test fun bitmapDibFamiliesAreRecognizedEvenWithATruncatedBody() = runTest {
+        for (size in listOf(12, 108, 124, 42, 46) + (16..64 step 4)) {
+            val bytes = bmp(size)
+            for (source in AttachmentPickSource.entries) for (mime in listOf(null, "text/plain", "image/bmp"))
+                assertEquals(AttachmentPhotoKind.UNSUPPORTED_IMAGE, attachmentPhotoKind(bytes, mime, source))
+        }
+        for (size in listOf(0, 11, 13, 17, 41, 65, -1, Int.MAX_VALUE)) {
+            val bytes = bmp(size)
+            assertEquals(AttachmentPhotoKind.NON_PHOTO, kind(bytes))
+            assertEquals(AttachmentPhotoKind.UNSUPPORTED_IMAGE,
+                attachmentPhotoKind(bytes, "image/bmp", AttachmentPickSource.FILE))
+            assertEquals(AttachmentPhotoKind.UNSUPPORTED_IMAGE,
+                attachmentPhotoKind(bytes, null, AttachmentPickSource.PHOTO_PICKER))
+        }
+    }
+
+    @Test fun ordinaryBmPrefixedFilesDoNotGetAPhotoWarning() = runTest {
+        for (bytes in listOf("BMI report: measurements".encodeUtf8(), "BM".encodeUtf8(),
+            "BMF\u0003not a bitmap font image".encodeUtf8(),
+            Buffer().writeUtf8("BM").write(ByteArray(12)).writeIntLe(0).readByteString())) {
+            for (mime in listOf(null, "text/plain", "application/octet-stream"))
+                assertEquals(AttachmentPhotoKind.NON_PHOTO,
+                    attachmentPhotoKind(bytes, mime, AttachmentPickSource.FILE))
+        }
+    }
+
     @Test fun imageMimeAndPhotoPickerOnlyEscalateUnknownHeaders() = runTest {
         val bytes = "%PDF-opaque".encodeUtf8()
         assertEquals(AttachmentPhotoKind.UNSUPPORTED_IMAGE,
@@ -71,7 +97,7 @@ class AttachmentPhotoKindTest {
             "89504e470d0a1a0a".decodeHex() to AttachmentPhotoKind.PNG,
             "524946460400000057454250".decodeHex() to AttachmentPhotoKind.WEBP,
             "GIF89a".encodeUtf8() to AttachmentPhotoKind.UNSUPPORTED_IMAGE,
-            "BM".encodeUtf8() to AttachmentPhotoKind.UNSUPPORTED_IMAGE,
+            bmp(40) to AttachmentPhotoKind.UNSUPPORTED_IMAGE,
             "49492a00".decodeHex() to AttachmentPhotoKind.UNSUPPORTED_IMAGE,
         )) for (cut in 0..header.size) {
             val bytes = header.substring(0, cut)
@@ -109,6 +135,7 @@ class AttachmentPhotoKindTest {
         assertEquals(AttachmentPhotoKind.UNSUPPORTED_IMAGE, kind(huge))
     }
 
+    private fun bmp(dibSize: Int) = Buffer().writeUtf8("BM").write(ByteArray(12)).writeIntLe(dibSize).readByteString()
     private suspend fun kind(bytes: ByteString) = attachmentPhotoKind(bytes, null, AttachmentPickSource.FILE)
     private fun ftyp(major: String, compatible: List<String> = emptyList(), extended: Boolean = false): ByteString {
         val size = (if (extended) 24 else 16) + compatible.size * 4

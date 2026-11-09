@@ -17,6 +17,10 @@ automatic fallback, aggregate memory owner or native attachment state.
 - A File selection with non-image or unknown MIME and an unrecognized header is a
   non-photo: unchanged final bytes, no extra privacy prompt.
 
+BMP recognition requires BM plus an identifying DIB-header size at byte14 (Windows
+and OS/2 header families); BM-prefixed text and unrelated binary files remain unknown.
+A recognized BMP header with no pixel body still needs a choice.
+
 These are signature candidates, not image-validity proofs or MIME/permission facts.
 A complete known signature with a truncated or corrupt body still goes to its
 cleaner or explicit choice. A known ISO image major brand is not downgraded by a
@@ -55,6 +59,7 @@ quota attempt, history reconciliation or retry is triggered here.
 The recognizer uses format identifiers, not a new decoder/library dependency:
 [GIF header](https://www.w3.org/Graphics/GIF/spec-gif89a.txt),
 [BMP file type](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapfileheader),
+[BMP DIB families in Chromium](https://chromium.googlesource.com/chromium/src/+/b9f58ca9ae3bc72a82382e44ff06f19b6a257c1a/third_party/blink/renderer/platform/image-decoders/bmp/bmp_image_reader.cc),
 [TIFF/BigTIFF header](https://libtiff.gitlab.io/libtiff/specification/bigtiff.html),
 [registered ISO brands](https://mp4ra.org/registered-types/brands), and
 [AVIF file-type requirements](https://aomediacodec.github.io/av1-avif/v1.2.0.html).
@@ -101,9 +106,27 @@ All30 focused cases (22 routing plus8 payload) passed after this correction,
 archive SHA256
 `d3d90698e021b9e66140d4156884bb4b4fc133974969fad0e3adbbb9c8ea464e`.
 All16 scratch files were verified and removed. Production helper and native-test
-sources are identical to the original head; only the two JVM tests and this record
-change. Earlier focused passes remain separate observations, not proof of the old
+sources were identical to the original head at that correction; only the two JVM
+tests and this record changed at that point. Earlier focused passes remain separate observations, not proof of the old
 tests' timing assumptions.
+
+A later audit found that the two-byte BMP prefix also classified ordinary text
+(such as a BMI report) as a photo. The negative-first regression failed against
+that implementation (31 cases, one failure), archive
+`863ca5e26b5a5c186a48fa1fd43e0f50a33910cc75df195823cf437d38509dcd`.
+Recognition now requires an identifying Windows/OS/2 DIB size, without decoding or
+validating the pixel body. Invalid/truncated identifying headers remain unknown;
+image MIME and Photo Picker still escalate them. Tests cover all recognized DIB
+sizes, unsupported sizes, every prefix truncation, and non-image BM-prefixed files.
+
+The first correction run retained one failure in the old routing fixture, which
+provided only BM, archive
+`d19b8ff2acc1644daebab2c885d0cfb6b1d20648c78c7e71116016907649e576`.
+Only that fixture changed to an identifiable BMP header; production hashes stayed
+identical. All32 focused routing/payload cases then passed, archive
+`d0d0ec17b11e6cf1a35ece3b7420839242aa29986ea291ea47bf9b8fb2b6f91f`.
+Every archive's bytes/CRC were verified and all16 scratch files per run removed.
+No native input assertion, deadline, workflow or production upload behavior changed.
 
 Current-head full JVM/build/lint/unfiltered native gates and both written reviews
 remain required and will be recorded on the PR. No native controls, original-owner

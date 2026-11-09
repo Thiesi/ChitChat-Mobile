@@ -34,7 +34,7 @@ class AttachmentPreparationTest {
     @Test fun unsupportedImagesAndImageHintedUnknownsReturnOnlyTheirOriginalChoice() = runTest {
         for ((bytes, mime, source) in listOf(
             Triple("GIF89a".encodeUtf8(), "text/plain", AttachmentPickSource.FILE),
-            Triple("BM".encodeUtf8(), null, AttachmentPickSource.FILE),
+            Triple(Buffer().writeUtf8("BM").write(ByteArray(12)).writeIntLe(40).readByteString(), null, AttachmentPickSource.FILE),
             Triple("49492a00".decodeHex(), null, AttachmentPickSource.FILE),
             Triple(Buffer().writeInt(16).writeUtf8("ftypavif").writeInt(0).readByteString(), null, AttachmentPickSource.FILE),
             Triple(privateText.encodeUtf8(), "image/heic", AttachmentPickSource.FILE),

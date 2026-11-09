@@ -27,7 +27,7 @@ internal suspend fun attachmentPhotoKind(
         bytes.starts(JPEG) -> AttachmentPhotoKind.JPEG
         bytes.starts(PNG) -> AttachmentPhotoKind.PNG
         bytes.starts(RIFF) && bytes.matches(8, WEBP) -> AttachmentPhotoKind.WEBP
-        OTHER_IMAGES.any(bytes::starts) || bytes.hasIsoImageBrand() -> AttachmentPhotoKind.UNSUPPORTED_IMAGE
+        OTHER_IMAGES.any(bytes::starts) || bytes.hasBitmapHeader() || bytes.hasIsoImageBrand() -> AttachmentPhotoKind.UNSUPPORTED_IMAGE
         source == AttachmentPickSource.PHOTO_PICKER || mimeType?.startsWith("image/", ignoreCase = true) == true ->
             AttachmentPhotoKind.UNSUPPORTED_IMAGE
         else -> AttachmentPhotoKind.NON_PHOTO
@@ -42,6 +42,15 @@ private fun ByteString.starts(marker: ByteString) = matches(0, marker)
 private fun ByteString.word(at: Int): Int =
     ((this[at].toInt() and 255) shl 24) or ((this[at + 1].toInt() and 255) shl 16) or
         ((this[at + 2].toInt() and 255) shl 8) or (this[at + 3].toInt() and 255)
+
+// BM alone also prefixes ordinary text and unrelated binary formats. Identify the
+// DIB-header family before calling it a photo; a missing pixel body is still a candidate.
+private fun ByteString.hasBitmapHeader(): Boolean {
+    if (!starts(BMP) || size < 18) return false
+    val dibSize = Integer.reverseBytes(word(14))
+    return dibSize == 12 || dibSize == 108 || dibSize == 124 ||
+        (dibSize in 16..64 && (dibSize % 4 == 0 || dibSize == 42 || dibSize == 46))
+}
 
 private suspend fun ByteString.hasIsoImageBrand(): Boolean {
     if (!matches(4, FTYP) || size < 12) return false
@@ -83,9 +92,10 @@ private val JPEG = "ffd8ff".decodeHex()
 private val PNG = "89504e470d0a1a0a".decodeHex()
 private val RIFF = "RIFF".encodeUtf8()
 private val WEBP = "WEBP".encodeUtf8()
+private val BMP = "BM".encodeUtf8()
 private val FTYP = "ftyp".encodeUtf8()
 private val OTHER_IMAGES = listOf(
-    "GIF87a".encodeUtf8(), "GIF89a".encodeUtf8(), "BM".encodeUtf8(),
+    "GIF87a".encodeUtf8(), "GIF89a".encodeUtf8(),
     "49492a00".decodeHex(), "4d4d002a".decodeHex(), // TIFF, including DNG-style raw
     "49492b00".decodeHex(), "4d4d002b".decodeHex(), // BigTIFF
     "4949524f".decodeHex(), "49495253".decodeHex(), "4d4d4f52".decodeHex(), "4d4d5352".decodeHex(), // ORF
