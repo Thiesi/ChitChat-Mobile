@@ -282,6 +282,13 @@
       "w": 390,
       "h": 844,
       "title": "Save your recovery key, shown once (dark, #155)"
+    },
+    "PrivacySecurity.dc.html": {
+      "x": 0,
+      "y": 11300,
+      "w": 390,
+      "h": 844,
+      "title": "You → Privacy and security (M6)"
     }
   },
   "order": [
