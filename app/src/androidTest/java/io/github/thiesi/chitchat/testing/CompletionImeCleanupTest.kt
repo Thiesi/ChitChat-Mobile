@@ -1,5 +1,6 @@
 package io.github.thiesi.chitchat.testing
 
+import androidx.compose.ui.test.ComposeTimeoutException
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -54,6 +55,89 @@ class CompletionImeCleanupTest {
         assertEquals(false, native.last)
         // The contract is hidden at completion, not a promise about a later re-show.
         assertEquals(listOf(true), native.remaining)
+    }
+
+    @Test fun timeoutRecordsOnlyTheLastShortCircuitedEvaluation() {
+        val failure = ComposeTimeoutException("fixture timeout")
+        var polls = 0
+        var nativeReads = 0
+        val records = mutableListOf<String>()
+        try {
+            awaitCompletionImeHidden({ deadline, condition ->
+                assertEquals(5_000L, deadline)
+                repeat(2) { assertFalse(condition()) }
+                throw failure
+            }, { if (++polls == 1) 0 else 9 }, { ++nativeReads == 2 }, records::add)
+            fail()
+        } catch (actual: ComposeTimeoutException) { assertSame(failure, actual) }
+        assertEquals(2, nativeReads) // No stale first/second values or post-timeout probes.
+        assertEquals(listOf("sample=last_wait_predicate compose=9 native1=unobserved native2=unobserved"), records)
+    }
+
+    @Test fun firstProbeVisibleOrUnknownKeepsSecondUnobserved() {
+        for (visible in listOf(true, null)) {
+            val failure = ComposeTimeoutException("fixture timeout")
+            var reads = 0
+            val records = mutableListOf<String>()
+            try {
+                awaitCompletionImeHidden({ _, condition -> assertFalse(condition()); throw failure },
+                    { 0 }, { reads++; visible }, records::add)
+                fail()
+            } catch (actual: ComposeTimeoutException) { assertSame(failure, actual) }
+            assertEquals(1, reads)
+            val first = if (visible == true) "visible" else "unknown"
+            assertEquals(listOf("sample=last_wait_predicate compose=0 native1=$first native2=unobserved"), records)
+        }
+    }
+
+    @Test fun secondProbeFailureIsRecordedWithoutAnotherStateRead() {
+        val failure = ComposeTimeoutException("fixture timeout")
+        val native = Probe(listOf(false, true))
+        val records = mutableListOf<String>()
+        try {
+            awaitCompletionImeHidden({ _, condition -> assertFalse(condition()); throw failure },
+                { 0 }, native::next, records::add)
+            fail()
+        } catch (actual: ComposeTimeoutException) { assertSame(failure, actual) }
+        assertEquals(2, native.reads)
+        assertEquals(listOf("sample=last_wait_predicate compose=0 native1=hidden native2=visible"), records)
+    }
+
+    @Test fun timeoutWithoutEvaluationIsUnobservedAndEmitterFailureCannotReplaceIt() {
+        val failure = ComposeTimeoutException("fixture timeout")
+        var emissions = 0
+        var emitted: String? = null
+        try {
+            awaitCompletionImeHidden({ _, _ -> throw failure }, { error("Unexpected Compose read") },
+                { error("Unexpected native read") }) { record ->
+                emissions++
+                emitted = record
+                error("fixture emitter failure")
+            }
+            fail()
+        } catch (actual: ComposeTimeoutException) {
+            assertSame(failure, actual); assertNull(actual.cause); assertTrue(actual.suppressed.isEmpty())
+        }
+        assertEquals(1, emissions)
+        assertEquals("sample=last_wait_predicate compose=unobserved native1=unobserved native2=unobserved", emitted)
+    }
+
+    @Test fun successfulCleanupEmitsNothingAndUsesOnlyItsTwoNativeProbes() {
+        val wait = Polls(1)
+        val native = Probe(listOf(false, false))
+        var emissions = 0
+        awaitCompletionImeHidden(wait::until, { 0 }, native::next) { emissions++ }
+        assertEquals(0, emissions); assertEquals(2, native.reads); assertEquals(1, wait.calls)
+    }
+
+    @Test fun nonTimeoutFailureIsPreservedWithoutAnEmission() {
+        val failure = IllegalArgumentException("fixture failure")
+        var emissions = 0
+        try {
+            awaitCompletionImeHidden({ _, _ -> throw failure }, { 0 }, { false }) { emissions++ }
+            fail()
+        } catch (actual: IllegalArgumentException) { assertSame(failure, actual) }
+        assertEquals(0, emissions)
     }
 
     private class Polls(private val maximum: Int) {
