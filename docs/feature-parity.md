@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5g5b retained upload ownership](milestones/M5g5b-retained-upload-ownership.md) connects exact READY memory ownership to concrete original-session room/DM transport. Draft retirement cannot release bytes still held by an upload. This is internal resource ownership: serialized actors/unknown-delivery state, native controls/downloads/sharing remain pending; files/media is not usable.
+
 [M5g5a upload exchange evidence](milestones/M5g5a-upload-exchange-evidence.md) exposes private file-vs-full-multipart facts and keeps cancelled upload operations alive through actual callback/writer stop. This is internal transport only: retained READY allocation adoption, serialized room/DM upload and unknown-delivery state, native controls/downloads/sharing remain pending. Files/media is not usable yet.
 
 [M5g4d explicit original-photo preparation](milestones/M5g4d-explicit-original-photo-preparation.md) connects exact current room/DM privacy choices to bounded local unchanged-byte hashing. It preserves original private slots, latest captions/replies, allocation lifetime and fresh entry guards, without network/send effects. Native Send anyway controls, serialized attachment POST/reconciliation and provider/sharing consumers remain pending; files/media is not usable yet.
