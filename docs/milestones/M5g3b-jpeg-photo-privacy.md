@@ -19,6 +19,15 @@ record at that segment's original position;1 may use its normal default. Remove
 the original GPS/sub-IFDs, thumbnails, XMP and other EXIF facts. No private metadata
 is decoded into strings, logged, persisted or put into generated debug output.
 
+EXIF can also specify colour interpretation independently of APP2 ICC. Validate
+the bounded EXIF/interoperability directory pointers before discarding them. This
+limited rewrite accepts implicit/explicit sRGB EXIF and its R98 interoperability
+index. Non-sRGB/uncalibrated colour-space values, calibration/gamma fields,
+non-default chroma positioning or non-sRGB interoperability return unsupported
+layout, even if another colour marker exists. They require a colour-preserving
+path/fallback before native use, not an orientation-only record and a false
+lossless claim. Directory cycles, invalid pointers/types/counts fail safely.
+
 Reject malformed lengths/offsets/orientation, duplicate EXIF, unsupported frame or
 marker layouts and MPF/multi-image/non-padding trailers. This prevents dropping a
 secondary image or gain map while claiming unchanged photo preparation. XMP without
@@ -38,6 +47,8 @@ Primary format references: [JPEG marker/scan syntax](https://www.w3.org/Graphics
 [JFIF](https://www.w3.org/Graphics/JPEG/jfif3.pdf),
 [TIFF structure/orientation](https://www.itu.int/itudoc/itu-t/com16/tiff-fx/docs/tiff6.pdf),
 and [colour-marker interpretation](https://docs.oracle.com/en/java/javase/17/docs/api/java.desktop/javax/imageio/metadata/doc-files/jpeg_metadata.html).
+The [EXIF colour-space/gamma fields](https://developer.android.com/reference/androidx/exifinterface/media/ExifInterface#TAG_COLOR_SPACE)
+also carry rendering information; retaining only APP colour markers is insufficient.
 No new dependency or backend change is introduced.
 
 JVM fixtures include an own, in-memory-generated8x4 JPEG, valid GPS IFDs in both
@@ -47,3 +58,10 @@ all truncated prefixes, malformed/ambiguous inputs and resource limits. The synt
 multi-scan fixture is no progressive-decoder proof. Current-head JVM/lint/debug/release,
 unfiltered native CI and both written reviews remain required. No live/native/provider
 or all-photo-format acceptance follows from these container tests.
+
+The EXIF-colour regression was reproduced against pre-fix production sources:
+the original10 JPEG cases passed and both new regression methods failed. After the
+guard, all13 focused JPEG cases passed with Kotlin2.3.21/JDK17, the pinned libraries
+and two processors, without Gradle or an emulator. Source/JAR/log/result archives
+were byte/CRC verified and fixed scratch removed after each run. These focused
+Windows JVM checks do not replace current-head full CI/native or device acceptance.

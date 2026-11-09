@@ -130,6 +130,28 @@ class JpegPhotoPrivacyTest {
         for (marker in bad) assertTrue(cleanJpegPhoto(insert(marker)) is JpegPhotoCleaning.Failed)
     }
 
+    @Test fun exifOnlyNonSrgbColourCannotBeDiscardedAsIfOnlyOrientationMattered() = runTest {
+        for (space in listOf(2, 65535))
+            assertFailed(JpegCleaningFailure.UNSUPPORTED_LAYOUT, insert(colourExif(space)))
+    }
+
+    @Test fun anSrgbColourDirectoryMustBeValidatedBeforeItIsDiscarded() = runTest {
+        assertEquals(base, cleaned(insert(colourExif(1))).bytes)
+        assertTrue(cleanJpegPhoto(insert(colourExif(1, -1))) is JpegPhotoCleaning.Failed)
+        assertTrue(cleanJpegPhoto(insert(colourExif(1, 8))) is JpegPhotoCleaning.Failed)
+    }
+
+    @Test fun calibrationAndNonSrgbInteroperabilityNeedAColourPreservingPath() = runTest {
+        val whitePoint = Buffer().writeUtf8("Exif\u0000\u0000II").writeShortLe(42).writeIntLe(8).writeShortLe(2)
+            .writeShortLe(0x0112).writeShortLe(3).writeIntLe(1).writeShortLe(1).writeShortLe(0)
+            .writeShortLe(0x013e).writeShortLe(5).writeIntLe(2).writeIntLe(38).writeIntLe(0)
+            .writeIntLe(3127).writeIntLe(10000).writeIntLe(3290).writeIntLe(10000).readByteString()
+        assertFailed(JpegCleaningFailure.UNSUPPORTED_LAYOUT, insert(segment(0xe1, whitePoint)))
+        assertFailed(JpegCleaningFailure.UNSUPPORTED_LAYOUT, insert(colourExif(1, gamma = true)))
+        assertFailed(JpegCleaningFailure.UNSUPPORTED_LAYOUT, insert(colourExif(1, interop = "R03\u0000")))
+        assertEquals(base, cleaned(insert(colourExif(1, interop = "R98\u0000"))).bytes)
+    }
+
     private suspend fun cleaned(bytes: ByteString): JpegPhotoCleaning.Cleaned {
         val result = cleanJpegPhoto(bytes)
         assertTrue(result is JpegPhotoCleaning.Cleaned)
@@ -150,6 +172,21 @@ class JpegPhotoPrivacyTest {
         .writeShort(payload.size + 2).write(payload).readByteString()
     private fun minimal(orientation: Int) = ("ffe1002245786966000049492a000800000001001201030001000000" +
         orientation.toString(16).padStart(2, '0') + "00000000000000").decodeHex()
+
+    private fun colourExif(space: Int, pointer: Int = 38, gamma: Boolean = false, interop: String? = null): ByteString {
+        val fields = 1 + (if (gamma) 1 else 0) + (if (interop == null) 0 else 1)
+        val extra = 38 + 2 + 12 * fields + 4
+        val payload = Buffer().writeUtf8("Exif\u0000\u0000II").writeShortLe(42).writeIntLe(8).writeShortLe(2)
+            .writeShortLe(0x0112).writeShortLe(3).writeIntLe(1).writeShortLe(1).writeShortLe(0)
+            .writeShortLe(0x8769).writeShortLe(4).writeIntLe(1).writeIntLe(pointer).writeIntLe(0)
+            .writeShortLe(fields).writeShortLe(0xa001).writeShortLe(3).writeIntLe(1).writeShortLe(space).writeShortLe(0)
+        if (interop != null) payload.writeShortLe(0xa005).writeShortLe(4).writeIntLe(1).writeIntLe(extra)
+        if (gamma) payload.writeShortLe(0xa500).writeShortLe(5).writeIntLe(1).writeIntLe(extra)
+        payload.writeIntLe(0)
+        if (interop != null) payload.writeShortLe(1).writeShortLe(1).writeShortLe(2).writeIntLe(4).writeUtf8(interop).writeIntLe(0)
+        if (gamma) payload.writeIntLe(22).writeIntLe(10)
+        return segment(0xe1, payload.readByteString())
+    }
 
     private fun exif(orientation: Int?, little: Boolean = true, type: Int = 3, count: Int = 1, offset: Int = 8): ByteString {
         val buffer = Buffer().writeUtf8("Exif\u0000\u0000").writeUtf8(if (little) "II" else "MM")

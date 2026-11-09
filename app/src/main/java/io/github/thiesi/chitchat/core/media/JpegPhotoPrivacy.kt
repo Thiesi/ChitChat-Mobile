@@ -175,20 +175,64 @@ private class JpegRewrite(private val input: ByteString) {
             return value
         }
         if (short(tiff + 2) != 42) rejectJpeg()
-        val offset = long(tiff + 4)
-        if (offset < 8 || offset > end - tiff - 2) rejectJpeg()
-        val directory = tiff + offset.toInt()
-        val entries = short(directory)
-        if (end - directory < 6) rejectJpeg()
-        if (entries > (end - directory - 6) / 12) rejectJpeg()
+        val visited = HashSet<Long>()
+        fun directory(offset: Long): IntProgression {
+            if (offset < 8 || offset > end - tiff - 6) rejectJpeg()
+            if (!visited.add(offset)) rejectJpeg(JpegCleaningFailure.UNSUPPORTED_LAYOUT)
+            val start = tiff + offset.toInt()
+            val count = short(start)
+            if (count > (end - start - 6) / 12) rejectJpeg()
+            return start + 2 until start + 2 + 12 * count step 12
+        }
+        fun pointer(entry: Int): Long {
+            if (short(entry + 2) != 4 || long(entry + 4) != 1L) rejectJpeg()
+            return long(entry + 8)
+        }
+        fun colour(entry: Int) {
+            when (short(entry)) {
+                0xa001 -> {
+                    if (short(entry + 2) != 3 || long(entry + 4) != 1L) rejectJpeg()
+                    // Non-sRGB/uncalibrated EXIF needs a colour-preserving path, not omission.
+                    if (short(entry + 8) != 1) rejectJpeg(JpegCleaningFailure.UNSUPPORTED_LAYOUT)
+                }
+                0x0213 -> {
+                    if (short(entry + 2) != 3 || long(entry + 4) != 1L) rejectJpeg()
+                    if (short(entry + 8) != 1) rejectJpeg(JpegCleaningFailure.UNSUPPORTED_LAYOUT)
+                }
+                in EXIF_CALIBRATION_TAGS -> rejectJpeg(JpegCleaningFailure.UNSUPPORTED_LAYOUT)
+            }
+        }
         var value: Int? = null
-        for (index in 0 until entries) {
-            val entry = directory + 2 + 12 * index
+        var exifPointer: Long? = null
+        for (entry in directory(long(tiff + 4))) {
+            colour(entry)
             if (short(entry) == 0x0112) {
                 if (value != null || short(entry + 2) != 3 || long(entry + 4) != 1L) rejectJpeg()
                 val parsed = short(entry + 8)
                 if (parsed !in 1..8) rejectJpeg()
                 value = parsed
+            }
+            if (short(entry) == 0x8769) {
+                if (exifPointer != null) rejectJpeg()
+                exifPointer = pointer(entry)
+            }
+        }
+        exifPointer?.let { offset ->
+            var interopPointer: Long? = null
+            for (entry in directory(offset)) {
+                colour(entry)
+                if (short(entry) == 0xa005) {
+                    if (interopPointer != null) rejectJpeg()
+                    interopPointer = pointer(entry)
+                }
+            }
+            interopPointer?.let { interop ->
+                for (entry in directory(interop)) {
+                    colour(entry)
+                    if (short(entry) == 1 && (short(entry + 2) != 2 || long(entry + 4) != 4L ||
+                            !input.rangeEquals(entry + 8, SRGB_INTEROP, 0, 4)))
+                        rejectJpeg(JpegCleaningFailure.UNSUPPORTED_LAYOUT)
+                }
             }
         }
         return value
@@ -201,6 +245,8 @@ private class JpegRewrite(private val input: ByteString) {
 
     companion object {
         private val CORE_MARKERS = setOf(0xc0, 0xc1, 0xc2, 0xc4, 0xdb, 0xdd, 0xda, 0xfe)
+        private val EXIF_CALIBRATION_TAGS = setOf(0x012d, 0x013e, 0x013f, 0x0211, 0x0214, 0xa500)
+        private val SRGB_INTEROP = "R98\u0000".encodeUtf8()
         private val JFIF = "JFIF\u0000".encodeUtf8()
         private val EXIF = "Exif\u0000\u0000".encodeUtf8()
         private val EXIF_NAME = "Exif".encodeUtf8()

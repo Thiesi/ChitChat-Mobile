@@ -1,6 +1,6 @@
 # Feature-parity matrix
 
-[M5g3b JPEG privacy](milestones/M5g3b-jpeg-photo-privacy.md) adds an internal lossless ordinary-JPEG metadata rewrite preserving valid orientation and colour/coded image data. Unsupported/malformed layouts return safe failure, never upload consent. PNG/WebP, final cleaned-byte readiness/hash, provider/native controls and complete photo acceptance remain pending.
+[M5g3b JPEG privacy](milestones/M5g3b-jpeg-photo-privacy.md) adds an internal lossless ordinary-JPEG metadata rewrite preserving valid orientation and colour/coded image data within its supported implicit/sRGB EXIF layouts. Non-sRGB/calibrated, unsupported or malformed layouts return safe failure, never upload consent. PNG/WebP, colour-preserving fallback, final cleaned-byte readiness/hash, provider/native controls and complete photo acceptance remain pending.
 
 [M5g3a picked-file snapshot](milestones/M5g3a-picked-file-snapshot.md) adds internal bounded single-read raw preparation, immutable bytes, safe failures and cancellation fences. This creates no upload-ready photo, reconciliation digest, picker/provider adapter or usable native media control. Photo cleaning and cleaned-byte evidence remain pending.
 
