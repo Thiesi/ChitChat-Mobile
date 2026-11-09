@@ -1,7 +1,9 @@
 package io.github.thiesi.chitchat.core.media
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import okio.Buffer
@@ -77,12 +79,16 @@ class PreparedAttachmentPayloadTest {
         }
     }
 
-    @Test fun cancellationBeforeResultDeliveryCannotPublishAPayload() = runTest {
+    @Test fun retiredCallerCannotPublishAPayload() = runTest {
+        var entered = false
         var published = false
-        val pending = async(start = CoroutineStart.UNDISPATCHED) {
+        val retired = Job().also { it.cancel() }
+        val pending = CoroutineScope(coroutineContext + retired).async(start = CoroutineStart.UNDISPATCHED) {
+            entered = true // Establish retirement before invoking the real factory, not after it may finish.
             PreparedAttachmentPayload.create("fixture", null, "bytes".encodeUtf8()).also { published = true }
         }
-        pending.cancel()
+        assertTrue(entered)
+        assertTrue(pending.isCancelled)
         try { pending.await(); fail("Cancelled preparation must not publish") }
         catch (_: CancellationException) { }
         assertFalse(published)

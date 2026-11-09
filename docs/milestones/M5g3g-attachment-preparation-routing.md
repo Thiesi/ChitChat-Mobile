@@ -85,6 +85,26 @@ All15 files from that fixed scratch were also verified and removed.
 The original failed archive remains retained:
 `b7a318ac60f07b9127ad116a72c0b62ba4294581121d894abe9e7a46addc9016`.
 
+The original full CI run42617831520 on12d1f07 executed1,220 JVM cases and failed
+two cancellation tests (preparation140 and existing payload86). Both failed at
+their own fail() after await returned normally: Default work could finish before
+the test called cancel. Those tests had not established cancellation before result
+delivery. The original failed report/status remains retained, never retried.
+
+The scoped test correction invokes the real helpers undispatched from an already
+cancelled independent caller job, asserts that the call site was entered, and
+requires CancellationException and no publication. This establishes retirement
+before invocation without a sleep, worker race or production dispatcher hook. See
+the pinned coroutine [context implementation](https://github.com/Kotlin/kotlinx.coroutines/blob/1.10.2/kotlinx-coroutines-core/common/src/Builders.common.kt)
+and [start semantics](https://github.com/Kotlin/kotlinx.coroutines/blob/1.10.2/kotlinx-coroutines-core/common/src/CoroutineStart.kt).
+All30 focused cases (22 routing plus8 payload) passed after this correction,
+archive SHA256
+`d3d90698e021b9e66140d4156884bb4b4fc133974969fad0e3adbbb9c8ea464e`.
+All16 scratch files were verified and removed. Production helper and native-test
+sources are identical to the original head; only the two JVM tests and this record
+change. Earlier focused passes remain separate observations, not proof of the old
+tests' timing assumptions.
+
 Current-head full JVM/build/lint/unfiltered native gates and both written reviews
 remain required and will be recorded on the PR. No native controls, original-owner
 consent state, aggregate memory, provider/live/device or full P-157 acceptance is

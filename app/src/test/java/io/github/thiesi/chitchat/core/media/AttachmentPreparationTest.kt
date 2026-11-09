@@ -4,7 +4,9 @@ import java.util.zip.CRC32
 import java.util.zip.DeflaterOutputStream
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import okio.Buffer
@@ -131,12 +133,16 @@ class AttachmentPreparationTest {
         }
     }
 
-    @Test fun cancellationBeforeDeliveryCannotPublishAReadyOrChoiceResult() = runTest {
+    @Test fun retiredCallerCannotPublishAReadyOrChoiceResult() = runTest {
+        var entered = false
         var published = false
-        val pending = async(start = CoroutineStart.UNDISPATCHED) {
+        val retired = Job().also { it.cancel() }
+        val pending = CoroutineScope(coroutineContext + retired).async(start = CoroutineStart.UNDISPATCHED) {
+            entered = true // UNDISPATCHED reaches the helper even though its caller is already retired.
             prepareAttachment(picked(privateText.encodeUtf8()), AttachmentPickSource.FILE).also { published = true }
         }
-        pending.cancel()
+        assertTrue(entered)
+        assertTrue(pending.isCancelled)
         try { pending.await(); fail() } catch (_: CancellationException) { }
         assertFalse(published)
     }
