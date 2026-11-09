@@ -20,9 +20,11 @@ class LiveSessionTest {
             SessionHttp(it).also(clients::add)
         }
         var active = repository()
+        var step = LiveStep.BOOTSTRAP
         try {
             active.connect(address)
             assertEquals("Anonymous bootstrap must succeed", SessionPhase.ANONYMOUS, active.state.value.phase)
+            step = LiveStep.LOGIN
             active.signIn(config.getValue("CHITCHAT_TEST_USERNAME"), config.getValue("CHITCHAT_TEST_PASSWORD"))
             assertEquals("Use a dedicated password-only non-admin test account", SessionPhase.AUTHENTICATED, active.state.value.phase)
             assertTrue("The test account must not be an administrator", active.state.value.user!!.roles.none { it in setOf("admin", "super_admin") })
@@ -32,36 +34,48 @@ class LiveSessionTest {
             clients.forEach(SessionHttp::close)
             active = repository()
             assertNull(active.state.value.user)
+            step = LiveStep.SESSION_RESTORATION
             active.connect(address)
             assertEquals(userId, active.state.value.user?.id)
+            step = LiveStep.REVALIDATION
             active.refresh()
             assertEquals(SessionPhase.AUTHENTICATED, active.state.value.phase)
             // Read-only M3a acceptance: no room memberships, reads, presence or messages are changed.
             val rooms = io.github.thiesi.chitchat.core.rooms.SessionRoomRepository(active)
+            step = LiveStep.ROOM_LIST
             val directory = rooms.list()
             assertEquals("Room IDs must be unique", directory.size, directory.map { it.id }.toSet().size)
             assertTrue("Provide at least one visible room for directory/detail acceptance", directory.isNotEmpty())
+            step = LiveStep.ROOM_DETAIL
             assertEquals("Room detail must match the requested authorized ID", directory.first().id, rooms.detail(directory.first().id).id)
             // Read-only M3b contracts: no read acknowledgment, send, presence or membership mutation.
             val conversations = io.github.thiesi.chitchat.core.conversation.SessionConversationRepository(active)
             val roomId = directory.first().id
+            step = LiveStep.ROOM_CONTEXT
             assertEquals(roomId, conversations.context(roomId).room.id)
+            step = LiveStep.HISTORY
             val page = conversations.history(roomId)
             assertTrue("Authorized history must remain in the requested room", page.messages.all { it.roomId == roomId })
             assertTrue("History IDs must be ascending and unique", page.messages.zipWithNext().all { (a, b) -> a.id < b.id })
+            step = LiveStep.PINGS
             assertTrue("Ping history must remain private to this account", conversations.pings(roomId).all {
                 it.roomId == roomId && userId in setOf(it.sender.id, it.target.id)
             })
             val revoked = vault.value!!
+            step = LiveStep.LOGOUT
             active.signOut()
             assertEquals(SessionPhase.SIGNED_OUT, active.state.value.phase)
             assertNull(vault.value)
             assertFalse("The server must confirm logout", active.state.value.logoutUnconfirmed)
             val stale = repository(TransientVault().apply { value = revoked })
             active = stale
+            step = LiveStep.LOGOUT_VERIFICATION
             stale.connect(address)
             assertNull("The logged-out HTTP cookie must not restore an account", stale.state.value.user)
             assertEquals(SessionPhase.INVALIDATED, stale.state.value.phase)
+        } catch (failure: Throwable) {
+            println(liveFailureMetadata(step, failure, active.state.value.error))
+            throw failure
         } finally {
             active.signOut()
             clients.forEach(SessionHttp::close)
