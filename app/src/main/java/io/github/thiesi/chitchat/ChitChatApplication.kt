@@ -55,6 +55,7 @@ class ChitChatApplication : Application() {
     val ignores: IgnoreOperations by lazy { SessionIgnoreRepository(sessionRepository) }
     val rooms: RoomOperations by lazy { SessionRoomRepository(sessionRepository) }
     val conversations: ConversationOperations by lazy { SessionConversationRepository(sessionRepository) }
+    internal val attachmentUploads by lazy { io.github.thiesi.chitchat.core.media.SessionAttachmentRepository(sessionRepository) }
     internal val messageMutations by lazy { SessionMessageMutationRepository(sessionRepository) }
     internal val messageReactions by lazy { SessionMessageReactionRepository(sessionRepository) }
     val directMessages: DirectOperations by lazy { SessionDirectRepository(sessionRepository) }

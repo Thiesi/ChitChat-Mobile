@@ -11,6 +11,9 @@ import io.github.thiesi.chitchat.core.media.AttachmentPreparationTask
 import io.github.thiesi.chitchat.core.media.OriginalPhotoPreparationTask
 import io.github.thiesi.chitchat.core.media.PickedAttachmentRead
 import io.github.thiesi.chitchat.core.media.RetainedAttachmentPreparation
+import io.github.thiesi.chitchat.core.media.AttachmentUploadOperations
+import io.github.thiesi.chitchat.core.media.AttachmentUploadPolicyFailure
+import io.github.thiesi.chitchat.core.media.UploadTransferFacts
 import io.github.thiesi.chitchat.core.conversation.ComposerReply
 
 import androidx.lifecycle.ViewModel
@@ -84,7 +87,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
     val typing: TypingController? = null,
     private val mutations: MessageMutationOperations? = null,
     private val reactions: MessageReactionOperations? = null,
-    private val attachmentBudget: AttachmentMemoryBudget? = null) : ViewModel() {
+    private val attachmentBudget: AttachmentMemoryBudget? = null,
+    private val uploads: AttachmentUploadOperations? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(ConversationUiState())
     val state = mutable.asStateFlow()
@@ -121,10 +125,11 @@ class ConversationViewModel internal constructor(private val operations: Convers
         var retained: RetainedAttachmentPreparation? = null
     }
     private val attachments = mutableMapOf<Long, AttachmentWork>()
+    private var uploadPosting: RoomAttachmentUpload? = null
 
     init { viewModelScope.launch { session.collect { current ->
         if (current.identity() != identity) {
-            retireAttachments(); retire(); identity = current.identity(); dividerEstablished = false
+            retireOwnerWork(); identity = current.identity(); dividerEstablished = false
             mutable.value = ConversationUiState()
             savedDrafts.value = emptyMap()
             unknownAuthors.clear()
@@ -147,17 +152,19 @@ class ConversationViewModel internal constructor(private val operations: Convers
         val owner = expected.identity() ?: return
         if (roomId <= 0 || owner != session.value.identity()) return
         if (owner != identity) {
-            retireAttachments(); retire(); identity = owner; savedDrafts.value = emptyMap(); unknownAuthors.clear(); mutable.value = ConversationUiState()
+            retireOwnerWork(); identity = owner; savedDrafts.value = emptyMap(); unknownAuthors.clear(); mutable.value = ConversationUiState()
             unknownReactions.clear()
         }
         if (mutable.value.roomId != roomId) {
             val wasForeground = foreground
-            background(); foreground = wasForeground; dividerEstablished = false
+            if (uploadPosting != null) retire(keepUpload = true) else background()
+            foreground = wasForeground; dividerEstablished = false
             realtime?.selectRoom(null, false)
             val memo = savedDrafts.value[roomId]?.takeIf { it.matches(expected) }
             mutable.value = ConversationUiState(roomId = roomId, draft = memo?.body.orEmpty(),
                 uncertainSend = memo?.uncertain == true, composerReply = memo?.composerReply,
-                authorUnknown = unknownAuthors[roomId], reactionUnknown = unknownReactions[roomId])
+                authorUnknown = unknownAuthors[roomId], reactionUnknown = unknownReactions[roomId],
+                busy = uploadPosting != null, sending = uploadPosting?.selection?.roomId == roomId)
         }
         if (interacted) deliberateSelection = true
         if (!mutable.value.loaded && !mutable.value.busy) loadEntry()
@@ -180,7 +187,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     /** Navigation must not turn an already authorized write into unknown delivery. */
     fun leavePane() {
         val value = mutable.value
-        if (!belongsTo(session.value) || (!postInFlight && !value.sending && !value.authorWriting && !value.reactionWriting &&
+        if (!belongsTo(session.value) || (uploadPosting == null && !postInFlight && !value.sending && !value.authorWriting && !value.reactionWriting &&
             authorPosting == null && reactionPosting == null && readJob?.isActive != true)) {
             cancel()
             return
@@ -214,7 +221,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     fun canUseMessage(expected: SessionState, roomId: Long?, message: RoomMessage): Boolean {
         val value = mutable.value
         val context = value.context ?: return false
-        return foreground && belongsTo(expected) && ready(session.value) && roomId != null && value.roomId == roomId &&
+        return uploadPosting == null && foreground && belongsTo(expected) && ready(session.value) && roomId != null && value.roomId == roomId &&
             value.pingSelection == null && value.authorDialog == null && !value.authorWriting && value.reactionDialog == null &&
             !value.reactionWriting && message.roomId == roomId && message.id > 0 &&
             value.messages.any { it === message } && !message.deleted &&
@@ -245,7 +252,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
             mutable.value = mutable.value.copy(draftsOpen = false)
     }
     fun discardDraft(draft: RoomDraft) {
-        if (!draft.matches(session.value) || mutable.value.sending || savedDrafts.value[draft.roomId] !== draft) return
+        if (!draft.matches(session.value) || mutable.value.sending || uploadPosting?.selection?.roomId == draft.roomId ||
+            savedDrafts.value[draft.roomId] !== draft) return
         removeAttachmentWork(draft.roomId)
         savedDrafts.value = savedDrafts.value - draft.roomId
         mutable.value = if (mutable.value.roomId == draft.roomId) mutable.value.copy(draft = "", composerReply = null, uncertainSend = false,
@@ -262,7 +270,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
             previous.uncertain == value.uncertainSend && previous.roomName == name && previous.composerReply === value.composerReply) return
         savedDrafts.value = if (value.draft.isEmpty() && !value.uncertainSend && value.composerReply == null && attachment == null) savedDrafts.value - roomId else
             savedDrafts.value + (roomId to RoomDraft(owner, roomId, name, value.draft, value.uncertainSend, value.composerReply,
-                attachment, previous?.slot ?: attachment?.selection?.slot ?: Any()))
+                attachment, previous?.slot ?: attachment?.selection?.slot ?: Any(),
+                previous?.takeIf { it.body == value.draft && it.composerReply === value.composerReply }?.content ?: Any()))
     }
     /** The caller has already obtained the first pick or an explicit original-bound Replace.
      * isCurrentEntry must query the real root entry now, never a cached foreground Boolean.
@@ -279,7 +288,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
         if (policy == AttachmentPolicy.Invalid || policy == AttachmentPolicy.Unavailable ||
             (policy is AttachmentPolicy.Known && policy.maxBytes == 0L)) return false
         val previous = attachments[roomId]
-        if (original?.selection !== previous?.selection || (original == null && previous != null)) return false
+        if (original?.selection !== previous?.selection || (original == null && previous != null) ||
+            original?.upload !== previous?.view?.upload) return false
         val slot = savedDrafts.value[roomId]?.slot ?: Any()
         val selection = RoomAttachmentSelection(owner, roomId, slot, sourceEntryId, read.filename, read.mimeType)
         val retiredProducer = removeAttachmentWork(roomId)
@@ -373,14 +383,19 @@ class ConversationViewModel internal constructor(private val operations: Convers
         val now = session.value
         if (current.selection !== original.selection || savedDrafts.value[roomId]?.slot !== current.selection.slot ||
             !current.selection.matches(now)) return null
-        val finalSize = current.sizeBytes.takeIf { current.phase == RoomAttachmentPhase.READY }
+        val finalSize = current.sizeBytes.takeIf { current.phase in setOf(RoomAttachmentPhase.READY,
+            RoomAttachmentPhase.UPLOADING, RoomAttachmentPhase.FINISHING, RoomAttachmentPhase.CANCELLING,
+            RoomAttachmentPhase.UNKNOWN, RoomAttachmentPhase.CONFIRMED) }
         return observeAttachmentPolicy(now.attachmentPolicy, finalSize, current.mimeType)
     }
 
     internal fun removeAttachment(expected: SessionState, roomId: Long, original: RoomAttachmentDraft,
         isCurrentEntry: () -> Boolean): Boolean {
         if (!isCurrentEntry() || !foreground || !belongsTo(expected) || mutable.value.roomId != roomId ||
-            mutable.value.busy || mutable.value.sending || attachments[roomId]?.selection !== original.selection) return false
+            mutable.value.busy || mutable.value.sending || attachments[roomId]?.selection !== original.selection ||
+            attachments[roomId]?.view?.upload !== original.upload ||
+            attachments[roomId]?.view?.phase in setOf(RoomAttachmentPhase.UPLOADING, RoomAttachmentPhase.FINISHING,
+                RoomAttachmentPhase.CANCELLING, RoomAttachmentPhase.UNKNOWN, RoomAttachmentPhase.CONFIRMED)) return false
         removeAttachmentWork(roomId)
         rememberDraft()
         return true
@@ -394,7 +409,176 @@ class ConversationViewModel internal constructor(private val operations: Convers
         return retired.producerEnd
     }
     private fun retireAttachments() { attachments.keys.toList().forEach { removeAttachmentWork(it) } }
-    override fun onCleared() { retireAttachments(); super.onCleared() }
+    private fun retireOwnerWork() {
+        retireAttachments()
+        retire()
+        // The retired generation keeps its own transport allocation until actual stop, but
+        // cannot serialize or clear a successor generation's jobs/busy state.
+        uploadPosting?.entryProbe = null
+        uploadPosting = null
+    }
+    override fun onCleared() { retireUpload(); retireAttachments(); super.onCleared() }
+
+    /** Explicit original-entry Send only. Captions are literal PHP-trimmed text, not commands. */
+    internal fun sendAttachment(expected: SessionState, roomId: Long, entryId: String, original: RoomAttachmentDraft,
+        isCurrentEntry: () -> Boolean): Boolean {
+        val sender = uploads ?: return false
+        val value = mutable.value
+        val work = attachments[roomId] ?: return false
+        val memo = savedDrafts.value[roomId] ?: return false
+        if (!isCurrentEntry() || entryId.isBlank() || !foreground || !belongsTo(expected) || expected.user?.guest != false ||
+            roomId != value.roomId || !composerCanSend() || value.busy || value.sending || value.draftsOpen || uploadPosting != null ||
+            postInFlight || authorPosting != null || reactionPosting != null || readJob?.isActive == true ||
+            work.view !== original || original.phase != RoomAttachmentPhase.READY || !work.selection.matches(session.value) ||
+            !memo.matches(session.value) || memo.slot !== work.selection.slot || work.producerEnd?.isCompleted != true) return false
+        val retained = work.retained ?: return false
+        val prepared = retained.preparation as? AttachmentPreparation.Ready ?: return false
+        when (observeAttachmentPolicy(session.value.attachmentPolicy, prepared.payload.sizeBytes, prepared.payload.mimeType)) {
+            AttachmentPolicyObservation.Unadvertised, AttachmentPolicyObservation.WithinAdvertisedFacts -> Unit
+            else -> return false
+        }
+        val caption = value.draft.phpTrim()
+        if (caption.codePointCount(0, caption.length) > 4000) return false
+        val attempt = RoomAttachmentUpload(work.selection, entryId, memo.content, caption, value.composerReply,
+            prepared.payload.sha256, System.currentTimeMillis(), isCurrentEntry)
+        stopSync()
+        uploadPosting = attempt
+        publishUpload(attempt, RoomAttachmentPhase.UPLOADING)
+        mutable.value = mutable.value.copy(busy = true, sending = true, error = null, validation = null, notice = null)
+        val pending = viewModelScope.launch {
+            attempt.entered = true
+            try {
+                if (ownedUpload(attempt) == null) throw CancellationException("Attachment retired")
+                // This handle can only keep the same READY or become null. Avoid capturing its
+                // payload-bearing preparation in the longer-lived job/attempt closure.
+                val readyForSend = retained.preparation as? AttachmentPreparation.Ready
+                    ?: throw CancellationException("Attachment retired")
+                val receipt = sender.room(expected, roomId, retained, readyForSend, caption, attempt.reply?.messageId) { facts ->
+                    if (uploadPosting !== attempt || ownedUpload(attempt) == null) throw CancellationException("Attachment retired")
+                    attempt.facts = facts
+                    attempt.observer = launch {
+                        facts.collect { state ->
+                            if (uploadPosting === attempt && !attempt.cancelRequested)
+                                publishUpload(attempt, if (state.fullBodyReported) RoomAttachmentPhase.FINISHING else RoomAttachmentPhase.UPLOADING)
+                        }
+                    }
+                }
+                if (receipt.roomId != roomId || receipt.messageId <= 0) throw ApiFailure(FailureKind.INCOMPATIBLE)
+                attempt.receipt = receipt // Positive ACK precedes any fallible canonical GET/adoption.
+                ownedUpload(attempt)?.let { it.retained?.close(); it.retained = null }
+                publishUpload(attempt, RoomAttachmentPhase.CONFIRMED)
+            } catch (cancelled: CancellationException) {
+                publishUpload(attempt, if (incompleteUpload(attempt)) RoomAttachmentPhase.READY else RoomAttachmentPhase.UNKNOWN)
+                throw cancelled
+            } catch (_: AttachmentUploadPolicyFailure) {
+                publishUpload(attempt, RoomAttachmentPhase.READY, policyBlocked = true)
+            } catch (failure: ApiFailure) {
+                publishUpload(attempt, if (failure.ambiguous() && !incompleteUpload(attempt))
+                    RoomAttachmentPhase.UNKNOWN else RoomAttachmentPhase.READY, error = failure)
+            } finally {
+                attempt.observer?.cancel()
+                finishUpload(attempt, expected)
+            }
+        }
+        attempt.job = pending.takeUnless { it.isCompleted }
+        return true
+    }
+
+    private fun ownedUpload(attempt: RoomAttachmentUpload): AttachmentWork? {
+        val roomId = attempt.selection.roomId
+        val work = attachments[roomId] ?: return null
+        val memo = savedDrafts.value[roomId] ?: return null
+        return work.takeIf { it.selection === attempt.selection && attempt.selection.matches(session.value) &&
+            memo.matches(session.value) && memo.slot === attempt.selection.slot }
+    }
+
+    private fun publishUpload(attempt: RoomAttachmentUpload, phase: RoomAttachmentPhase,
+        error: ApiFailure? = null, policyBlocked: Boolean = false) {
+        if (uploadPosting !== attempt) return
+        val work = ownedUpload(attempt) ?: return
+        val old = work.view
+        work.view = RoomAttachmentDraft(work.selection, phase, old.sizeBytes, old.privacy,
+            upload = attempt, transfer = attempt.facts?.value, uploadError = error, policyBlocked = policyBlocked)
+        val roomId = work.selection.roomId
+        savedDrafts.value = savedDrafts.value + (roomId to savedDrafts.value.getValue(roomId).withAttachment(work.view))
+    }
+
+    /** Only after the operation returned/threw: its contract includes actual callback/writer stop. */
+    private fun incompleteUpload(attempt: RoomAttachmentUpload): Boolean {
+        val facts = attempt.facts?.value ?: return true // No transport was bound/started.
+        val length = facts.multipartSizeBytes ?: return true // Rejected before multipart/call creation.
+        return facts.stopped && facts.multipartAttemptedUpperBound < length
+    }
+
+    internal fun cancelAttachmentUpload(expected: SessionState, roomId: Long, original: RoomAttachmentDraft,
+        isCurrentEntry: () -> Boolean): Boolean {
+        val attempt = uploadPosting ?: return false
+        val current = ownedUpload(attempt)?.view ?: return false
+        if (!isCurrentEntry() || !foreground || !belongsTo(expected) || mutable.value.roomId != roomId || mutable.value.draftsOpen ||
+            attempt.selection.roomId != roomId || original.upload !== attempt || current.upload !== attempt ||
+            attempt.cancelRequested || attempt.facts?.value?.fullBodyReported == true) return false
+        retireUpload()
+        return true
+    }
+
+    private fun retireUpload() {
+        val attempt = uploadPosting ?: return
+        val pending = attempt.job
+        attempt.cancelRequested = true
+        if (!attempt.entered) {
+            // All cancellation paths are feature-owned/Main-confined. DEFAULT may never enter;
+            // retire the queued marker here, before admitting any successor. No transport hold exists.
+            publishUpload(attempt, RoomAttachmentPhase.READY)
+            uploadPosting = null
+            attempt.entryProbe = null
+            attempt.job = null
+            mutable.value = mutable.value.copy(busy = false, sending = false)
+        } else publishUpload(attempt, RoomAttachmentPhase.CANCELLING)
+        pending?.cancel()
+    }
+
+    private fun finishUpload(attempt: RoomAttachmentUpload, expected: SessionState) {
+        val probe = attempt.entryProbe
+        attempt.entryProbe = null
+        attempt.job = null
+        attempt.observer = null
+        if (uploadPosting !== attempt) return
+        uploadPosting = null
+        mutable.value = mutable.value.copy(busy = false, sending = false)
+        val view = ownedUpload(attempt)?.view
+        val denial = view?.uploadError
+        if (denial?.status in setOf(403, 404) && denial?.code in setOf("room_forbidden", "room_not_found") &&
+            probe?.invoke() == true && foreground && belongsTo(expected) && mutable.value.roomId == attempt.selection.roomId) {
+            clearUnauthorized(checkNotNull(denial), unknownWrite = false)
+            return
+        }
+        if (view?.phase == RoomAttachmentPhase.CONFIRMED && probe != null && probe() && foreground &&
+            adoptConfirmedAttachment(expected, attempt.selection.roomId, view, probe)) return
+        if (foreground && mutable.value.roomId != null && !mutable.value.loaded) loadEntry() else drainSync()
+    }
+
+    /** Fresh actual-entry adoption, including a new entry returning to the original private slot.
+     * New authored content (even edit-away/back) survives; ACK never becomes unknown on GET failure.
+     */
+    internal fun adoptConfirmedAttachment(expected: SessionState, roomId: Long, original: RoomAttachmentDraft,
+        isCurrentEntry: () -> Boolean): Boolean {
+        val attempt = original.upload ?: return false
+        val work = ownedUpload(attempt) ?: return false
+        val memo = savedDrafts.value[roomId] ?: return false
+        if (!isCurrentEntry() || !foreground || !belongsTo(expected) || roomId != mutable.value.roomId ||
+            roomId != attempt.selection.roomId || work.view !== original || original.phase != RoomAttachmentPhase.CONFIRMED ||
+            attempt.receipt == null || uploadPosting != null || mutable.value.busy || readJob?.isActive == true) return false
+        removeAttachmentWork(roomId)
+        val sameContent = memo.content === attempt.content
+        mutable.value = mutable.value.copy(draft = if (sameContent) "" else memo.body,
+            composerReply = if (sameContent) null else memo.composerReply)
+        rememberDraft()
+        request { current ->
+            mutable.value = mutable.value.copy(notice = "sent")
+            reload(current, forceLatest = true)
+        }
+        return true
+    }
 
     fun reveal(id: Long) { mutable.value = mutable.value.copy(revealed = mutable.value.revealed + id) }
     private fun loadEntry() { request { current -> refreshWindow(current) } }
@@ -669,7 +853,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
 
     private fun mutationRequest(roomId: Long, action: suspend (() -> Unit) -> Unit) {
         val expected = session.value.identity() ?: return
-        if (mutable.value.busy || expected != identity) return
+        if (mutable.value.busy || uploadPosting != null || expected != identity) return
         stopSync()
         val attempt = ++sequence
         mutable.value = mutable.value.copy(busy = true, error = null)
@@ -716,7 +900,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     /** Reply navigation adopts in place. Notification entry preparation below needs no temporary latest window. */
     fun canAdoptTarget(snapshot: TargetSnapshot.RoomMessage): Boolean = foreground && ready(session.value) &&
         snapshot.matches(session.value) && snapshot.available && snapshot.context.room.id == mutable.value.roomId &&
-        !mutable.value.busy && mutable.value.authorDialog == null && mutable.value.reactionDialog == null && !postInFlight && readJob?.isActive != true
+        !mutable.value.busy && uploadPosting == null && mutable.value.authorDialog == null && mutable.value.reactionDialog == null && !postInFlight && readJob?.isActive != true
 
     fun belongsTo(expected: SessionState) = expected.identity() != null && expected.identity() == identity &&
         identity == session.value.identity()
@@ -736,7 +920,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
 
     /** Root must bind this to the actual original navigation entry and consume/navigate synchronously. */
     fun canPrepareTarget(snapshot: TargetSnapshot.RoomMessage): Boolean = ready(session.value) &&
-        snapshot.matches(session.value) && snapshot.available && !postInFlight && authorPosting == null && reactionPosting == null &&
+        snapshot.matches(session.value) && snapshot.available && uploadPosting == null && !postInFlight && authorPosting == null && reactionPosting == null &&
         mutable.value.authorDialog == null && mutable.value.reactionDialog == null && readJob?.isActive != true
 
     fun prepareTarget(snapshot: TargetSnapshot.RoomMessage): Boolean {
@@ -747,7 +931,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     }
 
     fun canPrepareTarget(snapshot: TargetSnapshot.RoomPing): Boolean = ready(session.value) &&
-        snapshot.matches(session.value) && snapshot.available && !postInFlight && authorPosting == null && reactionPosting == null &&
+        snapshot.matches(session.value) && snapshot.available && uploadPosting == null && !postInFlight && authorPosting == null && reactionPosting == null &&
         mutable.value.authorDialog == null && mutable.value.reactionDialog == null && readJob?.isActive != true
 
     fun prepareTarget(snapshot: TargetSnapshot.RoomPing): Boolean {
@@ -902,7 +1086,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
         val value = mutable.value
         val current = session.value
         val context = value.context ?: return false
-        return ready(current) && value.pingSelection == null && value.authorDialog == null && !value.authorWriting &&
+        return uploadPosting == null && attachments[value.roomId]?.view?.phase !in setOf(RoomAttachmentPhase.UNKNOWN,
+            RoomAttachmentPhase.CONFIRMED, RoomAttachmentPhase.CANCELLING) && ready(current) && value.pingSelection == null && value.authorDialog == null && !value.authorWriting &&
             value.reactionDialog == null && !value.reactionWriting && canEditDraft() && !value.stale && !value.uncertainSend && activePresence() && context.room.isMember &&
             (!current.user!!.guest || context.room.guestAccess == "write") && context.mute == null
     }
@@ -916,7 +1101,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
         val edge = atEdge && value.latestWindow && value.pingSelection == null && value.authorDialog == null && value.reactionDialog == null
         if (edge != value.atLatest) mutable.value = value.copy(atLatest = edge)
         val newest = value.messages.lastOrNull()?.id ?: return
-        if (!foreground || !edge || newestVisibleId != newest || value.busy || value.stale || !activePresence() || readJob?.isActive == true ||
+        if (uploadPosting != null || !foreground || !edge || newestVisibleId != newest || value.busy || value.stale || !activePresence() || readJob?.isActive == true ||
             value.context?.room?.isMember != true || newest <= maxOf(value.readCursor, attemptedRead) || !ready(session.value)) return
         val expected = identity ?: return
         val roomId = value.roomId ?: return
@@ -1000,7 +1185,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
         val expected = session.value.identity() ?: return
         val roomId = original.roomId ?: return
         if (realtime == null || realtime.state.value.phase == RealtimePhase.OFFLINE || expected != identity ||
-            !foreground || !original.loaded || original.busy || original.syncing ||
+            !foreground || !original.loaded || original.busy || uploadPosting != null || original.syncing ||
             requestedSync <= attemptedSync || !ready(session.value)) return
         val revision = requestedSync
         attemptedSync = revision
@@ -1091,7 +1276,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     private fun request(sending: Boolean = false, action: suspend (() -> Unit) -> Unit) {
         val roomId = mutable.value.roomId ?: return
         val expected = session.value.identity() ?: return
-        if (mutable.value.busy || expected != identity) return
+        if (mutable.value.busy || uploadPosting != null || expected != identity) return
         stopSync()
         val attempt = ++sequence
         identity = expected
@@ -1140,7 +1325,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
     private fun currentPolicy(context: ConversationContext) = session.value.chatPolicy
         ?.let { ConversationContext(context.room, it) } ?: context
 
-    private fun retire() {
+    private fun retire(keepUpload: Boolean = false) {
+        if (!keepUpload) retireUpload()
         authorPosting?.let(::rememberUnknownAuthor)
         reactionPosting?.let(::rememberUnknownReaction)
         authorPosting = null; reactionPosting = null; mutationJob?.cancel(); mutationJob = null
@@ -1168,8 +1354,9 @@ class ConversationViewModel internal constructor(private val operations: Convers
         internal fun factory(operations: ConversationOperations, realtime: RealtimeController? = null,
             typing: TypingController? = null, mutations: MessageMutationOperations? = null,
             reactions: MessageReactionOperations? = null,
-            attachmentBudget: AttachmentMemoryBudget? = null): ViewModelProvider.Factory = viewModelFactory {
-            initializer { ConversationViewModel(operations, realtime, typing, mutations, reactions, attachmentBudget) }
+            attachmentBudget: AttachmentMemoryBudget? = null,
+            uploads: AttachmentUploadOperations? = null): ViewModelProvider.Factory = viewModelFactory {
+            initializer { ConversationViewModel(operations, realtime, typing, mutations, reactions, attachmentBudget, uploads) }
         }
     }
 }

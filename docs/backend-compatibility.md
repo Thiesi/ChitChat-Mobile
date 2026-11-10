@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g5c room upload actor core](milestones/M5g5c-room-attachment-upload-state.md) consumes existing original-session multipart/ACK/refusal contracts with original-bound serialized state and scalar transport facts. No endpoint or minimum-version change. Confirmed ACK precedes GET; unknown outcomes remain locked for the following explicit evidence/consent consumer. No native/live parity claim.
+
 [M5g5b retained upload ownership](milestones/M5g5b-retained-upload-ownership.md) adds no server contract: original-session room/DM multipart can hold the exact READY allocation until actual transport termination, without releasing a surviving draft or replaying a POST. Feature serialization, explicit uncertainty/reconciliation and native controls remain separate.
 
 [M5g5a upload exchange evidence](milestones/M5g5a-upload-exchange-evidence.md) adds local per-attempt progress and actual callback/writer termination facts to the same original-session multipart routes. No endpoint, baseline, cookie/CSRF/policy/receipt, timeout or server-limit change. Server delivery and non-delivery require their own evidence; the later actor still owns explicit uncertainty/reconciliation consent.

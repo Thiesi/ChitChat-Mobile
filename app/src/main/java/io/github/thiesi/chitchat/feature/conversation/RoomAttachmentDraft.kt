@@ -4,8 +4,10 @@ import io.github.thiesi.chitchat.core.media.AttachmentPhotoPrivacy
 import io.github.thiesi.chitchat.core.media.PhotoPrivacyFailure
 import io.github.thiesi.chitchat.core.media.PreparationFailureKind
 import io.github.thiesi.chitchat.core.session.SessionState
+import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.media.UploadTransferFacts
 
-internal enum class RoomAttachmentPhase { PREPARING, READY, PRIVACY_CHOICE, FAILED }
+internal enum class RoomAttachmentPhase { PREPARING, READY, PRIVACY_CHOICE, FAILED, UPLOADING, FINISHING, CANCELLING, UNKNOWN, CONFIRMED }
 
 /** Stable original selection/slot identity; no generated private-data string or saved state. */
 internal class RoomAttachmentSelection(
@@ -30,6 +32,10 @@ internal class RoomAttachmentDraft(
     val privacy: AttachmentPhotoPrivacy? = null,
     val privacyFailure: PhotoPrivacyFailure? = null,
     val failure: PreparationFailureKind? = null,
+    val upload: RoomAttachmentUpload? = null,
+    val transfer: UploadTransferFacts? = null,
+    val uploadError: ApiFailure? = null,
+    val policyBlocked: Boolean = false,
 ) {
     val filename: String get() = selection.filename
     val mimeType: String? get() = selection.mimeType

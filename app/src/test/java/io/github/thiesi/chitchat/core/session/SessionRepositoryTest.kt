@@ -1132,9 +1132,11 @@ class SessionRepositoryTest {
     private fun retiringDraftDuringUpload(direct: Boolean) = runTest {
         val entered = java.util.concurrent.CountDownLatch(1)
         val finish = java.util.concurrent.CountDownLatch(1)
+        val uploadAttempts = java.util.concurrent.atomic.AtomicInteger()
         client = client.newBuilder().addNetworkInterceptor { chain ->
             val request = chain.request()
             if (!request.url.encodedPath.endsWith("attachments/upload.php")) return@addNetworkInterceptor chain.proceed(request)
+            uploadAttempts.incrementAndGet()
             val original = checkNotNull(request.body)
             val held = object : okhttp3.RequestBody() {
                 override fun contentType() = original.contentType()
@@ -1176,7 +1178,9 @@ class SessionRepositoryTest {
             retained.close()
         }
         assertEquals(0L, budget.reservedBytes)
-        assertEquals(3, server.requestCount) // Login GET/POST and one upload; no replay.
+        assertEquals(1, uploadAttempts.get()) // Exactly one actual client upload attempt, no replay.
+        // Cancel may close the socket before buffered headers/body reach the server's recorder.
+        assertTrue(server.requestCount in 2..3) // Login GET/POST plus at most one received upload.
     }
 
     private suspend fun retainedUploadFixture(): Triple<AttachmentMemoryBudget, AttachmentPreparation.Ready, RetainedAttachmentPreparation> {
@@ -1184,6 +1188,53 @@ class SessionRepositoryTest {
         val ready = AttachmentPreparation.Ready(PreparedAttachmentPayload.create("fixture", null, "bytes".encodeUtf8()),
             AttachmentPhotoPrivacy.NON_PHOTO)
         return Triple(budget, ready, RetainedAttachmentPreparation(ready, checkNotNull(budget.reserve(128))))
+    }
+
+    @Test fun rejectedTransferBindingSpendsNoPostAndReleasesOnlyItsTransportHold() = runTest {
+        login()
+        val uploads = SessionAttachmentRepository(sessions)
+        val (budget, ready, retained) = retainedUploadFixture()
+        val before = server.requestCount
+        var bindings = 0
+        try {
+            try {
+                uploads.room(sessions.state.value, 42, retained, ready, "", onTransfer = { facts ->
+                    bindings++
+                    assertNull(facts.value.multipartSizeBytes)
+                    throw CancellationException("Original attempt retired")
+                })
+                fail("Rejected original binding must not send")
+            } catch (_: CancellationException) { }
+            assertEquals(1, bindings)
+            assertEquals(before, server.requestCount)
+            assertSame(ready, retained.preparation)
+            assertEquals(128L, budget.reservedBytes)
+        } finally { retained.close() }
+        assertEquals(0L, budget.reservedBytes)
+    }
+
+    @Test fun boundTransferFactsReportTheSameActualRetainedMultipartExchange() = runTest {
+        login()
+        val uploads = SessionAttachmentRepository(sessions)
+        val (budget, ready, retained) = retainedUploadFixture()
+        val before = server.requestCount
+        var bound: kotlinx.coroutines.flow.StateFlow<io.github.thiesi.chitchat.core.media.UploadTransferFacts>? = null
+        var bindings = 0
+        try {
+            server.enqueue(json("""{"message":{"id":19,"room_id":42,"sender_id":7,"type":"attachment","deleted":false}}""", 201))
+            assertEquals(19L, uploads.room(sessions.state.value, 42, retained, ready, "caption", onTransfer = {
+                bindings++; bound = it
+            }).messageId)
+            val facts = checkNotNull(bound).value
+            assertEquals(1, bindings)
+            assertTrue(facts.stopped); assertTrue(facts.fullBodyReported)
+            assertEquals(ready.payload.sizeBytes, facts.fileBytesBuffered)
+            assertEquals(facts.multipartSizeBytes, facts.requestBodyEndBytes)
+            assertEquals(before + 1, server.requestCount)
+            assertSame(ready, retained.preparation)
+            assertEquals(128L, budget.reservedBytes)
+        } finally { retained.close() }
+        assertEquals(0L, budget.reservedBytes)
     }
 
     @Test fun retainedUploadsKeepTheDraftOnAckRefusalAndStaleAccess() = runTest {
