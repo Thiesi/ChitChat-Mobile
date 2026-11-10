@@ -2,29 +2,35 @@ package io.github.thiesi.chitchat.core.media
 
 import io.github.thiesi.chitchat.core.session.SessionRepository
 import io.github.thiesi.chitchat.core.session.SessionState
+import kotlinx.coroutines.flow.StateFlow
 
 /** Explicit original-session write transport only; the future room/DM actor owns serialization,
  * pending/unknown delivery, privacy/write policy, reconciliation and every native callback.
  */
-internal class SessionAttachmentRepository(private val sessions: SessionRepository) {
-    suspend fun room(expected: SessionState, roomId: Long, retained: RetainedAttachmentPreparation,
-        ready: AttachmentPreparation.Ready, caption: String, replyId: Long? = null): RoomUploadReceipt {
-        return withRetained(retained, ready, caption, replyId) { room(expected, roomId, it) }
+internal class SessionAttachmentRepository(private val sessions: SessionRepository) : AttachmentUploadOperations {
+    override suspend fun room(expected: SessionState, roomId: Long, retained: RetainedAttachmentPreparation,
+        ready: AttachmentPreparation.Ready, caption: String, replyId: Long?,
+        onTransfer: (StateFlow<UploadTransferFacts>) -> Unit): RoomUploadReceipt {
+        return withRetained(retained, ready, caption, replyId, onTransfer) { room(expected, roomId, it) }
     }
 
-    suspend fun direct(expected: SessionState, peerId: Long, retained: RetainedAttachmentPreparation,
-        ready: AttachmentPreparation.Ready, caption: String, replyId: Long? = null): DirectUploadReceipt {
-        return withRetained(retained, ready, caption, replyId) { direct(expected, peerId, it) }
+    override suspend fun direct(expected: SessionState, peerId: Long, retained: RetainedAttachmentPreparation,
+        ready: AttachmentPreparation.Ready, caption: String, replyId: Long?,
+        onTransfer: (StateFlow<UploadTransferFacts>) -> Unit): DirectUploadReceipt {
+        return withRetained(retained, ready, caption, replyId, onTransfer) { direct(expected, peerId, it) }
     }
 
     private suspend fun <T> withRetained(retained: RetainedAttachmentPreparation, ready: AttachmentPreparation.Ready,
-        caption: String, replyId: Long?, operation: suspend (AttachmentUpload) -> T): T {
+        caption: String, replyId: Long?, onTransfer: (StateFlow<UploadTransferFacts>) -> Unit,
+        operation: suspend (AttachmentUpload) -> T): T {
         val allocation = checkNotNull(retained.holdUpload(ready)) { "Attachment preparation unavailable" }
         try {
             // Only the concrete original-session calls below use this helper. They do not return
             // on cancellation before the actual callback/writer ends. Even construction/precheck
             // failures close this hold; the private draft keeps its own hold unless retired.
-            return operation(AttachmentUpload(allocation.payload, caption, replyId))
+            val upload = AttachmentUpload(allocation.payload, caption, replyId)
+            onTransfer(upload.transferFacts)
+            return operation(upload)
         } finally { allocation.close() }
     }
 
@@ -46,13 +52,10 @@ internal class SessionAttachmentRepository(private val sessions: SessionReposito
 
     private fun checkPolicy(upload: AttachmentUpload) {
         val current = sessions.state.value
-        check(current.user?.guest == false) { "Uploads unavailable" }
-        when (observeAttachmentPolicy(current.attachmentPolicy, upload.sizeBytes, upload.mimeType)) {
+        if (current.user?.guest != false) throw AttachmentUploadPolicyFailure(AttachmentPolicyObservation.Unavailable)
+        when (val observation = observeAttachmentPolicy(current.attachmentPolicy, upload.sizeBytes, upload.mimeType)) {
             AttachmentPolicyObservation.Unadvertised, AttachmentPolicyObservation.WithinAdvertisedFacts -> Unit
-            AttachmentPolicyObservation.Unavailable, AttachmentPolicyObservation.Invalid -> error("Uploads unavailable")
-            AttachmentPolicyObservation.UploadsDisabled, is AttachmentPolicyObservation.TooLarge -> error("Upload exceeds policy")
-            is AttachmentPolicyObservation.TypeNotAllowed -> error("Upload type outside policy")
-            AttachmentPolicyObservation.AwaitingFinalBytes -> error("Upload not prepared")
+            else -> throw AttachmentUploadPolicyFailure(observation)
         }
     }
 }

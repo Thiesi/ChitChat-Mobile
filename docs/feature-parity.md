@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5g5c room upload actor core](milestones/M5g5c-room-attachment-upload-state.md) adds private original-bound Send/cancel/progress/uncertainty/confirmed-adoption state to the room owner. It preserves navigation writes, actual allocation lifetime, successor isolation and positive ACKs across GET failure. Unknown history/evidence/duplicate-risk state, DM upload actor and native controls/downloads/sharing remain pending; files/media is not usable.
+
 [M5g5b retained upload ownership](milestones/M5g5b-retained-upload-ownership.md) connects exact READY memory ownership to concrete original-session room/DM transport. Draft retirement cannot release bytes still held by an upload. This is internal resource ownership: serialized actors/unknown-delivery state, native controls/downloads/sharing remain pending; files/media is not usable.
 
 [M5g5a upload exchange evidence](milestones/M5g5a-upload-exchange-evidence.md) exposes private file-vs-full-multipart facts and keeps cancelled upload operations alive through actual callback/writer stop. This is internal transport only: retained READY allocation adoption, serialized room/DM upload and unknown-delivery state, native controls/downloads/sharing remain pending. Files/media is not usable yet.
