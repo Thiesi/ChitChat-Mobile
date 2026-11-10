@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5g5d room upload reconciliation](milestones/M5g5d-room-attachment-reconciliation-state.md) adds internal explicit history/evidence/person-confirmation/duplicate-risk state for the original unknown room upload. It never posts or unlocks automatically; consent is attempt/entry-bound and distinct from text-send uncertainty. DM upload/reconciliation, native picker/card/modal controls, downloads/sharing and provider/live acceptance remain pending. Files/media is not usable yet; in-app availability disclosures remain accurate.
+
 [M5g5c room upload actor core](milestones/M5g5c-room-attachment-upload-state.md) adds private original-bound Send/cancel/progress/uncertainty/confirmed-adoption state to the room owner. It preserves navigation writes, actual allocation lifetime, successor isolation and positive ACKs across GET failure. Unknown history/evidence/duplicate-risk state, DM upload actor and native controls/downloads/sharing remain pending; files/media is not usable.
 
 [M5g5b retained upload ownership](milestones/M5g5b-retained-upload-ownership.md) connects exact READY memory ownership to concrete original-session room/DM transport. Draft retirement cannot release bytes still held by an upload. This is internal resource ownership: serialized actors/unknown-delivery state, native controls/downloads/sharing remain pending; files/media is not usable.
