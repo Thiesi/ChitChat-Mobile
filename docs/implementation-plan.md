@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g5d room upload reconciliation](milestones/M5g5d-room-attachment-reconciliation-state.md) completes the internal room actor's explicit history/SHA/person-confirmation/duplicate-risk consumer. After its own gates/reviews, add DM's distinct serialized upload actor and original-bound reconciliation, then native picker/card/privacy/unknown-delivery controls, downloads and sharing. Native consumers must bind actual entry/STARTED/root-modal permission and suppress read/typing while review choices cover the pane. No automatic retry, hash deduplication or attachment queue.
+
 [M5g5c room upload actor core](milestones/M5g5c-room-attachment-upload-state.md) supplies the original-bound serialized room write, conservative uncertainty and fresh-entry positive-ACK adoption. After its own gates/reviews, implement explicit room history/SHA evidence/person confirmation/duplicate-risk state, then DM's upload actor, then native picker/card/consent controls. Unknown remains locked until that consumer; no text-send, removal or automatic-refresh bypass.
 
 [M5g5b retained upload ownership](milestones/M5g5b-retained-upload-ownership.md) supplies the narrow draft/transport hold over an existing READY reservation, with actual-stop cancellation lifetime. After its own gates/reviews, integrate room upload/uncertainty into its existing write serialization, then DM's distinct actor marker, then native picker/card/consent controls. Byte ownership grants no send or retry authority.
