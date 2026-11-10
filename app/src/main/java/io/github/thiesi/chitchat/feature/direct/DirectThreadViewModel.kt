@@ -9,6 +9,8 @@ import io.github.thiesi.chitchat.core.direct.*
 import io.github.thiesi.chitchat.core.media.*
 import io.github.thiesi.chitchat.core.conversation.ComposerReply
 import io.github.thiesi.chitchat.core.conversation.phpTrim
+import io.github.thiesi.chitchat.core.conversation.serverInstant
+import java.time.Instant
 import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
 import io.github.thiesi.chitchat.core.mutations.MessageMutationOperations
 import io.github.thiesi.chitchat.core.mutations.validateEditedBody
@@ -53,7 +55,8 @@ data class DirectThreadState(val peerId: Long? = null, val context: DirectContex
     val authorNotice: String? = null,
     val reactionDialog: DirectReactionDialog? = null, val reactionWriting: Boolean = false,
     val reactionUnknown: DirectReactionUnknown? = null, val reactionLimit: Boolean = false,
-    val reactionNotice: String? = null) { override fun toString() = "DirectThreadState" }
+    val reactionNotice: String? = null,
+    val attachmentReview: DirectAttachmentReview? = null) { override fun toString() = "DirectThreadState" }
 
 /** One serialized operation per thread: hints queue behind writes, never cancel/replay a POST. */
 class DirectThreadViewModel internal constructor(private val operations: DirectOperations,
@@ -124,7 +127,10 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         }
         if (!mutable.value.loaded) invalidate() // Entry is not explicit uncertain-send reconciliation/consent.
     }
-    fun foreground() { active = true; invalidate() }
+    fun foreground() {
+        active = true
+        if (mutable.value.attachmentReview == null) invalidate()
+    }
     fun background() {
         active = false
         authorPosting?.let(::rememberUnknownAuthor)
@@ -134,7 +140,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             uncertainRead = current.uncertainRead || write == Write.READ,
             uncertainBlock = current.uncertainBlock || write == Write.BLOCK,
             checkedUnknown = false, busy = uploadPosting != null, sending = uploadPosting?.selection?.peer == current.peerId && uploadPosting != null, stale = true, atLatest = false,
-            authorDialog = null, authorWriting = false, reactionDialog = null, reactionWriting = false)
+            authorDialog = null, authorWriting = false, reactionDialog = null, reactionWriting = false, attachmentReview = null)
         rememberDraft(); retire(); visibleNewest = null; viewport = null
     }
 
@@ -154,11 +160,22 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     private suspend fun <T> checked(call: suspend () -> T): T {
         val seq = sequence; val peer = mutable.value.peerId ?: throw CancellationException("No thread")
         val expected = identity
+        val review = mutable.value.attachmentReview?.request
+        fun reviewAccess() {
+            if (review == null) return
+            if (mutable.value.attachmentReview?.request !== review) throw CancellationException("Attachment review retired")
+            if (!ready()) throw ApiFailure(FailureKind.HTTP, code = "csrf_failed")
+            validatedDirectPrivacy(session.value.privacy)
+        }
+        reviewAccess()
         if (!current(seq, peer, expected)) throw CancellationException("Thread retired")
-        return call().also { if (!current(seq, peer, expected)) throw CancellationException("Thread retired") }
+        return call().also {
+            if (!current(seq, peer, expected)) throw CancellationException("Thread retired")
+            reviewAccess()
+        }
     }
     private fun drain() {
-        if (!active || !ready() || mutable.value.busy || uploadPosting != null || mutable.value.peerId == null || requested <= attempted ||
+        if (!active || !ready() || mutable.value.busy || uploadPosting != null || mutable.value.attachmentReview != null || mutable.value.peerId == null || requested <= attempted ||
             realtime?.state?.value?.phase == RealtimePhase.OFFLINE) return
         attempted = requested
         start { peer -> reload(peer) }
@@ -170,7 +187,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     fun canAdoptTarget(snapshot: TargetSnapshot.DirectMessage): Boolean = active && ready() &&
         snapshot.matches(session.value) && snapshot.available && snapshot.context.peer.id == mutable.value.peerId &&
         !mutable.value.busy && write == null && mutable.value.authorDialog == null && authorPosting == null &&
-        mutable.value.reactionDialog == null && reactionPosting == null
+        mutable.value.reactionDialog == null && reactionPosting == null && mutable.value.attachmentReview == null
 
     fun belongsTo(expected: SessionState) = expected.directIdentity() != null && expected.directIdentity() == identity &&
         currentIdentity()
@@ -181,7 +198,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     fun targetDenied(request: TargetRequest, error: ApiFailure) {
         val target = request.target as? MessageTarget.DirectMessage ?: return
         if (!request.matches(session.value) || !selected(request.original, target.peerId) || uploadPosting != null || authorPosting != null || reactionPosting != null ||
-            error.status !in setOf(403, 404) || error.code == "csrf_failed") return
+            mutable.value.attachmentReview != null || error.status !in setOf(403, 404) || error.code == "csrf_failed") return
         val old = mutable.value; val pending = write
         retire()
         mutable.value = old.copy(context = null, messages = emptyList(), loaded = false, stale = true,
@@ -203,7 +220,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     /** Root must bind preparation to the original entry and consume/navigate in the same main-thread call. */
     fun canPrepareTarget(snapshot: TargetSnapshot.DirectMessage): Boolean = ready() &&
         snapshot.matches(session.value) && snapshot.available && write == null &&
-        mutable.value.authorDialog == null && authorPosting == null && mutable.value.reactionDialog == null && reactionPosting == null
+        mutable.value.authorDialog == null && authorPosting == null && mutable.value.reactionDialog == null && reactionPosting == null && mutable.value.attachmentReview == null
 
     fun prepareTarget(snapshot: TargetSnapshot.DirectMessage): Boolean {
         val fresh = snapshot.withCurrentPolicy(session.value) as? TargetSnapshot.DirectMessage ?: return false
@@ -242,7 +259,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         val policy = session.value.chatPolicy
         val mute = if (policy != null) policy.mutedEverywhere else context.mutedEverywhere
         return mutations != null && active && ready() && selected(request.expected, request.peerId) &&
-            value.loaded && !value.stale && context.peer.id == request.peerId &&
+            value.attachmentReview == null && value.loaded && !value.stale && context.peer.id == request.peerId &&
             row.id > 0 && row.sender.id == user.id && row.recipient.id == request.peerId && row.outgoing &&
             !row.deleted && row.body != null && value.messages.any { it === row } && when (request.kind) {
                 AuthorChangeKind.EDIT -> row.canEdit && context.relationship.messagingAvailable && mute == null
@@ -347,7 +364,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
 
     fun checkAuthorHistory(expected: SessionState, original: DirectAuthorUnknown) {
         if (!active || !selected(expected, original.peerId) || unknownAuthors[original.peerId] !== original || mutable.value.busy ||
-            mutable.value.reactionDialog != null) return
+            mutable.value.reactionDialog != null || mutable.value.attachmentReview != null) return
         val editor = mutable.value.authorDialog?.takeIf { it.request.peerId == original.peerId &&
             it.request.original.id == original.messageId && it.request.kind == original.kind }
         start { peer ->
@@ -382,7 +399,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         val value = mutable.value
         val viewer = session.value.user?.id ?: return false
         return reactions != null && active && selected(request.expected, request.peerId) && ready() && reactionPrivacyKnown() &&
-            value.loaded && !value.stale && value.context?.peer?.id == request.peerId &&
+            value.attachmentReview == null && value.loaded && !value.stale && value.context?.peer?.id == request.peerId &&
             reactionParties(request.original, request.peerId, viewer) && value.messages.any { it === request.original }
         // Room ignores and send/block/author capabilities are not DM history-reaction permissions.
     }
@@ -442,7 +459,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
 
     internal fun checkReactionHistory(expected: SessionState, original: DirectReactionUnknown) {
         if (!active || !selected(expected, original.peerId) || unknownReactions[original.peerId] !== original ||
-            mutable.value.busy || mutable.value.authorDialog != null) return
+            mutable.value.busy || mutable.value.authorDialog != null || mutable.value.attachmentReview != null) return
         val dialog = mutable.value.reactionDialog
         start { peer ->
             reload(peer, reconcileBlock = false) // GET only; no SEND/READ/BLOCK/AUTHOR reconciliation/consent.
@@ -478,14 +495,22 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         return true
     }
 
-    private fun start(operation: suspend (Long) -> Unit) {
+    private fun start(preserveAttachmentReview: Boolean = false, operation: suspend (Long) -> Unit) {
         val peer = mutable.value.peerId ?: return
         if (!active || !ready() || mutable.value.busy || uploadPosting != null) return
+        if (!preserveAttachmentReview && mutable.value.attachmentReview != null) {
+            visibleNewest = null
+            mutable.value = mutable.value.copy(attachmentReview = null, atLatest = false)
+        }
         val seq = ++sequence; val expected = identity
         mutable.value = mutable.value.copy(busy = true, error = null, validation = null, authorNotice = null, reactionNotice = null)
         val pending = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
                 if (!current(seq, peer, expected)) return@launch
+                if (preserveAttachmentReview) {
+                    if (!ready()) throw ApiFailure(FailureKind.HTTP, code = "csrf_failed")
+                    validatedDirectPrivacy(session.value.privacy)
+                }
                 operation(peer)
             } catch (_: CancellationException) { if (current(seq, peer, expected)) mutable.value = mutable.value.copy(
                 stale = true, uncertainSend = mutable.value.uncertainSend || write == Write.SEND,
@@ -509,6 +534,11 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
                     readError = if (pending == Write.READ) failure else mutable.value.readError)
             } }
             finally { if (current(seq, peer, expected)) {
+                val review = mutable.value.attachmentReview
+                if (preserveAttachmentReview && review?.phase == DirectAttachmentReviewPhase.CHECKING)
+                    mutable.value = mutable.value.copy(attachmentReview = mutable.value.error?.let {
+                        DirectAttachmentReview(review.request, DirectAttachmentReviewPhase.FAILED, error = it)
+                    })
                 authorPosting?.let(::rememberUnknownAuthor)
                 reactionPosting?.let(::rememberUnknownReaction)
                 authorPosting = null
@@ -574,7 +604,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     }
     fun older() {
         val before = mutable.value.olderCursor ?: return
-        if (!mutable.value.mayHaveOlder || mutable.value.stale) return
+        if (!mutable.value.mayHaveOlder || mutable.value.stale || mutable.value.attachmentReview != null) return
         start { peer ->
             val page = checked { operations.history(peer, before) }
             val existing = mutable.value
@@ -594,7 +624,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
 
     fun viewport(anchor: DirectAnchor?, incoming: Set<Long>, newest: Long?, edge: Boolean) {
         if (!active || !currentIdentity() || mutable.value.peerId == null) return
-        val authorModal = mutable.value.authorDialog != null || mutable.value.reactionDialog != null
+        val authorModal = mutable.value.authorDialog != null || mutable.value.reactionDialog != null || mutable.value.attachmentReview != null
         viewport = anchor; visibleNewest = newest.takeUnless { authorModal }
         val present = mutable.value.messages.filter { !it.outgoing }.map { it.id }.toSet()
         val visible = if (authorModal) emptySet() else incoming.intersect(present)
@@ -609,7 +639,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     }
     private fun maybeRead() {
         val value = mutable.value; val newest = value.messages.lastOrNull()?.id ?: return
-        if (!active || !ready() || value.busy || value.authorDialog != null || value.reactionDialog != null || value.stale || !value.latestWindow || !value.atLatest ||
+        if (!active || !ready() || value.busy || value.authorDialog != null || value.reactionDialog != null || value.attachmentReview != null || value.stale || !value.latestWindow || !value.atLatest ||
             visibleNewest != newest || attemptedRead >= newest || value.readError != null || value.uncertainRead ||
             value.messages.none { !it.outgoing && it.readAt == null }) return
         attemptedRead = newest
@@ -625,6 +655,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         }
     }
     fun retryRead() {
+        if (mutable.value.attachmentReview != null) return
         start { peer ->
             reload(peer)
             attemptedRead = 0
@@ -632,6 +663,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         }
     }
     fun acknowledgeAdditionalRead() {
+        if (mutable.value.attachmentReview != null) return
         val peer = mutable.value.peerId ?: return
         localAttention.value[peer]?.let { setAttention(peer, DirectAttention(it.ids)) }
     }
@@ -651,14 +683,14 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         updateDraft(session.value, mutable.value.peerId, value)
     }
     fun updateDraft(expected: SessionState, peer: Long?, value: String): Boolean {
-        if (!selected(expected, peer) || mutable.value.sending || mutable.value.authorDialog != null || mutable.value.reactionDialog != null) return false
+        if (!selected(expected, peer) || mutable.value.sending || mutable.value.authorDialog != null || mutable.value.reactionDialog != null || mutable.value.attachmentReview != null) return false
         if (!canEditDraft() && value.isNotEmpty()) { mutable.value = mutable.value.copy(draftLimit = true); return false }
         mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false)
         rememberDraft(); return true
     }
     fun canUseMessage(expected: SessionState, peer: Long?, message: DirectMessage): Boolean {
         val value = mutable.value
-        return active && selected(expected, peer) && ready() && value.context != null && value.authorDialog == null && value.reactionDialog == null &&
+        return active && selected(expected, peer) && ready() && value.context != null && value.authorDialog == null && value.reactionDialog == null && value.attachmentReview == null &&
             value.messages.any { it === message } && !message.deleted && message.id > 0
     }
     fun canReplyTo(expected: SessionState, peer: Long?, message: DirectMessage) =
@@ -671,7 +703,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     }
     fun cancelReply(expected: SessionState, peer: Long?, original: ComposerReply) {
         val value = mutable.value
-        if (!active || !selected(expected, peer) || value.sending || value.authorDialog != null || value.reactionDialog != null || value.composerReply !== original) return
+        if (!active || !selected(expected, peer) || value.sending || value.authorDialog != null || value.reactionDialog != null || value.attachmentReview != null || value.composerReply !== original) return
         mutable.value = value.copy(composerReply = null, draftLimit = false,
             error = value.error?.takeUnless { it.code == "invalid_reply_target" })
         rememberDraft()
@@ -708,7 +740,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     fun canSend() = attachments[mutable.value.peerId] == null && composerCanSend()
     private fun composerCanSend() = uploadPosting == null && attachments[mutable.value.peerId]?.view?.phase !in
         setOf(DirectAttachmentPhase.UNKNOWN, DirectAttachmentPhase.CONFIRMED, DirectAttachmentPhase.CANCELLING) &&
-        active && ready() && mutable.value.let { !it.busy && it.authorDialog == null && it.reactionDialog == null && !it.stale && it.loaded &&
+        active && ready() && mutable.value.let { !it.busy && it.authorDialog == null && it.reactionDialog == null && it.attachmentReview == null && !it.stale && it.loaded &&
         !it.uncertainSend && !it.uncertainBlock && it.context?.relationship?.messagingAvailable == true &&
         it.context.mutedEverywhere == null }
     fun send(expected: SessionState, peer: Long?) { if (selected(expected, peer)) send() }
@@ -731,7 +763,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         }
     }
     fun allowDuplicateRisk() {
-        if (mutable.value.uncertainSend && mutable.value.checkedUnknown && !mutable.value.busy && mutable.value.authorDialog == null && mutable.value.reactionDialog == null) {
+        if (mutable.value.uncertainSend && mutable.value.checkedUnknown && !mutable.value.busy && mutable.value.authorDialog == null && mutable.value.reactionDialog == null && mutable.value.attachmentReview == null) {
             mutable.value = mutable.value.copy(uncertainSend = false, checkedUnknown = false)
             rememberDraft()
         }
@@ -740,7 +772,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         if (selected(expected, peer)) setBlocked(blocked)
     }
     fun setBlocked(blocked: Boolean) {
-        if (mutable.value.context == null || mutable.value.uncertainBlock || mutable.value.authorDialog != null || mutable.value.reactionDialog != null) return
+        if (mutable.value.context == null || mutable.value.uncertainBlock || mutable.value.authorDialog != null || mutable.value.reactionDialog != null || mutable.value.attachmentReview != null) return
         start { peer ->
             write = Write.BLOCK
             val relationship = checked { operations.setBlocked(peer, blocked) }
@@ -752,6 +784,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         }
     }
     private fun retire(keepUpload: Boolean = false) {
+        mutable.value = mutable.value.copy(attachmentReview = null)
         sequence++
         if (uploadPosting != null) {
             if (!keepUpload) retireUpload()
@@ -884,6 +917,12 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
 
     private fun removeAttachmentWork(peer: Long): Job? {
         val retired = attachments.remove(peer) ?: return null
+        val review = mutable.value.attachmentReview
+        if (review?.request?.attempt?.selection === retired.selection) {
+            if (review.phase == DirectAttachmentReviewPhase.CHECKING) retire()
+            visibleNewest = null
+            mutable.value = mutable.value.copy(attachmentReview = null, busy = false, sending = false, atLatest = false)
+        }
         retired.job?.cancel()
         retired.retained?.close()
         retired.retained = null
@@ -1038,6 +1077,104 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         start { originalPeer -> reload(originalPeer, latest = true, consent = false, reconcileBlock = false) }
         return true
     }
+    internal fun checkAttachmentHistory(expected: SessionState, peer: Long, entryId: String,
+        original: DirectAttachmentDraft, isCurrentEntry: () -> Boolean): Boolean {
+        val attempt = original.upload ?: return false
+        val work = ownedUpload(attempt) ?: return false
+        val value = mutable.value
+        if (!isCurrentEntry() || entryId.isBlank() || !active || !selected(expected, peer) || !ready() || !uploadPrivacyKnown() ||
+            attempt.selection.peer != peer || work.view !== original || original.phase != DirectAttachmentPhase.UNKNOWN ||
+            value.busy || uploadPosting != null || write != null || authorPosting != null || reactionPosting != null ||
+            value.authorDialog != null || value.reactionDialog != null) return false
+        val check = DirectAttachmentReviewRequest(attempt, entryId)
+        visibleNewest = null
+        mutable.value = value.copy(attachmentReview = DirectAttachmentReview(check, DirectAttachmentReviewPhase.CHECKING), atLatest = false)
+        start(preserveAttachmentReview = true) { originalPeer ->
+            reload(originalPeer, latest = true, consent = false, reconcileBlock = false)
+            if (!active || mutable.value.attachmentReview?.request !== check ||
+                ownedUpload(attempt)?.view?.let { it.upload === attempt && it.phase == DirectAttachmentPhase.UNKNOWN } != true)
+                throw CancellationException("Attachment review retired")
+            val evidence = mutable.value.messages.filter { attachmentEvidence(attempt, it, session.value.user?.id) }
+                .map(::DirectAttachmentEvidence)
+            mutable.value = mutable.value.copy(attachmentReview = DirectAttachmentReview(check,
+                if (evidence.isEmpty()) DirectAttachmentReviewPhase.DUPLICATE_RISK else DirectAttachmentReviewPhase.EVIDENCE,
+                evidence))
+        }
+        return true
+    }
+
+    private fun attachmentEvidence(attempt: DirectAttachmentUpload, row: DirectMessage, viewer: Long?): Boolean =
+        viewer != null && row.outgoing && row.sender.id == viewer && row.recipient.id == attempt.selection.peer && row.id > 0 && !row.deleted &&
+            row.attachment?.sha256 == attempt.sha256 &&
+            serverInstant(row.createdAt)?.isAfter(Instant.ofEpochMilli(attempt.startedAtMillis)) == true
+
+    internal fun visibleAttachmentReview(expected: SessionState, peer: Long, entryId: String,
+        isCurrentEntry: () -> Boolean): DirectAttachmentReview? {
+        val review = mutable.value.attachmentReview ?: return null
+        return review.takeIf { attachmentReviewCurrent(expected, peer, entryId, review, isCurrentEntry) }
+    }
+
+    private fun attachmentReviewCurrent(expected: SessionState, peer: Long, entryId: String,
+        original: DirectAttachmentReview, isCurrentEntry: () -> Boolean, requireReady: Boolean = true): Boolean {
+        val check = original.request
+        return isCurrentEntry() && active && selected(expected, peer) && (!requireReady || ready() && uploadPrivacyKnown()) &&
+            check.entryId == entryId && check.attempt.selection.peer == peer &&
+            mutable.value.attachmentReview === original && ownedUpload(check.attempt)?.view?.let { it.upload === check.attempt && it.phase == DirectAttachmentPhase.UNKNOWN } == true
+    }
+
+    internal fun closeAttachmentReview(expected: SessionState, peer: Long, entryId: String,
+        original: DirectAttachmentReview, isCurrentEntry: () -> Boolean): Boolean {
+        if (!attachmentReviewCurrent(expected, peer, entryId, original, isCurrentEntry, requireReady = false)) return false
+        if (original.phase == DirectAttachmentReviewPhase.CHECKING) {
+            retire()
+            mutable.value = mutable.value.copy(busy = false, sending = false, stale = true)
+        }
+        visibleNewest = null
+        mutable.value = mutable.value.copy(attachmentReview = null, atLatest = false)
+        drain()
+        return true
+    }
+
+    internal fun rejectAttachmentEvidence(expected: SessionState, peer: Long, entryId: String,
+        original: DirectAttachmentReview, isCurrentEntry: () -> Boolean): Boolean {
+        if (!attachmentReviewCurrent(expected, peer, entryId, original, isCurrentEntry) || mutable.value.busy ||
+            original.phase != DirectAttachmentReviewPhase.EVIDENCE) return false
+        mutable.value = mutable.value.copy(attachmentReview = DirectAttachmentReview(original.request, DirectAttachmentReviewPhase.DUPLICATE_RISK))
+        return true
+    }
+
+    internal fun confirmAttachmentEvidence(expected: SessionState, peer: Long, entryId: String,
+        original: DirectAttachmentReview, evidence: DirectAttachmentEvidence, isCurrentEntry: () -> Boolean): Boolean {
+        if (!attachmentReviewCurrent(expected, peer, entryId, original, isCurrentEntry) || mutable.value.busy ||
+            original.phase != DirectAttachmentReviewPhase.EVIDENCE || original.evidence.none { it === evidence } ||
+            mutable.value.messages.none { it === evidence.original } ||
+            !attachmentEvidence(original.request.attempt, evidence.original, session.value.user?.id)) return false
+        val attempt = original.request.attempt
+        val memo = savedDrafts.value[peer] ?: return false
+        removeAttachmentWork(peer)
+        val sameContent = memo.content === attempt.content
+        mutable.value = mutable.value.copy(attachmentReview = null, atLatest = false,
+            draft = if (sameContent) "" else memo.body, composerReply = if (sameContent) null else memo.composerReply)
+        rememberDraft()
+        drain()
+        return true
+    }
+
+    /** Explicit risk acknowledgement only unlocks the exact file. A later fresh Send is separate. */
+    internal fun acceptAttachmentDuplicateRisk(expected: SessionState, peer: Long, entryId: String,
+        original: DirectAttachmentReview, isCurrentEntry: () -> Boolean): Boolean {
+        if (!attachmentReviewCurrent(expected, peer, entryId, original, isCurrentEntry) || mutable.value.busy ||
+            original.phase != DirectAttachmentReviewPhase.DUPLICATE_RISK) return false
+        val work = ownedUpload(original.request.attempt) ?: return false
+        val old = work.view
+        work.view = DirectAttachmentDraft(work.selection, DirectAttachmentPhase.READY, old.sizeBytes, old.privacy,
+            upload = original.request.attempt)
+        savedDrafts.value = savedDrafts.value + (peer to savedDrafts.value.getValue(peer).withAttachment(work.view))
+        mutable.value = mutable.value.copy(attachmentReview = null, atLatest = false)
+        drain()
+        return true
+    }
+
     private class IncompleteRange : Exception()
     private fun ApiFailure.ambiguous() = kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.TLS,
         FailureKind.REDIRECT, FailureKind.INCOMPATIBLE, FailureKind.TOO_LARGE) || (status ?: 0) >= 500
