@@ -169,6 +169,18 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             if (activity?.isChangingConfigurations != true &&
                 route?.startsWith("conversation/") != true && route != NOTIFICATION_ROOM_ROUTE)
                 conversations.background()
+            // A paused thread upload also survives the inbox/other routes. Genuine background
+            // must still cancel it there; an invalid scoped thread has no screen lifecycle owner.
+            if (activity?.isChangingConfigurations != true) {
+                val actual = nav.currentBackStackEntry
+                val args = actual?.arguments
+                val current = directThread?.session?.value
+                val peer = args?.getLong("peerId", -1) ?: -1
+                val thread = route == DIRECT_THREAD_ROUTE && args != null && current != null &&
+                    peer > 0 && peer != current.user?.id && matchesDirectScope(current, args.getLong("generation", -1),
+                        args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server"))
+                if (!thread) directThread?.background()
+            }
         }
         val entry = nav.currentBackStackEntryAsState().value
         val entryStarted = entry?.lifecycle?.currentStateAsState()?.value?.isAtLeast(Lifecycle.State.STARTED) == true
@@ -259,9 +271,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             val validPeer = entry?.destination?.route?.startsWith("direct/") != true || peer > 0 && peer != session.user?.id
             if (direct && (!sameScope || !validPeer || directInbox == null || directThread == null)) {
                 nav.popBackStack("home", false)
-                directInbox?.background(); directThread?.background()
+                directInbox?.background(); directThread?.leavePane()
             } else if (entry?.destination?.route != null && !direct) {
-                directInbox?.background(); directThread?.background()
+                directInbox?.background(); directThread?.leavePane()
             }
         }
         val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
@@ -506,7 +518,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             if (directThread != null && args != null && peer > 0 && peer != session.user?.id && matchesDirectScope(session,
                                 args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
                                 DirectThreadScreen(directThread, peer, auth::refresh, messageTargets, targetObscured,
-                                    onProfile = profileOpener(destination), completion = completion, completionEntryId = destination.id) {
+                                    onProfile = profileOpener(destination), completion = completion, completionEntryId = destination.id,
+                                    onStopped = { if (nav.currentBackStackEntry === destination) directThread.background()
+                                        else directThread.leavePane() }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
                         }
                     }

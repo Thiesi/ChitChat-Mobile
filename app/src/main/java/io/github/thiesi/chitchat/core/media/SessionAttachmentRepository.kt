@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.core.media
 
 import io.github.thiesi.chitchat.core.session.SessionRepository
 import io.github.thiesi.chitchat.core.session.SessionState
+import io.github.thiesi.chitchat.core.direct.validatedDirectPrivacy
 import kotlinx.coroutines.flow.StateFlow
 
 /** Explicit original-session write transport only; the future room/DM actor owns serialization,
@@ -46,6 +47,7 @@ internal class SessionAttachmentRepository(private val sessions: SessionReposito
         val access = sessions.openAccess(expected)
         return sessions.authorized(access) {
             checkPolicy(upload)
+            validatedDirectPrivacy(sessions.state.value.privacy)
             uploadDirectAttachment(peerId, upload, access.csrf, access.userId)
         }
     }

@@ -88,6 +88,15 @@ class SessionRepositoryTest {
         assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
     }
 
+    private suspend fun directUploadReady() {
+        login()
+        val privacy = """{"direct_messages":{"end_to_end_encrypted":false,"admin_inspection_enabled":false,"admin_inspection_role":"admin","retention":"permanently","retention_days":0},"message_revisions":{"admin_review_enabled":false,"admin_review_role":"admin","reason_required":true,"audit_each_review":true,"participant_notification":true}}"""
+        server.enqueue(json(bootstrapBody(user, b).dropLast(1) + """, "privacy":$privacy}"""))
+        sessions.refresh()
+        assertEquals("GET", server.takeRequest(5, TimeUnit.SECONDS)?.method)
+        assertNotNull(sessions.state.value.privacy)
+    }
+
     @Test fun attachmentPolicyRefreshReplacesRatherThanRetainsMissingOrNullFacts() = runTest {
         login()
         val before = server.requestCount
@@ -1150,7 +1159,8 @@ class SessionRepositoryTest {
             }
             chain.proceed(request.newBuilder().post(held).build())
         }.build()
-        login()
+        if (direct) directUploadReady() else login()
+        val requestsBeforeUpload = server.requestCount
         val uploads = io.github.thiesi.chitchat.core.media.SessionAttachmentRepository(sessions)
         val budget = io.github.thiesi.chitchat.core.media.AttachmentMemoryBudget(128)
         val ready = io.github.thiesi.chitchat.core.media.AttachmentPreparation.Ready(
@@ -1180,7 +1190,7 @@ class SessionRepositoryTest {
         assertEquals(0L, budget.reservedBytes)
         assertEquals(1, uploadAttempts.get()) // Exactly one actual client upload attempt, no replay.
         // Cancel may close the socket before buffered headers/body reach the server's recorder.
-        assertTrue(server.requestCount in 2..3) // Login GET/POST plus at most one received upload.
+        assertTrue(server.requestCount in requestsBeforeUpload..requestsBeforeUpload + 1) // Explicit setup plus at most one received upload.
     }
 
     private suspend fun retainedUploadFixture(): Triple<AttachmentMemoryBudget, AttachmentPreparation.Ready, RetainedAttachmentPreparation> {
@@ -1188,6 +1198,37 @@ class SessionRepositoryTest {
         val ready = AttachmentPreparation.Ready(PreparedAttachmentPayload.create("fixture", null, "bytes".encodeUtf8()),
             AttachmentPhotoPrivacy.NON_PHOTO)
         return Triple(budget, ready, RetainedAttachmentPreparation(ready, checkNotNull(budget.reserve(128))))
+    }
+
+    @Test fun directUploadCannotSpendAPostWhileCurrentPrivacyIsUnknown() = runTest {
+        login()
+        assertNull(sessions.state.value.privacy)
+        assertDirectUploadPrivacyRejected(sessions.state.value)
+    }
+
+    @Test fun oldRenderedPrivacyCannotAuthorizeUploadAfterCurrentDisclosureDisappears() = runTest {
+        directUploadReady()
+        val original = sessions.state.value
+        server.enqueue(json(bootstrapBody(user, b))); sessions.refresh(); server.takeRequest()
+        assertNull(sessions.state.value.privacy)
+        assertDirectUploadPrivacyRejected(original)
+    }
+
+    private suspend fun assertDirectUploadPrivacyRejected(expected: SessionState) {
+        val uploads = SessionAttachmentRepository(sessions)
+        val (budget, ready, retained) = retainedUploadFixture()
+        val before = server.requestCount
+        server.enqueue(json("""{"message":{"id":19,"sender":{"id":7},"recipient":{"id":8},"outgoing":true}}""", 201))
+        try {
+            try {
+                uploads.direct(expected, 8, retained, ready, "")
+                fail("Unknown DM disclosure must not reach the upload POST")
+            } catch (failure: ApiFailure) { assertEquals(FailureKind.INCOMPATIBLE, failure.kind) }
+            assertEquals(before, server.requestCount)
+            assertSame(ready, retained.preparation)
+            assertEquals(128L, budget.reservedBytes)
+        } finally { retained.close() }
+        assertEquals(0L, budget.reservedBytes)
     }
 
     @Test fun rejectedTransferBindingSpendsNoPostAndReleasesOnlyItsTransportHold() = runTest {
@@ -1238,7 +1279,7 @@ class SessionRepositoryTest {
     }
 
     @Test fun retainedUploadsKeepTheDraftOnAckRefusalAndStaleAccess() = runTest {
-        login()
+        directUploadReady()
         val uploads = SessionAttachmentRepository(sessions)
         val expected = sessions.state.value
         val (budget, ready, retained) = retainedUploadFixture()
@@ -1328,7 +1369,7 @@ class SessionRepositoryTest {
     }
 
     @Test fun lateUploadAcknowledgmentCannotReturnIntoASignedOutSession() = runTest {
-        login()
+        directUploadReady()
         val uploads = io.github.thiesi.chitchat.core.media.SessionAttachmentRepository(sessions)
         val original = sessions.state.value
         server.enqueue(MockResponse.Builder().code(201).addHeader("Content-Type", "application/json")
