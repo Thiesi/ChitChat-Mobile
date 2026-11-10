@@ -175,6 +175,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
 fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSession: () -> Unit,
     targets: MessageTargetViewModel? = null, obscured: Boolean = false, onProfile: ((Long) -> Boolean)? = null,
     completion: io.github.thiesi.chitchat.feature.completion.CompletionViewModel? = null, completionEntryId: String = "",
+    onStopped: (() -> Unit)? = null,
     isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
@@ -182,7 +183,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
     key(peer, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
         val state by model.state.collectAsStateWithLifecycle()
         LaunchedEffect(peer) { model.open(peer, displayedSession) }
-        DirectLifecycle(model::foreground, model::background, model::invalidate)
+        DirectLifecycle(model::foreground, onStopped ?: model::background, model::invalidate)
         if (model.belongsTo(displayedSession) && state.peerId == peer) {
             val focus = LocalFocusManager.current
             val attention by model.attention.collectAsStateWithLifecycle()

@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g5e DM upload actor](milestones/M5g5e-direct-attachment-upload-state.md) adds original-bound serialized state over the existing multipart route. The concrete DM transport now validates the current disclosure after original access, independently of an older rendered snapshot, without bootstrap/replay. Positive201 precedes canonical GET and grants no read/block/send-unknown consent. No endpoint, minimum version, timeout or HTTP budget changes.
+
 [M5g5d room upload reconciliation](milestones/M5g5d-room-attachment-reconciliation-state.md) reuses one explicit bounded room context/history/pings pass, with the existing original-session transport and timestamp/attachment metadata. Own final-byte SHA matches after attempt start are person-confirmed evidence, never deduplication or a synthetic receipt. No endpoint, baseline, HTTP budget, upload or retry change; no live acceptance claim.
 
 [M5g5c room upload actor core](milestones/M5g5c-room-attachment-upload-state.md) consumes existing original-session multipart/ACK/refusal contracts with original-bound serialized state and scalar transport facts. No endpoint or minimum-version change. Confirmed ACK precedes GET; unknown outcomes remain locked for the following explicit evidence/consent consumer. No native/live parity claim.
