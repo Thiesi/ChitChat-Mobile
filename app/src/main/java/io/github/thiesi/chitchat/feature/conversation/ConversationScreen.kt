@@ -84,6 +84,11 @@ import io.github.thiesi.chitchat.core.conversation.RoomMessage
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.PresencePhase
+import io.github.thiesi.chitchat.core.media.AttachmentPolicy
+import io.github.thiesi.chitchat.core.ui.AttachAvailability
+import io.github.thiesi.chitchat.core.ui.AttachUnavailableNotice
+import io.github.thiesi.chitchat.core.ui.AttachButton
+import io.github.thiesi.chitchat.core.ui.AttachmentCard
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import io.github.thiesi.chitchat.core.ui.InlineError
@@ -156,7 +161,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     var focusReply by remember { mutableStateOf<ComposerReply?>(null) }
     val composerFocus = remember { FocusRequester() }
     val androidContext = LocalContext.current
-    val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null
+    val attach = remember { RoomAttachmentControls() }
+    val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null ||
+        attach.modalOpen
     fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !obscured &&
         !pingsOpen && model.state.value.pingSelection == null && !detailsOpen &&
         ignores?.state?.value?.target == null && !model.state.value.draftsOpen
@@ -267,6 +274,60 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         }
     }
     val ready = !session.busy && !session.refreshRequired && !session.storageWarning && now >= session.retryAtMillis
+    val attachPolicy = session.attachmentPolicy
+    val attachAvailable = attachAvailability(attachPolicy)
+    val attachVisible = session.user?.guest == false && attachPolicy != AttachmentPolicy.Unavailable &&
+        state.context?.let { it.room.isMember && it.mute == null } == true
+    // The drafts flow is the recomposition signal; the VM's actual-entry query is the authority.
+    val attachment = savedDrafts[roomId]?.attachment?.let { model.visibleAttachment(displayedSession, roomId, isCurrentEntry) }
+    val attachmentFacts = attachment?.let { it.cardFacts(model.attachmentPolicyObservation(displayedSession, roomId, it, isCurrentEntry)) }
+    LaunchedEffect(attachAvailable) {
+        if (attachAvailable == AttachAvailability.AVAILABLE) { attach.invalidChecked = false
+            if (attach.notice != AttachNotice.NOT_ADDED) attach.notice = null }
+    }
+    val attachSettled = lifecycleState.isAtLeast(Lifecycle.State.STARTED) && model.canBeginAttachment()
+    val attachCannotWait = !attachVisible || attachAvailable != AttachAvailability.AVAILABLE || state.uncertainSend ||
+        presenceHere?.presencePhase in setOf(PresencePhase.EXPIRED, PresencePhase.ERROR)
+    RoomAttachmentHost(attach, model, displayedSession, roomId, completionEntryId, isCurrentEntry,
+        interactive = { interactive() && actions == null && replyOptions == null }, settled = attachSettled, waitingCanEnd = attachCannotWait)
+    fun onAttach() {
+        if (!interactive() || actions != null || replyOptions != null) return
+        when (attachAvailable) {
+            AttachAvailability.SERVER_OFF -> attach.notice = AttachNotice.SERVER_OFF
+            AttachAvailability.SETTINGS_UNREADABLE -> attach.notice = AttachNotice.SETTINGS_UNREADABLE
+            AttachAvailability.AVAILABLE -> {
+                if (!model.canBeginAttachment()) return
+                val current = model.visibleAttachment(displayedSession, roomId, isCurrentEntry)
+                focus.clearFocus()
+                attach.notice = null
+                if (current == null) { attach.sheetOriginal = null; attach.sheet = true }
+                else if (current.removable()) attach.replacing = current
+            }
+        }
+    }
+    val attachmentCard: @Composable () -> Unit = { attachmentFacts?.let { facts ->
+        val original = attachment
+        AttachmentCard(facts, enabled = !obscured && !composerDialog && !state.sending,
+            onRemove = original.takeIf { it.removable() }?.let { { if (interactive() && actions == null && replyOptions == null)
+                model.removeAttachment(displayedSession, roomId, it, isCurrentEntry) } },
+            onSendAnyway = original.takeIf { it.phase == RoomAttachmentPhase.PRIVACY_CHOICE }?.let { { if (interactive() &&
+                actions == null && replyOptions == null) model.prepareOriginalPhoto(displayedSession, roomId, it, isCurrentEntry) } },
+            modifier = Modifier.padding(horizontal = 16.dp))
+    } }
+    val attachNotices: @Composable () -> Unit = {
+        if (attach.picked != null) AttachWaitingLine(onCancel = { attach.picked = null })
+        when (val notice = attach.notice) {
+            AttachNotice.NOT_ADDED -> Text(stringResource(R.string.attach_not_added), Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                .testTag("attach_not_added").semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodySmall)
+            AttachNotice.SERVER_OFF, AttachNotice.SETTINGS_UNREADABLE -> AttachUnavailableNotice(
+                if (notice == AttachNotice.SERVER_OFF) AttachAvailability.SERVER_OFF else AttachAvailability.SETTINGS_UNREADABLE,
+                installationName(displayedSession), persisting = attach.invalidChecked && !session.busy &&
+                    attachPolicy == AttachmentPolicy.Invalid, canCheckAgain = !session.busy && now >= session.retryAtMillis,
+                onCheckAgain = { if (isCurrentEntry()) { attach.invalidChecked = true; onRefreshSession() } },
+                onDismiss = { attach.notice = null })
+            null -> Unit
+        }
+    }
     BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
     val compact = maxHeight < 240.dp
     val replyInline = compact
@@ -301,6 +362,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             model.realtime?.state?.value?.takeIf { it.generation==displayedSession.generation && it.selectedRoomId==roomId }
                 ?.users.orEmpty().filter { it.id!=displayedSession.user?.id }.map { it.username } },inlineChoices=inlineCompletion && !detailsOpen)
     val header: @Composable (Boolean,() -> Unit) -> Unit = { inDetails,close ->
+            if (inDetails && compact) { attachNotices(); attachmentCard() }
             if (inDetails && completionComposer.choice!=null) {
                 Text(stringResource(R.string.completion_title))
                 CompletionSuggestions(completionComposer,fromDetails=true,onAccepted=close)
@@ -460,6 +522,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             viewing = state.loaded && !state.stale && state.context != null && !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured,
             publishing = ready && !state.busy && !composerDialog && !obscured && model.canSend())
         if (!replyInline) replyControl(false)
+        if (!compact) { attachNotices(); attachmentCard() }
         if (inlineCompletion && !detailsOpen) CompletionSuggestions(completionComposer)
         Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
@@ -467,14 +530,16 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val label = stringResource(if (completionComposer.choice!=null) R.string.completion_details else R.string.conversation_details)
                 val blocked = !ready || state.busy || !model.canSend()
                 val status = stringResource(if (blocked) R.string.conversation_send_unavailable_details else R.string.conversation_details_attention)
-                val attention = completionComposer.choice!=null || state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend || state.authorUnknown != null || state.authorLimit ||
+                val attention = (compact && (attachmentFacts != null || attach.notice != null || attach.picked != null)) ||
+                    completionComposer.choice!=null || state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend || state.authorUnknown != null || state.authorLimit ||
                     state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
                     state.notice != null || blocked || connection?.takeIf { it.generation == session.generation }?.let {
                         it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null || it.roomId == roomId }
                     } == true
                 BadgedBox(badge = { if (attention) AttentionBadge(
                     uncertain = state.uncertainSend || state.authorUnknown != null || state.reactionUnknown != null,
-                    failed = state.error != null || state.syncError != null || state.readError != null || state.validation != null)
+                    failed = state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
+                        (compact && attachmentFacts?.needsAttention == true))
                 }) {
                     IconButton(onClick = { completionDetailsToken=Any(); detailsOpen = true }, modifier = Modifier.semantics {
                         contentDescription = label
@@ -485,8 +550,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (replyInline) replyControl(true)
             MessageInput(completionComposer.value, completionComposer::input,
                 !state.sending && model.canEditDraft() && !composerDialog && !obscured,
-                stringResource(R.string.conversation_message), compact,
+                stringResource(if (attachment != null) R.string.attach_caption else R.string.conversation_message), compact,
                 Modifier.weight(1f).onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("conversation_composer"))
+            if (attachVisible) AttachButton(attachAvailable, enabled = !obscured && !composerDialog && !state.sending &&
+                (attachAvailable != AttachAvailability.AVAILABLE || (ready && model.canBeginAttachment() &&
+                    attachment?.removable() != false)), onClick = ::onAttach, modifier = Modifier.testTag("conversation_attach"))
             MessageSendButton(stringResource(if (state.sending) R.string.conversation_sending else R.string.conversation_send),
                 onClick = { if (interactive() && actions == null && replyOptions == null) model.send(displayedSession, roomId) },
                 enabled = ready && !state.busy && !composerDialog && !obscured && model.canSend() && state.draft.phpTrim().isNotEmpty(),
