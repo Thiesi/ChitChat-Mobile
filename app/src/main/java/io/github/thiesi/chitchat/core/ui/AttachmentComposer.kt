@@ -323,3 +323,55 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
         }
     }
 }
+
+internal enum class AttachmentReviewPhase { CHECKING, EVIDENCE, DUPLICATE_RISK, FAILED }
+internal class AttachmentEvidenceRow(val key: Any, val filename: String, val time: String)
+
+/** One explicit history check's outcome. Confirming evidence or accepting the risk never posts:
+ * a match is the person's own judgment, and "Send again" only unlocks a later, separate Send.
+ */
+@Composable
+internal fun AttachmentReviewDialog(phase: AttachmentReviewPhase, evidence: List<AttachmentEvidenceRow>, error: String?,
+    canAct: Boolean, onConfirm: (Any) -> Unit, onReject: () -> Unit, onAccept: () -> Unit, onCheckAgain: () -> Unit,
+    onClose: () -> Unit) {
+    AlertDialog(onDismissRequest = onClose, modifier = Modifier.testTag("attach_review_dialog").lanternDialogEdge(),
+        title = { Text(stringResource(when (phase) {
+            AttachmentReviewPhase.CHECKING -> R.string.attach_review_checking_title
+            AttachmentReviewPhase.EVIDENCE -> R.string.attach_review_found_title
+            AttachmentReviewPhase.DUPLICATE_RISK -> R.string.attach_review_send_again_title
+            AttachmentReviewPhase.FAILED -> R.string.attach_review_failed_title
+        })) },
+        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            when (phase) {
+                AttachmentReviewPhase.CHECKING -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text(stringResource(R.string.attach_review_checking), Modifier.padding(start = 12.dp))
+                }
+                AttachmentReviewPhase.EVIDENCE -> evidence.forEach { row ->
+                    Text(stringResource(R.string.attach_review_found, row.filename, row.time))
+                    TextButton(onClick = { onConfirm(row.key) }, enabled = canAct, modifier = Modifier.fillMaxWidth()
+                        .heightIn(min = Lantern.target).testTag("attach_review_confirm")) {
+                        Text(stringResource(R.string.attach_review_confirm), Modifier.fillMaxWidth())
+                    }
+                }
+                AttachmentReviewPhase.DUPLICATE_RISK -> Text(stringResource(R.string.attach_review_send_again))
+                AttachmentReviewPhase.FAILED -> {
+                    Text(stringResource(R.string.attach_review_failed))
+                    error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = ChitChatTheme.colors.textMuted) }
+                }
+            }
+        } },
+        confirmButton = { when (phase) {
+            AttachmentReviewPhase.EVIDENCE -> TextButton(onClick = onReject, enabled = canAct,
+                modifier = Modifier.testTag("attach_review_reject")) { Text(stringResource(R.string.attach_review_reject)) }
+            AttachmentReviewPhase.DUPLICATE_RISK -> TextButton(onClick = onAccept, enabled = canAct,
+                modifier = Modifier.testTag("attach_review_accept")) { Text(stringResource(R.string.attach_review_accept)) }
+            AttachmentReviewPhase.FAILED -> TextButton(onClick = onCheckAgain, enabled = canAct,
+                modifier = Modifier.testTag("attach_review_retry")) { Text(stringResource(R.string.attach_check_history)) }
+            AttachmentReviewPhase.CHECKING -> Unit
+        } },
+        dismissButton = { TextButton(onClick = onClose, modifier = Modifier.testTag("attach_review_close")) {
+            Text(stringResource(if (phase == AttachmentReviewPhase.DUPLICATE_RISK || phase == AttachmentReviewPhase.EVIDENCE)
+                R.string.attach_review_keep else R.string.cancel))
+        } })
+}

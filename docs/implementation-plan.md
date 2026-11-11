@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g7c room attachment reconciliation](milestones/M5g7c-room-attach-reconciliation.md) completes the native room attachment flow. Next: DM attachment controls reusing the shared components, then authenticated downloads and previews.
+
 [M5g7b room attachment Send](milestones/M5g7b-room-attach-send.md) connects the room actor to native Send/progress/Cancel/refusal UI. Next: M5g7c room UNKNOWN reconciliation controls, then DM controls.
 
 [M5g7a room attach controls](milestones/M5g7a-room-attach-controls.md) connects the room owner to native picker/card/privacy-choice/Remove/Replace controls without attachment Send. Next: room Send with progress/Cancel/refusals (M5g7b), room UNKNOWN reconciliation UI (M5g7c), then DM controls reusing the shared components.

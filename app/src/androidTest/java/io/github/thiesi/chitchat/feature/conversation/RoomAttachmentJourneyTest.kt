@@ -214,6 +214,40 @@ class RoomAttachmentJourneyTest {
         compose.runOnIdle { assertEquals(1, wire.calls); assertEquals(0, api.sends.get()) }
     }
 
+    private fun unknownAfterFullBody() {
+        root(); sendPicked()
+        compose.runOnIdle { wire.fullBody(); wire.fail(io.github.thiesi.chitchat.core.network.ApiFailure(
+            io.github.thiesi.chitchat.core.network.FailureKind.NETWORK)) }
+        compose.waitUntil(5_000) { model.drafts.value[42]?.attachment?.phase == RoomAttachmentPhase.UNKNOWN && !model.state.value.busy }
+        compose.onNodeWithText(text(R.string.attach_unknown)).assertIsDisplayed()
+        compose.onNodeWithTag("conversation_send").assertIsNotEnabled()
+        compose.onNodeWithTag("attachment_card_remove").assertDoesNotExist()
+    }
+
+    @Test fun unknownNeedsAnExplicitCheckAndRiskConsentBeforeALaterSeparateSend() {
+        unknownAfterFullBody()
+        compose.onNodeWithTag("attachment_card_check_history").assertIsEnabled().performNativeTap()
+        compose.waitUntil(5_000) { model.state.value.attachmentReview?.phase == RoomAttachmentReviewPhase.DUPLICATE_RISK }
+        compose.onNodeWithText(text(R.string.attach_review_send_again)).assertIsDisplayed()
+        compose.onNodeWithTag("attach_review_accept").assertIsEnabled().performNativeTap()
+        compose.waitUntil(5_000) { model.drafts.value[42]?.attachment?.phase == RoomAttachmentPhase.READY }
+        compose.onNodeWithTag("attach_review_dialog").assertDoesNotExist()
+        // Accepting the risk posts nothing; only a later explicit Send would.
+        compose.onNodeWithTag("conversation_send").assertIsEnabled()
+        compose.runOnIdle { assertEquals(1, wire.calls); assertEquals(0, api.sends.get()); assertEquals("Caption fixture", model.state.value.draft) }
+    }
+
+    @Test fun keepAsDraftLeavesTheFileUnknownAndLocked() {
+        unknownAfterFullBody()
+        compose.onNodeWithTag("attachment_card_check_history").performNativeTap()
+        compose.waitUntil(5_000) { model.state.value.attachmentReview?.phase == RoomAttachmentReviewPhase.DUPLICATE_RISK }
+        compose.onNodeWithTag("attach_review_close").performNativeTap()
+        compose.onNodeWithTag("attach_review_dialog").assertDoesNotExist()
+        compose.onNodeWithText(text(R.string.attach_unknown)).assertIsDisplayed()
+        compose.onNodeWithTag("conversation_send").assertIsNotEnabled()
+        compose.runOnIdle { assertEquals(RoomAttachmentPhase.UNKNOWN, model.drafts.value[42]?.attachment?.phase); assertEquals(1, wire.calls) }
+    }
+
     /** Transport fake: holds the READY allocation like the real one and reports body facts. */
     private class Uploads : AttachmentUploadOperations {
         @Volatile var calls = 0

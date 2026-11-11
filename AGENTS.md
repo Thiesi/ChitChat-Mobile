@@ -1,6 +1,6 @@
 # ChitChat Android engineering
 
-- [M5g7a/b room attachments](docs/milestones/M5g7b-room-attach-send.md): picker results are frozen one-shot reads admitted once through the original-bound room VM; Send uses the existing room actor, and only an actor-returned READY may show non-delivery. Keep the paperclip outside the field decoration so input contracts don't change.
+- [M5g7a/b/c room attachments](docs/milestones/M5g7c-room-attach-reconciliation.md): picker results are frozen one-shot reads admitted once through the original-bound room VM; Send, Cancel and Check history use the existing room actor, and only an actor-returned READY may show non-delivery. Keep the paperclip outside the field decoration so input contracts don't change.
 
 - [M5g5f DM upload reconciliation](docs/milestones/M5g5f-direct-attachment-reconciliation-state.md) uses one explicit bounded original-session DM context/history GET in the existing actor, with original UNKNOWN/slot/attempt/entry and current disclosure guards. Own outgoing final-byte SHA matches strictly after attempt start remain person-confirmed evidence; no synthetic receipt/deduplication. No match/rejection requires NEW duplicate-risk consent, READY only, then a later fresh Send. Preserve independent uncertainty, later content, configuration, modal read/attention suppression and stale callback fences. Native root-modal/typing/picker controls remain separate; issue184 precedes evidence UI. No input/gate/baseline change.
 
