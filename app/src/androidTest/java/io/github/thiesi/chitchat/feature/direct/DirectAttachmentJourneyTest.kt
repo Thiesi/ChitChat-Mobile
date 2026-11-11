@@ -97,7 +97,7 @@ class DirectAttachmentJourneyTest {
         compose.onNodeWithText(text(R.string.attach_caption)).assertExists()
         compose.onNodeWithTag("dm_send").assertIsEnabled().performNativeTap()
         compose.waitUntil(5_000) { wire.calls == 1 }
-        compose.onNodeWithTag("attachment_card_cancel").assertIsDisplayed()
+        compose.onNodeWithTag("attachment_card_cancel").assertIsDisplayed().assertIsEnabled()
         compose.runOnIdle { wire.ack() }
         compose.waitUntil(5_000) { thread.drafts.value[8] == null && !thread.state.value.busy }
         compose.onNodeWithTag("attachment_card").assertDoesNotExist()
