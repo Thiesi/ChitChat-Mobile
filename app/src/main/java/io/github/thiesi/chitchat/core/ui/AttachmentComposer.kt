@@ -3,7 +3,6 @@ package io.github.thiesi.chitchat.core.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -224,10 +223,10 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
     val type = attachmentExtension(facts.filename)
     val size = facts.sizeBytes?.let { sizeText(attachmentSizeText(it, locale)) }
     val detail = listOfNotNull(type, size).joinToString(" · ")
-    Surface(modifier.fillMaxWidth().testTag("attachment_card"), color = colors.raised, shape = RoundedCornerShape(16.dp)) {
+    Surface(modifier.fillMaxWidth().testTag("attachment_card"), color = colors.raised, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(40.dp).background(colors.surface, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(40.dp).background(colors.surface, MaterialTheme.shapes.small), contentAlignment = Alignment.Center) {
                     if (facts.phase == AttachmentCardPhase.PREPARING) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     else Icon(painterResource(if (facts.mimeType?.startsWith("image/", ignoreCase = true) == true ||
                         facts.privacy == AttachmentPhotoPrivacy.LOCATION_REMOVED || facts.privacyFailure != null)
