@@ -85,6 +85,7 @@ import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.PresencePhase
 import io.github.thiesi.chitchat.core.media.AttachmentPolicy
+import io.github.thiesi.chitchat.core.media.AttachmentPolicyObservation
 import io.github.thiesi.chitchat.core.ui.AttachAvailability
 import io.github.thiesi.chitchat.core.ui.AttachUnavailableNotice
 import io.github.thiesi.chitchat.core.ui.AttachButton
@@ -280,12 +281,22 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         state.context?.let { it.room.isMember && it.mute == null } == true
     // The drafts flow is the recomposition signal; the VM's actual-entry query is the authority.
     val attachment = savedDrafts[roomId]?.attachment?.let { model.visibleAttachment(displayedSession, roomId, isCurrentEntry) }
-    val attachmentFacts = attachment?.let { it.cardFacts(model.attachmentPolicyObservation(displayedSession, roomId, it, isCurrentEntry)) }
+    val longCaption = attachment != null && captionTooLong(state.draft)
+    val attachmentFacts = attachment?.let { it.cardFacts(model.attachmentPolicyObservation(displayedSession, roomId, it, isCurrentEntry), longCaption) }
     LaunchedEffect(attachAvailable) {
         if (attachAvailable == AttachAvailability.AVAILABLE) { attach.invalidChecked = false
             if (attach.notice != AttachNotice.NOT_ADDED) attach.notice = null }
     }
     val attachSettled = lifecycleState.isAtLeast(Lifecycle.State.STARTED) && model.canBeginAttachment()
+    // Display gate only; sendAttachment rechecks the original entry, slot, READY bytes and policy.
+    val attachmentSendable = attachment?.phase == RoomAttachmentPhase.READY && !longCaption && ready && attachSettled &&
+        attachmentFacts?.observation.let { it == AttachmentPolicyObservation.Unadvertised || it == AttachmentPolicyObservation.WithinAdvertisedFacts }
+    // A confirmed upload adopts its canonical row only through a fresh actual entry; never a resend.
+    LaunchedEffect(attachment, attachSettled, state.busy) {
+        val confirmed = attachment?.takeIf { it.phase == RoomAttachmentPhase.CONFIRMED } ?: return@LaunchedEffect
+        if (lifecycleState.isAtLeast(Lifecycle.State.STARTED) && !state.busy)
+            model.adoptConfirmedAttachment(displayedSession, roomId, confirmed, isCurrentEntry)
+    }
     val attachCannotWait = !attachVisible || attachAvailable != AttachAvailability.AVAILABLE || state.uncertainSend ||
         presenceHere?.presencePhase in setOf(PresencePhase.EXPIRED, PresencePhase.ERROR)
     RoomAttachmentHost(attach, model, displayedSession, roomId, completionEntryId, isCurrentEntry,
@@ -312,7 +323,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 model.removeAttachment(displayedSession, roomId, it, isCurrentEntry) } },
             onSendAnyway = original.takeIf { it.phase == RoomAttachmentPhase.PRIVACY_CHOICE }?.let { { if (interactive() &&
                 actions == null && replyOptions == null) model.prepareOriginalPhoto(displayedSession, roomId, it, isCurrentEntry) } },
-            modifier = Modifier.padding(horizontal = 16.dp))
+            modifier = Modifier.padding(horizontal = 16.dp),
+            onCancel = original.takeIf { it.phase == RoomAttachmentPhase.UPLOADING && it.transfer?.fullBodyReported != true }?.let { {
+                if (isCurrentEntry() && !obscured) model.cancelAttachmentUpload(displayedSession, roomId, it, isCurrentEntry) } })
     } }
     val attachNotices: @Composable () -> Unit = {
         if (attach.picked != null) AttachWaitingLine(onCancel = { attach.picked = null })
@@ -528,7 +541,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
             run {
                 val label = stringResource(if (completionComposer.choice!=null) R.string.completion_details else R.string.conversation_details)
-                val blocked = !ready || state.busy || !model.canSend()
+                val blocked = !ready || state.busy || !(model.canSend() || attachmentSendable)
                 val status = stringResource(if (blocked) R.string.conversation_send_unavailable_details else R.string.conversation_details_attention)
                 val attention = (compact && (attachmentFacts != null || attach.notice != null || attach.picked != null)) ||
                     completionComposer.choice!=null || state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend || state.authorUnknown != null || state.authorLimit ||
@@ -556,8 +569,14 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 (attachAvailable != AttachAvailability.AVAILABLE || (ready && model.canBeginAttachment() &&
                     attachment?.removable() != false)), onClick = ::onAttach, modifier = Modifier.testTag("conversation_attach"))
             MessageSendButton(stringResource(if (state.sending) R.string.conversation_sending else R.string.conversation_send),
-                onClick = { if (interactive() && actions == null && replyOptions == null) model.send(displayedSession, roomId) },
-                enabled = ready && !state.busy && !composerDialog && !obscured && model.canSend() && state.draft.phpTrim().isNotEmpty(),
+                onClick = { if (interactive() && actions == null && replyOptions == null) {
+                    val file = model.visibleAttachment(displayedSession, roomId, isCurrentEntry)
+                    if (file == null) model.send(displayedSession, roomId)
+                    else if (file === attachment && file.phase == RoomAttachmentPhase.READY)
+                        model.sendAttachment(displayedSession, roomId, completionEntryId, file, isCurrentEntry)
+                } },
+                enabled = !composerDialog && !obscured && (attachmentSendable ||
+                    (ready && !state.busy && model.canSend() && state.draft.phpTrim().isNotEmpty())),
                 sending = state.sending, modifier = Modifier.testTag("conversation_send"))
         }
     }

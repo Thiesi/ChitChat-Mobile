@@ -21,7 +21,10 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.core.conversation.phpTrim
 import io.github.thiesi.chitchat.core.media.*
+import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import io.github.thiesi.chitchat.core.ui.*
@@ -56,14 +59,39 @@ internal fun attachAvailability(policy: AttachmentPolicy): AttachAvailability = 
     else -> AttachAvailability.AVAILABLE
 }
 
-internal fun RoomAttachmentDraft.cardFacts(observation: AttachmentPolicyObservation?) = AttachmentCardFacts(
+internal fun RoomAttachmentDraft.cardFacts(observation: AttachmentPolicyObservation?, captionTooLong: Boolean) = AttachmentCardFacts(
     filename, mimeType, sizeBytes, when (phase) {
         RoomAttachmentPhase.PREPARING -> AttachmentCardPhase.PREPARING
         RoomAttachmentPhase.READY -> AttachmentCardPhase.READY
         RoomAttachmentPhase.PRIVACY_CHOICE -> AttachmentCardPhase.PRIVACY_CHOICE
         RoomAttachmentPhase.FAILED -> AttachmentCardPhase.FAILED
-        else -> AttachmentCardPhase.IN_FLIGHT
-    }, privacy, privacyFailure, failure, observation, sendingAvailable = false)
+        RoomAttachmentPhase.UPLOADING -> AttachmentCardPhase.UPLOADING
+        RoomAttachmentPhase.FINISHING -> AttachmentCardPhase.FINISHING
+        RoomAttachmentPhase.CANCELLING -> AttachmentCardPhase.CANCELLING
+        RoomAttachmentPhase.UNKNOWN -> AttachmentCardPhase.UNKNOWN
+        RoomAttachmentPhase.CONFIRMED -> AttachmentCardPhase.CONFIRMED
+    }, privacy, privacyFailure, failure, observation, sentBytes = transfer?.fileBytesBuffered,
+    sendFailure = if (phase == RoomAttachmentPhase.READY) attachmentSendFailure(uploadError, policyBlocked) else null,
+    captionTooLong = captionTooLong && phase == RoomAttachmentPhase.READY)
+
+/** Meaning of a definite outcome. Only reached while the body is provably incomplete or the server
+ * answered with a refusal; anything after a possibly complete body is UNKNOWN, never mapped here.
+ */
+internal fun attachmentSendFailure(error: ApiFailure?, policyBlocked: Boolean): AttachmentSendFailure? = when {
+    policyBlocked -> AttachmentSendFailure.PolicyChanged
+    error == null -> null
+    error.status == 413 -> AttachmentSendFailure.TooLarge(error.maxBytes)
+    error.code == "attachment_type_not_allowed" || error.code == "attachment_type_unknown" -> AttachmentSendFailure.TypeRefused
+    error.code == "attachment_empty" -> AttachmentSendFailure.Empty
+    error.status == 429 -> AttachmentSendFailure.RateLimited(error.retryAfterSeconds)
+    error.code == "membership_required" -> AttachmentSendFailure.Membership
+    error.status == null && error.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.TLS) -> AttachmentSendFailure.NotSent
+    else -> AttachmentSendFailure.Rejected
+}
+
+/** The caption limit the room upload applies (PHP-trimmed, code points). */
+internal fun captionTooLong(caption: String): Boolean { val trimmed = caption.phpTrim()
+    return trimmed.codePointCount(0, trimmed.length) > 4_000 }
 
 private val replaceablePhases = setOf(RoomAttachmentPhase.PREPARING, RoomAttachmentPhase.READY,
     RoomAttachmentPhase.PRIVACY_CHOICE, RoomAttachmentPhase.FAILED)
