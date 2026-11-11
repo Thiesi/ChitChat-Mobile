@@ -300,6 +300,10 @@ The screen shows:
     `device_label` when present, else the shortened user agent. CCM sends the fixed
     `device_label` "ChitChat for Android", never the device model or name, so no new device
     detail leaves the phone.
+  - **Later (not in v1):** an optional device name that the person types in notification
+    settings, empty by default, could replace the fixed label. It's parked until the
+    maintainer approves a privacy-policy line for it (technical lead, 2026-11-11). Until then
+    the fixed label above and P-126 stay as they are.
   - Engineering note: CCM's User-Agent contains `ChitChat-Mobile` on every request
     (account-security.md, "Sessions"). Rows without a `device_label` fall back to it, and the
     sign-in list reads "ChitChat app on Android". It never includes the device model or name.

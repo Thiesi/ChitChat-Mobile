@@ -291,8 +291,9 @@ not a session list and isn't presented as one.
   sign-ins, not whether a device is online right now."
 - **Row labels** (technical lead decision, 2026-11-11): when a row has a `device_label`, it's
   the primary line and the `client_hint` is the secondary line. Without one, the `client_hint`
-  alone is the primary line. CCM's push setup sends a label the person confirmed, so this is
-  how people tell their devices apart. Both are untrusted server text: plain, one line,
+  alone is the primary line. Web browsers and other clients may send their own labels. CCM
+  itself sends the fixed label "ChitChat for Android" (push-presentation.md), never a device
+  model or name. Both are untrusted server text: plain, one line,
   ellipsized, never parsed or linked. "Unknown client" is shown as the server sends it. No raw
   addresses or locations appear (the server stores none).
 - **This phone** first (the row with `current: true`): its labels (the `client_hint` for CCM is
