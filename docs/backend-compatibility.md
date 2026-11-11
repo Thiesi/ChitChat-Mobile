@@ -38,7 +38,7 @@
 
 [M5d4c native mention completion](milestones/M5d4c-native-mention-completion.md) uses the reviewed M5d4b state and existing original-session GET. Room broadcasts remain explicit; DM and local Tab completion use only their intended names. UI changes grant no send/read/typing/notification authority and add no backend API.
 
-[M5d4a room mention candidates](milestones/M5d4a-room-mention-protocol.md) reuses existing GET rooms/mentionable-users.php and the same original-session transport, without another endpoint/cache or policy mutation. The slice's historical underscore LIKE behavior ([backend152](https://github.com/Thiesi/ChitChat/issues/152)) is fixed since v3.3.0 and retained in the minimum v3.5.0 backend. Preserve server order; do not add a client-side prefix filter or query replay. Native controls are delivered in M5d4c.
+[M5d4a room mention candidates](milestones/M5d4a-room-mention-protocol.md) reuses existing GET rooms/mentionable-users.php and the same original-session transport, without another endpoint/cache or policy mutation. The slice's historical underscore LIKE behavior ([backend152](https://github.com/Thiesi/ChitChat/issues/152)) is fixed since v3.3.0 and retained in the minimum backend. Preserve server order; do not add a client-side prefix filter or query replay. Native controls are delivered in M5d4c.
 
 [M5f2 native basic profiles](milestones/M5f2-native-basic-profiles.md) consumes existing M5f1 GET facts without another endpoint, transport, image URL, policy or management mutation. Original session/target/context and runtime fences remain authoritative; native controls never turn server hints into permissions.
 
@@ -64,9 +64,10 @@
 
 [M4c4c1](milestones/M4c4c1-notification-state.md) consumes the existing notification page/read contracts through scoped presentation state and bounded canonical GET reconciliation, now used by M4c4c2's native list/read/count controls. Counts remain independent of loaded rows; View message and Mark as read stay separate. Its bounds/coverage/confirmed-read overlay are local state, not server fields or timestamps. No new endpoint, SSE event, authorization mechanism or backend checkout change is introduced; general-link consumption remains pending.
 
-Documented minimum backend: **v3.5.0**, released tag `v3.5.0` / `25e65eb`, per the
-[maintainer's baseline decision](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6737288486)
-and [release](https://github.com/Thiesi/ChitChat/releases/tag/v3.5.0). There are no older-server fallbacks.
+Documented minimum backend: **v3.7.0**, released tag `v3.7.0` / `eba61e9`, per the
+[maintainer's baseline decision](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6747953068)
+and [its activation](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6806140508)
+([release](https://github.com/Thiesi/ChitChat/releases/tag/v3.7.0)). There are no older-server fallbacks.
 The source links below retain the original **v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf0d1`**
 audit; they are historical evidence, not a current minimum or tested-installation claim.
 Only merged backend contracts may be adopted; pending work appears in [backend issues](backend-dependencies.md).
@@ -81,6 +82,13 @@ remains pending onboarding work rather than full recovery parity.
 Released v3.5.0 includes batch3 push (#147/#148/#150) and #191 staff fields; their
 native consumers remain separate. Native passkeys (#145) and browser handoff (#146)
 are **not in v3.5.0**; they belong to the next release.
+
+Released v3.6.0 adds #211; released v3.7.0 completes batch5 with #205 signed-in sessions,
+#233 SSE revocation and #204 TOTP. Their native consumers (sessions list, TOTP, explicit
+`session_revoked` copy) remain a later slice. Migration 0051 signs every existing login out
+once after deployment, app logins included; that is expected, not a client defect. The client
+identifies itself with User-Agent `ChitChat-Mobile/<versionName> (Android <release>)` on every
+`SessionHttp` request, including the event stream, and sends no device model.
 
 The setup/revalidation check and server-update state remain pending with
 [onboarding/server-update](design/server-update.md). The newer baseline decision above
