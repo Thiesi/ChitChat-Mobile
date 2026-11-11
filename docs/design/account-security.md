@@ -226,7 +226,8 @@ capability hides setup only. It never hides or disables an authenticator that's 
   repeats a secret.
 - **Set up on a new phone** (row overflow, when it's on): the same setup screen, with the lead
   "Scan this code with the authenticator app on your new phone. Your current one keeps working
-  until you turn this on." Recovery codes aren't replaced.
+  until you turn this on." The old factor stays usable until the new setup's confirm succeeds,
+  so leaving, an expired setup or a failed code keeps it. Recovery codes aren't replaced.
 - **Remove** (row overflow): a decision dialog, "Remove the authenticator app? Its codes will
   stop working." (**Cancel** / **Remove**, `error`), then `withStepUp` and `remove.php`. The
   server allows it only when a passkey is set up, so Remove is absent without one, with the
@@ -288,18 +289,21 @@ not a session list and isn't presented as one.
 - **Screen** "Where you're signed in". Lead: "These are the places where your account is
   signed in. Signing one out means it has to sign in again." Below it, muted: "This shows
   sign-ins, not whether a device is online right now."
-- **This phone** first (the row with `current: true`): its `client_hint` (for CCM, "ChitChat
-  app on Android"), "Signed in {date}", and the tag "This phone". It has no sign-out action
-  here (Sign out lives on the You tab).
-- **Other places** below, in the server's order (most recently active first): the
-  `client_hint` as the title, then "Active {coarse time} · signed in {date}" (status-presentation
-  relative times; the server keeps activity to the minute and updates it every few minutes).
-  - Labels are server text shown as plain, one-line text, ellipsized, never parsed or linked.
-    "Unknown client" is shown as the server sends it.
-  - `device_label` isn't shown. Only the server's classification appears, never raw addresses
-    or locations (the server stores none).
+- **Row labels** (technical lead decision, 2026-11-11): when a row has a `device_label`, it's
+  the primary line and the `client_hint` is the secondary line. Without one, the `client_hint`
+  alone is the primary line. CCM's push setup sends a label the person confirmed, so this is
+  how people tell their devices apart. Both are untrusted server text: plain, one line,
+  ellipsized, never parsed or linked. "Unknown client" is shown as the server sends it. No raw
+  addresses or locations appear (the server stores none).
+- **This phone** first (the row with `current: true`): its labels (the `client_hint` for CCM is
+  "ChitChat app on Android"), "Signed in {date}", and the tag "This phone". It has no sign-out
+  action here (Sign out lives on the You tab).
+- **Other places** below, in the server's order (most recently active first): the labels, then
+  "Active {coarse time} · signed in {date}" (status-presentation relative times; the server
+  keeps activity to the minute and updates it every few minutes).
   - Each row has **Sign out**: a decision dialog, "Sign out {label}? It will need to sign in
-    again, and its notifications stop." with **Cancel** / **Sign out** (`revoke.php`).
+    again, and its notifications stop." (`{label}` is the row's primary line) with **Cancel** /
+    **Sign out** (`revoke.php`).
 - **Sign out everywhere else** (`error` text at the bottom, only when other places exist): a
   decision dialog, "Sign out everywhere else? Every other device will need to sign in again,
   and their notifications stop." (**Cancel** / **Sign out**), then `withStepUp` and
@@ -310,8 +314,8 @@ not a session list and isn't presented as one.
   - `409 current_session`: re-read (this phone signs out from the You tab).
   - 429: the waiting-time copy.
   - **Unknown:** re-read and never resend.
-- **Footnote,** muted: "{installation} keeps up to {maximum_sessions} sign-ins. Signing in
-  somewhere new can sign out the one that was used least recently."
+- **Footnote,** muted, one sentence: "{installation} keeps up to {maximum_sessions} sign-ins,
+  so signing in somewhere new can sign out the one used least recently."
 - **When this phone is signed out elsewhere:** a `401 session_revoked` on any request, or a
   `forced_logout` event with reason `session_revoked` on the live stream, ends the session
   through the existing session-ended screen (communication.md) with the copy **"You were
@@ -340,7 +344,8 @@ Delete account stays where play-readiness.md §2 puts it: the last row of Privac
   enabled authenticator shown regardless; the unavailable-authenticator line; MFA sign-in
   choices from `mfa_pending.methods`; passkey actions only with `native_passkey_origins`; the
   TOTP secret and URI held in memory only, discarded with one unretried `cancel.php` when setup
-  is left; `totp_enrollment_expired` restarts setup; `session_not_found` re-reads silently;
+  is left; `totp_enrollment_expired` restarts setup; `session_not_found` re-reads silently; row labels use `device_label` then `client_hint`, or
+  `client_hint` alone;
   `401 session_revoked` and `forced_logout` `session_revoked` show the revoked copy; the
   User-Agent contains `ChitChat-Mobile` and no device model.
 - **Compose:** the crop screen with button alternatives; dialogs' copy and `error` actions; the
@@ -353,7 +358,7 @@ Delete account stays where play-readiness.md §2 puts it: the last row of Privac
 
 | ID | Requirement | Verify |
 |---|---|---|
-| P-142 | Privacy and security groups Sign-in, Devices, Privacy, Your data and Delete account as specified. Rows hide when the server doesn't offer them. "Where you're signed in" (ChitChat#205, `capabilities.signed_in_sessions`) shows this phone first and other sign-ins with the server's `client_hint` only, signs out one or all others after a confirmation (all others through step-up), re-reads after every outcome and never resends on Unknown. A revoked session shows "You were signed out from another device. Sign in again." CCM's User-Agent makes it read "ChitChat app on Android" without a device model. | U, C |
+| P-142 | Privacy and security groups Sign-in, Devices, Privacy, Your data and Delete account as specified. Rows hide when the server doesn't offer them. "Where you're signed in" (ChitChat#205, `capabilities.signed_in_sessions`) shows this phone first and other sign-ins with `device_label` as the primary line and `client_hint` as the secondary line (`client_hint` alone without a label), as plain untrusted one-line text, signs out one or all others after a confirmation (all others through step-up), re-reads after every outcome and never resends on Unknown. A revoked session shows "You were signed out from another device. Sign in again." CCM's User-Agent makes it read "ChitChat app on Android" without a device model. | U, C |
 | P-143 | Profile pictures are cropped and re-encoded on the device (square, at most 1024 px, metadata dropped) before one explicit upload. Remove asks first. Unknown results re-read the profile, never resend. Provider import is left out until its dependency is built. | U, C |
 | P-144 | Changing the password says it signs out other devices, keeps the password out of saved state, and never resends on Unknown. | U, C |
 | P-145 | Two-step sign-in shows passkeys (label and dates only), protects the last passkey and admin-required MFA, and regenerates codes only after a confirmation and step-up. Adding passkeys and passkey step-up are B1 dependencies, need `native_passkey_origins`, and never open a browser. Authenticator setup (ChitChat#204) appears only with `capabilities.totp`, runs under step-up and `FLAG_SECURE` with a locally drawn QR code and a copyable setup key held in memory only, is confirmed by a first code, and restarts on expiry. An enabled authenticator is always shown, with a line when the server can't use it. Authenticator codes are offered in step-up, MFA sign-in (from `mfa_pending.methods`), restoration and reset without saving or resending them. | U, C |
