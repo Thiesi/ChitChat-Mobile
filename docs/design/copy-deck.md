@@ -43,6 +43,7 @@ The onboarding spec's copy table already covers `welcome_title`, `welcome_body`,
 |---|---|---|---|
 | `checking_session` | Checking your server and session… | Looking for {host}… | — |
 | `session_expired` | This session expired or changed. Sign in again. | You've been signed out. Sign in again. | — |
+| `session_revoked` | (new) | You were signed out from another device. Sign in again. (settled, technical lead 2026-11-11; `401 session_revoked` or `forced_logout` `session_revoked`, account-security.md "Sessions") | — |
 | `rate_limited` | Too many attempts. Please wait before trying again. | Too many attempts. Try again in a little while. (unknown delay) / Too many attempts. Try again in {wait}. (ChitChat#157, status-presentation "Waiting times") | — |
 | `request_rejected` | The server rejected this request. Check your account or contact the server administrator. | Your server refused this. If it keeps happening, ask the person who runs it. | — |
 | `redirect_error` | The server redirected this API request. Check the server address; credentials were not forwarded. | The server tried to send the app somewhere else. Check the address. Your password wasn't sent. | — |

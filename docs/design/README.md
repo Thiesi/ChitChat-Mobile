@@ -70,8 +70,11 @@ rather than fake it:
   time only.
 - Admin "Looking after this server" card, guest visits and moderation actions: M7.
 - Invite QR codes: specified in invite-codes.md (D5), not yet implemented or scheduled.
-- Installation icon: ChitChat#211 (open), designed in installation-icon.md. Until the minimum
-  includes it, the installation lantern keeps its initial.
+- ~~Installation icon~~: ChitChat#211 shipped in v3.6.0 and is inside the 3.7.0 minimum,
+  designed in installation-icon.md. Its presets and name-following initial (ChitChat#241) are
+  still a dependency.
+- ~~Signed-in sessions and authenticator codes~~: ChitChat#205 and #204 shipped in v3.7.0, the
+  minimum since 2026-11-11, designed in account-security.md.
 
 ## Approved decisions (maintainer, 2026-11-07)
 

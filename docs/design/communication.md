@@ -38,7 +38,7 @@ presentation rules:
 | Server unreachable while the device is online | Failed requests or stream errors | Notice: **"Can't reach Schmidt Family Chat.** We'll keep trying." (installation name, else host). No technical codes in the strip; details live behind "Details". |
 | Reconnecting | Stream reconnect in progress after a drop | Header subtitle: "Reconnecting…" (level 1). Escalate to the notice only if it lasts longer than about 5 s. |
 | Back | First successful reconciliation after a drop | The notice turns into "Back online" for about 2 s, then disappears. Content updates in place without jumping the scroll position. |
-| Session ended | Server says the session is invalid | Decision screen: "You've been signed out of Schmidt Family Chat" with Sign in. Never silent. |
+| Session ended | Server says the session is invalid | Decision screen: "You've been signed out of Schmidt Family Chat" with Sign in. Never silent. When the server says it was signed out from another device (`session_revoked`): "You were signed out from another device. Sign in again." |
 
 What reconnection does and does not imply:
 
