@@ -180,7 +180,7 @@ class RoomAttachmentJourneyTest {
 
     @Test fun sendShowsProgressAndConfirmedUploadClearsTheDraftWithoutATextPost() {
         root(); sendPicked()
-        compose.onNodeWithTag("attachment_card_cancel").assertIsDisplayed()
+        compose.onNodeWithTag("attachment_card_cancel").assertIsDisplayed().assertIsEnabled()
         compose.onNodeWithText(text(R.string.attach_sending_progress, text(R.string.attach_size_bytes, "8"),
             text(R.string.attach_size_bytes, "16"))).assertIsDisplayed()
         compose.onNodeWithTag("conversation_composer").assertIsNotEnabled()
