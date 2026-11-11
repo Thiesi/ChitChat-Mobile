@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g7d DM attachment controls](milestones/M5g7d-direct-attach-controls.md) completes native attachment sending. Next: authenticated downloads and memory-only previews (after PR187's metadata disposition), then the image viewer, Save/Share and share-in.
+
 [M5g7c room attachment reconciliation](milestones/M5g7c-room-attach-reconciliation.md) completes the native room attachment flow. Next: DM attachment controls reusing the shared components, then authenticated downloads and previews.
 
 [M5g7b room attachment Send](milestones/M5g7b-room-attach-send.md) connects the room actor to native Send/progress/Cancel/refusal UI. Next: M5g7c room UNKNOWN reconciliation controls, then DM controls.

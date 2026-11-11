@@ -63,6 +63,17 @@ import io.github.thiesi.chitchat.core.ui.messageTime
 import io.github.thiesi.chitchat.core.ui.canAcknowledgeVisibleRead
 import io.github.thiesi.chitchat.core.ui.isReadEdgeVisible
 import io.github.thiesi.chitchat.core.ui.MessageInput
+import io.github.thiesi.chitchat.core.ui.AttachAvailability
+import io.github.thiesi.chitchat.core.ui.AttachButton
+import io.github.thiesi.chitchat.core.ui.AttachNotice
+import io.github.thiesi.chitchat.core.ui.AttachNotices
+import io.github.thiesi.chitchat.core.ui.AttachmentCard
+import io.github.thiesi.chitchat.core.ui.AttachmentEvidenceRow
+import io.github.thiesi.chitchat.core.ui.AttachmentReviewDialog
+import io.github.thiesi.chitchat.core.ui.attachAvailability
+import io.github.thiesi.chitchat.core.ui.captionTooLong
+import io.github.thiesi.chitchat.core.media.AttachmentPolicy
+import io.github.thiesi.chitchat.core.media.AttachmentPolicyObservation
 import io.github.thiesi.chitchat.core.ui.MessageSendButton
 import io.github.thiesi.chitchat.core.ui.MessageActions
 import io.github.thiesi.chitchat.core.ui.MessageReactionPicker
@@ -208,7 +219,9 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             var focusReply by remember { mutableStateOf<ComposerReply?>(null) }
             val composerFocus = remember { FocusRequester() }
             val androidContext = LocalContext.current
-            val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null
+            val attach = remember { DirectAttachmentControls() }
+            val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null ||
+                attach.modalOpen || state.attachmentReview != null
             fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
                 !obscured && !blockConfirm && !detailsOpen
             fun interactive() = paneInteractive() && model.state.value.authorDialog == null && model.state.value.reactionDialog == null
@@ -278,6 +291,71 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             readable && !timeline.canScrollForward)
                     }.distinctUntilChanged().collect { model.viewport(it.anchor, it.incoming, it.newest, it.edge) }
                 }
+            }
+            val dmDrafts by model.drafts.collectAsStateWithLifecycle()
+            val attachPolicy = session.attachmentPolicy
+            val attachAvailable = attachAvailability(attachPolicy)
+            val attachVisible = session.user?.guest == false && attachPolicy != AttachmentPolicy.Unavailable &&
+                state.context?.let { it.relationship.messagingAvailable && it.mutedEverywhere == null } == true
+            // The drafts flow is the recomposition signal; the VM's actual-entry query is the authority.
+            val attachment = dmDrafts[peer]?.attachment?.let { model.visibleAttachment(displayedSession, peer, isCurrentEntry) }
+            val longCaption = attachment != null && captionTooLong(state.draft)
+            val attachmentFacts = attachment?.let { it.cardFacts(model.attachmentPolicyObservation(displayedSession, peer, it, isCurrentEntry), longCaption) }
+            LaunchedEffect(attachAvailable) {
+                if (attachAvailable == AttachAvailability.AVAILABLE) { attach.invalidChecked = false
+                    if (attach.notice != AttachNotice.NOT_ADDED) attach.notice = null }
+            }
+            val attachSettled = lifecycleState.isAtLeast(Lifecycle.State.STARTED) && model.canBeginAttachment()
+            // Display gate only; sendAttachment rechecks the original entry, slot, READY bytes, disclosure and policy.
+            val attachmentSendable = attachment?.phase == DirectAttachmentPhase.READY && !longCaption && ready && attachSettled &&
+                attachmentFacts?.observation.let { it == AttachmentPolicyObservation.Unadvertised || it == AttachmentPolicyObservation.WithinAdvertisedFacts }
+            // A confirmed upload adopts its canonical row only through a fresh actual entry; never a resend.
+            LaunchedEffect(attachment, attachSettled, state.busy) {
+                val confirmed = attachment?.takeIf { it.phase == DirectAttachmentPhase.CONFIRMED } ?: return@LaunchedEffect
+                if (lifecycleState.isAtLeast(Lifecycle.State.STARTED) && !state.busy)
+                    model.adoptConfirmedAttachment(displayedSession, peer, confirmed, isCurrentEntry)
+            }
+            val attachCannotWait = !attachVisible || attachAvailable != AttachAvailability.AVAILABLE || state.uncertainSend || state.uncertainBlock
+            DirectAttachmentHost(attach, model, displayedSession, peer, completionEntryId, isCurrentEntry,
+                interactive = { interactive() && actions == null && replyOptions == null }, settled = attachSettled, waitingCanEnd = attachCannotWait)
+            fun onAttach() {
+                if (!interactive() || actions != null || replyOptions != null) return
+                when (attachAvailable) {
+                    AttachAvailability.SERVER_OFF -> attach.notice = AttachNotice.SERVER_OFF
+                    AttachAvailability.SETTINGS_UNREADABLE -> attach.notice = AttachNotice.SETTINGS_UNREADABLE
+                    AttachAvailability.AVAILABLE -> {
+                        if (!model.canBeginAttachment()) return
+                        val current = model.visibleAttachment(displayedSession, peer, isCurrentEntry)
+                        focus.clearFocus()
+                        attach.notice = null
+                        if (current == null) { attach.sheetOriginal = null; attach.sheet = true }
+                        else if (current.removable()) attach.replacing = current
+                    }
+                }
+            }
+            val attachmentCard: @Composable () -> Unit = { attachmentFacts?.let { facts ->
+                val original = attachment
+                AttachmentCard(facts, enabled = !obscured && !composerDialog && !state.sending,
+                    onRemove = original.takeIf { it.removable() }?.let { { if (interactive() && actions == null && replyOptions == null)
+                        model.removeAttachment(displayedSession, peer, it, isCurrentEntry) } },
+                    onSendAnyway = original.takeIf { it.phase == DirectAttachmentPhase.PRIVACY_CHOICE }?.let { { if (interactive() &&
+                        actions == null && replyOptions == null) model.prepareOriginalPhoto(displayedSession, peer, it, isCurrentEntry) } },
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    unknownActions = original.takeIf { it.phase == DirectAttachmentPhase.UNKNOWN }?.let { unknown -> {
+                        TextButton(onClick = { if (interactive() && actions == null && replyOptions == null)
+                            model.checkAttachmentHistory(displayedSession, peer, completionEntryId, unknown, isCurrentEntry) },
+                            enabled = ready && !state.busy && !obscured && state.attachmentReview == null,
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("attachment_card_check_history")) {
+                            Text(stringResource(R.string.attach_check_history))
+                        }
+                    } },
+                    onCancel = original.takeIf { it.phase == DirectAttachmentPhase.UPLOADING && it.transfer?.fullBodyReported != true }?.let { {
+                        if (isCurrentEntry() && !obscured) model.cancelAttachmentUpload(displayedSession, peer, it, isCurrentEntry) } })
+            } }
+            val attachNotices: @Composable () -> Unit = {
+                AttachNotices(attach, displayedSession, persisting = attach.invalidChecked && !session.busy &&
+                    attachPolicy == AttachmentPolicy.Invalid, canCheckAgain = !session.busy && now >= session.retryAtMillis,
+                    onCheckAgain = { if (isCurrentEntry()) onRefreshSession() })
             }
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val compact = maxHeight < 240.dp
@@ -353,6 +431,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         viewing = state.loaded && !state.stale && !blockConfirm && !detailsOpen && !composerDialog && !obscured && state.context?.relationship?.messagingAvailable == true,
                         publishing = ready && !composerDialog && !detailsOpen && !blockConfirm && !obscured && model.canSend())
                     if (!replyInline) replyControl(false)
+                    if (!compact) { attachNotices(); attachmentCard() }
                     if (inlineCompletion && !detailsOpen) io.github.thiesi.chitchat.feature.completion.CompletionSuggestions(completionComposer)
                     Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 12.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
@@ -367,8 +446,10 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 },
                                 uncertain = state.uncertainSend || state.uncertainRead || state.uncertainBlock ||
                                     state.authorUnknown != null || state.reactionUnknown != null,
-                                failed = state.error != null || state.validation != null || state.readError != null,
-                                needsAttention = completionComposer.choice!=null || state.stale || state.error != null || state.validation != null || state.newerAvailable ||
+                                failed = state.error != null || state.validation != null || state.readError != null ||
+                                    (compact && attachmentFacts?.needsAttention == true),
+                                needsAttention = (compact && (attachmentFacts != null || attach.notice != null || attach.picked != null)) ||
+                                    completionComposer.choice!=null || state.stale || state.error != null || state.validation != null || state.newerAvailable ||
                                     state.uncertainSend || state.uncertainRead || state.readError != null || state.uncertainBlock ||
                                     state.authorUnknown != null || state.authorLimit || state.authorNotice != null ||
                                     state.reactionUnknown != null || state.reactionLimit || state.reactionNotice != null ||
@@ -378,6 +459,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 if (connection != null)
                                     RealtimeStatus(connection, model.realtime::retry, model.realtime::dismissBroadcast, roomId = null)
                                 Text(context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleMedium)
+                                if (compact) { attachNotices(); attachmentCard() }
                                 if (completionComposer.choice!=null) {
                                     Text(stringResource(R.string.completion_title))
                                     io.github.thiesi.chitchat.feature.completion.CompletionSuggestions(completionComposer,fromDetails=true,onAccepted={
@@ -408,13 +490,34 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         if (replyInline) replyControl(true)
                         MessageInput(completionComposer.value, completionComposer::input,
                             !state.sending && model.canEditDraft() && !composerDialog && !obscured,
-                            stringResource(R.string.dm_message), compact, Modifier.weight(1f).onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("dm_composer"))
+                            stringResource(if (attachment != null) R.string.attach_caption else R.string.dm_message), compact, Modifier.weight(1f).onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("dm_composer"))
+                        if (attachVisible) AttachButton(attachAvailable, enabled = !obscured && !composerDialog && !detailsOpen && !blockConfirm &&
+                            !state.sending && (attachAvailable != AttachAvailability.AVAILABLE || (ready && model.canBeginAttachment() &&
+                                attachment?.removable() != false)), onClick = ::onAttach, modifier = Modifier.testTag("dm_attach"))
                         MessageSendButton(stringResource(if (state.sending) R.string.conversation_sending else R.string.dm_send),
-                            onClick = { if (interactive() && actions == null && replyOptions == null) model.send(displayedSession, peer) },
-                            enabled = ready && !composerDialog && !detailsOpen && !blockConfirm && !obscured && model.canSend() && state.draft.phpTrim().isNotEmpty(),
+                            onClick = { if (interactive() && actions == null && replyOptions == null) {
+                                val file = model.visibleAttachment(displayedSession, peer, isCurrentEntry)
+                                if (file == null) model.send(displayedSession, peer)
+                                else if (file === attachment && file.phase == DirectAttachmentPhase.READY)
+                                    model.sendAttachment(displayedSession, peer, completionEntryId, file, isCurrentEntry)
+                            } },
+                            enabled = !composerDialog && !detailsOpen && !blockConfirm && !obscured && (attachmentSendable ||
+                                (ready && model.canSend() && state.draft.phpTrim().isNotEmpty())),
                             sending = state.sending, modifier = Modifier.testTag("dm_send"))
                     }
                 }
+            }
+            model.visibleAttachmentReview(displayedSession, peer, completionEntryId, isCurrentEntry)?.takeIf { paneInteractive() }?.let { review ->
+                AttachmentReviewDialog(review.phase.shared(),
+                    review.evidence.map { AttachmentEvidenceRow(it, it.filename, messageTime(it.sentAt, state.context?.display)) },
+                    review.error?.let { directError(it) }, ready && !state.busy && review.phase != DirectAttachmentReviewPhase.CHECKING,
+                    onConfirm = { key -> (key as? DirectAttachmentEvidence)?.let {
+                        model.confirmAttachmentEvidence(displayedSession, peer, completionEntryId, review, it, isCurrentEntry) } },
+                    onReject = { model.rejectAttachmentEvidence(displayedSession, peer, completionEntryId, review, isCurrentEntry) },
+                    onAccept = { model.acceptAttachmentDuplicateRisk(displayedSession, peer, completionEntryId, review, isCurrentEntry) },
+                    onCheckAgain = { model.visibleAttachment(displayedSession, peer, isCurrentEntry)?.let {
+                        model.checkAttachmentHistory(displayedSession, peer, completionEntryId, it, isCurrentEntry) } },
+                    onClose = { model.closeAttachmentReview(displayedSession, peer, completionEntryId, review, isCurrentEntry) })
             }
             actions?.let { request ->
                 val message = state.messages.firstOrNull { it.id == request.messageId }

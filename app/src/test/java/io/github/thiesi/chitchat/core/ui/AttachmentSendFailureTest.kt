@@ -1,12 +1,11 @@
-package io.github.thiesi.chitchat.feature.conversation
+package io.github.thiesi.chitchat.core.ui
 
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
-import io.github.thiesi.chitchat.core.ui.AttachmentSendFailure
 import org.junit.Assert.*
 import org.junit.Test
 
-class RoomAttachmentControlsTest {
+class AttachmentSendFailureTest {
     private fun http(status: Int, code: String? = null, retry: Long? = null, max: Long? = null) =
         ApiFailure(FailureKind.HTTP, status, code, retry, max)
 
@@ -21,6 +20,7 @@ class RoomAttachmentControlsTest {
         assertNull((attachmentSendFailure(http(429, "rate_limited"), false) as AttachmentSendFailure.RateLimited).retryAfterSeconds)
         assertSame(AttachmentSendFailure.Membership, attachmentSendFailure(http(403, "membership_required"), false))
         assertSame(AttachmentSendFailure.Rejected, attachmentSendFailure(http(400, "validation_error"), false))
+        assertSame(AttachmentSendFailure.Unavailable, attachmentSendFailure(http(403, "direct_message_unavailable"), false))
     }
 
     @Test fun onlyStatuslessTransportFailuresReadAsNotSent() {

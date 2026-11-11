@@ -87,9 +87,12 @@ import io.github.thiesi.chitchat.core.realtime.PresencePhase
 import io.github.thiesi.chitchat.core.media.AttachmentPolicy
 import io.github.thiesi.chitchat.core.media.AttachmentPolicyObservation
 import io.github.thiesi.chitchat.core.ui.AttachAvailability
-import io.github.thiesi.chitchat.core.ui.AttachUnavailableNotice
 import io.github.thiesi.chitchat.core.ui.AttachButton
 import io.github.thiesi.chitchat.core.ui.AttachmentCard
+import io.github.thiesi.chitchat.core.ui.AttachNotice
+import io.github.thiesi.chitchat.core.ui.AttachNotices
+import io.github.thiesi.chitchat.core.ui.attachAvailability
+import io.github.thiesi.chitchat.core.ui.captionTooLong
 import io.github.thiesi.chitchat.core.ui.AttachmentEvidenceRow
 import io.github.thiesi.chitchat.core.ui.AttachmentReviewDialog
 import io.github.thiesi.chitchat.core.ui.AttachmentReviewPhase
@@ -339,18 +342,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 if (isCurrentEntry() && !obscured) model.cancelAttachmentUpload(displayedSession, roomId, it, isCurrentEntry) } })
     } }
     val attachNotices: @Composable () -> Unit = {
-        if (attach.picked != null) AttachWaitingLine(onCancel = { attach.picked = null })
-        when (val notice = attach.notice) {
-            AttachNotice.NOT_ADDED -> Text(stringResource(R.string.attach_not_added), Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                .testTag("attach_not_added").semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodySmall)
-            AttachNotice.SERVER_OFF, AttachNotice.SETTINGS_UNREADABLE -> AttachUnavailableNotice(
-                if (notice == AttachNotice.SERVER_OFF) AttachAvailability.SERVER_OFF else AttachAvailability.SETTINGS_UNREADABLE,
-                installationName(displayedSession), persisting = attach.invalidChecked && !session.busy &&
-                    attachPolicy == AttachmentPolicy.Invalid, canCheckAgain = !session.busy && now >= session.retryAtMillis,
-                onCheckAgain = { if (isCurrentEntry()) { attach.invalidChecked = true; onRefreshSession() } },
-                onDismiss = { attach.notice = null })
-            null -> Unit
-        }
+        AttachNotices(attach, displayedSession, persisting = attach.invalidChecked && !session.busy &&
+            attachPolicy == AttachmentPolicy.Invalid, canCheckAgain = !session.busy && now >= session.retryAtMillis,
+            onCheckAgain = { if (isCurrentEntry()) onRefreshSession() })
     }
     BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
     val compact = maxHeight < 240.dp

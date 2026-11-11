@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5g7d DM attachment controls](milestones/M5g7d-direct-attach-controls.md) brings the room attachment flow to direct messages through the DM actor, with DM availability, rate-limit and disclosure rules. Attachments can now be sent in rooms and DMs; downloads, previews, Save/Share, share-in and provider/live acceptance remain pending.
+
 [M5g7c room attachment reconciliation](milestones/M5g7c-room-attach-reconciliation.md) adds Check history, person-confirmed SHA evidence and the accepted "Send again?" risk dialog for unknown room uploads. Room attachments are usable end to end in the app; DM files, downloads, previews, sharing and provider/live acceptance remain pending.
 
 [M5g7b room attachment Send](milestones/M5g7b-room-attach-send.md) lets rooms send the attached file with progress, Cancel while the body is still sending, definite-refusal copy and a "Not sure your file arrived" state. Checking an unconfirmed file (M5g7c), DM files, downloads, previews and sharing remain pending.
