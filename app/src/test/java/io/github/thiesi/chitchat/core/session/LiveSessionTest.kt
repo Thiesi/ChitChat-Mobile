@@ -46,11 +46,14 @@ class LiveSessionTest {
             val directory = rooms.list()
             assertEquals("Room IDs must be unique", directory.size, directory.map { it.id }.toSet().size)
             assertTrue("Provide at least one visible room for directory/detail acceptance", directory.isNotEmpty())
+            // A visible public room the account hasn't joined has a readable detail but forbidden history.
+            val joined = directory.firstOrNull { it.isMember }
+            assertNotNull("Test account must be a member of at least one room", joined)
             step = LiveStep.ROOM_DETAIL
-            assertEquals("Room detail must match the requested authorized ID", directory.first().id, rooms.detail(directory.first().id).id)
+            assertEquals("Room detail must match the requested authorized ID", joined!!.id, rooms.detail(joined.id).id)
             // Read-only M3b contracts: no read acknowledgment, send, presence or membership mutation.
             val conversations = io.github.thiesi.chitchat.core.conversation.SessionConversationRepository(active)
-            val roomId = directory.first().id
+            val roomId = joined.id
             step = LiveStep.ROOM_CONTEXT
             assertEquals(roomId, conversations.context(roomId).room.id)
             step = LiveStep.HISTORY
