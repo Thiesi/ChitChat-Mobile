@@ -36,6 +36,23 @@ class SessionHttpTest {
     private fun anonymous(csrf: String = token) = """{"csrf_token":"$csrf","user":null,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false},"future_field":true}"""
     private fun user() = """{"id":7,"username":"Alice","roles":["member"],"session_version":2,"guest":false}"""
 
+    @Test fun everyRequestNamesTheAppWithoutADeviceModel() = runTest {
+        api.close()
+        api = SessionHttp(address(), trustedClient, chitChatUserAgent("1.2.0", "15"))
+        server.enqueue(response(anonymous()))
+        api.bootstrap()
+        assertEquals("ChitChat-Mobile/1.2.0 (Android 15)", server.takeRequest().headers["User-Agent"])
+        server.enqueue(response("""{"ignored_user_ids":[]}"""))
+        api.setIgnored(8, true, token)
+        assertEquals("ChitChat-Mobile/1.2.0 (Android 15)", server.takeRequest().headers["User-Agent"])
+    }
+
+    @Test fun userAgentDropsUnsafeOrMissingParts() {
+        assertEquals("ChitChat-Mobile/0.1.0-dev (Android unknown)", chitChatUserAgent("0.1.0-dev", null))
+        assertEquals("ChitChat-Mobile/1.0beta (Android 16)", chitChatUserAgent("1.0 beta\r\n", "16"))
+        assertEquals("ChitChat-Mobile/unknown (Android 14)", chitChatUserAgent("()", " 14 "))
+    }
+
     @Test fun bootstrapCarriesAttachmentPolicyThroughTheExistingSingleGet() = runTest {
         val policy = """{"max_bytes":0,"allowed_mime_types":["image/png"],"previewable_mime_types":["image/png"]}"""
         server.enqueue(response(anonymous().dropLast(1) + """, "attachments":$policy}"""))
