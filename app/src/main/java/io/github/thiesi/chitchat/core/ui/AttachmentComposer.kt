@@ -48,7 +48,8 @@ internal fun AttachButton(availability: AttachAvailability, enabled: Boolean, on
         AttachAvailability.SETTINGS_UNREADABLE -> R.string.attach_label_unreadable
     })
     IconButton(onClick = onClick, enabled = enabled, modifier = modifier.size(Lantern.target).semantics { contentDescription = label }) {
-        Icon(painterResource(R.drawable.ic_attach), contentDescription = null, Modifier.size(24.dp))
+        Icon(painterResource(R.drawable.ic_attach), contentDescription = null, Modifier.size(24.dp),
+            tint = if (enabled) ChitChatTheme.colors.textMuted else ChitChatTheme.colors.textMuted.copy(alpha = 0.38f))
     }
 }
 
@@ -75,7 +76,7 @@ internal fun AttachUnavailableNotice(availability: AttachAvailability, installat
             Text(stringResource(R.string.attach_check_again))
         }
         val close = stringResource(R.string.attach_notice_close)
-        IconButton(onClick = onDismiss, modifier = Modifier.semantics { contentDescription = close }) { Text("×") }
+        IconButton(onClick = onDismiss, modifier = Modifier.semantics { contentDescription = close }) { CloseIcon() }
     }
 }
 
@@ -146,6 +147,25 @@ internal class AttachmentCardFacts(
 private enum class LineTone { MUTED, WARNING, BLOCKING }
 
 @Composable
+internal fun CloseIcon() = Icon(painterResource(R.drawable.ic_close), contentDescription = null, Modifier.size(24.dp))
+
+/** Non-muted lines carry a decorative leading glyph, so state is never color-only (A-05). */
+@Composable
+private fun StatusLine(text: String, tone: LineTone) {
+    val colors = ChitChatTheme.colors
+    Row(verticalAlignment = Alignment.Top) {
+        if (tone != LineTone.MUTED) Icon(painterResource(if (tone == LineTone.BLOCKING) R.drawable.ic_error else R.drawable.ic_warning),
+            contentDescription = null, Modifier.padding(top = 1.dp, end = 6.dp).size(16.dp),
+            tint = if (tone == LineTone.BLOCKING) colors.error else colors.unsureLine)
+        Text(text, style = MaterialTheme.typography.bodySmall, color = when (tone) {
+            LineTone.MUTED -> colors.textMuted
+            LineTone.WARNING -> colors.text
+            LineTone.BLOCKING -> colors.error
+        }, fontWeight = if (tone == LineTone.MUTED) null else FontWeight.SemiBold)
+    }
+}
+
+@Composable
 private fun sizeText(value: AttachmentSizeText) = when (value.unit) {
     AttachmentSizeUnit.BYTES -> stringResource(R.string.attach_size_bytes, value.number)
     AttachmentSizeUnit.KB -> stringResource(R.string.attach_size_kb, value.number)
@@ -209,7 +229,10 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(40.dp).background(colors.surface, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
                     if (facts.phase == AttachmentCardPhase.PREPARING) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Text(type?.take(4) ?: "•", style = MaterialTheme.typography.labelSmall, color = colors.textMuted, maxLines = 1)
+                    else Icon(painterResource(if (facts.mimeType?.startsWith("image/", ignoreCase = true) == true ||
+                        facts.privacy == AttachmentPhotoPrivacy.LOCATION_REMOVED || facts.privacyFailure != null)
+                        R.drawable.ic_image else R.drawable.ic_document), contentDescription = null, Modifier.size(24.dp),
+                        tint = colors.textMuted)
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp).semantics(mergeDescendants = true) {}) {
                     Text(facts.filename, style = MaterialTheme.typography.bodyMedium, color = colors.text,
@@ -219,16 +242,12 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
                 if (onRemove != null) {
                     val remove = stringResource(R.string.attach_remove_label)
                     IconButton(onClick = onRemove, enabled = enabled, modifier = Modifier.testTag("attachment_card_remove")
-                        .semantics { contentDescription = remove }) { Text("×") }
+                        .semantics { contentDescription = remove }) { CloseIcon() }
                 }
             }
             if (lines.isNotEmpty()) Column(Modifier.padding(end = 8.dp, bottom = 4.dp).testTag("attachment_card_status")
                 .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
-                lines.forEach { (text, tone) -> Text(text, style = MaterialTheme.typography.bodySmall, color = when (tone) {
-                    LineTone.MUTED -> colors.textMuted
-                    LineTone.WARNING -> colors.text
-                    LineTone.BLOCKING -> colors.error
-                }, fontWeight = if (tone == LineTone.MUTED) null else FontWeight.SemiBold) }
+                lines.forEach { (text, tone) -> StatusLine(text, tone) }
             }
             if (facts.phase == AttachmentCardPhase.PRIVACY_CHOICE && (onSendAnyway != null || onRemove != null))
                 Row(Modifier.fillMaxWidth().padding(end = 4.dp), horizontalArrangement = Arrangement.End) {

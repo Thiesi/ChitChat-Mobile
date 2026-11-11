@@ -152,6 +152,6 @@ internal fun AttachWaitingLine(onCancel: () -> Unit, modifier: Modifier = Modifi
         Text(stringResource(R.string.attach_waiting), Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
             style = MaterialTheme.typography.bodySmall, color = ChitChatTheme.colors.textMuted)
         val cancel = stringResource(R.string.attach_waiting_cancel)
-        IconButton(onClick = onCancel, modifier = Modifier.semantics { contentDescription = cancel }) { Text("×") }
+        IconButton(onClick = onCancel, modifier = Modifier.semantics { contentDescription = cancel }) { CloseIcon() }
     }
 }
