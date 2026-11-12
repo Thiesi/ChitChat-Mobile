@@ -104,24 +104,12 @@ Release/device/accessibility gates remain required.
 
 The earlier [Completion cleanup allowance](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6729587072)
 and its owner-confirmed [API36/product-guard extension](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6737201774)
-ended when the [cleanup correction](milestones/completion-ime-cleanup.md) merged (PR165).
+end when the [cleanup correction](milestones/completion-ime-cleanup.md) merges.
 They covered only the original @After line167 expected-false/actual-true assertion
 without another cause; original failures and development exceptions remain recorded.
 The corrected contract is hidden at cleanup completion: Compose IME 0 and both native
 observations hidden inside the same 5000ms wait, with no extra hide, tap or focus action.
 A later re-show from the test's own earlier tap is outside this completion-time contract.
-
-The owner-confirmed [#177 rule](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6832503284)
-(2026-11-12) lets a PR merge when its only failures beyond the covered API35 ReplyComposer
-signature are the exact #177 Completion cleanup timeout, on API35 or API36:
-`CompletionJourneyTest` `@After` cleanup, `ComposeTimeoutException` 5000ms via
-`CompletionImeCleanup.awaitCompletionImeHidden`, with the existing failure-only sample pattern
-(Compose IME above 0, native observations unobserved) and no other cause. Record each occurrence
-with its run ID and scalars on the PR and on #177; no retries. JVM tests, lint, debug/release
-builds, conflict-free scope and BOTH written current-head reviews must pass, and
-api36-product-defects may fail only because of this exact signature. The rule ends when #177
-is fixed or immediately if user impact is shown; release, device and accessibility gates are
-unchanged. PR205 was its first application.
 PR131's classifier is delivered; no manual-classifier deferral remains. The bounded
 pre-theme/current and real-MainActivity observations are recorded on issue69; the latter
 covers only its measured synthetic API35 path. The separate ReplyComposer investigation

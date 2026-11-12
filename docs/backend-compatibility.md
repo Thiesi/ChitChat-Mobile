@@ -66,13 +66,10 @@
 
 [M4c4c1](milestones/M4c4c1-notification-state.md) consumes the existing notification page/read contracts through scoped presentation state and bounded canonical GET reconciliation, now used by M4c4c2's native list/read/count controls. Counts remain independent of loaded rows; View message and Mark as read stay separate. Its bounds/coverage/confirmed-read overlay are local state, not server fields or timestamps. No new endpoint, SSE event, authorization mechanism or backend checkout change is introduced; general-link consumption remains pending.
 
-Documented minimum backend: **v3.9.0**, released at `8b790caca5686038adc3b12f3e4e09a02ffd03aa`, per the
-[technical lead's decision](https://github.com/Thiesi/ChitChat-Mobile/pull/206#issuecomment-6836338017): room ownership transfer ships in v1 and has no capability key, so
-it can't be detected on an older server. It was previously v3.7.0 (`eba61e9`), per the
+Documented minimum backend: **v3.7.0**, released tag `v3.7.0` / `eba61e9`, per the
 [maintainer's baseline decision](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6747953068)
-and [its activation](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6806140508).
-There are no older-server fallbacks. No code constant exists yet; the pending setup and server-update
-check will use 3.9.0.
+and [its activation](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6806140508)
+([release](https://github.com/Thiesi/ChitChat/releases/tag/v3.7.0)). There are no older-server fallbacks.
 The source links below retain the original **v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf0d1`**
 audit; they are historical evidence, not a current minimum or tested-installation claim.
 Only merged backend contracts may be adopted; pending work appears in [backend issues](backend-dependencies.md).

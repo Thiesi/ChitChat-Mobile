@@ -158,14 +158,9 @@ JVM tests:
   - a failing cleanup doesn't block sign-out;
   - an ended session cleans up with no request.
 
-Device test: `PushVaultDeviceTest` (real Keystore, the real connector with no distributor
-installed):
-- sealed storage;
-- decryption;
-- retirement removes the file and key alias;
-- the connector's `keys` table stays empty.
-
-With no distributor installed, the connector never stores a registration, so the `keys` table check
-is weak. Checking that table after a real distributor registration is **pending device acceptance**.
+The real-Keystore device test (sealed storage, decryption, retirement removing the file and key
+alias, an empty connector `keys` table) follows in a separate PR, kept out of this one only to fit the
+review size limit. Checking the connector's `keys` table after a real distributor registration is
+**pending device acceptance**.
 
 There's no distributor, delivery or live-server evidence yet.
