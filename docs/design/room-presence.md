@@ -101,8 +101,11 @@ A choice sheet, opened from the header:
     this room);
   - **Private pings** (the existing pings list);
   - **Leave room…** (decision dialog, existing confirmation, `error`-colored confirm).
-- Owners don't see Leave room. They see the existing explanation instead ("Owners can't leave
-  their room").
+- Owners don't see Leave room. They see the explanation instead: "Owners can't leave their
+  room. Hand it to someone else first." with a **Transfer ownership…** row that opens the
+  transfer flow (administration.md, P-217; guaranteed by the 3.9.0 minimum). After a
+  transfer, the former owner is a
+  moderator and sees Leave room like anyone.
 - Not in this slice: room editing, roles, invitations and moderation (M7). These later go into
   a steward section in this sheet.
 
@@ -129,5 +132,5 @@ A choice sheet, opened from the header:
 | P-131 | Presence moments render above the composer, one at a time, with the existing enter actions and gating. Draft text is never lost. | C |
 | P-132 | The WARNING countdown runs only while visible and is announced once plus at 10 s, never every second. | C |
 | P-133 | The people sheet is never shown with a stale list, and guests are marked. | C |
-| P-134 | The room details sheet offers only existing actions. Owners can't leave, with the existing explanation. | C |
+| P-134 | The room details sheet offers only existing actions. Owners can't leave; they see the explanation and Transfer ownership (P-217). | C |
 | P-135 | No new timers or requests. Presence, inactivity, send and read contracts are unchanged. | R, existing tests |

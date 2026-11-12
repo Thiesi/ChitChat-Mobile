@@ -70,16 +70,22 @@ rather than fake it:
   time only.
 - Admin "Looking after this server" card, guest visits and moderation actions: M7.
 - Invite QR codes: specified in invite-codes.md (D5), not yet implemented or scheduled.
-- ~~Installation icon~~: ChitChat#211 shipped in v3.6.0 and is inside the 3.7.0 minimum,
+- ~~Installation icon~~: ChitChat#211 shipped in v3.6.0 and is inside the 3.9.0 minimum,
   designed in installation-icon.md. Its presets and name-following initial (ChitChat#241)
   shipped in v3.8.0 and need no app change.
 - ~~Required username change~~: ChitChat#164 shipped in v3.8.0, designed in play-readiness.md
-  and required for the first Play release. The minimum stays 3.7.0; it's gated by the session
-  fields.
-- Per-room mention marker: ChitChat main `4711dcf` (`unread_mention_count`, after v3.8.0),
-  designed in lists-restyle.md (P-215). Presence-gated; a missing field shows no marker.
-- ~~Signed-in sessions and authenticator codes~~: ChitChat#205 and #204 shipped in v3.7.0, the
-  minimum since 2026-11-11, designed in account-security.md.
+  and required for the first Play release. It's inside the 3.9.0 minimum; the screens still
+  key on the session fields.
+- ~~Per-room mention marker~~: `unread_mention_count` shipped in v3.9.0, designed in
+  lists-restyle.md (P-215). Inside the 3.9.0 minimum; a missing field shows no marker.
+- ~~DM row relationship states~~: ChitChat#274 shipped in v3.9.0, designed in
+  lists-restyle.md (P-218). Inside the 3.9.0 minimum; only the viewer's own block is ever
+  shown.
+- ~~Room ownership transfer~~: ChitChat#273 shipped in v3.9.0, designed in
+  administration.md (P-217), in v1, through the 3.9.0 minimum (technical lead,
+  2026-11-12). Self-takeover by administrators stays web-only.
+- ~~Signed-in sessions and authenticator codes~~: ChitChat#205 and #204 shipped in v3.7.0, inside
+  the 3.9.0 minimum, designed in account-security.md.
 
 ## Approved decisions (maintainer, 2026-11-07)
 

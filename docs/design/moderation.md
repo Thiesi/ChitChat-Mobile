@@ -17,7 +17,7 @@ other web-only tasks in administration.md. Where one would be looked for, the ap
 this on {installation}'s website." with an explicit **Open website** (administration.md).
 
 **Minimum server version.** The subject filter and `counts` (#191) are guaranteed by the
-minimum server version (3.7.0), as in administration.md. There's no fallback for
+minimum server version (3.9.0), as in administration.md. There's no fallback for
 older servers and no per-field check.
 
 All moderation surfaces use the **steward** role color (Dusk) and the `steward` shield icon.

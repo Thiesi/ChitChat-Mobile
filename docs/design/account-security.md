@@ -8,8 +8,8 @@ engineering slices (technical lead, 2026-11-09). It's grounded in the ChitChat A
 
 Maintainer decisions on 2026-11-09 (issue #1, comment 6734871007): authenticator-app codes
 (TOTP, ChitChat#204) are wanted as an additional method, and a signed-in sessions list
-(ChitChat#205) is wanted. **Both shipped in ChitChat v3.7.0, and CCM's minimum server version is
-3.7.0 since 2026-11-11** (technical lead). Native passkeys (ChitChat#145) and the browser sign-in
+(ChitChat#205) is wanted. **Both shipped in ChitChat v3.7.0, inside CCM's minimum server version
+(3.9.0 since 2026-11-12; 3.7.0 from 2026-11-11)** (technical lead). Native passkeys (ChitChat#145) and the browser sign-in
 handoff (ChitChat#146) shipped in v3.6.0, so the minimum includes their server halves too. The
 app half of passkeys (B1, Credential Manager) is still to be built. There are no per-feature
 version checks or older-server fallbacks. Operator settings (`capabilities.totp`,
@@ -168,7 +168,7 @@ people who don't expect the header to be tappable.
     re-reads the status and shows that note.
   - **Add a passkey**: **Dependency B1** (native passkeys through Credential Manager, trusted
     app origins and each server's Digital Asset Links). The backend half (ChitChat#145) is in
-    the 3.7.0 minimum. The row activates once B1 is built, on servers where
+    the 3.9.0 minimum. The row activates once B1 is built, on servers where
     `native_passkey_origins` is true. Until then, the row reads "Adding passkeys in the app is
     coming. You can add one on {installation}'s website." It never opens a browser by itself.
 - **Recovery codes:** "{n} of your recovery codes are left." When it's 3 or fewer, add "Make new
@@ -184,7 +184,7 @@ people who don't expect the header to be tappable.
   (B1). When the server offers neither in the app, the Off state shows the same "on
   {installation}'s website" line.
 
-**Authenticator app** (ChitChat#204, in the 3.7.0 minimum). The row shows when
+**Authenticator app** (ChitChat#204, in the 3.9.0 minimum). The row shows when
 `capabilities.totp` is true or the account already has one (`totp.enabled`). A missing or false
 capability hides setup only. It never hides or disables an authenticator that's already on.
 
@@ -282,7 +282,7 @@ alternatives below.
 
 ## Sessions
 
-**Where you're signed in** (ChitChat#205, in the 3.7.0 minimum; shown when
+**Where you're signed in** (ChitChat#205, in the 3.9.0 minimum; shown when
 `capabilities.signed_in_sessions` is true). The push device list's `current_session` is still
 not a session list and isn't presented as one.
 

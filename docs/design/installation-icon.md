@@ -2,7 +2,7 @@
 
 How the app shows an installation's own icon where it already shows the installation's name.
 
-**Status: active.** ChitChat#211 shipped in v3.6.0 and is inside CCM's 3.7.0 minimum
+**Status: active.** ChitChat#211 shipped in v3.6.0 and is inside CCM's 3.9.0 minimum
 (server-update.md). A Super Administrator uploads an installation icon, and the session
 response carries `application.icon`: `null` for the ChitChat default, otherwise
 `{url, width: 512, height: 512, mime_type: "image/png", sha256}`, visible anonymously, to
