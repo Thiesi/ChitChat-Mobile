@@ -43,3 +43,9 @@ and 115% (stacked), and the capture matrix shows one row at 100% and the stack a
 The capped attachment status and notice text (K1) now compare the text's natural height with
 its cap, so the space reserved under More no longer reads as overflow; More appears only when
 text is actually cut off, with a short leading fade onto its backing.
+
+When the bounded room/DM header overflows, More is its own 48dp band below the scrolling
+viewport inside the same cap, with the short fade at the viewport's bottom; content never draws
+under the band (presentation lead, F2/P-216). A control at the viewport's clean edge is ordinary
+scrolling: scrolling, More and accessibility focus bring it fully into view. A fitting header
+has no band, fade or reserve. `BoundedHeaderLayoutTest` covers both at default and 200%.
