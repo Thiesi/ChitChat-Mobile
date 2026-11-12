@@ -26,8 +26,10 @@ class BoundedHeaderLayoutTest {
             ChitChatTheme(dark = false) {
                 Column(Modifier.width(320.dp)) {
                     BoundedHeader(160.dp) {
-                        Text("Room 43")
-                        repeat(controls) { i -> TextButton(onClick = {}, modifier = Modifier.testTag("control:$i")) { Text("Saved room drafts ($i)") } }
+                        Column(Modifier.testTag("content")) {
+                            Text("Room 43")
+                            repeat(controls) { i -> TextButton(onClick = {}, modifier = Modifier.testTag("control:$i")) { Text("Saved room drafts ($i)") } }
+                        }
                     }
                     Box(Modifier.fillMaxWidth().height(40.dp).testTag("below"))
                 }
@@ -54,7 +56,8 @@ class BoundedHeaderLayoutTest {
         header(1f, 1)
         compose.onNodeWithTag("header_more").assertDoesNotExist()
         val header = compose.onNodeWithTag("bounded_header").fetchSemanticsNode().boundsInRoot
-        val control = compose.onNodeWithTag("control:0").fetchSemanticsNode().boundsInRoot
-        assertEquals("No band or reserve below fitting content", control.bottom, header.bottom, 1f)
+        // The content's own bottom, not a button's 40dp visual bounds inside its 48dp touch target.
+        val content = compose.onNodeWithTag("content").fetchSemanticsNode().boundsInRoot
+        assertEquals("No band or reserve below fitting content", content.bottom, header.bottom, 1f)
     }
 }
