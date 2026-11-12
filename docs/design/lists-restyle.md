@@ -86,12 +86,29 @@ One `LazyColumn` (`rooms_directory`):
       it shows **time only**: never a sender, preview or "new message" wording. The time may
       therefore be newer than the last message the viewer sees in the transcript, and that's
       expected.
+  - **Mentions (Dependency: ChitChat main `4711dcf`, not in a release yet; ships after
+    v3.8.0).** Joined-room entries gain `unread_mention_count`: an integer from 0 to 100,
+    capped like `unread_count`, counting unread room-mention notifications after the viewer's
+    read position (deleted messages and ignored senders excluded). Reading past the mention
+    clears it; non-joined rooms get 0. Contract: `docs/api/rooms.md` on ChitChat main. CCM's
+    minimum stays 3.7.0, so this is gated by the field's presence, never by a version check.
+    - `unread_mention_count ≥ 1`: the honey **`MentionBadge`** with "@" (theme-foundation.md)
+      in the trailing column, on the badge line, to the start of the unread `CountBadge`
+      with a 4dp gap. It's a marker, not a count: the number is never shown, because the
+      unread badge already carries the count.
+    - `0`, `null` or a missing field: no marker. A missing field never triggers the server
+      update notice.
+    - It refreshes with the unread count on the directory's existing triggers (entry,
+      foreground, existing room invalidations, manual Refresh), with no polling, SSE or
+      extra request. Like the unread count, it shows the last fetched value while the
+      directory is stale; it's a backlog marker, not a "now" claim like presence.
+    - It never reorders rooms, and the Rooms tab keeps no badge (navigation-shell.md,
+      decided).
   - **Accessibility:** the row's content description reads, in order, the name, "{n} people
-    here now" (when shown), the info line, "Last message {time or day}" (when shown) and the
-    unread count.
-  - Invitations and open rooms carry neither field (`null` when not joined) and show neither.
-  - Still not shown: a per-room mention badge (no data source). The Rooms tab keeps no badge
-    (navigation-shell.md, decided).
+    here now" (when shown), the info line, "Last message {time or day}" (when shown), the
+    unread count and "mentioned" (when the marker shows).
+  - Invitations and open rooms carry none of these fields (`null` or 0 when not joined) and
+    show none of them.
 - **Tap behavior** (a deliberate flow change, using existing guarded callbacks):
   - a joined room opens the conversation directly through the existing `openRoom` path,
     with its current guards;
@@ -257,7 +274,8 @@ A `LazyColumn` (`notification_list`):
 | ID | Requirement | Verify |
 |---|---|---|
 | P-90 | All four lists use the shared row anatomy, with lanterns for rooms and pebbles for people (P-10, P-11), and no cards. | S, R |
-| P-91 | The room directory shows Your rooms, Invitations and Open rooms in server order and never re-sorts by recency or presence. No mention data is shown. | C, R |
+| P-91 | The room directory shows Your rooms, Invitations and Open rooms in server order and never re-sorts by recency, presence or mentions. No mention data is shown beyond P-215's per-room marker. | C, R |
+| P-215 | (Dependency, ChitChat `4711dcf`.) A joined row shows the honey "@" `MentionBadge` beside the unread badge only for `unread_mention_count ≥ 1`, never a number, and nothing for 0, null or missing. Its description adds "mentioned". It refreshes only with the unread count; no new requests, timers or sorting, and a missing field never triggers the update notice. | U, C, S |
 | P-96 | Joined rows show the glow and "{n} here now" only for `active_count ≥ 1` on a fresh, online directory, and nothing for 0, null or missing. Recency shows `last_activity_at` as time, Yesterday, weekday or date, and nothing for null, never with a sender or preview. No new requests or timers. | U, C |
 | P-92 | Membership writes, reconciliation and the uncertain state behave exactly as today. Check room list is explicit, and pull-to-refresh never reconciles. | C, existing tests |
 | P-93 | DM rows keep today's preview rules, draft precedence and local attention, and filters make no new requests. The privacy line stays visible. | C |

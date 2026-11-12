@@ -115,7 +115,8 @@ upload:
 ## Composer: attaching
 
 - **Entry:** a paperclip icon button (48dp, label "Attach") **beside** the message field, in
-  the order field · Attach · Send, with Send pinned to the field as before (presentation lead,
+  the order field · Attach · Send (or, when the field is narrow, the stacked composer of
+  transcript-restyle.md, P-216), with Send pinned to the field as before (presentation lead,
   PR #190: the field's own semantics and keyboard contracts win over placing it inside the
   field). The reserved emoji slot moves beside it when emoji arrives. The icon is the Lantern
   `attach` glyph in `textMuted`. Hidden where uploads aren't allowed: guests
