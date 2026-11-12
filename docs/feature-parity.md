@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M5g7b room attachment Send](milestones/M5g7b-room-attach-send.md) lets rooms send the attached file with progress, Cancel while the body is still sending, definite-refusal copy and a "Not sure your file arrived" state. Checking an unconfirmed file (M5g7c), DM files, downloads, previews and sharing remain pending.
+
 [M5g7a room attach controls](milestones/M5g7a-room-attach-controls.md) puts the first attachment controls on screen in rooms: paperclip, Photo/File choice sheet, pending card with privacy choice, local failures and policy pre-checks, Remove and Replace. Sending files is not available yet (room Send, progress/Cancel and reconciliation follow, then DMs); the in-app availability text says so. Downloads, previews, sharing and provider/live acceptance remain pending.
 
 [M5g5f DM upload reconciliation](milestones/M5g5f-direct-attachment-reconciliation-state.md) adds private explicit history/SHA/person-confirmation/duplicate-risk state with current owner/entry/disclosure and independent uncertainty guards. Room/DM internal upload/reconciliation state is implemented; native picker/card/privacy/unknown-delivery controls, downloads/sharing and provider/live acceptance remain pending. Files/media is not usable; existing feature-availability disclosures remain accurate.

@@ -1,5 +1,7 @@
 # Independently verifiable implementation milestones
 
+[M5g7b room attachment Send](milestones/M5g7b-room-attach-send.md) connects the room actor to native Send/progress/Cancel/refusal UI. Next: M5g7c room UNKNOWN reconciliation controls, then DM controls.
+
 [M5g7a room attach controls](milestones/M5g7a-room-attach-controls.md) connects the room owner to native picker/card/privacy-choice/Remove/Replace controls without attachment Send. Next: room Send with progress/Cancel/refusals (M5g7b), room UNKNOWN reconciliation UI (M5g7c), then DM controls reusing the shared components.
 
 [M5g5f DM upload reconciliation](milestones/M5g5f-direct-attachment-reconciliation-state.md) completes the internal DM explicit history/SHA/person-confirmation/duplicate-risk state. After its own full gates/reviews, connect native picker/card/privacy/unknown controls to the delivered room/DM owners, then authenticated downloads and sharing. Native modal consumers must suppress read/typing and bind actual entry/STARTED/current owner/disclosure. [Issue184](https://github.com/Thiesi/ChitChat-Mobile/issues/184) needs coordinator/presentation disposition before evidence UI; no timestamp tolerance or automatic attachment queue/retry is assumed.

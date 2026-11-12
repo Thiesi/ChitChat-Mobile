@@ -121,7 +121,19 @@ internal fun ReplaceAttachmentDialog(onReplace: () -> Unit, onDismiss: () -> Uni
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
-internal enum class AttachmentCardPhase { PREPARING, READY, PRIVACY_CHOICE, FAILED, IN_FLIGHT }
+internal enum class AttachmentCardPhase { PREPARING, READY, PRIVACY_CHOICE, FAILED, UPLOADING, FINISHING, CANCELLING, UNKNOWN, CONFIRMED }
+
+/** A definite refusal or not-sent outcome of the last explicit Send. The file stays attached. */
+internal sealed interface AttachmentSendFailure {
+    class TooLarge(val maxBytes: Long?) : AttachmentSendFailure
+    data object TypeRefused : AttachmentSendFailure
+    data object Empty : AttachmentSendFailure
+    class RateLimited(val retryAfterSeconds: Long?) : AttachmentSendFailure
+    data object Membership : AttachmentSendFailure
+    data object NotSent : AttachmentSendFailure
+    data object PolicyChanged : AttachmentSendFailure
+    data object Rejected : AttachmentSendFailure
+}
 
 /** Neutral display facts mapped by each feature from its own private draft. No bytes. */
 internal class AttachmentCardFacts(
@@ -133,17 +145,45 @@ internal class AttachmentCardFacts(
     val privacyFailure: PhotoPrivacyFailure? = null,
     val failure: PreparationFailureKind? = null,
     val observation: AttachmentPolicyObservation? = null,
-    val sendingAvailable: Boolean = false,
+    /** Buffered file bytes: presentation only, never proof of delivery or non-delivery. */
+    val sentBytes: Long? = null,
+    val sendFailure: AttachmentSendFailure? = null,
+    val captionTooLong: Boolean = false,
 ) {
     override fun toString() = "AttachmentCardFacts"
     /** Something the person needs to act on before this file could be sent. */
     val needsAttention: Boolean get() = phase == AttachmentCardPhase.PRIVACY_CHOICE || phase == AttachmentCardPhase.FAILED ||
         observation is AttachmentPolicyObservation.TooLarge || observation is AttachmentPolicyObservation.TypeNotAllowed ||
         observation == AttachmentPolicyObservation.Invalid || observation == AttachmentPolicyObservation.UploadsDisabled ||
-        observation == AttachmentPolicyObservation.Unavailable
+        observation == AttachmentPolicyObservation.Unavailable || captionTooLong
 }
 
-private enum class LineTone { MUTED, WARNING, BLOCKING }
+@Composable
+private fun waitText(seconds: Long): String = when {
+    seconds < 60 -> pluralStringResource(R.plurals.attach_wait_seconds, seconds.toInt(), seconds.toInt())
+    seconds < 120 -> stringResource(R.string.attach_wait_minute)
+    seconds < 3_600 -> ((seconds + 59) / 60).toInt().let { pluralStringResource(R.plurals.attach_wait_minutes, it, it) }
+    else -> ((seconds + 3_599) / 3_600).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        .let { pluralStringResource(R.plurals.attach_wait_hours, it, it) }
+}
+
+@Composable
+private fun sendFailureText(failure: AttachmentSendFailure, locale: java.util.Locale): String = when (failure) {
+    is AttachmentSendFailure.TooLarge -> failure.maxBytes?.takeIf { it > 0 }
+        ?.let { stringResource(R.string.attach_refused_too_large_limit, sizeText(attachmentSizeText(it, locale))) }
+        ?: stringResource(R.string.attach_refused_too_large)
+    AttachmentSendFailure.TypeRefused -> stringResource(R.string.attach_refused_type)
+    AttachmentSendFailure.Empty -> stringResource(R.string.attach_refused_empty)
+    is AttachmentSendFailure.RateLimited -> failure.retryAfterSeconds?.takeIf { it > 0 }
+        ?.let { stringResource(R.string.attach_refused_rate_wait, waitText(it)) }
+        ?: stringResource(R.string.attach_refused_rate)
+    AttachmentSendFailure.Membership -> stringResource(R.string.conversation_membership)
+    AttachmentSendFailure.NotSent -> stringResource(R.string.attach_not_sent)
+    AttachmentSendFailure.PolicyChanged -> stringResource(R.string.attach_policy_changed)
+    AttachmentSendFailure.Rejected -> stringResource(R.string.attach_refused_other)
+}
+
+private enum class LineTone { MUTED, WARNING, UNSURE, BLOCKING }
 
 @Composable
 internal fun CloseIcon() = Icon(painterResource(R.drawable.ic_close), contentDescription = null, Modifier.size(24.dp))
@@ -158,7 +198,7 @@ private fun StatusLine(text: String, tone: LineTone) {
             tint = if (tone == LineTone.BLOCKING) colors.error else colors.unsureLine)
         Text(text, style = MaterialTheme.typography.bodySmall, color = when (tone) {
             LineTone.MUTED -> colors.textMuted
-            LineTone.WARNING -> colors.text
+            LineTone.WARNING, LineTone.UNSURE -> colors.text
             LineTone.BLOCKING -> colors.error
         }, fontWeight = if (tone == LineTone.MUTED) null else FontWeight.SemiBold)
     }
@@ -186,7 +226,8 @@ private fun kindText(mimeType: String?, filename: String): String? = when (val k
  */
 @Composable
 internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemove: (() -> Unit)?,
-    onSendAnyway: (() -> Unit)?, modifier: Modifier = Modifier) {
+    onSendAnyway: (() -> Unit)?, modifier: Modifier = Modifier, onCancel: (() -> Unit)? = null,
+    unknownActions: (@Composable () -> Unit)? = null) {
     val colors = ChitChatTheme.colors
     val locale = LocalConfiguration.current.locales[0]
     val lines = mutableListOf<Pair<String, LineTone>>()
@@ -203,8 +244,20 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
         AttachmentCardPhase.FAILED -> lines += stringResource(
             if (facts.failure == PreparationFailureKind.CLIENT_BUDGET) R.string.attach_too_large_for_phone
             else R.string.attach_unreadable_file) to LineTone.BLOCKING
-        AttachmentCardPhase.IN_FLIGHT -> Unit
+        AttachmentCardPhase.UPLOADING -> {
+            val total = facts.sizeBytes
+            val sent = facts.sentBytes?.coerceIn(0, total ?: Long.MAX_VALUE)
+            lines += (if (total != null && sent != null) stringResource(R.string.attach_sending_progress,
+                sizeText(attachmentSizeText(sent, locale)), sizeText(attachmentSizeText(total, locale)))
+                else stringResource(R.string.attach_sending)) to LineTone.MUTED
+        }
+        AttachmentCardPhase.FINISHING -> lines += stringResource(R.string.attach_finishing) to LineTone.MUTED
+        AttachmentCardPhase.CANCELLING -> lines += stringResource(R.string.attach_cancelling) to LineTone.MUTED
+        AttachmentCardPhase.UNKNOWN -> lines += stringResource(R.string.attach_unknown) to LineTone.UNSURE
+        AttachmentCardPhase.CONFIRMED -> lines += stringResource(R.string.attach_sent) to LineTone.MUTED
     }
+    facts.sendFailure?.takeIf { facts.phase == AttachmentCardPhase.READY }?.let { lines += sendFailureText(it, locale) to LineTone.BLOCKING }
+    if (facts.captionTooLong) lines += stringResource(R.string.attach_caption_too_long) to LineTone.BLOCKING
     when (val observed = facts.observation) {
         is AttachmentPolicyObservation.TooLarge -> {
             val (size, limit) = attachmentSizeComparison(observed.sizeBytes, observed.maxBytes, locale)
@@ -218,8 +271,6 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
         AttachmentPolicyObservation.Invalid -> lines += stringResource(R.string.attach_unreadable_short) to LineTone.BLOCKING
         else -> Unit
     }
-    if (!facts.sendingAvailable && facts.phase == AttachmentCardPhase.READY && !facts.needsAttention)
-        lines += stringResource(R.string.attach_sending_pending) to LineTone.MUTED
     val type = attachmentExtension(facts.filename)
     val size = facts.sizeBytes?.let { sizeText(attachmentSizeText(it, locale)) }
     val detail = listOfNotNull(type, size).joinToString(" · ")
@@ -227,7 +278,14 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
         Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(40.dp).background(colors.surface, MaterialTheme.shapes.small), contentAlignment = Alignment.Center) {
-                    if (facts.phase == AttachmentCardPhase.PREPARING) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    val total = facts.sizeBytes?.takeIf { it > 0 }
+                    val sent = facts.sentBytes
+                    if (facts.phase == AttachmentCardPhase.UPLOADING && total != null && sent != null)
+                        CircularProgressIndicator(progress = { (sent.toFloat() / total).coerceIn(0f, 1f) },
+                            Modifier.size(24.dp).testTag("attachment_card_progress"), strokeWidth = 2.dp)
+                    else if (facts.phase in setOf(AttachmentCardPhase.PREPARING, AttachmentCardPhase.UPLOADING,
+                            AttachmentCardPhase.FINISHING, AttachmentCardPhase.CANCELLING))
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     else Icon(painterResource(if (facts.mimeType?.startsWith("image/", ignoreCase = true) == true ||
                         facts.privacy == AttachmentPhotoPrivacy.LOCATION_REMOVED || facts.privacyFailure != null)
                         R.drawable.ic_image else R.drawable.ic_document), contentDescription = null, Modifier.size(24.dp),
@@ -248,6 +306,12 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
                 .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
                 lines.forEach { (text, tone) -> StatusLine(text, tone) }
             }
+            if (facts.phase == AttachmentCardPhase.UPLOADING && onCancel != null)
+                Row(Modifier.fillMaxWidth().padding(end = 4.dp), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onCancel, enabled = enabled, modifier = Modifier.heightIn(min = Lantern.target)
+                        .testTag("attachment_card_cancel")) { Text(stringResource(R.string.attach_cancel_send)) }
+                }
+            if (facts.phase == AttachmentCardPhase.UNKNOWN) unknownActions?.invoke()
             if (facts.phase == AttachmentCardPhase.PRIVACY_CHOICE && (onSendAnyway != null || onRemove != null))
                 Row(Modifier.fillMaxWidth().padding(end = 4.dp), horizontalArrangement = Arrangement.End) {
                     onRemove?.let { TextButton(onClick = it, enabled = enabled, modifier = Modifier.heightIn(min = Lantern.target)
