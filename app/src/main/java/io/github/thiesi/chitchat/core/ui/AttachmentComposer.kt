@@ -113,15 +113,15 @@ private fun CappedText(maxHeight: androidx.compose.ui.unit.Dp, background: Color
     val overflow = bounded && scroll.maxValue > 0
     val atEnd by remember { derivedStateOf { scroll.value >= scroll.maxValue } }
     var full by remember { mutableStateOf(false) }
-    Column(modifier) {
-        Box {
-            Column(contentModifier.then(if (bounded) Modifier.heightIn(max = maxHeight).verticalScroll(scroll) else Modifier)
-                .testTag(tag), content = content)
-            if (overflow && !atEnd) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(20.dp)
-                .background(Brush.verticalGradient(listOf(Color.Transparent, background))))
-        }
-        if (overflow) TextButton(onClick = { full = true }, modifier = Modifier.align(Alignment.End)
-            .heightIn(min = Lantern.target).testTag("${tag}_more")) { Text(stringResource(R.string.attach_more)) }
+    // More sits over the capped area's bottom end on a solid backing (no extra row, so the composer
+    // keeps its room); the scrolled text reserves space beneath it so the last line can clear it.
+    Box(modifier) {
+        Column(contentModifier.then(if (bounded) Modifier.heightIn(max = maxHeight).verticalScroll(scroll) else Modifier)
+            .padding(bottom = if (overflow) Lantern.target else 0.dp).testTag(tag), content = content)
+        if (overflow && !atEnd) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(20.dp)
+            .background(Brush.verticalGradient(listOf(Color.Transparent, background))))
+        if (overflow) TextButton(onClick = { full = true }, modifier = Modifier.align(Alignment.BottomEnd)
+            .background(background).heightIn(min = Lantern.target).testTag("${tag}_more")) { Text(stringResource(R.string.attach_more)) }
     }
     if (full) AlertDialog(onDismissRequest = { full = false }, modifier = Modifier.testTag("${tag}_dialog").lanternDialogEdge(),
         text = { Column(Modifier.verticalScroll(rememberScrollState()), content = content) },

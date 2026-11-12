@@ -206,7 +206,7 @@ class ThemePresentationJourneyTest {
         compose.onNodeWithTag("message_search_open").reveal().performNativeTap()
         compose.waitUntil(5_000) { search.state.value.entry!=null }
         capture(label,"search")
-        compose.runOnIdle { assertEquals(2,api.rooms.sends);assertEquals(0,api.notices.posts) }
+        compose.runOnIdle { assertEquals(1,api.rooms.sends);assertEquals(0,api.notices.posts) }
     }
 
     private fun attachCaptures(label: String) {
@@ -257,14 +257,14 @@ class ThemePresentationJourneyTest {
 
     /** The Details marker's failed then uncertain shapes (gap-audit F3), from fixture send outcomes only. */
     private fun markerCaptures(label: String) {
-        fun send(body: String,failure: ApiFailure) {
+        fun send(body: String,failure: ApiFailure?) {
             compose.runOnIdle { api.rooms.sendFailure=failure;assertTrue(room.updateDraft(sessions.state.value,43,body)) }
             compose.onNodeWithTag("conversation_send").reveal().assertIsEnabled().performNativeTap()
             compose.waitUntil(5_000) { !room.state.value.busy && !room.state.value.sending }
         }
-        // A definite refusal: the failed octagon.
-        send("Synthetic refused send",ApiFailure(FailureKind.HTTP,400,"validation_error"))
-        compose.waitUntil(5_000) { room.state.value.error!=null }
+        // A local validation failure (no POST): the failed octagon. Editing the draft clears it.
+        send("/ping",null)
+        compose.waitUntil(5_000) { room.state.value.validation!=null }
         compose.onNodeWithTag("attention_badge:failed",useUnmergedTree=true).assertExists()
         capture(label,"room-marker-failed")
         // Then an unknown outcome: uncertain takes precedence over the earlier error.
