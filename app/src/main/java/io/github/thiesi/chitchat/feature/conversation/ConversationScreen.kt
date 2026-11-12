@@ -583,7 +583,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 } },
                 enabled = !composerDialog && !obscured && (attachmentSendable ||
                     (ready && !state.busy && model.canSend() && state.draft.phpTrim().isNotEmpty())),
-                sending = state.sending, modifier = Modifier.testTag("conversation_send"))
+                sending = state.sending, modifier = Modifier.testTag("conversation_send"), progress = attachment == null)
         }
     }
     actions?.let { request ->

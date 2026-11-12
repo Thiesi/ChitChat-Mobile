@@ -7,6 +7,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -21,6 +26,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.media.*
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
@@ -58,29 +66,66 @@ internal fun AttachUnavailableNotice(availability: AttachAvailability, installat
     canCheckAgain: Boolean, onCheckAgain: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier,
     maxHeight: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Infinity) {
     val colors = ChitChatTheme.colors
-    // Like the card: in the composer only the text scrolls (A-04); Check again and close stay visible.
-    val bounded = maxHeight != androidx.compose.ui.unit.Dp.Infinity
-    Row(modifier.fillMaxWidth().testTag("attach_unavailable").padding(start = 16.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).then(if (bounded) Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState())
-            else Modifier).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
-            if (availability == AttachAvailability.SERVER_OFF)
-                Text(stringResource(R.string.attach_server_off), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
-            else {
-                Text(stringResource(R.string.attach_unreadable_title, installation), style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold, color = colors.text)
-                Text(stringResource(R.string.attach_unreadable_body), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
-                if (persisting) Text(stringResource(R.string.attach_unreadable_persisting, installation),
-                    style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+    // A level-1 line (info, not a refusal). Stacked at every scale so the text keeps the full width;
+    // its actions sit below and stay visible while the capped text scrolls (A-04).
+    Column(modifier.fillMaxWidth().testTag("attach_unavailable").padding(start = 16.dp, end = 4.dp)) {
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(painterResource(R.drawable.ic_info), contentDescription = null,
+                Modifier.padding(top = 2.dp, end = 6.dp).size(statusGlyphSize()), tint = colors.textMuted)
+            CappedText(maxHeight, colors.ground, "attach_unavailable_text", Modifier.weight(1f).padding(end = 12.dp),
+                Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+                if (availability == AttachAvailability.SERVER_OFF)
+                    Text(stringResource(R.string.attach_server_off), style = MaterialTheme.typography.bodySmall, color = colors.text)
+                else {
+                    Text(stringResource(R.string.attach_unreadable_title, installation), style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold, color = colors.text)
+                    Text(stringResource(R.string.attach_unreadable_body), style = MaterialTheme.typography.bodySmall, color = colors.text)
+                    if (persisting) Text(stringResource(R.string.attach_unreadable_persisting, installation),
+                        style = MaterialTheme.typography.bodySmall, color = colors.text)
+                }
             }
         }
-        if (availability == AttachAvailability.SETTINGS_UNREADABLE) TextButton(onClick = onCheckAgain, enabled = canCheckAgain,
-            modifier = Modifier.heightIn(min = Lantern.target).testTag("attach_check_again")) {
-            Text(stringResource(R.string.attach_check_again))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            if (availability == AttachAvailability.SETTINGS_UNREADABLE) TextButton(onClick = onCheckAgain, enabled = canCheckAgain,
+                modifier = Modifier.heightIn(min = Lantern.target).testTag("attach_check_again")) {
+                Text(stringResource(R.string.attach_check_again))
+            }
+            val close = stringResource(R.string.attach_notice_close)
+            IconButton(onClick = onDismiss, modifier = Modifier.semantics { contentDescription = close }) { CloseIcon() }
         }
-        val close = stringResource(R.string.attach_notice_close)
-        IconButton(onClick = onDismiss, modifier = Modifier.semantics { contentDescription = close }) { CloseIcon() }
     }
+}
+
+/** Status glyphs follow the text size (16sp) but never exceed 24dp, so they stay attached to it. */
+@Composable
+private fun statusGlyphSize() = with(androidx.compose.ui.platform.LocalDensity.current) { 16.sp.toDp() }.coerceAtMost(24.dp)
+
+/** Text capped above the composer so it never pushes the field and Send off screen (A-04). When it
+ * overflows, its last visible line fades into [background] and More opens the whole text in a dialog,
+ * so consent or limit copy is never only partly readable. Actions stay with the caller, outside.
+ * Unbounded (for example inside Details) the text simply grows.
+ */
+@Composable
+private fun CappedText(maxHeight: androidx.compose.ui.unit.Dp, background: Color, tag: String, modifier: Modifier = Modifier,
+    contentModifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val bounded = maxHeight != androidx.compose.ui.unit.Dp.Infinity
+    val scroll = rememberScrollState()
+    val overflow = bounded && scroll.maxValue > 0
+    val atEnd by remember { derivedStateOf { scroll.value >= scroll.maxValue } }
+    var full by remember { mutableStateOf(false) }
+    Column(modifier) {
+        Box {
+            Column(contentModifier.then(if (bounded) Modifier.heightIn(max = maxHeight).verticalScroll(scroll) else Modifier)
+                .testTag(tag), content = content)
+            if (overflow && !atEnd) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(20.dp)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, background))))
+        }
+        if (overflow) TextButton(onClick = { full = true }, modifier = Modifier.align(Alignment.End)
+            .heightIn(min = Lantern.target).testTag("${tag}_more")) { Text(stringResource(R.string.attach_more)) }
+    }
+    if (full) AlertDialog(onDismissRequest = { full = false }, modifier = Modifier.testTag("${tag}_dialog").lanternDialogEdge(),
+        text = { Column(Modifier.verticalScroll(rememberScrollState()), content = content) },
+        confirmButton = { TextButton(onClick = { full = false }) { Text(stringResource(R.string.rooms_close)) } })
 }
 
 /** Two rows: Photo (system Photo Picker) and File (system document picker). Nothing is read,
@@ -200,7 +245,7 @@ private fun StatusLine(text: String, tone: LineTone) {
     val colors = ChitChatTheme.colors
     Row(verticalAlignment = Alignment.Top) {
         if (tone != LineTone.MUTED) Icon(painterResource(if (tone == LineTone.BLOCKING) R.drawable.ic_error else R.drawable.ic_warning),
-            contentDescription = null, Modifier.padding(top = 1.dp, end = 6.dp).size(16.dp),
+            contentDescription = null, Modifier.padding(top = 2.dp, end = 6.dp).size(statusGlyphSize()),
             tint = if (tone == LineTone.BLOCKING) colors.error else colors.unsureLine)
         Text(text, style = MaterialTheme.typography.bodySmall, color = when (tone) {
             LineTone.MUTED -> colors.textMuted
@@ -253,9 +298,11 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
         AttachmentCardPhase.UPLOADING -> {
             val total = facts.sizeBytes
             val sent = facts.sentBytes?.coerceIn(0, total ?: Long.MAX_VALUE)
-            lines += (if (total != null && sent != null) stringResource(R.string.attach_sending_progress,
-                sizeText(attachmentSizeText(sent, locale)), sizeText(attachmentSizeText(total, locale)))
-                else stringResource(R.string.attach_sending)) to LineTone.MUTED
+            lines += (if (total != null && sent != null) {
+                val sentText = attachmentSizeText(sent, locale); val totalText = attachmentSizeText(total, locale)
+                if (sentText.unit == totalText.unit) stringResource(R.string.attach_sending_progress, sentText.number, sizeText(totalText))
+                else stringResource(R.string.attach_sending_progress, sizeText(sentText), sizeText(totalText))
+            } else stringResource(R.string.attach_sending)) to LineTone.MUTED
         }
         AttachmentCardPhase.FINISHING -> lines += stringResource(R.string.attach_finishing) to LineTone.MUTED
         AttachmentCardPhase.CANCELLING -> lines += stringResource(R.string.attach_cancelling) to LineTone.MUTED
@@ -312,9 +359,9 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
                         .semantics { contentDescription = remove }) { CloseIcon() }
                 }
             }
-            if (lines.isNotEmpty()) Column(Modifier.then(if (bounded) Modifier.heightIn(max = maxHeight)
-                .verticalScroll(rememberScrollState()) else Modifier).padding(end = 8.dp, bottom = 4.dp).testTag("attachment_card_status")
-                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+            if (lines.isNotEmpty()) CappedText(maxHeight, colors.raised, "attachment_card_status",
+                Modifier.padding(end = 8.dp, bottom = 4.dp),
+                Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
                 lines.forEach { (text, tone) -> StatusLine(text, tone) }
             }
             if (facts.phase == AttachmentCardPhase.UPLOADING && onCancel != null)
