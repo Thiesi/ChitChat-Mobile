@@ -66,6 +66,8 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -287,7 +289,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         Scaffold(
             topBar = {
                 if (!compactKeyboard) TopAppBar(
-                    title = { Text(stringResource(if (entry?.destination?.route == NOTIFICATIONS_ROUTE) R.string.notifications_title
+                    title = { BarTitle(if (entry?.destination?.route == NOTIFICATIONS_ROUTE) R.string.notifications_title
                         else if (entry?.destination?.route == SEARCH_ROUTE) R.string.message_search_title
                         else if (entry?.destination?.route?.startsWith("direct") == true) R.string.dm_title
                         else if (entry?.destination?.route?.startsWith("conversation/") == true || entry?.destination?.route == NOTIFICATION_ROOM_ROUTE)
@@ -296,7 +298,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         "account", NOTIFICATION_ACCOUNT_ROUTE -> R.string.account
                         "rooms" -> R.string.rooms_title
                         else -> R.string.app_name
-                    })) },
+                    }) },
                     navigationIcon = {
                         if (!atHome) TextButton(onClick = { nav.popBackStack() }) { Text(stringResource(R.string.back)) }
                     },
@@ -730,4 +732,20 @@ private fun SettingsScreen(state: SettingsUiState, model: SettingsViewModel, can
         },
         dismissButton = { TextButton(onClick = { confirmForget = false }) { Text(stringResource(R.string.cancel)) } },
      modifier = Modifier.lanternDialogEdge())
+}
+
+/** Top-bar titles never break mid-word (A-04). The wordmark is a logotype: one line at the
+ * display face's 1.0 size, independent of the font scale. Every other title follows the font
+ * scale on one ellipsized line and keeps its full text in semantics as a heading.
+ */
+@Composable
+internal fun BarTitle(@androidx.annotation.StringRes title: Int) {
+    val text = stringResource(title)
+    if (title == R.string.app_name) {
+        val size = with(androidx.compose.ui.platform.LocalDensity.current) { 22.dp.toSp() }
+        Text(text, Modifier.testTag("bar_wordmark").semantics { heading(); contentDescription = text },
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = size, lineHeight = size * 1.27f),
+            maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Visible)
+    } else Text(text, Modifier.testTag("bar_title").semantics { heading() }, maxLines = 1,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
 }

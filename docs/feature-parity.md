@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[A-floor fixes F1–F3](milestones/A-floor-f1-f3.md) make bar titles one line (with a fixed-size wordmark), give bounded room/DM headers a fade plus More/Back to top, and make the Details marker shape-distinct with per-state descriptions. Presentation only.
+
 [M5g7d DM attachment controls](milestones/M5g7d-direct-attach-controls.md) brings the room attachment flow to direct messages through the DM actor, with DM availability, rate-limit and disclosure rules. Attachments can now be sent in rooms and DMs; downloads, previews, Save/Share, share-in and provider/live acceptance remain pending.
 
 [M5g7c room attachment reconciliation](milestones/M5g7c-room-attach-reconciliation.md) adds Check history, person-confirmed SHA evidence and the accepted "Send again?" risk dialog for unknown room uploads. Room attachments are usable end to end in the app; DM files, downloads, previews, sharing and provider/live acceptance remain pending.

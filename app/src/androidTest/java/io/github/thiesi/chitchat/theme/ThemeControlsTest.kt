@@ -86,9 +86,23 @@ class ThemeControlsTest {
             if(Build.VERSION.SDK_INT>=34) compose.onRoot().tryPerformAccessibilityChecks()
             if(Build.VERSION.SDK_INT>=28) {
                 val palette=listOf(Lantern.light,Lantern.dark,Lantern.amoledBlack)[theme]
-                val expected=when(kind) { 1,3 -> palette.unsureLine;2 -> palette.error;else -> palette.signature }
+                // States differ by shape (dot, help, error octagon), each drawn in its own color on ground (A-05).
+                val expected=when(kind) { 1,3 -> palette.warning;2 -> palette.error;else -> palette.signatureText }
                 val pixels=compose.onNodeWithTag("attention").captureToImage().toPixelMap()
-                assertEquals("theme=$theme, status=$kind",expected.toArgb(),pixels[pixels.width/2,pixels.height/2].toArgb())
+                fun near(a: androidx.compose.ui.graphics.Color,b: androidx.compose.ui.graphics.Color)=
+                    kotlin.math.abs(a.red-b.red)<0.04f && kotlin.math.abs(a.green-b.green)<0.04f && kotlin.math.abs(a.blue-b.blue)<0.04f
+                // Thin antialiased strokes rarely hit the exact color: accept a pixel lying on the ground-to-color
+                // blend, at least halfway towards the state color.
+                val g=palette.ground
+                fun strokeOf(p: androidx.compose.ui.graphics.Color): Boolean {
+                    val dr=expected.red-g.red; val dg=expected.green-g.green; val db=expected.blue-g.blue
+                    val t=((p.red-g.red)*dr+(p.green-g.green)*dg+(p.blue-g.blue)*db)/(dr*dr+dg*dg+db*db)
+                    val rr=p.red-(g.red+t*dr); val rg=p.green-(g.green+t*dg); val rb=p.blue-(g.blue+t*db)
+                    return t>=0.5f && rr*rr+rg*rg+rb*rb<0.0025f
+                }
+                val colors=(0 until pixels.width).flatMap { x -> (0 until pixels.height).map { y -> pixels[x,y] } }
+                assertTrue("theme=$theme, status=$kind draws its own color",colors.any(::strokeOf))
+                if(kind==0) assertTrue("generic is a filled dot",near(pixels[pixels.width/2,pixels.height/2],expected))
             }
         }
     }

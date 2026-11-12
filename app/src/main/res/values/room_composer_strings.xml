@@ -1,5 +1,7 @@
 <resources>
     <string name="conversation_details">Room details</string>
     <string name="conversation_details_attention">Updates or actions need attention</string>
+    <string name="details_attention_uncertain">Not sure something went through. Open details to check.</string>
+    <string name="details_attention_failed">Something didn’t work. Open details for what happened.</string>
     <string name="conversation_send_unavailable_details">Sending unavailable. Open room details for the reason and recovery actions.</string>
 </resources>
