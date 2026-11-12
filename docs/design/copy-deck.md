@@ -182,7 +182,7 @@ change with them.
 | Resource | Current | Proposed | Tests asserting the exact text |
 |---|---|---|---|
 | `rooms_leave_title` | Leave this room? | Leave {room}? | RoomsJourneyTest |
-| `rooms_owner_immutable` | Room ownership cannot be transferred here. The owner cannot leave the room. | Owners can't leave their room. | RoomsJourneyTest |
+| `rooms_owner_immutable` | Room ownership cannot be transferred here. The owner cannot leave the room. | Owners can't leave their room. (Once the minimum includes v3.9.0: "Owners can't leave their room. Hand it to someone else first." with Transfer ownership…, administration.md P-217) | RoomsJourneyTest |
 | `rooms_public_help` | Public rooms are discoverable. Joining is required to post and receive room realtime events. | Open to everyone on this server. Join to post. | — |
 | `rooms_unlisted_help` | Unlisted rooms are hidden from ordinary discovery until joined or invited… | Hidden from the room list. Anyone with the link can see it and join. | — |
 | `rooms_private_help` | Private rooms require membership or privileged moderation access to read history… | Private, by invitation. Invited people can see its details and join. | — |

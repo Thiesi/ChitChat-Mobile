@@ -95,7 +95,56 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
 - **Invitations:** pending invitations with the inviter, plus **Revoke**. **Invite someone**
   searches with the room-scoped search (2–32 characters; members and already-invited people are
   excluded), then confirms "Invite {name} to {room}?".
-- Ownership can't be transferred (server rule), so the app offers no such action.
+- **Transfer ownership** (ChitChat#273, v3.9.0; **in v1**, presentation lead with the
+  technical lead, 2026-11-12, because "owners can't leave" would otherwise trap an owner):
+  - **Gating:** v3.9.0 adds no session or room field that announces transfer, so it can't be
+    presence-gated like the other v3.9.0 items, and CCM never probes the endpoint or falls
+    back on a 404. It ships when the technical lead raises the minimum server version to
+    include v3.9.0 (one rule, server-update.md). Until then it's left out and the owner
+    explanation keeps today's wording. Being in v1 means the first release needs that
+    minimum.
+  - **Who sees it:** the room's owner, and Super-Administrators, Administrators and Chat
+    Admins for rooms in their list. Room moderators and Global Moderators never see it.
+    It's gated on the session role and the room snapshot; the server stays the authority
+    (`403 forbidden`).
+  - **Where:** an **Ownership** section at the end of Room settings: "Owner: **{name}**"
+    and a **Transfer ownership…** row. It's also reached from the room details sheet's
+    owner explanation (room-presence.md).
+  - **Choose:** a full-screen picker of the room's members from the existing room snapshot,
+    with pebble, name and room role, and a local filter field when there are more than 10.
+    The current owner and guests aren't listed. The app doesn't guess other eligibility
+    (closing, closed or banned accounts); the server answers that.
+  - **Confirm:** a level-3 decision dialog, "**Make {name} the owner of {room}?**"
+    - owner acting: "{name} gets full control of the room: its settings, moderators and
+      members. You'll stay in the room as a moderator and can leave afterwards. You can't
+      undo this yourself.";
+    - administrator acting: "{name} gets full control of the room. {owner} stays in the
+      room as a moderator.";
+    - buttons **Cancel** and **Make owner** (`signature`, not `error`: nothing is deleted).
+  - **Step-up:** the request goes through `withStepUp` (only `403 step_up_required`, one
+    retry after confirmation), never another retry.
+  - **Outcomes** (never resent; every refusal keeps the picker's choice so the person can
+    pick again):
+    - success: the room is re-rendered from the returned `room`. An owner who handed the
+      room on can no longer manage it, so Room settings closes back to the room details
+      sheet with "**{name}** now owns {room}. You're a moderator now." (level 1). An
+      administrator stays in Room settings with the new owner shown;
+    - `409 already_owner`: "{name} already owns this room." and the room is re-read;
+    - `409 transfer_target_not_eligible`: "**{name} can't own this room.** Choose someone
+      else.";
+    - `404 membership_not_found`: "{name} isn't in this room any more." and the member list
+      is re-read;
+    - `409 ownership_changed`: "**The room's owner or members changed.** Check the room and
+      try again." with **Check room** (one room GET, then the picker reopens on the fresh
+      list);
+    - `403 forbidden`: "You can't hand on this room." and the room is re-read (this covers
+      a room that was handed on meanwhile and an owner whose role is higher);
+    - `403 birth_date_required` / `minimum_age_not_met` can't occur here, because CCM never
+      offers an administrator's self-takeover;
+    - unknown (no response): "**Not sure the transfer went through.**" with **Check room**,
+      which re-reads the room once and shows its owner. Nothing is resent.
+  - **Later (not in v1):** an administrator taking over a room they aren't in (naming
+    themselves, ChitChat#273). That stays on the website.
 
 ## Server status (read only)
 
@@ -153,4 +202,5 @@ An emergency switch, so it's on the phone, behind step-up.
 | P-206 | People uses search, the Everyone/Staff/Banned/Muted/Closing chips with server counts, the two sorts and cursor paging, and relies on the minimum server version (3.7.0), which includes #191 (no older-server fallback). Rows show the most important restriction or sign-in fact. | U, C |
 | P-207 | A person's staff view shows roles, dates, active ban and mute, closing date and report counts, with only the server-allowed everywhere actions. Roles, password reset and audit stay web-only. | U, C |
 | P-208 | Room settings send the full editable state, warn before removing guests, and never resend. Members and invitations follow the ranks. Delete and restore stay web-only. | U, C |
+| P-217 | (Ships when the minimum includes v3.9.0; no presence gate or endpoint probe.) Transfer ownership is shown only to the owner and to Super-Administrators, Administrators and Chat Admins for their listed rooms. It picks a non-guest member other than the owner, confirms with the actor-specific dialog, goes through `withStepUp`, and is never resent. already_owner, transfer_target_not_eligible, membership_not_found, ownership_changed, forbidden and unknown each show their own line, and the re-reads are explicit. A former owner returns to the room details sheet as a moderator. Self-takeover stays web-only. | U, C |
 | P-209 | Server status is read-only and shows no personal data. Lockdown is Super-Administrator-only, explains its effects, needs step-up, and reports the sign-out count. | U, C |
