@@ -65,6 +65,19 @@ no service to declare.
 | Unregistered | Forget the record locally, then one best-effort revoke for the same signed-in account. Nothing is sent back to the distributor, so there's no loop |
 | Registration failed | Forget the record and report network, action-required or other |
 
+## Status honesty
+
+"On" means the server confirmed the distributor's **current** endpoint; a registration id alone doesn't count.
+- A new endpoint (rotation) clears the confirmation until the server answers.
+- If it is refused, invalid or its outcome is unknown, the record is marked **Needs setup**, and the
+  held endpoint is dropped, never replayed. The server may still hold the old endpoint, so pushes may
+  have stopped. The status shows the refusal or unknown outcome, and after a restart it reads Needs
+  setup, never On.
+- An endpoint being sent when the process dies also reads Needs setup after the restart.
+- Only Turn on again clears it.
+
+The Turn on screen (part B) shows these states.
+
 ## Sign-out and ended sessions
 
 `SessionRepository` calls `PushTeardown.retire` inside its lock, before clearing the saved session:
@@ -125,6 +138,8 @@ JVM tests:
   - stale answers can't revive a record;
   - the record lives exactly as long as its login session (restore keeps it; a new sign-in, another
     account or no account drops it);
+  - a cold start shows On only for a confirmed current endpoint; an endpoint in flight reads Needs
+    setup after a restart; Turn on again clears a recorded failure;
 - `PushRegistrarTest`:
   - subscribe and adopt; rotation with `replaces_id`; named refusal;
   - stale-instance and foreign-key fencing;
@@ -133,6 +148,7 @@ JVM tests:
   - distributor unregister cleans up with one revoke and no echo;
   - registration failure shows an honest status and drops the record;
   - start is gated on discovery;
+  - a dropped held rotation (409 or 500) never stays On, and reads Needs setup after a restart;
   - nothing handed to the connector (whose store is its SQLite database) contains key material;
 - `SessionRepositoryTest`:
   - the revoke carries the retiring cookies and CSRF;

@@ -119,6 +119,39 @@ class PushLocalTest {
         assertTrue("Forgetting is local: the distributor already dropped it", connector.unregistered.isEmpty())
     }
 
+    @Test fun aColdStartShowsOnOnlyForAConfirmedCurrentEndpoint() {
+        val record = prep(7)
+        fun coldStatus(saved: PushRecord): PushPhoneStatus {
+            vault.record = saved
+            return PushLocal(vault, connector) {}.also { it.record() }.status.value
+        }
+        assertEquals(PushPhoneStatus.Waiting, coldStatus(record))
+        assertEquals(PushPhoneStatus.On, coldStatus(record.copy(12, null, confirmed = true)))
+        assertEquals("A registration id alone is no confirmed current subscription",
+            PushPhoneStatus.Waiting, coldStatus(record.copy(12, null, confirmed = false)))
+        assertEquals(PushPhoneStatus.NeedsSetup, coldStatus(record.copy(12, null, confirmed = true, needsSetup = true)))
+    }
+
+    @Test fun anEndpointInFlightReadsNeedsSetupAfterARestart() {
+        val record = prep(7)
+        local.adopt(record.instance, PushRegistration(12, null))
+        local.endpointArrived(record.instance, null) // Being sent when the process died.
+        assertEquals(PushPhoneStatus.Waiting, local.status.value)
+        assertEquals(PushPhoneStatus.NeedsSetup, PushLocal(vault, connector) {}.also { it.record() }.status.value)
+        local.endpointArrived(record.instance, "https://push.example/held") // Held for its session instead.
+        assertEquals(PushPhoneStatus.Waiting, PushLocal(vault, connector) {}.also { it.record() }.status.value)
+    }
+
+    @Test fun turningOnAgainClearsARecordedFailure() {
+        val record = prep(7)
+        local.endpointFailed(record.instance, PushPhoneStatus.Unconfirmed)
+        assertEquals(PushPhoneStatus.Unconfirmed, local.status.value)
+        assertTrue(vault.record!!.needsSetup)
+        local.restart(record.instance)
+        assertFalse(vault.record!!.needsSetup)
+        assertEquals(PushPhoneStatus.Waiting, local.status.value)
+    }
+
     @Test fun malformedRecordsAreRejected() {
         val record = PushRecord.create(origin, 7, 100)
         assertFalse(PushRecord("http://chat.example", 7, 100, record.instance, record.privateKey, record.publicKey, record.auth).valid())

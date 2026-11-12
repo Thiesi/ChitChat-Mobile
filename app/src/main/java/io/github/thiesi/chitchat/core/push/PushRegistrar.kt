@@ -42,7 +42,10 @@ sealed interface PushPhoneStatus {
     data object Off : PushPhoneStatus
     /** Registered with the distributor; its address hasn't reached the server yet. */
     data object Waiting : PushPhoneStatus
+    /** The server confirmed this phone's current endpoint. */
     data object On : PushPhoneStatus
+    /** No confirmed current subscription (a dropped rotation, or a failure before a restart): Turn on again. */
+    data object NeedsSetup : PushPhoneStatus
     data class Refused(val reason: PushSubscribeRefusal) : PushPhoneStatus
     /** The subscribe request may or may not have reached the server. */
     data object Unconfirmed : PushPhoneStatus
@@ -68,8 +71,7 @@ class PushLocal(
         val record = try { vault.read() } catch (_: IOException) { null }
         if (!loaded) {
             loaded = true
-            mutableStatus.value = when { record == null -> PushPhoneStatus.Off
-                record.registrationId != null -> PushPhoneStatus.On; else -> PushPhoneStatus.Waiting }
+            mutableStatus.value = record?.status() ?: PushPhoneStatus.Off
         }
         return record
     }
@@ -103,20 +105,34 @@ class PushLocal(
     /** Saves the server's answer only into the record it was requested for. */
     @Synchronized fun adopt(instance: String, registration: PushRegistration): Boolean {
         val current = record()?.takeIf { it.instance == instance } ?: return false
-        vault.save(current.registered(registration))
+        vault.save(current.copy(registration.id, registration.binding, pendingEndpoint = null, confirmed = true, needsSetup = false))
         mutableStatus.value = PushPhoneStatus.On
         return true
     }
 
-    /** Keeps (or with null, drops) an endpoint for [instance] until its session can send it. */
-    @Synchronized fun hold(instance: String, endpoint: String?): Boolean {
-        val current = record()?.takeIf { it.instance == instance } ?: return false
-        if (current.pendingEndpoint != endpoint) vault.save(current.pending(endpoint))
-        return true
+    /**
+     * A new endpoint arrived: the old subscription is no longer confirmed current. [held] waits for its
+     * session; otherwise it is being sent now, and until the server answers a restart reads Needs setup.
+     */
+    @Synchronized fun endpointArrived(instance: String, held: String?) {
+        val current = record()?.takeIf { it.instance == instance } ?: return
+        vault.save(current.copy(pendingEndpoint = held, confirmed = false, needsSetup = held == null))
+        if (mutableStatus.value == PushPhoneStatus.On) mutableStatus.value = PushPhoneStatus.Waiting
     }
 
-    @Synchronized fun publish(instance: String?, status: PushPhoneStatus) {
-        if (instance == null || record()?.instance == instance) mutableStatus.value = status
+    /** The endpoint was refused, invalid or its outcome unknown. Never left showing On. */
+    @Synchronized fun endpointFailed(instance: String, status: PushPhoneStatus) {
+        val current = record()?.takeIf { it.instance == instance } ?: return
+        vault.save(current.copy(pendingEndpoint = null, confirmed = false, needsSetup = true))
+        mutableStatus.value = status
+    }
+
+    /** Turn on again: clears a recorded failure; the status follows what is confirmed. */
+    @Synchronized fun restart(instance: String) {
+        val current = record()?.takeIf { it.instance == instance } ?: return
+        val next = current.copy(needsSetup = false)
+        if (current.needsSetup) vault.save(next)
+        mutableStatus.value = next.status()
     }
 
     /** Local-only forget of [instance] after the distributor dropped it. Returns what it was. */
@@ -175,7 +191,7 @@ class PushRegistrar(
         if (current.generation != expected.generation || current.user?.id != user.id) return@withLock false
         withContext(io) {
             val record = local.prepare(origin, user.id) ?: return@withContext false
-            local.publish(record.instance, if (record.registrationId != null) PushPhoneStatus.On else PushPhoneStatus.Waiting)
+            local.restart(record.instance)
             connector.register(record.instance, vapid)
             true
         }
@@ -189,19 +205,18 @@ class PushRegistrar(
         val record = withContext(io) { local.record() }?.takeIf { it.instance == instance } ?: return
         val keys = if (p256dh == null || auth == null) null else validEndpointKeys(endpoint, p256dh, auth)
         if (keys == null || keys.p256dh != record.publicKey || keys.auth != record.auth) {
-            withContext(io) { local.hold(instance, null) }
-            local.publish(instance, PushPhoneStatus.Refused(PushSubscribeRefusal.DESTINATION))
+            withContext(io) { local.endpointFailed(instance, PushPhoneStatus.Refused(PushSubscribeRefusal.DESTINATION)) }
             return
         }
         val state = sessions.state.value
         // Only the account that turned push on may register it. A cold process (a distributor callback
         // with no signed-in session yet) keeps the endpoint sealed until that session is back.
         if (state.phase != SessionPhase.AUTHENTICATED || !record.belongsTo(state.server?.value.orEmpty(), state.user?.id ?: -1)) {
-            withContext(io) { local.hold(instance, endpoint) }
+            withContext(io) { local.endpointArrived(instance, endpoint) }
             return
         }
         // Sent once: a refusal or unknown outcome drops the held endpoint, so nothing is replayed later.
-        withContext(io) { local.hold(instance, null) }
+        withContext(io) { local.endpointArrived(instance, null) }
         val body = pushSubscribeBody(keys, record.registrationId)
         try {
             val access = sessions.openAccess(state)
@@ -209,7 +224,8 @@ class PushRegistrar(
             withContext(io) { local.adopt(instance, registration) }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: ApiFailure) {
-            local.publish(instance, failure.subscribeRefusal()?.let { PushPhoneStatus.Refused(it) } ?: PushPhoneStatus.Unconfirmed)
+            val status = failure.subscribeRefusal()?.let { PushPhoneStatus.Refused(it) } ?: PushPhoneStatus.Unconfirmed
+            withContext(io) { local.endpointFailed(instance, status) }
         }
     }
 

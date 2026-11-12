@@ -212,6 +212,34 @@ class PushRegistrarTest {
         assertNull(vault.record!!.pendingEndpoint)
     }
 
+    @Test fun aDroppedHeldRotationNeverStaysOn() = runTest {
+        for ((reply, expected) in listOf(
+            json("""{"error":{"code":"push_subscription_limit","message":"fixture"}}""", 409) to
+                PushPhoneStatus.Refused(PushSubscribeRefusal.LIMIT),
+            json("""{"error":{"code":"server_error","message":"fixture"}}""", 500) to PushPhoneStatus.Unconfirmed)) {
+            vault.record = null
+            savedSessions.saved = null
+            sessions = repository()
+            login()
+            val record = local.prepare(origin(), 7)!!
+            local.adopt(record.instance, PushRegistration(12, null))
+            assertEquals(PushPhoneStatus.On, local.status.value)
+            sessions = repository() // Cold process: the rotation arrives before any session connects.
+            val registrar = registrar()
+            registrar.onNewEndpoint(record.instance, "https://push.example/rotated", record.publicKey, record.auth)
+            awaitReal { vault.record?.pendingEndpoint != null }
+            assertEquals("A held rotation is not a confirmed subscription", PushPhoneStatus.Waiting, local.status.value)
+            server.enqueue(json(bootstrap(user)))
+            server.enqueue(reply)
+            sessions.connect(address())
+            awaitReal { local.status.value != PushPhoneStatus.Waiting }
+            assertEquals(expected, local.status.value)
+            assertNull("Dropped, never replayed", vault.record!!.pendingEndpoint)
+            assertEquals(PushPhoneStatus.NeedsSetup, PushLocal(vault, connector) {}.also { it.record() }.status.value)
+            repeat(server.requestCount) { server.takeRequest(100, TimeUnit.MILLISECONDS) }
+        }
+    }
+
     @Test fun distributorUnregisterCleansUpLocallyAndRevokesOnce() = runTest {
         login()
         val registrar = registrar()

@@ -49,15 +49,26 @@ class PushRecord(
     val binding: String? = null,
     /** A distributor endpoint that arrived while its session wasn't signed in; sent once it is. */
     val pendingEndpoint: String? = null,
+    /** The server confirmed the distributor's current endpoint. A newer endpoint clears it until confirmed. */
+    val confirmed: Boolean = false,
+    /** An endpoint was refused, dropped or left unconfirmed: pushes may have stopped until Turn on runs again. */
+    val needsSetup: Boolean = false,
     val schema: Int = 1,
 ) {
     fun belongsTo(origin: String, userId: Long) = this.origin == origin && this.userId == userId
     fun ownedBy(origin: String, userId: Long, signedInAt: Long) = belongsTo(origin, userId) && this.signedInAt == signedInAt
 
-    fun registered(registration: PushRegistration) = PushRecord(origin, userId, signedInAt, instance, privateKey, publicKey,
-        auth, registration.id, registration.binding, null, schema)
-    fun pending(endpoint: String?) = PushRecord(origin, userId, signedInAt, instance, privateKey, publicKey, auth,
-        registrationId, binding, endpoint, schema)
+    fun copy(registrationId: Long? = this.registrationId, binding: String? = this.binding,
+        pendingEndpoint: String? = this.pendingEndpoint, confirmed: Boolean = this.confirmed,
+        needsSetup: Boolean = this.needsSetup) = PushRecord(origin, userId, signedInAt, instance, privateKey, publicKey,
+        auth, registrationId, binding, pendingEndpoint, confirmed, needsSetup, schema)
+
+    /** What a record honestly means on a cold start; the in-memory status adds the failure detail. */
+    fun status(): PushPhoneStatus = when {
+        needsSetup -> PushPhoneStatus.NeedsSetup
+        confirmed -> PushPhoneStatus.On
+        else -> PushPhoneStatus.Waiting
+    }
 
     fun valid(): Boolean = schema == 1 && userId > 0 && signedInAt >= 0 && origin.startsWith("https://") &&
         instance.length in 1..64 && decode(privateKey)?.size == 32 &&
