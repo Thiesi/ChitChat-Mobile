@@ -26,7 +26,9 @@ internal fun DirectAttachmentDraft.cardFacts(observation: AttachmentPolicyObserv
 private val replaceablePhases = setOf(DirectAttachmentPhase.PREPARING, DirectAttachmentPhase.READY,
     DirectAttachmentPhase.PRIVACY_CHOICE, DirectAttachmentPhase.FAILED)
 
-internal fun DirectAttachmentDraft.removable() = phase in replaceablePhases && upload == null
+/** READY may still carry a finished attempt (after a refusal or accepted duplicate risk); the VM
+ * binds Remove/Replace to that exact attempt, so only the phase gates the control. */
+internal fun DirectAttachmentDraft.removable() = phase in replaceablePhases
 
 internal fun DirectAttachmentReviewPhase.shared() = when (this) {
     DirectAttachmentReviewPhase.CHECKING -> AttachmentReviewPhase.CHECKING

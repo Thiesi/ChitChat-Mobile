@@ -322,7 +322,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             }
         }
     }
-    val attachmentCard: @Composable () -> Unit = { attachmentFacts?.let { facts ->
+    val attachmentCard: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { cardLimit -> attachmentFacts?.let { facts ->
         val original = attachment
         // An upload itself sets sending; its Cancel must stay usable while the body is still being written.
         AttachmentCard(facts, enabled = !obscured && !composerDialog && (!state.sending || original.phase == RoomAttachmentPhase.UPLOADING),
@@ -340,12 +340,12 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 }
             } },
             onCancel = original.takeIf { it.phase == RoomAttachmentPhase.UPLOADING && it.transfer?.fullBodyReported != true }?.let { {
-                if (isCurrentEntry() && !obscured) model.cancelAttachmentUpload(displayedSession, roomId, it, isCurrentEntry) } })
+                if (isCurrentEntry() && !obscured) model.cancelAttachmentUpload(displayedSession, roomId, it, isCurrentEntry) } }, maxHeight = cardLimit)
     } }
-    val attachNotices: @Composable () -> Unit = {
+    val attachNotices: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { noticeLimit ->
         AttachNotices(attach, displayedSession, persisting = attach.invalidChecked && !session.busy &&
             attachPolicy == AttachmentPolicy.Invalid, canCheckAgain = !session.busy && now >= session.retryAtMillis,
-            onCheckAgain = { if (isCurrentEntry()) onRefreshSession() })
+            onCheckAgain = { if (isCurrentEntry()) onRefreshSession() }, maxHeight = noticeLimit)
     }
     BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
     val compact = maxHeight < 240.dp
@@ -381,7 +381,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             model.realtime?.state?.value?.takeIf { it.generation==displayedSession.generation && it.selectedRoomId==roomId }
                 ?.users.orEmpty().filter { it.id!=displayedSession.user?.id }.map { it.username } },inlineChoices=inlineCompletion && !detailsOpen)
     val header: @Composable (Boolean,() -> Unit) -> Unit = { inDetails,close ->
-            if (inDetails && compact) { attachNotices(); attachmentCard() }
+            if (inDetails && compact) { attachNotices(androidx.compose.ui.unit.Dp.Infinity); attachmentCard(androidx.compose.ui.unit.Dp.Infinity) }
             if (inDetails && completionComposer.choice!=null) {
                 Text(stringResource(R.string.completion_title))
                 CompletionSuggestions(completionComposer,fromDetails=true,onAccepted=close)
@@ -541,7 +541,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             viewing = state.loaded && !state.stale && state.context != null && !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured,
             publishing = ready && !state.busy && !composerDialog && !obscured && model.canSend())
         if (!replyInline) replyControl(false)
-        if (!compact) { attachNotices(); attachmentCard() }
+        if (!compact) { attachNotices(headerLimit * 0.5f); attachmentCard(headerLimit * 0.5f) }
         if (inlineCompletion && !detailsOpen) CompletionSuggestions(completionComposer)
         Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
