@@ -11,7 +11,7 @@ from unittest.mock import patch
 import native_journeys as runner
 
 
-TRACE = """10-21 05:20:00.498  4531  4531 I ImeTracker: io.github.thiesi.chitchat.debug:4cecf77: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT_BY_INSETS_API fromUser false
+TRACE = """10-21 05:20:00.498  4531  4531 I ImeTracker: de.networkxxiii.chitchat.debug:4cecf77: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT_BY_INSETS_API fromUser false
 10-21 05:20:05.532 712 830 I ImeTracker: system_server:abc: onCancelled at PHASE_WM_ABORT_SHOW_IME_POST_LAYOUT
 10-21 05:20:06.439 4531 4531 I TestRunner: failed: keyboardTap(io.github.thiesi.chitchat.testing.NativeInputWindowTest)
 """
@@ -108,11 +108,11 @@ class TraceTests(unittest.TestCase):
         raw = TRACE + """10-21 05:20:06.440 4531 4531 I TestRunner: private-body-canary
 10-21 05:20:06.441 4531 4531 I App: private-body-canary
 10-21 05:20:06.442 4531 4531 I ImeTracker: other.package:abc: onShown private-body-canary
-10-21 05:20:06.443 4531 4531 I ImeTracker: io.github.thiesi.chitchat.debug:abc: private-body-canary
-10-21 05:20:06.444 4531 4531 I ImeTracker: io.github.thiesi.chitchat.debug:abc: onShown private-body-canary PHASE_PRIVATE_BODY_CANARY
+10-21 05:20:06.443 4531 4531 I ImeTracker: de.networkxxiii.chitchat.debug:abc: private-body-canary
+10-21 05:20:06.444 4531 4531 I ImeTracker: de.networkxxiii.chitchat.debug:abc: onShown private-body-canary PHASE_PRIVATE_BODY_CANARY
 10-21 05:20:06.445 4531 4531 I TestRunner: started: parameter[private-body-canary](io.github.thiesi.chitchat.Test)
 10-21 05:20:06.446 4531 4531 I TestRunner: started: safe(io.github.thiesi.chitchat.Test) private-body-canary
-invalid private-body-canary I ImeTracker: io.github.thiesi.chitchat.debug:abc: onShown
+invalid private-body-canary I ImeTracker: de.networkxxiii.chitchat.debug:abc: onShown
 """
         trace = runner.filtered_trace(raw)
         self.assertNotIn("canary", trace.lower())

@@ -10,7 +10,7 @@ import subprocess
 import time
 import zipfile
 
-APP = "io.github.thiesi.chitchat.debug"
+APP = "de.networkxxiii.chitchat.debug"
 DIAGNOSTIC = "io.github.thiesi.chitchat.diagnostic.focus"
 OWNERS = {"TARGET_HOST", "SYSTEM_UI", "OTHER_COMPONENT", "NO_WINDOW"}
 STAGES = {"COMPOSE", "NATIVE_TAP", "FOCUS_IME", "TEXT_PROOF"}
