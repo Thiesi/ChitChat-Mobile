@@ -1,5 +1,15 @@
 # Independently verifiable implementation milestones
 
+[M5g7d DM attachment controls](milestones/M5g7d-direct-attach-controls.md) completes native attachment sending. Next: authenticated downloads and memory-only previews (after PR187's metadata disposition), then the image viewer, Save/Share and share-in.
+
+[M5g7c room attachment reconciliation](milestones/M5g7c-room-attach-reconciliation.md) completes the native room attachment flow. Next: DM attachment controls reusing the shared components, then authenticated downloads and previews.
+
+[M5g7b room attachment Send](milestones/M5g7b-room-attach-send.md) connects the room actor to native Send/progress/Cancel/refusal UI. Next: M5g7c room UNKNOWN reconciliation controls, then DM controls.
+
+[M5g7a room attach controls](milestones/M5g7a-room-attach-controls.md) connects the room owner to native picker/card/privacy-choice/Remove/Replace controls without attachment Send. Next: room Send with progress/Cancel/refusals (M5g7b), room UNKNOWN reconciliation UI (M5g7c), then DM controls reusing the shared components.
+
+[M5g6a image/preview metadata](milestones/M5g6a-attachment-preview-metadata.md) supplies released nullable/oriented geometry and namespace-bound rendition descriptors, with no byte fetch or native image behavior. After its own gates/reviews, continue original-session authenticated binary transport/cache ownership and the native files/media consumers. Native upload controls are delivered in M5g7a–d. Later framing must use positive display geometry and bounded decoding, never allocate from raw dimensions or assume `previewable` means a rendition exists.
+
 [M5g5f DM upload reconciliation](milestones/M5g5f-direct-attachment-reconciliation-state.md) completes the internal DM explicit history/SHA/person-confirmation/duplicate-risk state. After its own full gates/reviews, connect native picker/card/privacy/unknown controls to the delivered room/DM owners, then authenticated downloads and sharing. Native modal consumers must suppress read/typing and bind actual entry/STARTED/current owner/disclosure. [Issue184](https://github.com/Thiesi/ChitChat-Mobile/issues/184) needs coordinator/presentation disposition before evidence UI; no timestamp tolerance or automatic attachment queue/retry is assumed.
 
 [M5g5e DM upload actor](milestones/M5g5e-direct-attachment-upload-state.md) supplies original-bound serialized UPLOAD state and actual root lifecycle handling. After its own gates/reviews, implement explicit DM history/SHA/person-confirmation/duplicate-risk state while preserving independent uncertainty, then native picker/card/privacy/unknown controls, downloads and sharing. The clock-domain evidence follow-up [184](https://github.com/Thiesi/ChitChat-Mobile/issues/184) requires coordinator/presentation disposition before native evidence UI; no tolerance is assumed.

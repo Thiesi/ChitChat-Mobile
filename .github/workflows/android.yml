@@ -9,8 +9,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-${{ github.ref }}
-  cancel-in-progress: true
+  # PR heads supersede each other; every main commit keeps its own complete post-merge run.
+  group: android-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:

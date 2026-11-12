@@ -1199,6 +1199,12 @@ class ConversationViewModel internal constructor(private val operations: Convers
 
     fun canSend(): Boolean = attachments[mutable.value.roomId] == null && composerCanSend()
 
+    /** Paperclip/admission readiness only. selectAttachment still rechecks every original fact. */
+    internal fun canBeginAttachment(): Boolean {
+        val value = mutable.value
+        return foreground && attachmentBudget != null && !value.busy && !value.sending && composerCanSend()
+    }
+
     private fun composerCanSend(): Boolean {
         val value = mutable.value
         val current = session.value
