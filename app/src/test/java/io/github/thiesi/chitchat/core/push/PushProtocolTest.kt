@@ -3,6 +3,7 @@ package io.github.thiesi.chitchat.core.push
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.network.SessionHttp
+import io.github.thiesi.chitchat.core.network.apiJson
 import io.github.thiesi.chitchat.core.server.AddressResult
 import io.github.thiesi.chitchat.core.server.ServerAddress
 import kotlinx.coroutines.test.runTest
@@ -114,5 +115,74 @@ class PushProtocolTest {
         assertEquals("ChitChat-Mobile/1.0 (Android 15)", pushDeviceLabel(device("ChitChat-Mobile/1.0 (Android 15)")))
         assertTrue(pushDeviceLabel(device("x".repeat(80)))!!.length <= 48)
         assertNull(pushDeviceLabel(device(null)))
+    }
+
+    private val point = PushRecord.create("https://chat.example", 1).publicKey
+    private val secret = "AAECAwQFBgcICQoLDA0ODw"
+
+    @Test fun vapidKeyMustBeTheConnectorsForm() {
+        assertEquals(point, validVapidKey(point))
+        assertEquals(point, validVapidKey("$point="))
+        assertNull(validVapidKey(point.dropLast(1)))
+        assertNull(validVapidKey("C" + point.drop(1))) // First byte 0x08, not a 0x04 uncompressed point.
+        assertNull(validVapidKey(point.replace(point[5], '+')))
+        assertNull(validVapidKey(null))
+    }
+
+    @Test fun discoveryIsAvailableOnlyForAnExplicitOnWithAValidKey() {
+        fun parse(json: String) = apiJson.decodeFromString(WebPushDiscoverySerializer, json)
+        assertEquals(point, (parse("""{"enabled":true,"vapid_public_key":"$point"}""") as WebPushDiscovery.Available).vapidKey)
+        for (json in listOf("""{"enabled":false,"vapid_public_key":"$point"}""", """{"enabled":"true","vapid_public_key":"$point"}""",
+            """{"enabled":true}""", """{"enabled":true,"vapid_public_key":null}""", """{"enabled":true,"vapid_public_key":"short"}""",
+            "null", "[]")) assertEquals(json, WebPushDiscovery.Unavailable, parse(json))
+    }
+
+    @Test fun endpointAndKeysAreCheckedBeforeLeavingThePhone() {
+        val keys = validEndpointKeys("https://push.example/up/abc?x=1", "$point=", secret)!!
+        assertEquals(point, keys.p256dh); assertEquals("PushEndpointKeys", keys.toString())
+        for (endpoint in listOf("http://push.example/a", "https://user@push.example/a", "https://push.example/a#f",
+            "https:///a", "https://push.example/" + "a".repeat(2048), "https://push.example/ä", "not a uri"))
+            assertNull(endpoint, validEndpointKeys(endpoint, point, secret))
+        assertNull(validEndpointKeys("https://push.example/a", secret, secret))
+        assertNull(validEndpointKeys("https://push.example/a", point, point))
+        assertNull(validEndpointKeys("https://push.example/a", point, "%%%"))
+    }
+
+    @Test fun subscribeBodyCarriesTheFixedLabelAndOptionalReplacement() {
+        val keys = validEndpointKeys("https://push.example/a", point, secret)!!
+        val first = apiJson.parseToJsonElement(pushSubscribeBody(keys, null)).jsonObject
+        assertEquals(setOf("endpoint", "p256dh", "auth", "device_label"), first.keys)
+        assertEquals("ChitChat for Android", first.getValue("device_label").jsonPrimitive.content)
+        assertEquals("4", apiJson.parseToJsonElement(pushSubscribeBody(keys, 4)).jsonObject.getValue("replaces_id").jsonPrimitive.content)
+    }
+
+    @Test fun subscribeReplyIsStrict() = runTest {
+        reply("""{"subscribed":true,"id":12,"binding":"b-1"}""")
+        val registration = api.subscribePush("{}", csrf)
+        assertEquals(12L, registration.id); assertEquals("b-1", registration.binding)
+        val request = server.takeRequest()
+        assertEquals("/api/v1/push/subscribe.php", request.url.encodedPath); assertEquals(csrf, request.headers["X-CSRF-Token"])
+        reply("""{"subscribed":true,"id":13}""")
+        assertNull(api.subscribePush("{}", csrf).binding)
+        for (bad in listOf("""{"subscribed":"true","id":1}""", """{"subscribed":false,"id":1}""", """{"subscribed":true,"id":0}""",
+            """{"subscribed":true}""", """{"subscribed":true,"id":1,"binding":""}""", """{"subscribed":true,"id":1,"binding":"${"x".repeat(65)}"}""",
+            """{"subscribed":true,"id":1,"binding":"has space"}""")) {
+            reply(bad)
+            val failure = try { api.subscribePush("{}", csrf); null } catch (f: ApiFailure) { f }
+            assertNotNull(bad, failure)
+        }
+    }
+
+    @Test fun onlyNamedRefusalsAreDefinite() {
+        fun refusal(status: Int?, code: String?, kind: FailureKind = FailureKind.HTTP) = ApiFailure(kind, status, code).subscribeRefusal()
+        assertEquals(PushSubscribeRefusal.CONFLICT, refusal(409, "push_subscription_conflict"))
+        assertEquals(PushSubscribeRefusal.LIMIT, refusal(409, "push_subscription_limit"))
+        assertEquals(PushSubscribeRefusal.PROVIDER_UNAVAILABLE, refusal(503, "push_provider_unavailable"))
+        assertEquals(PushSubscribeRefusal.DESTINATION, refusal(400, "validation_error"))
+        assertEquals(PushSubscribeRefusal.RATE_LIMITED, refusal(429, null))
+        assertEquals(PushSubscribeRefusal.OTHER, refusal(403, "guest_not_allowed"))
+        assertNull(refusal(503, null)); assertNull(refusal(500, "x"))
+        assertNull(refusal(null, null, FailureKind.NETWORK)); assertNull(refusal(null, null, FailureKind.TIMEOUT))
+        assertNull(refusal(200, null, FailureKind.INCOMPATIBLE))
     }
 }
