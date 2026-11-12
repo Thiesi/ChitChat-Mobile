@@ -55,11 +55,15 @@ internal fun AttachButton(availability: AttachAvailability, enabled: Boolean, on
 /** The level-1 explanation shown instead of the choice sheet when uploads are off. */
 @Composable
 internal fun AttachUnavailableNotice(availability: AttachAvailability, installation: String, persisting: Boolean,
-    canCheckAgain: Boolean, onCheckAgain: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    canCheckAgain: Boolean, onCheckAgain: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier,
+    maxHeight: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Infinity) {
     val colors = ChitChatTheme.colors
+    // Like the card: in the composer only the text scrolls (A-04); Check again and close stay visible.
+    val bounded = maxHeight != androidx.compose.ui.unit.Dp.Infinity
     Row(modifier.fillMaxWidth().testTag("attach_unavailable").padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+        Column(Modifier.weight(1f).then(if (bounded) Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState())
+            else Modifier).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
             if (availability == AttachAvailability.SERVER_OFF)
                 Text(stringResource(R.string.attach_server_off), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
             else {

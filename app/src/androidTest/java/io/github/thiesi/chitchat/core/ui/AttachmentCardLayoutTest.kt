@@ -58,4 +58,23 @@ class AttachmentCardLayoutTest {
         pane()
         listOf("attachment_card_cancel", "attachment_card_progress", "composer").forEach(::fullyInsidePane)
     }
+
+    @Test fun unreadableSettingsNoticeKeepsItsActionsAndTheComposerVisible() {
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                ChitChatTheme(dark = false) {
+                    Column(Modifier.size(360.dp, 640.dp).testTag("pane")) {
+                        Spacer(Modifier.height(192.dp))
+                        Spacer(Modifier.weight(1f))
+                        AttachUnavailableNotice(AttachAvailability.SETTINGS_UNREADABLE, "chat.example.test", persisting = true,
+                            canCheckAgain = true, onCheckAgain = {}, onDismiss = {}, maxHeight = 96.dp)
+                        AttachmentCard(facts.value, enabled = true, onRemove = {}, onSendAnyway = {}, maxHeight = 96.dp)
+                        Box(Modifier.fillMaxWidth().height(56.dp).testTag("composer"))
+                    }
+                }
+            }
+        }
+        listOf("attach_check_again", "attachment_card_send_anyway", "composer").forEach(::fullyInsidePane)
+    }
 }

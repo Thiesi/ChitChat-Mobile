@@ -165,7 +165,7 @@ internal fun AttachWaitingLine(onCancel: () -> Unit, modifier: Modifier = Modifi
 /** The pending-pick line and the unavailable/not-added notices, shared by every composer. */
 @Composable
 internal fun <D : Any> AttachNotices(controls: AttachmentControls<D>, session: SessionState, persisting: Boolean,
-    canCheckAgain: Boolean, onCheckAgain: () -> Unit) {
+    canCheckAgain: Boolean, onCheckAgain: () -> Unit, maxHeight: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Infinity) {
     if (controls.picked != null) AttachWaitingLine(onCancel = { controls.picked = null })
     when (val notice = controls.notice) {
         AttachNotice.NOT_ADDED -> Text(stringResource(R.string.attach_not_added), Modifier.fillMaxWidth().padding(horizontal = 16.dp)
@@ -173,7 +173,8 @@ internal fun <D : Any> AttachNotices(controls: AttachmentControls<D>, session: S
         AttachNotice.SERVER_OFF, AttachNotice.SETTINGS_UNREADABLE -> AttachUnavailableNotice(
             if (notice == AttachNotice.SERVER_OFF) AttachAvailability.SERVER_OFF else AttachAvailability.SETTINGS_UNREADABLE,
             installationName(session), persisting = persisting, canCheckAgain = canCheckAgain,
-            onCheckAgain = { controls.invalidChecked = true; onCheckAgain() }, onDismiss = { controls.notice = null })
+            onCheckAgain = { controls.invalidChecked = true; onCheckAgain() }, onDismiss = { controls.notice = null },
+            maxHeight = maxHeight)
         null -> Unit
     }
 }
