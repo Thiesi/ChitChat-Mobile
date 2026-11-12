@@ -60,14 +60,16 @@ internal fun detailsStateDescription(kind: AttentionKind, @StringRes generic: In
 internal fun AttentionBadge(modifier: Modifier=Modifier, uncertain: Boolean=false, failed: Boolean=false) {
     val colors=ChitChatTheme.colors
     val kind=attentionKind(uncertain,failed)
-    Box(modifier.size(16.dp).background(colors.ground,CircleShape).testTag("attention_badge:${kind.name.lowercase()}"),
+    // One small-glyph size app-wide (16dp, as on card status lines); the shared stroke stays legible.
+    val ring=if (kind==AttentionKind.GENERIC) 16.dp else 20.dp
+    Box(modifier.size(ring).background(colors.ground,CircleShape).testTag("attention_badge:${kind.name.lowercase()}"),
         contentAlignment=Alignment.Center) {
         when (kind) {
             AttentionKind.GENERIC -> Box(Modifier.size(8.dp).background(colors.signatureText,CircleShape))
             AttentionKind.UNCERTAIN -> Icon(painterResource(R.drawable.ic_help),contentDescription=null,
-                Modifier.size(12.dp),tint=colors.warning)
+                Modifier.size(16.dp),tint=colors.warning)
             AttentionKind.FAILED -> Icon(painterResource(R.drawable.ic_error),contentDescription=null,
-                Modifier.size(12.dp),tint=colors.error)
+                Modifier.size(16.dp),tint=colors.error)
         }
     }
 }

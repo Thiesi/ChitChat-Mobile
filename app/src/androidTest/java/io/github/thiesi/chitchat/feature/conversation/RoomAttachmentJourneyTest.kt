@@ -181,8 +181,8 @@ class RoomAttachmentJourneyTest {
     @Test fun sendShowsProgressAndConfirmedUploadClearsTheDraftWithoutATextPost() {
         root(); sendPicked()
         compose.onNodeWithTag("attachment_card_cancel").assertIsDisplayed().assertIsEnabled()
-        compose.onNodeWithText(text(R.string.attach_sending_progress, text(R.string.attach_size_bytes, "8"),
-            text(R.string.attach_size_bytes, "16"))).assertIsDisplayed()
+        // Both figures share the unit, so it's shown once ("Sending 8 of 16 bytes").
+        compose.onNodeWithText(text(R.string.attach_sending_progress, "8", text(R.string.attach_size_bytes, "16"))).assertIsDisplayed()
         compose.onNodeWithTag("conversation_composer").assertIsNotEnabled()
         compose.runOnIdle { assertEquals("Caption fixture", wire.caption); wire.fullBody() }
         compose.onNodeWithText(text(R.string.attach_finishing)).assertIsDisplayed()

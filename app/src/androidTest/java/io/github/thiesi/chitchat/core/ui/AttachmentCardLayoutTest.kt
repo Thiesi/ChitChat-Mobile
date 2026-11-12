@@ -13,6 +13,9 @@ import androidx.compose.ui.unit.dp
 import io.github.thiesi.chitchat.core.media.AttachmentPolicyObservation
 import io.github.thiesi.chitchat.core.media.PhotoPrivacyFailure
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
+import io.github.thiesi.chitchat.R
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -76,5 +79,55 @@ class AttachmentCardLayoutTest {
             }
         }
         listOf("attach_check_again", "attachment_card_send_anyway", "composer").forEach(::fullyInsidePane)
+    }
+
+    private fun text(id: Int, vararg args: Any) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)
+
+    @Test fun clippedConsentTextOffersMoreWithTheWholeSentenceAndKeepsActionsOnTheCard() {
+        pane()
+        compose.onNodeWithTag("attachment_card_status_more", useUnmergedTree = true).assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp).performClick()
+        val privacy = text(R.string.attach_privacy_unsupported)
+        compose.onNode(hasText(privacy) and hasAnyAncestor(isDialog()), useUnmergedTree = true).assertExists()
+        compose.onNode(hasTestTag("attachment_card_send_anyway") and hasAnyAncestor(isDialog()), useUnmergedTree = true)
+            .assertDoesNotExist()
+        compose.onNode(hasText(text(R.string.rooms_close)) and hasAnyAncestor(isDialog())).performClick()
+        compose.onNodeWithTag("attachment_card_status_dialog").assertDoesNotExist()
+        fullyInsidePane("attachment_card_send_anyway")
+    }
+
+    @Test fun sharedUnitIsShownOnceWhileSending() {
+        compose.runOnIdle { }
+        facts.value = AttachmentCardFacts("notes.txt", "text/plain", 3_400_000, AttachmentCardPhase.UPLOADING, sentBytes = 1_200_000)
+        pane()
+        compose.onNodeWithText(text(R.string.attach_sending_progress, "1.2", text(R.string.attach_size_mb, "3.4")),
+            useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun settingsNoticeStacksItsTextAboveFullWidthActions() {
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                ChitChatTheme(dark = false) {
+                    Column(Modifier.size(360.dp, 640.dp).testTag("pane")) {
+                        AttachUnavailableNotice(AttachAvailability.SETTINGS_UNREADABLE, "chat.example.test", persisting = false,
+                            canCheckAgain = true, onCheckAgain = {}, onDismiss = {}, maxHeight = 96.dp)
+                    }
+                }
+            }
+        }
+        val pane = compose.onNodeWithTag("pane").getUnclippedBoundsInRoot()
+        val body = compose.onNodeWithTag("attach_unavailable_text", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val check = compose.onNodeWithTag("attach_check_again").assertIsDisplayed().getUnclippedBoundsInRoot()
+        assertTrue("Text keeps most of the width", (body.right - body.left) >= (pane.right - pane.left) * 0.6f)
+        assertTrue("Actions sit below the text", check.top >= body.bottom)
+    }
+
+    @Test fun uploadSendButtonShowsNoSecondProgressRing() {
+        compose.setContent { ChitChatTheme(dark = false) {
+            MessageSendButton("Sending", enabled = false, sending = true, onClick = {}, modifier = Modifier.testTag("send"), progress = false)
+        } }
+        compose.onAllNodes(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate), useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithTag("send").assertIsNotEnabled()
     }
 }
