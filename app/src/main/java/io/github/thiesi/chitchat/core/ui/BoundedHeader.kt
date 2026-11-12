@@ -25,8 +25,8 @@ import io.github.thiesi.chitchat.core.theme.Lantern
 import kotlinx.coroutines.launch
 
 /** A conversation header bounded to [maxHeight] so the composer always stays visible (A-04).
- * When its content overflows, a bottom fade shows it continues and More scrolls one viewport,
- * becoming Back to top at the end. The column keeps its scroll semantics. When it fits, neither
+ * When its content overflows, a short fade at the viewport's bottom shows it continues and More,
+ * on its own band below the viewport, scrolls one viewport, becoming Back to top at the end. The column keeps its scroll semantics. When it fits, neither
  * appears. Content, status precedence and the bound itself are the caller's.
  */
 @Composable
@@ -37,16 +37,21 @@ internal fun BoundedHeader(maxHeight: Dp, modifier: Modifier = Modifier, content
     // Derived, so scrolling recomposes only when the label flips, not on every pixel.
     val atEnd by remember { derivedStateOf { scroll.value >= scroll.maxValue } }
     val colors = ChitChatTheme.colors
-    Box(modifier.fillMaxWidth().heightIn(max = maxHeight).testTag("bounded_header")) {
-        Column(Modifier.fillMaxWidth().verticalScroll(scroll).padding(horizontal = 16.dp)
-            .padding(bottom = if (overflow) Lantern.target else 0.dp), content = content)
-        if (overflow) {
-            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(24.dp)
+    // When it overflows, More is its own 48dp band below the scrolling viewport, inside the same
+    // cap, so content never draws under the band or its fade; a control at the viewport's clean
+    // edge is ordinary scrolling (F2, P-216). When it fits there is no band, fade or reserve.
+    Column(modifier.fillMaxWidth().heightIn(max = maxHeight).testTag("bounded_header")) {
+        Box(Modifier.weight(1f, fill = false)) {
+            Column(Modifier.fillMaxWidth().verticalScroll(scroll).padding(horizontal = 16.dp), content = content)
+            if (overflow && !atEnd) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(24.dp)
                 .background(Brush.verticalGradient(listOf(Color.Transparent, colors.ground))))
+        }
+        if (overflow) Row(Modifier.fillMaxWidth().height(Lantern.target), horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { scope.launch {
                 if (atEnd) scroll.animateScrollTo(0)
                 else scroll.animateScrollTo((scroll.value + scroll.viewportSize).coerceAtMost(scroll.maxValue))
-            } }, modifier = Modifier.align(Alignment.BottomEnd).heightIn(min = Lantern.target).testTag("header_more")) {
+            } }, modifier = Modifier.heightIn(min = Lantern.target).testTag("header_more")) {
                 Text(stringResource(if (atEnd) R.string.header_back_to_top else R.string.header_more), color = colors.signatureText)
             }
         }

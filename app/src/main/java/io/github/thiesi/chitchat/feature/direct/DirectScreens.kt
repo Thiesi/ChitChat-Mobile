@@ -66,6 +66,7 @@ import io.github.thiesi.chitchat.core.ui.messageTime
 import io.github.thiesi.chitchat.core.ui.canAcknowledgeVisibleRead
 import io.github.thiesi.chitchat.core.ui.isReadEdgeVisible
 import io.github.thiesi.chitchat.core.ui.MessageInput
+import io.github.thiesi.chitchat.core.ui.ComposerLayout
 import io.github.thiesi.chitchat.core.ui.AttachAvailability
 import io.github.thiesi.chitchat.core.ui.AttachButton
 import io.github.thiesi.chitchat.core.ui.AttachNotice
@@ -437,8 +438,9 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     if (!replyInline) replyControl(false)
                     if (!compact) { attachNotices(headerLimit * 0.5f); attachmentCard(headerLimit * 0.5f) }
                     if (inlineCompletion && !detailsOpen) io.github.thiesi.chitchat.feature.completion.CompletionSuggestions(completionComposer)
-                    Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 12.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                    // One pinned block: a single row, or the field alone above Details/Attach/Send when narrow (P-216).
+                    ComposerLayout(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 12.dp, vertical = 4.dp),
+                        leading = {
                         run {
                             val context = state.context
                             val profileSource = profileDetailsToken
@@ -492,9 +494,11 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             }
                         }
                         if (replyInline) replyControl(true)
+                        }, field = {
                         MessageInput(completionComposer.value, completionComposer::input,
                             !state.sending && model.canEditDraft() && !composerDialog && !obscured,
-                            stringResource(if (attachment != null) R.string.attach_caption else R.string.dm_message), compact, Modifier.weight(1f).onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("dm_composer"))
+                            stringResource(if (attachment != null) R.string.attach_caption else R.string.dm_message), compact, Modifier.onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("dm_composer"))
+                        }, trailing = {
                         if (attachVisible) AttachButton(attachAvailable, enabled = !obscured && !composerDialog && !detailsOpen && !blockConfirm &&
                             !state.sending && (attachAvailable != AttachAvailability.AVAILABLE || (ready && model.canBeginAttachment() &&
                                 attachment?.removable() != false)), onClick = ::onAttach, modifier = Modifier.testTag("dm_attach"))
@@ -508,7 +512,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             enabled = !composerDialog && !detailsOpen && !blockConfirm && !obscured && (attachmentSendable ||
                                 (ready && model.canSend() && state.draft.phpTrim().isNotEmpty())),
                             sending = state.sending, modifier = Modifier.testTag("dm_send"), progress = attachment == null)
-                    }
+                    })
                 }
             }
             model.visibleAttachmentReview(displayedSession, peer, completionEntryId, isCurrentEntry)?.takeIf { paneInteractive() }?.let { review ->

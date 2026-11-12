@@ -100,6 +100,7 @@ persistence. Phase B covers the appearance switch/recreation and synthetic produ
 navigation cases. New/restyled
 presentation cases enable ATF on API34+ without adding checks to historical keyboard
 journeys. No assertion, native tap path or five-second input deadline is weakened.
+An ATF failure in the capture fixture carries failure-only, content-free layout evidence (the flagged nodes' role/tag/bounds/click/merge chain plus transcript, card and composer bounds) as a suppressed exception; the original failure is rethrown unchanged.
 
 Each delivery used its then-current full unfiltered/untraced native gate, with B's failure
 preserved under its explicit exception. PR117's separate manually dispatched, non-gating
