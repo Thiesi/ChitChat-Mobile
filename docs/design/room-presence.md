@@ -103,8 +103,8 @@ A choice sheet, opened from the header:
   - **Leave room…** (decision dialog, existing confirmation, `error`-colored confirm).
 - Owners don't see Leave room. They see the explanation instead: "Owners can't leave their
   room. Hand it to someone else first." with a **Transfer ownership…** row that opens the
-  transfer flow (administration.md, P-217), once the minimum server version includes
-  v3.9.0; until then, the existing "Owners can't leave their room". After a transfer, the former owner is a
+  transfer flow (administration.md, P-217; guaranteed by the 3.9.0 minimum). After a
+  transfer, the former owner is a
   moderator and sees Leave room like anyone.
 - Not in this slice: room editing, roles, invitations and moderation (M7). These later go into
   a steward section in this sheet.

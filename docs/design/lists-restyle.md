@@ -90,8 +90,8 @@ One `LazyColumn` (`rooms_directory`):
     `unread_mention_count`: an integer from 0 to 100,
     capped like `unread_count`, counting unread room-mention notifications after the viewer's
     read position (deleted messages and ignored senders excluded). Reading past the mention
-    clears it; non-joined rooms get 0. Contract: `docs/api/rooms.md` at `v3.9.0`. CCM's
-    minimum stays 3.7.0, so this is gated by the field's presence, never by a version check.
+    clears it; non-joined rooms get 0. Contract: `docs/api/rooms.md` at `v3.9.0`. It's
+    inside CCM's 3.9.0 minimum; the app still reads the field's presence, never a version.
     - `unread_mention_count ≥ 1`: the honey **`MentionBadge`** with "@" (theme-foundation.md)
       in the trailing column, on the badge line, to the start of the unread `CountBadge`
       with a 4dp gap. It's a marker, not a count: the number is never shown, because the
@@ -178,7 +178,7 @@ A `LazyColumn`:
 - **Drafts for peers without an inbox row** appear in a "Drafts" section at the top, with
   "Not sure it arrived" for uncertain drafts (existing flag) and Discard. The existing
   confirmation stays.
-- **Relationship states (ChitChat#274, v3.9.0, presence-gated).** Each `conversations.php`
+- **Relationship states (ChitChat#274, v3.9.0, inside the minimum).** Each `conversations.php`
   row carries `user.available` and `relationship {blocked_by_me, messaging_available}`, with
   `block-status.php`'s meaning. The row shows at most one state, in this order:
   1. `user.available == false`: **"Account no longer active"**, with a desaturated pebble.
@@ -299,9 +299,9 @@ A `LazyColumn` (`notification_list`):
 | ID | Requirement | Verify |
 |---|---|---|
 | P-90 | All four lists use the shared row anatomy, with lanterns for rooms and pebbles for people (P-10, P-11), and no cards. | S, R |
-| P-218 | (v3.9.0, presence-gated.) DM inbox rows show at most one relationship state, in order: "Account no longer active" (`user.available` false), "You blocked this person" (`blocked_by_me`), or the neutral "Messaging unavailable" (`messaging_available` false). Nothing implies the other person blocked the viewer. The state starts the secondary line and is in the description; rows stay openable; missing fields show nothing. | U, C, S |
+| P-218 | (v3.9.0, inside the minimum.) DM inbox rows show at most one relationship state, in order: "Account no longer active" (`user.available` false), "You blocked this person" (`blocked_by_me`), or the neutral "Messaging unavailable" (`messaging_available` false). Nothing implies the other person blocked the viewer. The state starts the secondary line and is in the description; rows stay openable; missing fields show nothing. | U, C, S |
 | P-91 | The room directory shows Your rooms, Invitations and Open rooms in server order and never re-sorts by recency, presence or mentions. No mention data is shown beyond P-215's per-room marker. | C, R |
-| P-215 | (v3.9.0, presence-gated.) A joined row shows the honey "@" `MentionBadge` beside the unread badge only for `unread_mention_count ≥ 1`, never a number, and nothing for 0, null or missing. Its description adds "mentioned". It refreshes only with the unread count; no new requests, timers or sorting, and a missing field never triggers the update notice. | U, C, S |
+| P-215 | (v3.9.0, inside the minimum.) A joined row shows the honey "@" `MentionBadge` beside the unread badge only for `unread_mention_count ≥ 1`, never a number, and nothing for 0, null or missing. Its description adds "mentioned". It refreshes only with the unread count; no new requests, timers or sorting, and a missing field never triggers the update notice. | U, C, S |
 | P-96 | Joined rows show the glow and "{n} here now" only for `active_count ≥ 1` on a fresh, online directory, and nothing for 0, null or missing. Recency shows `last_activity_at` as time, Yesterday, weekday or date, and nothing for null, never with a sender or preview. No new requests or timers. | U, C |
 | P-92 | Membership writes, reconciliation and the uncertain state behave exactly as today. Check room list is explicit, and pull-to-refresh never reconciles. | C, existing tests |
 | P-93 | DM rows keep today's preview rules, draft precedence and local attention, and filters make no new requests. The privacy line stays visible. | C |
