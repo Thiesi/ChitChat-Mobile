@@ -1,6 +1,6 @@
 # Independently verifiable implementation milestones
 
-[M6a notification settings](milestones/M6a-push-settings.md) is push P1. Next: P2 Turn on (UnifiedPush connector, distributor choice, permission, channels, subscribe with the fixed device label, binding and keys in the session vault), P3 receive/render/route, P4 the optional embedded FCM distributor.
+[M6a notification settings](milestones/M6a-push-settings.md) is push P1. [M6b](milestones/M6b-push-registration.md) is P2 part A (discovery, subscribe, keys and binding in a separate Keystore push vault, receiver, sign-out destruction). Next: P2 part B Turn on (distributor choice, permission, channels, status card), P3 receive/render/route, P4 the optional embedded FCM distributor.
 
 [M5g7d DM attachment controls](milestones/M5g7d-direct-attach-controls.md) completes native attachment sending. Next: authenticated downloads and memory-only previews (after PR187's metadata disposition), then the image viewer, Save/Share and share-in.
 

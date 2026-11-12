@@ -172,6 +172,9 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
     suspend fun updatePushPreferences(body: String, csrf: String): io.github.thiesi.chitchat.core.push.PushPreferences =
         decode<io.github.thiesi.chitchat.core.push.PushPreferencesReply>(request("push/update-preferences.php", body, csrf)
             .require200()).preferences.domain()
+    /** One subscribe POST, never replayed: an unknown outcome is reconciled by the device list (GET). */
+    suspend fun subscribePush(body: String, csrf: String): io.github.thiesi.chitchat.core.push.PushRegistration =
+        decode<io.github.thiesi.chitchat.core.push.PushSubscribeReply>(request("push/subscribe.php", body, csrf).require200()).domain()
     suspend fun revokePushDevice(id: Long, csrf: String): List<io.github.thiesi.chitchat.core.push.PushDevice> =
         decode<io.github.thiesi.chitchat.core.push.PushDevicesReply>(request("push/revoke-device.php",
             "{\"id\":$id}", csrf).require200()).domain()
@@ -581,19 +584,31 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
     }
 
     /** Build before retiring the jar. Only this bounded, in-memory attempt retains old credentials. */
-    fun logoutRequest(csrf: String): Request = buildRequest("logout.php", "{}", csrf).newBuilder()
-        .header("Cookie", jar.loadForRequest(origin.resolve("api/v1/logout.php")!!).joinToString("; ") { "${it.name}=${it.value}" })
+    fun logoutRequest(csrf: String): Request = retiredRequest("logout.php", "{}", csrf)
+
+    /** Sign-out's explicit removal of this phone's push registration, prepared like [logoutRequest]. */
+    fun revokePushRequest(id: Long, csrf: String): Request {
+        require(id > 0)
+        return retiredRequest("push/revoke-device.php", "{\"id\":$id}", csrf)
+    }
+
+    private fun retiredRequest(path: String, body: String, csrf: String): Request = buildRequest(path, body, csrf).newBuilder()
+        .header("Cookie", jar.loadForRequest(origin.resolve("api/v1/$path")!!).joinToString("; ") { "${it.name}=${it.value}" })
         .build()
 
-    suspend fun sendLogout(request: Request) {
+    suspend fun sendLogout(request: Request) = sendRetired(request) { reply ->
+        if (reply.status != 200 || decode<LogoutReply>(reply).status != "logged_out") throw ApiFailure(FailureKind.INCOMPATIBLE)
+    }
+
+    /** Best effort; any reply other than 200 is a failure the caller may ignore. Never retried. */
+    suspend fun sendRevokePush(request: Request) = sendRetired(request) { reply ->
+        if (reply.status != 200) throw ApiFailure(FailureKind.HTTP, reply.status)
+    }
+
+    private suspend fun sendRetired(request: Request, check: suspend (RawReply) -> Unit) {
         val oneShot = client.newBuilder().dispatcher(Dispatcher()).cookieJar(CookieJar.NO_COOKIES)
             .callTimeout(5, TimeUnit.SECONDS).build()
-        try {
-            val reply = execute(oneShot.newCall(request))
-            if (reply.status != 200 || decode<LogoutReply>(reply).status != "logged_out") {
-                throw ApiFailure(FailureKind.INCOMPATIBLE)
-            }
-        } finally {
+        try { check(execute(oneShot.newCall(request))) } finally {
             oneShot.dispatcher.executorService.shutdown()
             oneShot.connectionPool.evictAll()
         }

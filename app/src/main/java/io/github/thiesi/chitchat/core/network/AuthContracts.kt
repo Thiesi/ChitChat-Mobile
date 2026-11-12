@@ -40,6 +40,8 @@ internal class SessionReply(
     @SerialName("share_typing") @Serializable(with = StrictJsonBoolean::class) val shareTyping: Boolean? = null,
     @SerialName("attachments") @Serializable(with = AttachmentPolicySerializer::class)
     val attachmentPolicy: AttachmentPolicy = AttachmentPolicy.Unknown,
+    @SerialName("web_push") @Serializable(with = io.github.thiesi.chitchat.core.push.WebPushDiscoverySerializer::class)
+    val webPush: io.github.thiesi.chitchat.core.push.WebPushDiscovery = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
 )
 
 @Serializable

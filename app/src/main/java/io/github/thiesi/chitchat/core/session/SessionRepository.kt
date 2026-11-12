@@ -16,7 +16,10 @@ import io.github.thiesi.chitchat.core.media.AttachmentPolicy
 import java.io.IOException
 import java.time.Clock
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -57,6 +60,8 @@ data class SessionState(
     val privacy: MessagePrivacy? = null,
     val shareTyping: Boolean? = null,
     val attachmentPolicy: AttachmentPolicy = AttachmentPolicy.Unknown,
+    /** Bootstrap Web Push discovery; like the attachment policy, never persisted and cleared on revalidation. */
+    val webPush: io.github.thiesi.chitchat.core.push.WebPushDiscovery = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
 ) {
     val canChangeServer get() = phase !in setOf(SessionPhase.AUTHENTICATED, SessionPhase.PENDING_MFA, SessionPhase.GUEST) && !storageWarning && !busy
 }
@@ -74,9 +79,28 @@ interface SessionController {
 }
 
 /** Local transitions and vault writes are serialized; network calls never hold the lock. */
+/**
+ * Local push teardown, run inside the session lock. [retire] runs when an account's session ends:
+ * cancel its notifications, wipe the push record and keys, and ask the distributor to unregister
+ * without waiting. It returns the server registration to revoke when that belongs to
+ * [origin]/[userId]. [sessionChanged] runs whenever a session is published or saved; a record
+ * created under any other login session (identified by its sign-in time) is retired.
+ */
+interface PushTeardown {
+    fun retire(origin: String?, userId: Long?): Long?
+    fun sessionChanged(origin: String, userId: Long?, signedInAt: Long?)
+    companion object {
+        val NONE = object : PushTeardown {
+            override fun retire(origin: String?, userId: Long?): Long? = null
+            override fun sessionChanged(origin: String, userId: Long?, signedInAt: Long?) {}
+        }
+    }
+}
+
 class SessionRepository internal constructor(
     private val vault: SessionVault,
     private val clock: Clock = Clock.systemUTC(),
+    private val push: PushTeardown = PushTeardown.NONE,
     private val http: (ServerAddress) -> SessionHttp = { SessionHttp(it) },
 ) : SessionController {
     private val lock = Mutex()
@@ -140,7 +164,7 @@ class SessionRepository internal constructor(
                 invalidate(active, ApiFailure(FailureKind.EXPIRED))
                 return@withLock null
             }
-            mutable.value = mutable.value.copy(busy = true, error = null, attachmentPolicy = AttachmentPolicy.Unknown)
+            mutable.value = mutable.value.copy(busy = true, error = null, attachmentPolicy = AttachmentPolicy.Unknown, webPush = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown)
             active
         } ?: return
         bootstrap(active)
@@ -293,6 +317,7 @@ class SessionRepository internal constructor(
                     shareTyping = reply.shareTyping.takeIf { reply.user != null },
                     attachmentPolicy = if (reply.user != null && !reply.user.guest) reply.attachmentPolicy
                         else AttachmentPolicy.Unavailable,
+                    webPush = if (reply.user != null && !reply.user.guest) reply.webPush else io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unavailable,
                 )
                 active.bootstrapActive = false
                 persist(active, reply.user)
@@ -307,7 +332,7 @@ class SessionRepository internal constructor(
                     active.csrf = null
                     active.bootstrapActive = false
                     mutable.value = current.copy(busy = false, refreshRequired = true,
-                        shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown,
+                        shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown, webPush = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
                         phase = if (current.phase == SessionPhase.CONNECTING) SessionPhase.INVALIDATED else current.phase,
                         error = if (current.phase == SessionPhase.CONNECTING) current.error ?: ApiFailure(FailureKind.NETWORK) else current.error)
                 }
@@ -322,14 +347,14 @@ class SessionRepository internal constructor(
         if (reply.mfaRequired) {
             mutable.value = mutable.value.copy(phase = SessionPhase.PENDING_MFA, user = null, busy = true,
                 error = null, recoveryCodesRemaining = null, chatPolicy = null, privacy = null, shareTyping = null,
-                attachmentPolicy = AttachmentPolicy.Unknown)
+                attachmentPolicy = AttachmentPolicy.Unknown, webPush = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown)
             persist(active, null)
         } else {
             active.signedInAt = clock.millis()
             active.expectedUserId = reply.user!!.id
             mutable.value = mutable.value.copy(phase = SessionPhase.AUTHENTICATED, user = reply.user,
                 busy = true, error = null, recoveryCodesRemaining = reply.recoveryCodesRemaining,
-                chatPolicy = null, privacy = null, shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown,
+                chatPolicy = null, privacy = null, shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown, webPush = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
                 accountRestored = reply.restored, registrationMayHaveSucceeded = false)
             persist(active, reply.user)
         }
@@ -337,6 +362,11 @@ class SessionRepository internal constructor(
 
     private suspend fun persist(active: Runtime, user: SessionUser?, finishOperation: Boolean = true) {
         // Called under lock: a late save cannot run after logout/server change.
+        val person = user?.takeIf { !it.guest }
+        if (person != null && active.signedInAt == null) active.signedInAt = clock.millis()
+        try { withContext(Dispatchers.IO) { push.sessionChanged(active.server.value, person?.id, person?.let { active.signedInAt }) } }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { /* Push state never decides the session. */ }
         try {
             if (user == null || user.guest) vault.clear() else {
                 val now = clock.millis()
@@ -545,6 +575,7 @@ class SessionRepository internal constructor(
         generation++
         var storageWarning = false
         try { vault.clear() } catch (_: IOException) { storageWarning = true }
+        retirePush(active.server.value, mutable.value.user?.id ?: active.expectedUserId) // Local only: the session is gone.
         mutable.value = SessionState(active.server, generation, SessionPhase.INVALIDATED,
             error = failure, storageWarning = storageWarning)
     }
@@ -554,7 +585,12 @@ class SessionRepository internal constructor(
             val active = runtime
             val alreadyConfirmed = active == null && mutable.value.phase == SessionPhase.SIGNED_OUT &&
                 !mutable.value.logoutUnconfirmed
-            val request = active?.csrf?.let { active.api.logoutRequest(it) }
+            val csrf = active?.csrf
+            // Local push cleanup happens now, offline or not; the revoke is prepared from the still-valid
+            // runtime before its credentials are retired below.
+            val revokeId = retirePush(active?.server?.value ?: selected?.value, mutable.value.user?.id ?: active?.expectedUserId)
+            val revoke = if (active != null && csrf != null && revokeId != null) active.api.revokePushRequest(revokeId, csrf) else null
+            val request = csrf?.let { active.api.logoutRequest(it) }
             active?.api?.close()
             runtime = null
             generation++
@@ -562,20 +598,38 @@ class SessionRepository internal constructor(
             try { vault.clear() } catch (_: IOException) { storageWarning = true }
             mutable.value = SessionState(selected, generation, SessionPhase.SIGNED_OUT,
                 storageWarning = storageWarning, logoutUnconfirmed = !alreadyConfirmed, busy = request != null)
-            if (active != null && request != null) Triple(active, request, generation) else null
+            if (active != null && request != null) PendingLogout(active, request, revoke, generation) else null
         } ?: return
         var confirmed = false
-        try { pending.first.api.sendLogout(pending.second); confirmed = true }
-        catch (_: ApiFailure) { /* Local sign-out is immediate even without connectivity. */ }
+        try {
+            coroutineScope {
+                // Concurrent with logout, so the bounded logout wait is not extended. Logout also removes this
+                // session's registrations on the server; the explicit revoke covers a failed logout, so a
+                // logout failure is caught inside the scope and never cancels the revoke.
+                pending.revoke?.let { revoke -> launch {
+                    try { pending.runtime.api.sendRevokePush(revoke) } catch (_: ApiFailure) { /* Best effort. */ }
+                } }
+                confirmed = try { pending.runtime.api.sendLogout(pending.logout); true }
+                    catch (_: ApiFailure) { false } // Local sign-out is immediate even without connectivity.
+            }
+        }
         catch (cancelled: CancellationException) { throw cancelled }
         finally {
             withContext(NonCancellable) {
                 lock.withLock {
-                    if (generation == pending.third) mutable.value = mutable.value.copy(logoutUnconfirmed = !confirmed, busy = false)
+                    if (generation == pending.generation) mutable.value = mutable.value.copy(logoutUnconfirmed = !confirmed, busy = false)
                 }
             }
         }
     }
+
+    private class PendingLogout(val runtime: Runtime, val logout: okhttp3.Request, val revoke: okhttp3.Request?, val generation: Long)
+
+    /** Under the lock. Push cleanup never fails a sign-out; storage problems leave keys unreadable at worst. */
+    private suspend fun retirePush(origin: String?, userId: Long?): Long? =
+        try { withContext(Dispatchers.IO) { push.retire(origin, userId) } }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { null }
 
     private fun SessionReply.publicSession() = PublicSession(registrationEnabled, providers,
         lockdown.copy(message = lockdown.message?.take(500)))
