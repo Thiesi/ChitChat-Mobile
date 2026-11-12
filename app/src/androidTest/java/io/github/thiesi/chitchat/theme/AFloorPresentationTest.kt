@@ -106,7 +106,7 @@ class AFloorPresentationTest {
             (false to true) to R.string.details_attention_failed,
             (true to true) to R.string.details_attention_uncertain)) {
             compose.runOnIdle { marker.value = state }
-            compose.onNodeWithContentDescription(label).assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp)
+            compose.onNodeWithContentDescription(label).assertTouchHeightIsEqualTo(48.dp).assertTouchWidthIsEqualTo(48.dp)
                 .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, text(expected)))
             val kind = if (state.first) "uncertain" else if (state.second) "failed" else "generic"
             compose.onNodeWithTag("attention_badge:$kind", useUnmergedTree = true).assertExists()
