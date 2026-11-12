@@ -229,7 +229,7 @@ private fun kindText(mimeType: String?, filename: String): String? = when (val k
 @Composable
 internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemove: (() -> Unit)?,
     onSendAnyway: (() -> Unit)?, modifier: Modifier = Modifier, onCancel: (() -> Unit)? = null,
-    unknownActions: (@Composable () -> Unit)? = null) {
+    unknownActions: (@Composable () -> Unit)? = null, maxHeight: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Infinity) {
     val colors = ChitChatTheme.colors
     val locale = LocalConfiguration.current.locales[0]
     val lines = mutableListOf<Pair<String, LineTone>>()
@@ -276,6 +276,10 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
     val type = attachmentExtension(facts.filename)
     val size = facts.sizeBytes?.let { sizeText(attachmentSizeText(it, locale)) }
     val detail = listOfNotNull(type, size).joinToString(" · ")
+    // In the composer only the status text scrolls, within [maxHeight], so long lines at large font
+    // scales never push the field and Send off screen (A-04). The file row with Remove and every action
+    // row stay outside the scroll and always visible. Unbounded (inside Details) the text simply grows.
+    val bounded = maxHeight != androidx.compose.ui.unit.Dp.Infinity
     Surface(modifier.fillMaxWidth().testTag("attachment_card"), color = colors.raised, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -304,7 +308,8 @@ internal fun AttachmentCard(facts: AttachmentCardFacts, enabled: Boolean, onRemo
                         .semantics { contentDescription = remove }) { CloseIcon() }
                 }
             }
-            if (lines.isNotEmpty()) Column(Modifier.padding(end = 8.dp, bottom = 4.dp).testTag("attachment_card_status")
+            if (lines.isNotEmpty()) Column(Modifier.then(if (bounded) Modifier.heightIn(max = maxHeight)
+                .verticalScroll(rememberScrollState()) else Modifier).padding(end = 8.dp, bottom = 4.dp).testTag("attachment_card_status")
                 .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
                 lines.forEach { (text, tone) -> StatusLine(text, tone) }
             }

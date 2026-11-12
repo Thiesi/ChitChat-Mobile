@@ -333,7 +333,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     }
                 }
             }
-            val attachmentCard: @Composable () -> Unit = { attachmentFacts?.let { facts ->
+            val attachmentCard: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { cardLimit -> attachmentFacts?.let { facts ->
                 val original = attachment
                 // An upload itself sets sending; its Cancel must stay usable while the body is still being written.
                 AttachmentCard(facts, enabled = !obscured && !composerDialog && (!state.sending || original.phase == DirectAttachmentPhase.UPLOADING),
@@ -351,7 +351,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         }
                     } },
                     onCancel = original.takeIf { it.phase == DirectAttachmentPhase.UPLOADING && it.transfer?.fullBodyReported != true }?.let { {
-                        if (isCurrentEntry() && !obscured) model.cancelAttachmentUpload(displayedSession, peer, it, isCurrentEntry) } })
+                        if (isCurrentEntry() && !obscured) model.cancelAttachmentUpload(displayedSession, peer, it, isCurrentEntry) } }, maxHeight = cardLimit)
             } }
             val attachNotices: @Composable () -> Unit = {
                 AttachNotices(attach, displayedSession, persisting = attach.invalidChecked && !session.busy &&
@@ -432,7 +432,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         viewing = state.loaded && !state.stale && !blockConfirm && !detailsOpen && !composerDialog && !obscured && state.context?.relationship?.messagingAvailable == true,
                         publishing = ready && !composerDialog && !detailsOpen && !blockConfirm && !obscured && model.canSend())
                     if (!replyInline) replyControl(false)
-                    if (!compact) { attachNotices(); attachmentCard() }
+                    if (!compact) { attachNotices(); attachmentCard(headerLimit * 0.5f) }
                     if (inlineCompletion && !detailsOpen) io.github.thiesi.chitchat.feature.completion.CompletionSuggestions(completionComposer)
                     Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 12.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
@@ -460,7 +460,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 if (connection != null)
                                     RealtimeStatus(connection, model.realtime::retry, model.realtime::dismissBroadcast, roomId = null)
                                 Text(context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleMedium)
-                                if (compact) { attachNotices(); attachmentCard() }
+                                if (compact) { attachNotices(); attachmentCard(androidx.compose.ui.unit.Dp.Infinity) }
                                 if (completionComposer.choice!=null) {
                                     Text(stringResource(R.string.completion_title))
                                     io.github.thiesi.chitchat.feature.completion.CompletionSuggestions(completionComposer,fromDetails=true,onAccepted={
