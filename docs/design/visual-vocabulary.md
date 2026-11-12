@@ -108,7 +108,7 @@ both repositories. The source of truth in CCM is `identityHueIndex` in `core/the
 | Bubble | 20dp corner radius on all corners; no tail | Max width about 75% of the transcript |
 | Chit | Circle, 9dp, same fill as its bubble, offset about 11dp outward from the bottom speaker corner | Only on the last bubble of a run |
 | Buttons | Full pill (height/2 radius); primary 52dp tall, small 40dp visual inside a 48dp target | |
-| Fields | 16dp corners for forms; pill for the message input, radius capped at 24dp so a multi-line input stays a rounded rectangle | 56dp forms, 48dp minimum composer |
+| Fields | 16dp corners for forms; full pill for a one-line message input; multi-line inputs cap the corner (CCM 24dp, the web a fixed rem radius), so they stay rounded rectangles | 56dp forms, 48dp minimum composer |
 | Sheets and dialogs | 28dp top corners (sheets), 28dp (dialogs) | |
 
 A "run" is consecutive messages by the same sender with no day separator and no more than
