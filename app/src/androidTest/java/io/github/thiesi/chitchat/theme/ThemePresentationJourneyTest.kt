@@ -189,6 +189,7 @@ class ThemePresentationJourneyTest {
         compose.onNodeWithTag("conversation_composer").assertHeightIsAtLeast(48.dp).assertIsDisplayed()
         capture(label,"room")
         attachCaptures(label)
+        markerCaptures(label)
         back();back()
         action(R.string.dm_title)
         compose.waitUntil(5_000) { inbox.state.value.let { it.inbox!=null && !it.busy } }
@@ -205,7 +206,7 @@ class ThemePresentationJourneyTest {
         compose.onNodeWithTag("message_search_open").reveal().performNativeTap()
         compose.waitUntil(5_000) { search.state.value.entry!=null }
         capture(label,"search")
-        compose.runOnIdle { assertEquals(0,api.rooms.sends);assertEquals(0,api.notices.posts) }
+        compose.runOnIdle { assertEquals(1,api.rooms.sends);assertEquals(0,api.notices.posts) }
     }
 
     private fun attachCaptures(label: String) {
@@ -252,6 +253,26 @@ class ThemePresentationJourneyTest {
         capture(label,"room-attach-settings")
         policy(original)
         compose.runOnIdle { assertEquals(1,wire.calls);assertEquals(0,api.rooms.sends) }
+    }
+
+    /** The Details marker's failed then uncertain shapes (gap-audit F3), from fixture send outcomes only. */
+    private fun markerCaptures(label: String) {
+        fun send(body: String,failure: ApiFailure?) {
+            compose.runOnIdle { api.rooms.sendFailure=failure;assertTrue(room.updateDraft(sessions.state.value,43,body)) }
+            compose.onNodeWithTag("conversation_send").reveal().assertIsEnabled().performNativeTap()
+            compose.waitUntil(5_000) { !room.state.value.busy && !room.state.value.sending }
+        }
+        // A local validation failure (no POST): the failed octagon. Editing the draft clears it.
+        send("/ping",null)
+        compose.waitUntil(5_000) { room.state.value.validation!=null }
+        compose.onNodeWithTag("attention_badge:failed",useUnmergedTree=true).assertExists()
+        capture(label,"room-marker-failed")
+        // Then an unknown outcome: uncertain takes precedence over the earlier error.
+        send("Synthetic unconfirmed send",ApiFailure(FailureKind.TIMEOUT))
+        compose.waitUntil(5_000) { room.state.value.uncertainSend }
+        compose.onNodeWithTag("attention_badge:uncertain",useUnmergedTree=true).assertExists()
+        capture(label,"room-marker-uncertain")
+        compose.runOnIdle { api.rooms.sendFailure=null }
     }
 
     private fun capture(label: String,scene: String) {

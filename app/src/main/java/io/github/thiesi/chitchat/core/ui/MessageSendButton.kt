@@ -17,13 +17,15 @@ import io.github.thiesi.chitchat.R
 /** Consistent 48dp action leaves useful input width even on a narrow, keyboard-resized phone. */
 @Composable
 internal fun MessageSendButton(label: String, enabled: Boolean, sending: Boolean,
-    onClick: () -> Unit, modifier: Modifier = Modifier) {
+    onClick: () -> Unit, modifier: Modifier = Modifier, progress: Boolean = true) {
     val colors = ChitChatTheme.colors
     FilledIconButton(onClick = onClick, enabled = enabled && !sending,
         colors = IconButtonDefaults.filledIconButtonColors(containerColor = colors.signature, contentColor = colors.onSignature,
             disabledContainerColor = colors.raised, disabledContentColor = colors.textMuted),
         modifier = modifier.size(48.dp).semantics { contentDescription = label }) {
-        if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        // An attachment upload shows its progress on the card; Send then shows the waiting glyph.
+        if (sending && progress) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        else if (sending) Icon(painterResource(R.drawable.ic_send_waiting), contentDescription = null, Modifier.size(24.dp))
         else Icon(painterResource(R.drawable.ic_message_send), contentDescription = null, Modifier.size(24.dp))
     }
 }

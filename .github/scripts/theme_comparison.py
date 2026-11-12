@@ -10,7 +10,9 @@ TARGET=ROOT/'.tooling/worktrees/theme-baseline'
 REPORT=ROOT/'app/build/reports/theme-comparison'
 SCENES=('server','auth','home','settings','rooms','room','direct','thread','activity','account','search',
     # Synthetic attach states; the base ref must already contain room attachments (#190 or later).
-    'room-attach-photo','room-attach-privacy','room-attach-sending','room-attach-unknown','room-attach-too-large','room-attach-settings')
+    'room-attach-photo','room-attach-privacy','room-attach-sending','room-attach-unknown','room-attach-too-large','room-attach-settings',
+    # Details marker shapes (gap-audit F3).
+    'room-marker-failed','room-marker-uncertain')
 
 def display_snapshot():
     saved={}

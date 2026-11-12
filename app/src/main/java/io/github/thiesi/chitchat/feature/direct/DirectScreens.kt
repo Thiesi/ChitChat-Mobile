@@ -507,7 +507,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             } },
                             enabled = !composerDialog && !detailsOpen && !blockConfirm && !obscured && (attachmentSendable ||
                                 (ready && model.canSend() && state.draft.phpTrim().isNotEmpty())),
-                            sending = state.sending, modifier = Modifier.testTag("dm_send"))
+                            sending = state.sending, modifier = Modifier.testTag("dm_send"), progress = attachment == null)
                     }
                 }
             }
