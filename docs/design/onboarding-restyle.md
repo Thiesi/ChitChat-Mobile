@@ -116,6 +116,8 @@ transcript, lists, status and modals → Send when back online.
   it's absent: "Too many attempts. Try again in a little while.", with no number, even while
   the session layer's own fallback gate keeps Sign in disabled. Sign in re-enables when the
   gate ends. Nothing signs in by itself.
+- **Later (not in v1):** the server's seasonal sign-in decoration (`sign_in_decoration`:
+  `null`, `"winter"`, `"spring"` or `"celebration"`, v3.8.0) isn't shown; CCM ignores the field.
 
 ### 4b Create account (restyled `RegistrationForm`)
 

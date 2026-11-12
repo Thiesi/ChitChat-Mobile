@@ -8,8 +8,11 @@ response carries `application.icon`: `null` for the ChitChat default, otherwise
 `{url, width: 512, height: 512, mime_type: "image/png", sha256}`, visible anonymously, to
 members and guests (`docs/api/installation-icon.md` at `v3.7.0`). The `url` is a versioned
 same-origin path (`/installation-icon.php?revision=…`). The icon presets and name-following
-initial (ChitChat#241) aren't in a release yet and stay a dependency: until the minimum
-includes them, nothing here changes for them.
+initial (ChitChat#241) shipped in v3.8.0 and are active with no app change and no version
+check: a preset or the name-following initial arrives as the same `application.icon` record (a
+server-rendered PNG), so it's shown like an upload. The **"ChitChat icon"** preset (`lantern`)
+is a reset: `application.icon` becomes `null` and the app keeps showing the initial lantern. Choosing
+presets is web administration; CCM has no picker.
 
 ## Where it appears
 
@@ -49,8 +52,8 @@ It doesn't appear anywhere else:
 - **When:** only after a successful bootstrap reports `application.icon` with a URL, at step 3
   (anonymous) or in the signed-in session. `null` or a missing field means the initial lantern,
   silently, and a missing field never triggers the server update notice (it isn't a
-  session-level feature key). The web's "ChitChat icon" preset (ChitChat #226, approved) is a
-  reset to `null`, never a stored copy, so it also shows the initial lantern. The app never shows
+  session-level feature key). The web's "ChitChat icon" preset (ChitChat #226, approved;
+  `lantern` in ChitChat#241's catalog) is a reset to `null`, never a stored copy, so it also shows the initial lantern. The app never shows
   the ChitChat mark as a server's icon.
 - **Where from:** the URL is resolved against the chosen origin through the existing session
   transport and same-origin rules. A URL that resolves to another origin isn't fetched.
