@@ -48,7 +48,18 @@ class ChitChatApplication : Application() {
             (Runtime.getRuntime().maxMemory() / 8).coerceIn(1L, 96L * 1024 * 1024))
     }
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
-    private val sessionRepository by lazy { SessionRepository(KeystoreSessionVault(this)) }
+    private val pushVault by lazy { io.github.thiesi.chitchat.core.push.KeystorePushVault(this) }
+    internal val pushKeys by lazy { io.github.thiesi.chitchat.core.push.VaultKeyManager(pushVault) }
+    private val pushConnector by lazy { io.github.thiesi.chitchat.core.push.UnifiedPushConnector(this, pushKeys) }
+    private val pushLocal by lazy {
+        io.github.thiesi.chitchat.core.push.PushLocal(pushVault, pushConnector) {
+            getSystemService(android.app.NotificationManager::class.java)?.cancelAll()
+        }
+    }
+    private val sessionRepository by lazy { SessionRepository(KeystoreSessionVault(this), push = pushLocal) }
+    internal val pushRegistrar by lazy {
+        io.github.thiesi.chitchat.core.push.PushRegistrar(pushLocal, pushConnector, sessionRepository, processScope)
+    }
     val sessions: SessionController get() = sessionRepository
     val accounts: AccountOperations by lazy { SessionAccountRepository(sessionRepository) }
     val typingPreferences: TypingPreferenceOperations by lazy { SessionTypingPreferences(sessionRepository) }
@@ -77,6 +88,7 @@ class ChitChatApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        pushRegistrar // Watches for a record left by another account; distributor callbacks also reach it.
         realtimeRuntime = AndroidRealtimeRuntime(this, ProcessLifecycleOwner.get().lifecycle,
             { foreground -> realtimeCoordinator.setForeground(foreground); typingCoordinator.setForeground(foreground) },
             realtimeCoordinator::setNetworkAvailable)

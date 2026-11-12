@@ -62,7 +62,8 @@ class SessionRepositoryTest {
         sessions = repository()
     }
     @After fun tearDown() { apis.forEach(SessionHttp::close); server.close() }
-    private fun repository() = SessionRepository(vault, clock) { SessionHttp(it, client).also(apis::add) }
+    private fun repository(push: PushTeardown = PushTeardown.NONE) =
+        SessionRepository(vault, clock, push) { SessionHttp(it, client).also(apis::add) }
     private fun address() = (ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address
     private fun json(body: String, status: Int = 200, cookie: String? = null) = MockResponse.Builder()
         .code(status).body(body).addHeader("Content-Type", "application/json")
@@ -247,6 +248,82 @@ class SessionRepositoryTest {
         assertNull(vault.saved)
         assertNull(sessions.state.value.user)
         assertFalse(sessions.state.value.logoutUnconfirmed)
+    }
+
+    private class RecordingTeardown(private val id: Long?, private val vault: MemoryVault) : PushTeardown {
+        val calls = mutableListOf<Pair<String?, Long?>>()
+        val savedSessionAtCall = mutableListOf<Boolean>()
+        var fail = false
+        override fun retire(origin: String?, userId: Long?): Long? {
+            calls += origin to userId
+            savedSessionAtCall += vault.saved != null
+            if (fail) throw IllegalStateException("fixture")
+            return id
+        }
+    }
+
+    private fun drain() = generateSequence { server.takeRequest(500, TimeUnit.MILLISECONDS) }.toList()
+
+    @Test fun signOutWipesPushLocallyAndRevokesWithTheRetiringCredentials() = runTest {
+        val push = RecordingTeardown(5, vault)
+        sessions = repository(push)
+        login()
+        drain()
+        server.dispatcher = object : mockwebserver3.Dispatcher() {
+            override fun dispatch(request: mockwebserver3.RecordedRequest) = when (request.url.encodedPath) {
+                "/api/v1/push/revoke-device.php" -> json("""{"devices":[]}""")
+                else -> json("""{"status":"logged_out"}""")
+            }
+        }
+        sessions.signOut()
+        assertEquals(listOf<Pair<String?, Long?>>(address().value to 7L), push.calls)
+        assertEquals("Push cleanup runs before the saved session is cleared", listOf(true), push.savedSessionAtCall)
+        val requests = drain().associateBy { it.url.encodedPath }
+        val revoke = requests.getValue("/api/v1/push/revoke-device.php")
+        assertEquals("""{"id":5}""", revoke.body!!.utf8())
+        assertEquals("SITE=auth", revoke.headers["Cookie"])
+        assertEquals(b, revoke.headers["X-CSRF-Token"])
+        assertTrue("/api/v1/logout.php" in requests)
+        assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
+        assertFalse(sessions.state.value.logoutUnconfirmed)
+        assertFalse(sessions.state.value.busy)
+    }
+
+    @Test fun offlineSignOutStillCompletesPushCleanupLocally() = runTest {
+        val push = RecordingTeardown(5, vault)
+        sessions = repository(push)
+        login()
+        server.close()
+        sessions.signOut()
+        assertEquals(1, push.calls.size)
+        assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
+        assertTrue(sessions.state.value.logoutUnconfirmed)
+        assertFalse(sessions.state.value.busy)
+        assertNull(vault.saved)
+    }
+
+    @Test fun failingPushCleanupNeverBlocksSignOut() = runTest {
+        val push = RecordingTeardown(5, vault).apply { fail = true }
+        sessions = repository(push)
+        login()
+        drain()
+        server.enqueue(json("""{"status":"logged_out"}"""))
+        sessions.signOut()
+        assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
+        assertNull(vault.saved)
+        assertEquals("No registration id, so no revoke", listOf("/api/v1/logout.php"), drain().map { it.url.encodedPath })
+    }
+
+    @Test fun endedSessionRetiresPushLocallyWithoutAnyRequest() = runTest {
+        val push = RecordingTeardown(5, vault)
+        sessions = repository(push)
+        login()
+        drain()
+        server.enqueue(json(bootstrapBody("null", c)))
+        sessions.refresh()
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+        assertEquals(listOf<Pair<String?, Long?>>(address().value to 7L), push.calls)
+        assertEquals(listOf("/api/v1/session.php"), drain().map { it.url.encodedPath })
     }
 
     @Test fun coldRestoreRevalidatesBeforeShowingAnAccount() = runTest {
