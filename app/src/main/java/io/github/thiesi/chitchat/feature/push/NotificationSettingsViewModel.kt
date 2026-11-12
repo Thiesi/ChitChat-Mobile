@@ -121,7 +121,7 @@ class NotificationSettingsViewModel(private val operations: PushOperations) : Vi
         return true
     }
 
-    /** Genuine background or sign-out clears private facts. An in-flight write becomes unconfirmed. */
+    /** Genuine background or leaving Notifications clears private facts. A cancelled write is reconciled by the next open's GET, never replayed. */
     fun retire() {
         job?.cancel(); job = null
         owner = null

@@ -189,8 +189,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         val entryStarted = entry?.lifecycle?.currentStateAsState()?.value?.isAtLeast(Lifecycle.State.STARTED) == true
         LifecycleEventEffect(Lifecycle.Event.ON_START) { profiles?.foreground(); completion?.foreground() }
         LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-            if (activity?.isChangingConfigurations != true) { profiles?.background(); completion?.background() }
+            if (activity?.isChangingConfigurations != true) { profiles?.background(); completion?.background(); pushSettings?.retire() }
         }
+        // Push facts live only while Notifications is the current entry; leaving it (including
+        // sign-out, which navigates away) clears them. Configuration change keeps the entry.
+        val pushRoute = entry?.destination?.route
+        LaunchedEffect(pushSettings, pushRoute) { if (pushRoute != null && pushRoute != "notification_settings") pushSettings?.retire() }
         LaunchedEffect(completion, entry, entryStarted, completionState?.entryId) {
             val actual=entry
             if (actual!=null && entryStarted && nav.currentBackStackEntry===actual) completion?.navigate(actual.id)

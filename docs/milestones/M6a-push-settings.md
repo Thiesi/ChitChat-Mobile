@@ -28,7 +28,7 @@ unoffered DM choice is never written. There's no optimistic flip: a definite ref
 previous choice with its copy. A timeout, network loss, 5xx, malformed reply or cancellation
 leaves the change **unconfirmed**: further changes are blocked until an explicit Refresh (GET),
 and the POST is never replayed. Facts are memory-only, scoped to server, account, generation
-and session version, and cleared on genuine background or another account.
+and session version, and cleared on genuine background (not configuration change), on leaving Notifications (including sign-out) or for another account; the next open re-reads with one GET.
 
 ## Verification
 
