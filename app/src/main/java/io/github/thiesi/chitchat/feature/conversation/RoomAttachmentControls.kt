@@ -26,7 +26,9 @@ internal fun RoomAttachmentDraft.cardFacts(observation: AttachmentPolicyObservat
 private val replaceablePhases = setOf(RoomAttachmentPhase.PREPARING, RoomAttachmentPhase.READY,
     RoomAttachmentPhase.PRIVACY_CHOICE, RoomAttachmentPhase.FAILED)
 
-internal fun RoomAttachmentDraft.removable() = phase in replaceablePhases && upload == null
+/** READY may still carry a finished attempt (after a refusal or accepted duplicate risk); the VM
+ * binds Remove/Replace to that exact attempt, so only the phase gates the control. */
+internal fun RoomAttachmentDraft.removable() = phase in replaceablePhases
 
 /** Room binding of the shared host: admission only through the original-bound room VM. */
 @Composable
