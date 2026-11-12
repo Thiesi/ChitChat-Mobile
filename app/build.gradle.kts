@@ -10,8 +10,9 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        // Development identity; confirm the public application ID before release signing/DAL.
-        applicationId = "io.github.thiesi.chitchat"
+        // Owner-decided public application ID (issue #1, c6726384755); debug adds ".debug". The Kotlin
+        // namespace/package stays io.github.thiesi.chitchat.
+        applicationId = "de.networkxxiii.chitchat"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
