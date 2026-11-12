@@ -11,6 +11,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
@@ -35,8 +37,7 @@ class ComposerLayoutTest {
     private val text = mutableStateOf("")
 
     private fun composer(fontScale: Float) = compose.setContent {
-        val density = LocalDensity.current
-        CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+        CompositionLocalProvider(LocalDensity provides phone360(fontScale)) {
             ChitChatTheme(dark = false) {
                 Box(Modifier.width(360.dp)) {
                     ComposerLayout(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("block"),
@@ -48,6 +49,8 @@ class ComposerLayoutTest {
             }
         }
     }
+    /** CI emulators can be narrower than 360dp; scale density so a 360dp phone fills the window exactly. */
+    @Composable private fun phone360(fontScale: Float) = Density(LocalWindowInfo.current.containerSize.width / 360f, fontScale)
     private fun at(tag: String): DpRect = compose.onNodeWithTag(tag).assertIsDisplayed().getUnclippedBoundsInRoot()
     private fun close(expected: Float, actual: Float) = assertEquals(expected, actual, 1f)
 
@@ -86,8 +89,7 @@ class ComposerLayoutTest {
         fun Modifier.slot(tag: String) = size(48.dp).testTag(tag).onFocusChanged { if (it.isFocused) focused.value = tag }.focusable()
         compose.setContent {
             focus = LocalFocusManager.current
-            val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density, 1.15f)) {
+            CompositionLocalProvider(LocalDensity provides phone360(1.15f)) {
                 ChitChatTheme(dark = false) {
                     Box(Modifier.width(360.dp)) {
                         ComposerLayout(Modifier.fillMaxWidth().padding(horizontal = 16.dp),

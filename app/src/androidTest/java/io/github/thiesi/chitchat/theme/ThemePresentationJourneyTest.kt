@@ -277,7 +277,7 @@ class ThemePresentationJourneyTest {
 
     private fun capture(label: String,scene: String) {
         compose.waitForIdle()
-        if(Build.VERSION.SDK_INT>=34) compose.onRoot().tryPerformAccessibilityChecks() // THEME_ONLY
+        if(Build.VERSION.SDK_INT>=34) try { compose.onRoot().tryPerformAccessibilityChecks() } catch(failure: Throwable) { failure.addSuppressed(LayoutEvidence(layoutEvidence(failure.message.orEmpty()))); throw failure } // THEME_ONLY
         if(Build.VERSION.SDK_INT<28) return
         val args=InstrumentationRegistry.getArguments()
         val output=args.getString("additionalTestOutputDir")?.let(::File)
@@ -291,6 +291,41 @@ class ThemePresentationJourneyTest {
         finally { image.recycle() }
         // Configuration only; no account/message content.
         File(folder,"theme-$label-configuration.json").writeText("{\"fontScale\":$observedFontScale,\"widthDp\":$observedWidth,\"heightDp\":$observedHeight}")
+    }
+
+    /**
+     * Failure-only, content-free evidence for an ATF result: for each reported "View with bounds"
+     * rectangle, the matching semantics nodes and their ancestor chains (role, test tag, screen
+     * bounds, click action and merge flag; never text), plus the transcript, attachment card and
+     * composer bounds. It is attached as a suppressed exception; the ATF failure itself is
+     * rethrown unchanged, and passing checks never reach this.
+     */
+    private class LayoutEvidence(evidence: String) : Throwable(evidence, null, false, false)
+
+    private fun layoutEvidence(message: String): String {
+        val lines=mutableListOf<String>()
+        fun describe(node: androidx.compose.ui.semantics.SemanticsNode): String {
+            val c=node.config
+            val b=node.boundsInRoot.let { r -> val o=node.positionOnScreen-node.positionInRoot
+                "[${(r.left+o.x).toInt()},${(r.top+o.y).toInt()}][${(r.right+o.x).toInt()},${(r.bottom+o.y).toInt()}]" }
+            return "id=${node.id} role=${c.getOrElseNullable(SemanticsProperties.Role) { null }} tag=${c.getOrElseNullable(SemanticsProperties.TestTag) { null }} " +
+                "bounds=$b click=${c.contains(androidx.compose.ui.semantics.SemanticsActions.OnClick)} merged=${c.isMergingSemanticsOfDescendants}"
+        }
+        val root=compose.onRoot(useUnmergedTree=true).fetchSemanticsNode()
+        val all=generateSequence(listOf(root)) { level -> level.flatMap { it.children }.takeIf { it.isNotEmpty() } }.flatten().take(2_000).toList()
+        Regex("""View with bounds: \[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]""").findAll(message).take(4).forEach { m ->
+            val (l,t,r,b)=m.destructured.toList().map(String::toInt)
+            lines+="flagged [$l,$t][$r,$b]"
+            all.filter { n -> val o=n.positionOnScreen-n.positionInRoot; val x=n.boundsInRoot
+                kotlin.math.abs(x.left+o.x-l)<=1 && kotlin.math.abs(x.top+o.y-t)<=1 && kotlin.math.abs(x.right+o.x-r)<=1 && kotlin.math.abs(x.bottom+o.y-b)<=1
+            }.take(3).forEach { hit ->
+                generateSequence(hit) { it.parent }.take(12).forEachIndexed { depth,n -> lines+="  ${"  ".repeat(depth)}${describe(n)}" }
+            }
+        }
+        listOf("conversation_timeline","attachment_card","conversation_composer","conversation_send").forEach { tag ->
+            lines+="$tag: "+(all.firstOrNull { it.config.getOrElseNullable(SemanticsProperties.TestTag) { null }==tag }?.let(::describe) ?: "absent")
+        }
+        return lines.take(80).joinToString(" | ")
     }
 
     @Test fun capturesLightDefault()=captures(0,false)
