@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import io.github.thiesi.chitchat.core.theme.Lantern
 
 /** Whether the single-row field is too narrow (P-216): under 9 × the body text size, in pixels. */
 internal fun composerStacks(fieldWidthPx: Int, bodyTextPx: Float): Boolean = fieldWidthPx < bodyTextPx * 9f
@@ -44,7 +45,10 @@ internal fun ComposerLayout(modifier: Modifier = Modifier, spacing: Dp = 8.dp,
         val controlsHeight = maxOf(start.maxOfOrNull { it.height } ?: 0, end.maxOfOrNull { it.height } ?: 0)
         val width = constraints.maxWidth
         val rowFieldWidth = width - startWidth - endWidth - gap * listOf(startWidth, endWidth).count { it > 0 }
-        val stacked = composerStacks(rowFieldWidth, bodyTextPx)
+        // Stack only when the cap still fits a 48dp field above the controls row; a short window
+        // (compact mode, large font) keeps the single row, where the field keeps the row height.
+        val stacked = composerStacks(rowFieldWidth, bodyTextPx) &&
+            constraints.maxHeight >= Lantern.target.roundToPx() + gap + controlsHeight
         if (!stacked) {
             val fields = fieldSlot.map { it.measure(Constraints(rowFieldWidth, rowFieldWidth, 0, constraints.maxHeight)) }
             val height = maxOf(controlsHeight, fields.maxOfOrNull { it.height } ?: 0).coerceIn(constraints.minHeight, constraints.maxHeight)

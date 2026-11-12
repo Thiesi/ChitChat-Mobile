@@ -33,7 +33,7 @@ that row would leave the field under 9 × the body text size (144dp at 100%, 288
 field alone full width above Details (start) and Attach and Send (end). Both arrangements are one
 pinned block outside every scroller, so input and Send still stay together. The same
 `MessageInput` instance, tags and input contracts are used in both; the decision depends only on
-width and font scale, never on the draft. Keyboard Next follows placement and screen readers
+width, font scale and the height cap, never on the draft; a cap too short for a 48dp field above the controls keeps the single row. Keyboard Next follows placement and screen readers
 follow geometry, so both read field, Details, Attach, Send when stacked. Field corners are
 min(height / 2, 24dp) (`Lantern.field`). On 320dp test fixtures the composer stacks even at 100%
 (field would be 120dp); this is the specified geometry, accepted by the technical lead, and the

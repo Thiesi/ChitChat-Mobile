@@ -36,11 +36,11 @@ class ComposerLayoutTest {
     @get:Rule val compose = createComposeRule()
     private val text = mutableStateOf("")
 
-    private fun composer(fontScale: Float) = compose.setContent {
+    private fun composer(fontScale: Float, cap: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Infinity) = compose.setContent {
         CompositionLocalProvider(LocalDensity provides phone360(fontScale)) {
             ChitChatTheme(dark = false) {
                 Box(Modifier.width(360.dp)) {
-                    ComposerLayout(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("block"),
+                    ComposerLayout(Modifier.fillMaxWidth().heightIn(max = cap).padding(horizontal = 16.dp, vertical = 4.dp).testTag("block"),
                         leading = { Box(Modifier.size(48.dp).testTag("details")) },
                         field = { MessageInput(text.value, { text.value = it }, enabled = true, label = "Message", compact = false,
                             modifier = Modifier.testTag("field")) },
@@ -80,6 +80,14 @@ class ComposerLayoutTest {
         compose.waitForIdle()
         close(160f, at("field").width.value)
         close(at("field").bottom.value, at("send").bottom.value)
+    }
+
+    /** A short cap (compact mode, large font) keeps the single row rather than squeezing the field. */
+    @Test fun aShortCapKeepsOneRowWithAFullHeightField() {
+        composer(1.15f, cap = 80.dp)
+        val field = at("field"); val send = at("send")
+        assertTrue("Field keeps its 48dp target, was ${field.height}", field.height.value >= 47.5f)
+        close(field.bottom.value, send.bottom.value) // Same row.
     }
 
     /** Keyboard Next follows placement order, which is field, Details, Attach, Send when stacked. */
