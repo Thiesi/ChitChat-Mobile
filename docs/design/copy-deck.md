@@ -50,6 +50,9 @@ The onboarding spec's copy table already covers `welcome_title`, `welcome_body`,
 | `providers_unavailable` | External-provider sign-in needs a native authentication handoff that this server does not yet support. | Signing in with another service isn't available in the app yet. Use your username and password. | — |
 | `maintenance_notice` | This server is in maintenance lockdown. Sign-in may be restricted. | {installation} is in maintenance. Signing in may not work right now. | — |
 | `registration_policy` | An account is created on this server, not with the app publisher. The server decides your permissions. | Your account is created on {host}, not with the app maker. The server decides what you can do. | — |
+| `username_change_required` | (new) | Choose a new username to send messages. (banner; play-readiness.md "Required username change", dependency ChitChat#164) | — |
+| `username_taken` | (new) | That username isn't available. Try a different one. (also reserved and placeholder-pattern names; never says why) | — |
+| `username_change_not_required` | (new) | You don't need to choose a new username any more. | — |
 | `username_policy` | Use 3–32 ASCII letters, numbers, dots, underscores or hyphens, starting with a letter or number. | 3–32 characters: letters (a–z), numbers, dots, underscores or hyphens. Start with a letter or number. | — |
 | `password_policy` | Use 12–4096 characters without your username or control characters. The server checks the final password policy. | At least 12 characters, and not your username. Your server may have more rules. | — |
 | `birth_date_explanation` | Birth date is optional. The server uses it for age-restricted rooms. | Optional. Only used for age-restricted rooms. | — |

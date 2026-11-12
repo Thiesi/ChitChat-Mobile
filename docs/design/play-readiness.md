@@ -199,6 +199,142 @@ notification kind. It's timeline-only and never pushed. CCM tolerates it as it d
 destination is built, the row shows without a destination, like other unsupported kinds. An
 unknown kind is never an error.
 
+### Required username change (ChitChat#164, merged)
+
+**Status: Dependency.** ChitChat#164 is merged (`363fcde`) and ships in the release after
+3.7.0. Like every later feature, it ships only once the technical lead raises the minimum server
+version to include it (one rule, server-update.md), with no capability check. Until then,
+implementers leave it out. The contract is `docs/api/username-change.md` on ChitChat main.
+
+**What the server does.** A Global Moderator or above can require a new username when a name
+breaks the community rules. The server replaces the name at once with a placeholder such as
+`member-k7q2xm` and flags the account. The session then carries `user.username` (the
+placeholder) and `user.username_change: {required, required_at, reason,
+sign_in_with_previous_username}`, or `null` when nothing is required. The account keeps reading
+and signing in, but new content is refused until a name is chosen
+(`POST account/username.php {username}`).
+
+**Choose a new username** (full screen over the shell, no bottom bar; the same layout as
+re-acceptance)
+
+- Title "**Choose a new username**".
+- A `raised` card labelled "**From {installation}'s moderators**", holding the `reason`:
+  - **plain text** only, never markup or links; newlines are kept;
+  - shown in full, with no "Show all": the server caps it at 500 characters. The screen scrolls,
+    and Save stays reachable at 2.0 font on a 360×640dp screen;
+  - when `reason` is missing, `null` or empty after trimming (defensive; the server always
+    sends text), the card reads "{installation}'s moderators asked you to choose a different
+    username." It doesn't claim the name was reported, because the app can't know that.
+- Body: "For now, your username is **{placeholder}**. Choose a new one to keep writing. You can
+  still read everything." `{placeholder}` is the session's `user.username`.
+- When `sign_in_with_previous_username` is true, one more line in `textMuted`: "Until you
+  choose, you can still sign in with your previous username." The previous name itself is
+  **never shown**: the session doesn't carry it, and CCM never keeps it from earlier state.
+- One field, "**New username**", with the supporting text from the copy deck's
+  `username_policy` ("3–32 characters: letters (a–z), numbers, dots, underscores or hyphens.
+  Start with a letter or number."). Single line, no autocorrect, no automatic capitals and no
+  suggestions; the keyboard's Done key saves. The value is sent exactly as typed.
+- **Save** (primary) and **Not now** (text button). Save is disabled while the field is empty.
+  Back is Not now.
+- **Local format check:** before any request, the field is checked against the documented
+  username rules. A miss shows the invalid line below and makes no request, so the rate budget
+  isn't spent on a typo. The server stays the authority for everything else.
+
+**Save outcomes** (Save shows busy in place; the field keeps its text)
+
+- **`200`:** the screen closes, and the person returns to where they were with every draft
+  intact. A level-1 confirmation reads "Your username is now **{name}**." from the returned
+  `user.username`. The app adopts the returned user as its usual session update. Nothing that
+  was refused earlier resends.
+- **`400 invalid_username`:** the field shows the line "Use 3–32 letters (a–z), numbers, dots,
+  underscores or hyphens, starting with a letter or number." with the `error` glyph.
+- **`409 username_taken`:** "**That username isn't available.** Try a different one." The same
+  copy covers a name in use, a reserved name (including the person's own previous name), and
+  anything in the placeholder pattern. It never says why, because the server deliberately
+  hides moderation history.
+- **`429 rate_limited`:** the copy deck's `rate_limited` line ("Too many attempts. Try again in
+  {wait}.", or "in a little while" without a delay). Save stays disabled until a known wait has
+  passed.
+- **`409 username_change_not_required`** (for example, a name was chosen on another device):
+  re-read the session, close the screen and show "You don't need to choose a new username any
+  more." This isn't an error state.
+- **`401`:** the ordinary session-ended flow. `403 guest_not_allowed` and `400
+  validation_error` aren't reachable from this screen; if one arrives, show the generic
+  refusal line (`request_rejected`).
+- **Unknown** (timeout or connection lost after sending): "**Not sure your new username was
+  saved.**" with **Check**, which is one session GET. If no change is required any more, show
+  the 200 confirmation with the session's name. If one still is, the field keeps its text and
+  the line reads "Your username wasn't changed. Try again." **Save is never resent
+  automatically.**
+
+**When the screen opens**
+
+- When `user.username_change.required` turns true on a signed-in session: cold start,
+  foreground, session refresh or sign-in. It opens once per change, not on every foreground.
+- When a write is refused with `403 username_change_required` (below).
+- From the conversation banner, the You row and the notification (below).
+- **Rules come first.** When `user.rules.acceptance_required` is also true, the re-acceptance
+  screen opens first. After **I agree**, the chooser follows directly from the session, without
+  waiting for a second refused write. Only one of the two banners shows at a time, rules first.
+
+**Not now**
+
+- Returns to where the person was. Reading continues, as after re-acceptance's Not now.
+- A small level-1 banner sits at the top of each conversation, "**Choose a new username to send
+  messages.**" with **Choose**. The composer stays enabled so drafts keep working.
+- You: under the name in the account header, a level-1 row "**Choose a new username**" that
+  opens the screen. It goes away once a name is chosen.
+
+**Write refusals: `403 username_change_required`**
+
+- Gated, exactly the set of `rules_acceptance_required`: room and DM sends and edits, attachment
+  uploads, adding reactions, private pings, and profile picture uploads.
+- It's a **definite refusal**, handled like P-175: nothing was committed. The draft stays in the
+  composer (text, reply and attached file). An edit dialog keeps its text. A refused reaction
+  leaves the chip unchanged. A refused profile picture leaves the current one in place. No
+  unknown-send state is set.
+- The app re-reads the session (one GET), then the chooser opens. After **Save**, the person
+  returns to the same place with the draft intact. **Nothing resends automatically.** The
+  person presses Send (or adds the reaction) again.
+- Never gated, and never showing the chooser: reading, discovery and search, sign-in and
+  sign-out, reporting, block, ignore, removing one's own messages, reactions or profile picture,
+  security, device and notification settings, export, closure and restoration.
+
+**Signing in.** The sign-in form doesn't change. While a change is pending, the previous
+username and the placeholder both sign in. After sign-in, the chooser opens as above. Passkeys
+and the browser handoff don't use the username. Account labels (onboarding, You, sessions)
+always show the server's current `user.username`. CCM never shows a name the session has
+replaced, including from any locally remembered label.
+
+**Notification `username_change_required`**
+
+- In Activity, the row shows the server's rendered text ("Choose a new username", with the
+  reason) as plain text, with the `edit` icon in a `raised` circle. Its link,
+  `/choose-username.php`, maps to the chooser through the guarded native-link flow, never to a
+  browser.
+- Tapping it opens the chooser while a change is required. Otherwise it shows the level-1 line
+  "You've already chosen a new username." and stays in Activity.
+- When it's pushed, it goes to the `account` channel like other unlisted kinds
+  (push-presentation.md). The lock-screen public version stays "New notification", so the
+  reason never shows on a locked screen.
+- Until the destination is built, the row shows without a destination, like other unsupported
+  kinds. An unknown kind is never an error.
+
+**Other people's renames**
+
+- `user_renamed {user: {id, username}}` updates every rendered occurrence of that user ID:
+  author names, mention and reply labels, presence and typing, the DM inbox, profile cards and
+  the mention suggestions. If it's the viewer's own ID, the app re-reads the session.
+- **No visual cue** (presentation lead decision). A "renamed" mark would point at a moderation
+  action that the server deliberately keeps private, and the same event also arrives when the
+  person picks their new name. Names simply change in place, without animation.
+- Accepted limits, as the server documents them: a typing indicator may show the old name for
+  its last few seconds; "@OldName" typed inside existing message bodies is people's content and
+  stays as written; a replayed older event can briefly show the old name until the later
+  `user_renamed` follows.
+- **Later (not in this section):** the moderator's side (`can_require_username_change` on the
+  profile card, the `username_change_required` resolution code) belongs in moderation.md.
+
 ## 2. Deleting the account in the app
 
 Play requires that apps which create accounts let people delete them in the app. ChitChat
@@ -345,6 +481,9 @@ re-verify them at release. How they map to the form's answers is the maintainer'
 | P-170 | No write action is possible before the guidelines are accepted for the current version, server and account. Acceptance is stored locally and versioned. | C |
 | P-171 | With `policies.rules`, one I agree covers the app guidelines and the server rules and posts the shown version. Sign-up sends `accepted_rules_version`. `409` and unknown results re-read the session and never accept or resend on their own. `rules: null` or a missing `policies` shows only the app guidelines. | U, C |
 | P-175 | A `403 rules_acceptance_required` is a definite refusal: the draft, reply, file or edit text is kept, no unknown state is set, re-acceptance opens, and nothing resends after I agree. Ungated actions never show re-acceptance. | U, C |
+| P-212 | When the minimum includes ChitChat#164, the Choose a new username screen shows the moderators' `reason` as plain text (newlines kept, no markup or links, up to 500 characters in full, with Save reachable at 2.0 font on 360×640dp) and generic copy when it's missing or empty. It shows the placeholder, the previous-name sign-in line only when `sign_in_with_previous_username` is true, and never the previous name. One field and Save: a local format check makes no request; `invalid_username`, `username_taken` (one copy for taken, reserved and placeholder-pattern names), `429`, `username_change_not_required` and Unknown each show their copy. Unknown checks with one session GET, and Save is never resent automatically. | U, C |
+| P-213 | A `403 username_change_required` is a definite refusal, as in P-175: the draft, reply, file or edit text is kept, no unknown state is set, the session is re-read and the chooser opens, and nothing resends after Save. When rules acceptance is also required, re-acceptance comes first and the chooser follows. Ungated actions (reading, search, reporting, block, ignore, removals, settings, export, closure) never show the chooser. | U, C |
+| P-214 | The `username_change_required` notification is tolerated in Activity, opens the chooser through the guarded link flow (or the "already chosen" line), and its lock-screen public version is "New notification". `user_renamed` updates every rendered occurrence of that user ID without a visual cue, and the viewer's own ID re-reads the session. No surface shows a name the session has replaced. | U, C |
 | P-176 | Hosted policy documents render `markdown` through the bounded formatter's display subset (escaped HTML, http(s) and mailto links only, no images, headings level 2 and below, flattened quotes, plain code) with literal fallback, never server HTML or a WebView. External documents and the legal notice open only `https` URLs, through an explicit Open in browser. | U, C |
 | P-177 | `privacy_policy_updated` notifications are tolerated in Activity and never fail parsing. `change_summary` shows as plain text. | U |
 | P-172 | Delete account is reachable from You → Privacy and security. It discloses the per-server scope, the 14-day restoration, finalization and what is kept, shows the destructive decision dialog before the request, uses step-up only on 403 step_up_required, checks unknown results with a session GET, and never resends automatically. | C |
