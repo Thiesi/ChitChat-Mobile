@@ -130,6 +130,7 @@ internal sealed interface AttachmentSendFailure {
     data object Empty : AttachmentSendFailure
     class RateLimited(val retryAfterSeconds: Long?) : AttachmentSendFailure
     data object Membership : AttachmentSendFailure
+    data object Unavailable : AttachmentSendFailure
     data object NotSent : AttachmentSendFailure
     data object PolicyChanged : AttachmentSendFailure
     data object Rejected : AttachmentSendFailure
@@ -178,6 +179,7 @@ private fun sendFailureText(failure: AttachmentSendFailure, locale: java.util.Lo
         ?.let { stringResource(R.string.attach_refused_rate_wait, waitText(it)) }
         ?: stringResource(R.string.attach_refused_rate)
     AttachmentSendFailure.Membership -> stringResource(R.string.conversation_membership)
+    AttachmentSendFailure.Unavailable -> stringResource(R.string.attach_refused_dm_unavailable)
     AttachmentSendFailure.NotSent -> stringResource(R.string.attach_not_sent)
     AttachmentSendFailure.PolicyChanged -> stringResource(R.string.attach_policy_changed)
     AttachmentSendFailure.Rejected -> stringResource(R.string.attach_refused_other)
