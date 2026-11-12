@@ -61,6 +61,7 @@ class ChitChatApplication : Application() {
     val directMessages: DirectOperations by lazy { SessionDirectRepository(sessionRepository) }
     val messageTargets: MessageTargetOperations by lazy { SessionMessageTargetRepository(sessionRepository) }
     val notifications: NotificationOperations by lazy { SessionNotificationRepository(sessionRepository) }
+    val push: io.github.thiesi.chitchat.core.push.PushOperations by lazy { io.github.thiesi.chitchat.core.push.SessionPushRepository(sessionRepository) }
     val messageSearch: MessageSearchOperations by lazy { SessionMessageSearchRepository(sessionRepository) }
     val profiles: ProfileOperations by lazy { SessionProfileRepository(sessionRepository) }
     val roomMentions: RoomMentionOperations by lazy { SessionRoomMentionRepository(sessionRepository) }

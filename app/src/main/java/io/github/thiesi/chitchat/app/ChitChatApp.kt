@@ -137,6 +137,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     search: MessageSearchViewModel? = null,
     profiles: ProfileViewModel? = null,
     completion: CompletionViewModel? = null,
+    pushSettings: io.github.thiesi.chitchat.feature.push.NotificationSettingsViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session = auth.state.collectAsStateWithLifecycle().value
@@ -188,8 +189,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         val entryStarted = entry?.lifecycle?.currentStateAsState()?.value?.isAtLeast(Lifecycle.State.STARTED) == true
         LifecycleEventEffect(Lifecycle.Event.ON_START) { profiles?.foreground(); completion?.foreground() }
         LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-            if (activity?.isChangingConfigurations != true) { profiles?.background(); completion?.background() }
+            if (activity?.isChangingConfigurations != true) { profiles?.background(); completion?.background(); pushSettings?.retire() }
         }
+        // Push facts live only while Notifications is the current entry; leaving it (including
+        // sign-out, which navigates away) clears them. Configuration change keeps the entry.
+        val pushRoute = entry?.destination?.route
+        LaunchedEffect(pushSettings, pushRoute) { if (pushRoute != null && pushRoute != "notification_settings") pushSettings?.retire() }
         LaunchedEffect(completion, entry, entryStarted, completionState?.entryId) {
             val actual=entry
             if (actual!=null && entryStarted && nav.currentBackStackEntry===actual) completion?.navigate(actual.id)
@@ -296,6 +301,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         R.string.rooms_conversation else when (entry?.destination?.route) {
                         "settings" -> R.string.settings
                         "account", NOTIFICATION_ACCOUNT_ROUTE -> R.string.account
+                        "notification_settings" -> R.string.notification_settings_title
                         "rooms" -> R.string.rooms_title
                         else -> R.string.app_name
                     }) },
@@ -404,7 +410,16 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         composable("account") {
                             if (session.phase == SessionPhase.AUTHENTICATED) ScreenContent {
                                 AccountScreen(account, session, auth::refresh)
+                                if (pushSettings != null) TextButton(onClick = { nav.navigate("notification_settings") {
+                                    launchSingleTop = true } }, modifier = Modifier.heightIn(min = 48.dp).testTag("notification_settings_open")) {
+                                    Text(stringResource(R.string.notification_settings_open))
+                                }
                                 typingPreferences?.let { TypingPreferenceCard(it, session, auth::refresh) }
+                            }
+                        }
+                        composable("notification_settings") {
+                            if (session.phase == SessionPhase.AUTHENTICATED && pushSettings != null) ScreenContent {
+                                io.github.thiesi.chitchat.feature.push.NotificationSettingsScreen(pushSettings, session)
                             }
                         }
                         composable(NOTIFICATION_ACCOUNT_ROUTE, arguments = notificationArguments()) { destination ->

@@ -90,6 +90,52 @@ class ComposerLayoutTest {
         close(field.bottom.value, send.bottom.value) // Same row.
     }
 
+    /**
+     * A window resize (the IME opening under adjustResize) can move the composer across the
+     * short-cap exception. The field is the same composable in both arrangements, so focus, the
+     * IME connection and the draft survive the switch; nothing is re-requested after it.
+     */
+    @Test fun stackedToOneRowSwitchKeepsFocusImeConnectionAndDraft() {
+        val cap = mutableStateOf(androidx.compose.ui.unit.Dp.Infinity)
+        val focus = FocusRequester(); lateinit var view: android.view.View
+        val instances = mutableListOf<Any>()
+        compose.setContent {
+            view = androidx.compose.ui.platform.LocalView.current
+            CompositionLocalProvider(LocalDensity provides phone360(1.15f)) {
+                ChitChatTheme(dark = false) {
+                    Box(Modifier.width(360.dp)) {
+                        ComposerLayout(Modifier.fillMaxWidth().heightIn(max = cap.value).padding(horizontal = 16.dp, vertical = 4.dp),
+                            leading = { Box(Modifier.size(48.dp).testTag("details")) },
+                            field = {
+                                val instance = androidx.compose.runtime.remember { Any() }
+                                androidx.compose.runtime.SideEffect { if (instances.lastOrNull() !== instance) instances += instance }
+                                MessageInput(text.value, { text.value = it }, enabled = true, label = "Message", compact = false,
+                                    modifier = Modifier.focusRequester(focus).testTag("field"))
+                            },
+                            trailing = { Box(Modifier.size(48.dp).testTag("attach")); Box(Modifier.size(48.dp).testTag("send")) })
+                    }
+                }
+            }
+        }
+        compose.runOnIdle { text.value = "Draft survives"; focus.requestFocus() } // Setup only; not a tap or IME proof.
+        compose.waitForIdle()
+        val imm = view.context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+        fun stacked() = at("field").bottom <= at("send").top
+        assertTrue("Starts stacked at 115%", stacked())
+        compose.onNodeWithTag("field").assertIsFocused()
+        val activeBefore = compose.runOnIdle { imm.isActive(view) }
+        compose.runOnIdle { cap.value = 80.dp } // Too short to stack: the single row.
+        compose.waitForIdle()
+        assertFalse("Switched to one row", stacked())
+        compose.onNodeWithTag("field").assertIsFocused().assertTextContains("Draft survives")
+        assertEquals("IME connection unchanged by the switch", activeBefore, compose.runOnIdle { imm.isActive(view) })
+        compose.runOnIdle { cap.value = androidx.compose.ui.unit.Dp.Infinity }
+        compose.waitForIdle()
+        assertTrue("Back to stacked", stacked())
+        compose.onNodeWithTag("field").assertIsFocused().assertTextContains("Draft survives")
+        assertEquals("One field instance across both switches", 1, instances.size)
+    }
+
     /** Keyboard Next follows placement order, which is field, Details, Attach, Send when stacked. */
     @Test fun nextFocusFollowsTheStackedVisualOrder() {
         val start = FocusRequester(); lateinit var focus: FocusManager
