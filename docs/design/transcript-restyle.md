@@ -157,8 +157,24 @@ the collapsed row), and the muted line "Message from someone you ignore" with **
 
 - Keep the single `MessageInput` `BasicTextField` (no swapping fields), pinned with Send
   outside scrollers, and the Details access for constrained heights (room-composer contract).
-- Field: full pill, at least 48dp, `surface` fill, a 1.5dp `fieldLine` border, and a 2dp
-  `primary` border when focused.
+- Field: pill corners capped at 24dp (radius = min(height / 2, 24dp)), so a one-line 48dp
+  field is a full pill and a taller multi-line field stays a rounded rectangle, never a
+  circle. At least 48dp, `surface` fill, a 1.5dp `fieldLine` border, and a 2dp `primary`
+  border when focused.
+- **Narrow field: stacked composer** (presentation lead, approved by the technical lead
+  2026-11-12). The composer row is Details · field · Attach · Send. When the width left for
+  the field in that row is **under 9 × the body text size in dp** (body 16sp × font scale:
+  **144dp at 100%, 180dp at 125%, 216dp at 150%, 288dp at 200%**), the composer stacks:
+  - row 1: the field alone, full width (16dp side padding);
+  - row 2, below it: Details at the start, then Attach and Send at the end, each 48dp.
+
+  On a 360dp phone the single-row field is 160dp, so it stays one row up to 110% and
+  stacks from 115%. Both rows are one pinned block outside scrollers, so input and Send stay
+  pinned together (room-composer contract). The same single `BasicTextField` instance is
+  used in both arrangements, not swapped, and test tags and input contracts don't change.
+  Traversal follows the visual order: field, Details, Attach, Send. The Details marker and
+  Send states are unchanged. The threshold depends only on width and font scale, so it
+  doesn't flip while typing.
   - Placeholder: "Message {room}" or "Message {name}".
   - Up to 4 lines expanded and 1 line compact, as today.
   - Trailing emoji-picker slot reserved for M5. Don't render a dead button.
@@ -251,4 +267,5 @@ change to ViewModels, repositories, request handling or authorization.
 | P-83 | No message renders before server confirmation. Sending, uncertain and failed states live on the composer, as specified. Check history and the duplicate-risk choice are the existing explicit actions. | C, existing unknown-send tests |
 | P-84 | Reactions keep 48dp targets, explicit Add/Remove, viewer-ID selection and their tags. | C |
 | P-85 | The composer keeps one text field instance, the pinned Send, Details access and the existing input contracts. | C, existing input tests |
+| P-216 | The message field's corner radius is min(height / 2, 24dp). When the single-row field would be narrower than 9 × the body text size (144dp at 100%, 288dp at 200%), the composer stacks: field full width, then Details · Attach · Send in the same pinned block, with the same field instance, tags and input contracts. At 200% on 360×640dp no word in the field breaks mid-word because of the field's width. | C, S |
 | P-86 | The header glow and "here" count appear only from known presence after entry. Offline shows "unknown". | C |
