@@ -90,6 +90,9 @@ import io.github.thiesi.chitchat.core.ui.AttachAvailability
 import io.github.thiesi.chitchat.core.ui.AttachUnavailableNotice
 import io.github.thiesi.chitchat.core.ui.AttachButton
 import io.github.thiesi.chitchat.core.ui.AttachmentCard
+import io.github.thiesi.chitchat.core.ui.AttachmentEvidenceRow
+import io.github.thiesi.chitchat.core.ui.AttachmentReviewDialog
+import io.github.thiesi.chitchat.core.ui.AttachmentReviewPhase
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import io.github.thiesi.chitchat.core.ui.InlineError
@@ -164,7 +167,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val androidContext = LocalContext.current
     val attach = remember { RoomAttachmentControls() }
     val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null ||
-        attach.modalOpen
+        attach.modalOpen || state.attachmentReview != null
     fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !obscured &&
         !pingsOpen && model.state.value.pingSelection == null && !detailsOpen &&
         ignores?.state?.value?.target == null && !model.state.value.draftsOpen
@@ -325,6 +328,14 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             onSendAnyway = original.takeIf { it.phase == RoomAttachmentPhase.PRIVACY_CHOICE }?.let { { if (interactive() &&
                 actions == null && replyOptions == null) model.prepareOriginalPhoto(displayedSession, roomId, it, isCurrentEntry) } },
             modifier = Modifier.padding(horizontal = 16.dp),
+            unknownActions = original.takeIf { it.phase == RoomAttachmentPhase.UNKNOWN }?.let { unknown -> {
+                TextButton(onClick = { if (interactive() && actions == null && replyOptions == null)
+                    model.checkAttachmentHistory(displayedSession, roomId, completionEntryId, unknown, isCurrentEntry) },
+                    enabled = ready && !state.busy && !state.reading && !obscured && state.attachmentReview == null,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("attachment_card_check_history")) {
+                    Text(stringResource(R.string.attach_check_history))
+                }
+            } },
             onCancel = original.takeIf { it.phase == RoomAttachmentPhase.UPLOADING && it.transfer?.fullBodyReported != true }?.let { {
                 if (isCurrentEntry() && !obscured) model.cancelAttachmentUpload(displayedSession, roomId, it, isCurrentEntry) } })
     } }
@@ -657,6 +668,23 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     model.cancelReply(displayedSession, roomId, choice); replyOptions = null
                 }
             }, onDismiss = { if (replyOptions === choice) replyOptions = null })
+    }
+    model.visibleAttachmentReview(displayedSession, roomId, completionEntryId, isCurrentEntry)?.takeIf { paneInteractive() }?.let { review ->
+        val canAct = ready && !state.busy && review.phase != RoomAttachmentReviewPhase.CHECKING
+        AttachmentReviewDialog(when (review.phase) {
+                RoomAttachmentReviewPhase.CHECKING -> AttachmentReviewPhase.CHECKING
+                RoomAttachmentReviewPhase.EVIDENCE -> AttachmentReviewPhase.EVIDENCE
+                RoomAttachmentReviewPhase.DUPLICATE_RISK -> AttachmentReviewPhase.DUPLICATE_RISK
+                RoomAttachmentReviewPhase.FAILED -> AttachmentReviewPhase.FAILED
+            }, review.evidence.map { AttachmentEvidenceRow(it, it.filename, displayTime(it.sentAt, state.context)) },
+            review.error?.let { conversationError(it) }, canAct,
+            onConfirm = { key -> (key as? RoomAttachmentEvidence)?.let {
+                model.confirmAttachmentEvidence(displayedSession, roomId, completionEntryId, review, it, isCurrentEntry) } },
+            onReject = { model.rejectAttachmentEvidence(displayedSession, roomId, completionEntryId, review, isCurrentEntry) },
+            onAccept = { model.acceptAttachmentDuplicateRisk(displayedSession, roomId, completionEntryId, review, isCurrentEntry) },
+            onCheckAgain = { model.visibleAttachment(displayedSession, roomId, isCurrentEntry)?.let {
+                model.checkAttachmentHistory(displayedSession, roomId, completionEntryId, it, isCurrentEntry) } },
+            onClose = { model.closeAttachmentReview(displayedSession, roomId, completionEntryId, review, isCurrentEntry) })
     }
     if (detailsOpen) AlertDialog(onDismissRequest = { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } },
         title = { Text(stringResource(R.string.conversation_details)) },
