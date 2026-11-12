@@ -321,7 +321,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     }
     val attachmentCard: @Composable () -> Unit = { attachmentFacts?.let { facts ->
         val original = attachment
-        AttachmentCard(facts, enabled = !obscured && !composerDialog && !state.sending,
+        // An upload itself sets sending; its Cancel must stay usable while the body is still being written.
+        AttachmentCard(facts, enabled = !obscured && !composerDialog && (!state.sending || original.phase == RoomAttachmentPhase.UPLOADING),
             onRemove = original.takeIf { it.removable() }?.let { { if (interactive() && actions == null && replyOptions == null)
                 model.removeAttachment(displayedSession, roomId, it, isCurrentEntry) } },
             onSendAnyway = original.takeIf { it.phase == RoomAttachmentPhase.PRIVACY_CHOICE }?.let { { if (interactive() &&
