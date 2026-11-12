@@ -1,5 +1,7 @@
 # Feature-parity matrix
 
+[M6a notification settings](milestones/M6a-push-settings.md) adds Account → Notifications: mention/ping/opt-in DM push choices, whole-hour quiet hours with a time zone, and the device list with Remove, through the released Web Push API. This phone can't receive pushes yet (distributor/subscribe P2, rendering P3); device and live acceptance remain pending.
+
 [A-floor fixes F1–F3](milestones/A-floor-f1-f3.md) make bar titles one line (with a fixed-size wordmark), give bounded room/DM headers a fade plus More/Back to top, and make the Details marker shape-distinct with per-state descriptions. Presentation only.
 
 [M5g7d DM attachment controls](milestones/M5g7d-direct-attach-controls.md) brings the room attachment flow to direct messages through the DM actor, with DM availability, rate-limit and disclosure rules. Attachments can now be sent in rooms and DMs; downloads, previews, Save/Share, share-in and provider/live acceptance remain pending.

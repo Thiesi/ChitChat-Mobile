@@ -166,6 +166,16 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         return decode<ProfileReply>(request(path).require200()).snapshot(userId, roomId)
     }
 
+    suspend fun pushSettings(): io.github.thiesi.chitchat.core.push.PushSettings =
+        decode<io.github.thiesi.chitchat.core.push.PushSettingsReply>(request("push/preferences.php").require200()).domain()
+    /** [body] is the complete choice set from pushPreferencesBody, including the quiet-hours triplet. */
+    suspend fun updatePushPreferences(body: String, csrf: String): io.github.thiesi.chitchat.core.push.PushPreferences =
+        decode<io.github.thiesi.chitchat.core.push.PushPreferencesReply>(request("push/update-preferences.php", body, csrf)
+            .require200()).preferences.domain()
+    suspend fun revokePushDevice(id: Long, csrf: String): List<io.github.thiesi.chitchat.core.push.PushDevice> =
+        decode<io.github.thiesi.chitchat.core.push.PushDevicesReply>(request("push/revoke-device.php",
+            "{\"id\":$id}", csrf).require200()).domain()
+
     suspend fun notifications(beforeId: Long?, limit: Int): NotificationPage {
         if (beforeId != null && beforeId <= 0 || limit !in 1..100)
             throw ApiFailure(FailureKind.HTTP, 400, "validation_error")
