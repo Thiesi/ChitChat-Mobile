@@ -98,7 +98,8 @@ upload:
   header (its magic bytes) decides. The provider's type or the Photo Picker can only make a
   file count as a photo, never stop it counting as one.
 - **Presentation:** the pending card for a photo shows a small line, "Location removed",
-  after cleaning. A photo is **never** sent silently with its location. Each case below gets
+  after cleaning. After **Send anyway**, the line becomes "**Location not removed**", with the
+  Lantern `warning` triangle in `unsureLine` (PR #190). A photo is **never** sent silently with its location. Each case below gets
   an explicit choice, **Send anyway** or **Remove**:
   - **cleaning failed** (JPEG, PNG or WebP): "Couldn't remove the location from this photo.";
   - **a photo the app can't clean:** a recognized but unsupported image format (HEIC/HEIF,
@@ -113,8 +114,11 @@ upload:
 
 ## Composer: attaching
 
-- **Entry:** a paperclip icon button (48dp, label "Attach") inside the message field's
-  trailing area, beside the reserved emoji slot. Hidden where uploads aren't allowed: guests
+- **Entry:** a paperclip icon button (48dp, label "Attach") **beside** the message field, in
+  the order field · Attach · Send, with Send pinned to the field as before (presentation lead,
+  PR #190: the field's own semantics and keyboard contracts win over placing it inside the
+  field). The reserved emoji slot moves beside it when emoji arrives. The icon is the Lantern
+  `attach` glyph in `textMuted`. Hidden where uploads aren't allowed: guests
   (`attachments` is `null`), reading-only rooms, a blocked DM, or no permission to send.
 - **Server without uploads (`max_bytes: 0`):** the paperclip stays visible, so the absence is
   explained rather than mysterious. Its label is "Attach, not available on this server", and
@@ -149,9 +153,18 @@ upload:
 - **Pending attachment card** above the composer field, in the composer notice stack directly
   under the reply chip:
   - images: a locally decoded, downsampled thumbnail (decoded on the device, never uploaded
-    early), filename, size ("2.4 MB") and **Remove** (×, 48dp);
+    early), filename, size ("2.4 MB") and **Remove** (the Lantern `close` icon, 48dp);
   - other files: a type icon (PDF, archive, text, table, code), filename, type and size, and
     Remove.
+  - **Interim, until thumbnails land** (PR #190): a 40dp tile with the Lantern `image` glyph for
+    images and `document` for everything else, 24dp in `textMuted`. The tile never holds text;
+    the type stays in the detail line ("PDF · 2.4 MB"). Thumbnails follow once their decoding
+    is counted in the memory ledger.
+  - **Card lines** carry a 16dp leading glyph, top-aligned with the first line, so they never
+    differ by color alone (A-05): privacy lines use the `warning` triangle in `unsureLine` with
+    `text`-colored copy, and blocking lines (too large, type refused, unreadable, too large for
+    this phone, server off, settings unreadable) use the `error` octagon with `error`-colored
+    copy. No full level-2 block is drawn inside the card.
   - The field's text becomes the caption. Placeholder while a file is attached: "Add a
     caption".
 - **One file per message.** A second pick replaces the first after the decision dialog

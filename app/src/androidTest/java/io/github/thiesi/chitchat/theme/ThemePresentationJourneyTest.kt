@@ -46,6 +46,17 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.*
 import java.io.File
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import io.github.thiesi.chitchat.core.media.*
+import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.network.FailureKind
+import io.github.thiesi.chitchat.core.ui.AttachmentPickerOverride
+import io.github.thiesi.chitchat.core.ui.LocalAttachmentPickerOverride
+import io.github.thiesi.chitchat.feature.conversation.RoomAttachmentPhase
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /** Synthetic owned-window captures; no input or live mutations. */
 @OptIn(ExperimentalTestApi::class)
@@ -67,6 +78,11 @@ class ThemePresentationJourneyTest {
     private lateinit var notices: NotificationCenterViewModel
     private lateinit var search: MessageSearchViewModel
     private var observedFontScale=0f
+    // Synthetic attach states: a one-shot picker and a transport that holds the READY bytes.
+    private val budget=AttachmentMemoryBudget(12L*1024*1024)
+    private val wire=CaptureUploads()
+    private var nextPick: () -> PickedAttachmentRead={ error("No pick scheduled") }
+    private val picker=AttachmentPickerOverride { _,_,deliver -> deliver(nextPick()) }
     private var observedWidth=0f
     private var observedHeight=0f
     private fun text(id: Int)=InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
@@ -103,7 +119,7 @@ class ThemePresentationJourneyTest {
                 override suspend fun create(input: CreateRoom): RoomInfo=error("No room creation in a capture")
             }
             directory=ViewModelProvider(activity,RoomsViewModel.factory(rooms))[RoomsViewModel::class.java]
-            room=ViewModelProvider(activity,ConversationViewModel.factory(api.rooms))[ConversationViewModel::class.java]
+            room=ViewModelProvider(activity,ConversationViewModel.factory(api.rooms,attachmentBudget=budget,uploads=wire))[ConversationViewModel::class.java]
             val directs=object: DirectOperations by api.directs {
                 override suspend fun inbox(): DirectInbox {
                     val last=api.directs.history(8,null,1).messages.single()
@@ -129,12 +145,14 @@ class ThemePresentationJourneyTest {
                 BoxWithConstraints(Modifier.fillMaxSize().testTag("theme_capture_root")) {
                     val width=maxWidth.value;val height=maxHeight.value
                     SideEffect { observedFontScale=density.fontScale;observedWidth=width;observedHeight=height }
+                    CompositionLocalProvider(LocalAttachmentPickerOverride provides picker) {
                     ChitChatApp(settings,auth,account,directory,room,directInbox=inbox,directThread=thread,
                         notifications=notices,messageTargets=targets,search=search,onThemeChanged={ dark ->
                             activity.enableEdgeToEdge(
                                 statusBarStyle=SystemBarStyle.auto(android.graphics.Color.TRANSPARENT,android.graphics.Color.TRANSPARENT) { dark },
                                 navigationBarStyle=SystemBarStyle.auto(android.graphics.Color.TRANSPARENT,android.graphics.Color.TRANSPARENT) { dark })
                         })
+                    }
                 }
             } })
         }
@@ -169,7 +187,9 @@ class ThemePresentationJourneyTest {
         compose.onNode(hasText(text(R.string.rooms_open_conversation)) and hasAnyAncestor(isDialog())).reveal().performNativeTap()
         compose.waitUntil(5_000) { room.state.value.let { it.loaded && !it.busy && it.roomId==43L } }
         compose.onNodeWithTag("conversation_composer").assertHeightIsAtLeast(48.dp).assertIsDisplayed()
-        capture(label,"room");back();back()
+        capture(label,"room")
+        attachCaptures(label)
+        back();back()
         action(R.string.dm_title)
         compose.waitUntil(5_000) { inbox.state.value.let { it.inbox!=null && !it.busy } }
         compose.onNodeWithTag("dm_inbox").performScrollToNode(hasTestTag("dm_conversation:8"))
@@ -186,6 +206,52 @@ class ThemePresentationJourneyTest {
         compose.waitUntil(5_000) { search.state.value.entry!=null }
         capture(label,"search")
         compose.runOnIdle { assertEquals(0,api.rooms.sends);assertEquals(0,api.notices.posts) }
+    }
+
+    private fun attachCaptures(label: String) {
+        val original=sessions.state.value.attachmentPolicy
+        fun policy(value: AttachmentPolicy) { compose.runOnIdle { sessions.state.value=sessions.state.value.copy(attachmentPolicy=value) } }
+        fun settledPhase() { compose.waitUntil(5_000) { room.drafts.value[43]?.attachment?.phase.let { it!=null && it!=RoomAttachmentPhase.PREPARING } } }
+        fun pick(read: PickedAttachmentRead,photo: Boolean) {
+            nextPick={ read }
+            compose.onNodeWithTag("conversation_attach").reveal().assertIsEnabled().performNativeTap()
+            compose.onNodeWithTag(if(photo) "attach_photo" else "attach_file").performNativeTap()
+            settledPhase()
+        }
+        fun remove() {
+            compose.onNodeWithTag("attachment_card_remove").performNativeTap()
+            compose.waitUntil(5_000) { room.drafts.value[43]?.attachment==null }
+        }
+        // Photo cleaned of location metadata.
+        pick(PickedAttachmentRead("photo.jpg","image/jpeg") { ByteArrayInputStream(captureJpeg()) },photo=true)
+        capture(label,"room-attach-photo");remove()
+        // An image type the app recognizes but can't clean: explicit choice.
+        pick(PickedAttachmentRead("IMG_0001.heic","image/heic") { ByteArrayInputStream(HEIF_HEADER) },photo=true)
+        capture(label,"room-attach-privacy");remove()
+        // Sending, then not sure it arrived, then the explicit no-match dialog.
+        pick(PickedAttachmentRead("notes.txt","text/plain") { ByteArrayInputStream("Synthetic capture notes".toByteArray()) },photo=false)
+        compose.onNodeWithTag("conversation_send").assertIsEnabled().performNativeTap()
+        compose.waitUntil(5_000) { wire.calls==1 }
+        capture(label,"room-attach-sending")
+        compose.runOnIdle { wire.unknown() }
+        compose.waitUntil(5_000) { room.drafts.value[43]?.attachment?.phase==RoomAttachmentPhase.UNKNOWN && !room.state.value.busy }
+        capture(label,"room-attach-unknown")
+        compose.onNodeWithTag("attachment_card_check_history").reveal().performNativeTap()
+        compose.waitUntil(5_000) { room.state.value.attachmentReview?.phase==io.github.thiesi.chitchat.feature.conversation.RoomAttachmentReviewPhase.DUPLICATE_RISK }
+        compose.onNodeWithTag("attach_review_accept").performNativeTap()
+        compose.waitUntil(5_000) { room.drafts.value[43]?.attachment?.phase==RoomAttachmentPhase.READY }
+        remove()
+        // Server limit pre-check with the real figures; no POST.
+        policy(AttachmentPolicy.Known(10,setOf("text/plain"),emptySet(),UploadRateLimits(UploadRateLimit(10,3_600),UploadRateLimit(10,3_600))))
+        pick(PickedAttachmentRead("report.txt","text/plain") { ByteArrayInputStream("Twenty bytes of text".toByteArray()) },photo=false)
+        capture(label,"room-attach-too-large");remove()
+        // Unreadable file settings: explanation instead of a picker.
+        policy(AttachmentPolicy.Invalid)
+        compose.onNodeWithTag("conversation_attach").reveal().performNativeTap()
+        compose.onNodeWithTag("attach_unavailable").assertExists()
+        capture(label,"room-attach-settings")
+        policy(original)
+        compose.runOnIdle { assertEquals(1,wire.calls);assertEquals(0,api.rooms.sends) }
     }
 
     private fun capture(label: String,scene: String) {
@@ -212,4 +278,43 @@ class ThemePresentationJourneyTest {
     @Test fun capturesLightFont200()=captures(0,true)
     @Test fun capturesDarkFont200()=captures(1,true)
     @Test fun capturesPureBlackFont200()=captures(2,true) // THEME_ONLY
+}
+
+/** A small real JPEG without location data; the cleaner keeps its pixels and orientation. */
+private fun captureJpeg(): ByteArray {
+    val bitmap=android.graphics.Bitmap.createBitmap(16,12,android.graphics.Bitmap.Config.ARGB_8888)
+    bitmap.eraseColor(android.graphics.Color.rgb(240,106,59))
+    return try { ByteArrayOutputStream().also { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,90,it)) }.toByteArray() }
+    finally { bitmap.recycle() }
+}
+
+/** An ISO-BMFF header with a HEIC brand: recognized as an image the app can't clean. */
+private val HEIF_HEADER=byteArrayOf(0,0,0,24,0x66,0x74,0x79,0x70,0x68,0x65,0x69,0x63,0,0,0,0,
+    0x6d,0x69,0x66,0x31,0x68,0x65,0x69,0x63,0,0,0,0)
+
+/** Holds the READY allocation like the real transport; unknown() reports a full body then a lost connection. */
+private class CaptureUploads : AttachmentUploadOperations {
+    @Volatile var calls=0
+    private val stop=CompletableDeferred<Unit>()
+    private val result=CompletableDeferred<RoomUploadReceipt>()
+    private val facts=kotlinx.coroutines.flow.MutableStateFlow(UploadTransferFacts(23,fileBytesBuffered=9,multipartSizeBytes=200,
+        multipartAttemptedUpperBound=80,writerStarted=true,writerRunning=true))
+    fun unknown() {
+        facts.value=facts.value.copy(fileBytesBuffered=23,multipartAttemptedUpperBound=200,requestBodyEndObserved=true,requestBodyEndBytes=200)
+        stop.complete(Unit);result.completeExceptionally(ApiFailure(FailureKind.NETWORK))
+    }
+    override suspend fun room(expected: SessionState,roomId: Long,retained: RetainedAttachmentPreparation,
+        ready: AttachmentPreparation.Ready,caption: String,replyId: Long?,
+        onTransfer: (kotlinx.coroutines.flow.StateFlow<UploadTransferFacts>) -> Unit): RoomUploadReceipt {
+        val hold=checkNotNull(retained.holdUpload(ready));calls++
+        try { onTransfer(facts);return result.await() }
+        finally {
+            withContext(NonCancellable) { stop.await() }
+            facts.value=facts.value.copy(writerRunning=false,callbackFinished=true,stopped=true)
+            hold.close()
+        }
+    }
+    override suspend fun direct(expected: SessionState,peerId: Long,retained: RetainedAttachmentPreparation,
+        ready: AttachmentPreparation.Ready,caption: String,replyId: Long?,
+        onTransfer: (kotlinx.coroutines.flow.StateFlow<UploadTransferFacts>) -> Unit): DirectUploadReceipt=error("Room captures only")
 }

@@ -70,7 +70,7 @@ transcript, lists, status and modals → Send when back online.
 ### 3 Server found (new chooser; ANONYMOUS phase)
 
 - Shown when the anonymous bootstrap succeeds. A card with the installation lantern (initial
-  from the name, identity hue from the host; the operator's icon once ChitChat#211 ships, see
+  from the name, identity hue from the host; the operator's icon when it has one (ChitChat#211), see
   [installation-icon.md](installation-icon.md)), the **installation name** from
   `application.name` (ChitChat#149, the effective name including the operator's override) as
   the title, then the **host as a second line** and a lock icon. The host always stays

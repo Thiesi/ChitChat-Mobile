@@ -39,7 +39,8 @@ class ComparisonEvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):runner.collect(self.root,self.destination,'after')
 
     def test_excess_or_unexpected_files_are_not_copied(self):
-        files=[Path(str(n)) for n in range(81)]
+        # One more than the complete three-palette, two-scale matrix.
+        files=[Path(str(n)) for n in range(6*(len(runner.SCENES)+1)+1)]
         with patch.object(Path,'rglob',return_value=iter(files)):
             with self.assertRaises(ValueError):runner.collect(self.root,self.destination,'after')
         self.assertEqual([],list(self.destination.iterdir()))
@@ -55,7 +56,7 @@ class ComparisonEvidenceTests(unittest.TestCase):
                 (self.source/(prefix+'-configuration.json')).write_text(json.dumps(dict(
                     widthDp=360,heightDp=640,fontScale=2 if scale=='font200' else 1)))
         records,complete=runner.collect(self.root,self.destination,'before',True)
-        self.assertTrue(complete);self.assertEqual(72,len(records))
+        self.assertTrue(complete);self.assertEqual(6*(len(runner.SCENES)+1),len(records))
 
     def run_capture(self,status,complete,kind='after'):
         (self.destination/'provenance.json').write_text(json.dumps(dict(kind=kind,worktree=str(self.root),testClass='fixture')))

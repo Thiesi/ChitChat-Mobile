@@ -6,20 +6,23 @@ issues, with no fallback paths for older servers. Mockup: `ServerUpdate` on the 
 
 **Detection** (ChitChat#149; baseline decision on issue #1, comment 6729652556). `GET
 session.php` (anonymous, member and guest) carries `application: {name, version}` and
-`capabilities: {schema_version, …}`. **The minimum is ChitChat 3.5.0** (`{minimum}`; tag
-`v3.5.0`, commit `25e65eb`), the release with batch 3 push (#147, #148, #150) and the staff data
-(#191), on top of 3.4.0's batch 2 (#160, #159, #155, #158). It was raised from 3.4.0 on
-2026-11-09 (issue #1, comment 6737288486), matching AGENTS.md and `backend-compatibility.md`.
+`capabilities: {schema_version, …}`. **The minimum is ChitChat 3.7.0** (`{minimum}`; tag
+`v3.7.0`, commit `eba61e9`), the release with signed-in sessions (#205) and authenticator codes
+(#204). It includes 3.6.0's native passkeys (#145), browser sign-in handoff (#146) and
+installation icon (#211), 3.5.0's batch 3 push (#147, #148, #150) and staff data (#191), and
+3.4.0's batch 2 (#160, #159, #155, #158). It was raised from 3.5.0 on 2026-11-11 (technical
+lead; earlier from 3.4.0 on 2026-11-09, issue #1, comment 6737288486). AGENTS.md and
+`backend-compatibility.md` follow in the engineering change.
 
-The state shows only for a parsed session response that is **definitely older than 3.5.0**:
+The state shows only for a parsed session response that is **definitely older than 3.7.0**:
 
 1. **No `capabilities.schema_version`, or no `application`:** the server is older than 3.3.0.
    Show the state.
 2. **Otherwise, compare `application.version`** (reliable since 3.3.0). Parse its leading
    `major.minor.patch` as three non-negative integers and compare them numerically (3.10.0 is
-   newer than 3.5.0). Anything that doesn't start with that pattern is **unknown**.
-   - Definitely below 3.5.0: show the state.
-   - 3.5.0 or newer: don't.
+   newer than 3.7.0). Anything that doesn't start with that pattern is **unknown**.
+   - Definitely below 3.7.0: show the state.
+   - 3.7.0 or newer: don't.
 3. **Unknown version:** show the state only when the session-level feature keys are **also all
    missing**. At step 3 that's `policies`. On revalidation it's `policies` and
    `user.recovery_key`. If any of them is present, the state doesn't show: an unknown version
@@ -43,7 +46,7 @@ its own, it never triggers this state.
   instead.
 - **Only for a definite answer.** A session response that arrived and parsed, and is older
   than the minimum by the Detection rules: a missing capabilities block, a version below
-  3.5.0, or an unknown version with the feature keys also missing. Network errors, timeouts
+  3.7.0, or an unknown version with the feature keys also missing. Network errors, timeouts
   and other failures keep their existing messages (status and onboarding specs). This state
   is never a guess.
 
@@ -102,7 +105,7 @@ session response that's older than the minimum (Detection):
 
 | ID | Requirement | Verify |
 |---|---|---|
-| P-180 | This state shows at step 3 and on revalidation only for a parsed session response that's definitely older than 3.5.0: no `capabilities.schema_version` or `application`; a numerically compared `major.minor.patch` below 3.5.0; or an unknown version with the session-level feature keys (`policies`, plus `user.recovery_key` when signed in) all missing. An unknown version with any of those keys present never triggers it. A missing per-feature key only hides its own feature. Network or other failures never trigger it. | U, C |
+| P-180 | This state shows at step 3 and on revalidation only for a parsed session response that's definitely older than 3.7.0: no `capabilities.schema_version` or `application`; a numerically compared `major.minor.patch` below 3.7.0; or an unknown version with the session-level feature keys (`policies`, plus `user.recovery_key` when signed in) all missing. An unknown version with any of those keys present never triggers it. A missing per-feature key only hides its own feature. Network or other failures never trigger it. | U, C |
 | P-181 | Step 3 offers only Copy note and Use a different server. Revalidation offers Copy note, Check again and Sign out, and keeps the session. | C |
 | P-182 | While the state shows, no writes, reads or realtime run against that server. Check again is the only server request, and it is explicit. | C, R |
 | P-183 | The copied note contains the raw host (`{address}`, never the display name), the minimum and the found version (or "unknown"), and nothing else. | U |

@@ -43,6 +43,7 @@ The onboarding spec's copy table already covers `welcome_title`, `welcome_body`,
 |---|---|---|---|
 | `checking_session` | Checking your server and session… | Looking for {host}… | — |
 | `session_expired` | This session expired or changed. Sign in again. | You've been signed out. Sign in again. | — |
+| `session_revoked` | (new) | You were signed out from another device. Sign in again. (settled, technical lead 2026-11-11; `401 session_revoked` or `forced_logout` `session_revoked`, account-security.md "Sessions") | — |
 | `rate_limited` | Too many attempts. Please wait before trying again. | Too many attempts. Try again in a little while. (unknown delay) / Too many attempts. Try again in {wait}. (ChitChat#157, status-presentation "Waiting times") | — |
 | `request_rejected` | The server rejected this request. Check your account or contact the server administrator. | Your server refused this. If it keeps happening, ask the person who runs it. | — |
 | `redirect_error` | The server redirected this API request. Check the server address; credentials were not forwarded. | The server tried to send the app somewhere else. Check the address. Your password wasn't sent. | — |
@@ -50,6 +51,9 @@ The onboarding spec's copy table already covers `welcome_title`, `welcome_body`,
 | `providers_unavailable` | External-provider sign-in needs a native authentication handoff that this server does not yet support. | Signing in with another service isn't available in the app yet. Use your username and password. | — |
 | `maintenance_notice` | This server is in maintenance lockdown. Sign-in may be restricted. | {installation} is in maintenance. Signing in may not work right now. | — |
 | `registration_policy` | An account is created on this server, not with the app publisher. The server decides your permissions. | Your account is created on {host}, not with the app maker. The server decides what you can do. | — |
+| `username_change_required` | (new) | Choose a new username to send messages. (banner; play-readiness.md "Required username change", dependency ChitChat#164) | — |
+| `username_taken` | (new) | That username isn't available. Try a different one. (also reserved and placeholder-pattern names; never says why) | — |
+| `username_change_not_required` | (new) | You don't need to choose a new username any more. | — |
 | `username_policy` | Use 3–32 ASCII letters, numbers, dots, underscores or hyphens, starting with a letter or number. | 3–32 characters: letters (a–z), numbers, dots, underscores or hyphens. Start with a letter or number. | — |
 | `password_policy` | Use 12–4096 characters without your username or control characters. The server checks the final password policy. | At least 12 characters, and not your username. Your server may have more rules. | — |
 | `birth_date_explanation` | Birth date is optional. The server uses it for age-restricted rooms. | Optional. Only used for age-restricted rooms. | — |

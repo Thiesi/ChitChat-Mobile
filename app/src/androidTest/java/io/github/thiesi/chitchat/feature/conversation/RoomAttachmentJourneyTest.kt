@@ -211,6 +211,9 @@ class RoomAttachmentJourneyTest {
         compose.waitUntil(5_000) { model.drafts.value[42]?.attachment?.phase == RoomAttachmentPhase.READY && !model.state.value.busy }
         compose.onNodeWithText(text(R.string.attach_refused_too_large_limit, text(R.string.attach_size_bytes, "5"))).assertIsDisplayed()
         compose.onNodeWithTag("conversation_send").assertIsEnabled()
+        // A refused file can still be removed or replaced.
+        compose.onNodeWithTag("attachment_card_remove").assertIsDisplayed().assertIsEnabled()
+        attach().assertIsEnabled()
         compose.runOnIdle { assertEquals(1, wire.calls); assertEquals(0, api.sends.get()) }
     }
 
@@ -235,6 +238,10 @@ class RoomAttachmentJourneyTest {
         // Accepting the risk posts nothing; only a later explicit Send would.
         compose.onNodeWithTag("conversation_send").assertIsEnabled()
         compose.runOnIdle { assertEquals(1, wire.calls); assertEquals(0, api.sends.get()); assertEquals("Caption fixture", model.state.value.draft) }
+        // After accepting the risk the person may still discard the file instead of sending it.
+        compose.onNodeWithTag("attachment_card_remove").assertIsDisplayed().assertIsEnabled().performNativeTap()
+        compose.waitUntil(5_000) { model.drafts.value[42]?.attachment == null }
+        compose.runOnIdle { assertEquals(1, wire.calls) }
     }
 
     @Test fun keepAsDraftLeavesTheFileUnknownAndLocked() {
