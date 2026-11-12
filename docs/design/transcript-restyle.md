@@ -173,8 +173,14 @@ the collapsed row), and the muted line "Message from someone you ignore" with **
   pinned together (room-composer contract). The same single `BasicTextField` instance is
   used in both arrangements, not swapped, and test tags and input contracts don't change.
   Traversal follows the visual order: field, Details, Attach, Send. The Details marker and
-  Send states are unchanged. The threshold depends only on width and font scale, so it
-  doesn't flip while typing.
+  Send states are unchanged.
+  - **Short-height exception** (PR #203, presentation lead): when the composer's height cap
+    is too short for a 48dp field above the 48dp controls row (compact mode, or a large font
+    in a short window), the composer keeps the single row rather than squeezing the field
+    below 48dp. A 48dp field wins over the stack.
+  - The arrangement depends only on width, font scale and the composer's height cap, never
+    on the text, so it doesn't flip while typing. A window change (rotation, the keyboard
+    resizing the window) can switch it; the field instance, focus and draft stay the same.
   - Placeholder: "Message {room}" or "Message {name}".
   - Up to 4 lines expanded and 1 line compact, as today.
   - Trailing emoji-picker slot reserved for M5. Don't render a dead button.
@@ -267,5 +273,5 @@ change to ViewModels, repositories, request handling or authorization.
 | P-83 | No message renders before server confirmation. Sending, uncertain and failed states live on the composer, as specified. Check history and the duplicate-risk choice are the existing explicit actions. | C, existing unknown-send tests |
 | P-84 | Reactions keep 48dp targets, explicit Add/Remove, viewer-ID selection and their tags. | C |
 | P-85 | The composer keeps one text field instance, the pinned Send, Details access and the existing input contracts. | C, existing input tests |
-| P-216 | The message field's corner radius is min(height / 2, 24dp). When the single-row field would be narrower than 9 × the body text size (144dp at 100%, 288dp at 200%), the composer stacks: field full width, then Details · Attach · Send in the same pinned block, with the same field instance, tags and input contracts. At 200% on 360×640dp no word in the field breaks mid-word because of the field's width. | C, S |
+| P-216 | The message field's corner radius is min(height / 2, 24dp). When the single-row field would be narrower than 9 × the body text size (144dp at 100%, 288dp at 200%), the composer stacks: field full width, then Details · Attach · Send in the same pinned block, with the same field instance, tags and input contracts. At 200% on 360×640dp no word in the field breaks mid-word because of the field's width. When a 48dp field won't fit above the controls row, the single row is kept. | C, S |
 | P-86 | The header glow and "here" count appear only from known presence after entry. Offline shows "unknown". | C |

@@ -238,9 +238,15 @@ Details trigger conditions stay as they are, because the status slice owns them.
     the cut reads as "continues", not "broken";
   - add a **More** text button (48dp target, `signatureText`) at the header's bottom-end. It
     scrolls the header by one viewport height, and at the end it becomes **Back to top**;
-  - the header column exposes scroll semantics (TalkBack announces it as scrollable).
+  - the header column exposes scroll semantics (TalkBack announces it as scrollable);
+  - **More gets its own band** (PR #203, presentation lead and technical lead): the
+    scrolling viewport ends at the top of a 48dp More band inside the same 30% bound, so
+    header content is never drawn under More. The fade stays inside the viewport, just above
+    the band. A control partly scrolled out at the viewport's edge is ordinary scrolling:
+    scrolling, accessibility focus and More bring it into view, and it keeps its 48dp target
+    and label. "Saved room drafts" stays in the header.
 
-  When the content fits, there's no fade and no button. Don't change the header text, the status
+  When the content fits, there's no fade, no band and no button, and nothing is reserved. Don't change the header text, the status
   precedence or what the header contains. The status slice shortens it later.
 - **Acceptance:**
   - At 2.0 on 360×640dp, room and DM thread captures show the fade and More whenever the header
