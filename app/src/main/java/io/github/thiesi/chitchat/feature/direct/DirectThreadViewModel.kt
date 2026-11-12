@@ -738,6 +738,8 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
                 previous?.takeIf { it.body == value.draft && it.composerReply === value.composerReply }?.content ?: Any()))
     }
     fun canSend() = attachments[mutable.value.peerId] == null && composerCanSend()
+    /** Paperclip/admission readiness only. selectAttachment still rechecks every original fact. */
+    internal fun canBeginAttachment() = active && attachmentBudget != null && !mutable.value.sending && composerCanSend()
     private fun composerCanSend() = uploadPosting == null && attachments[mutable.value.peerId]?.view?.phase !in
         setOf(DirectAttachmentPhase.UNKNOWN, DirectAttachmentPhase.CONFIRMED, DirectAttachmentPhase.CANCELLING) &&
         active && ready() && mutable.value.let { !it.busy && it.authorDialog == null && it.reactionDialog == null && it.attachmentReview == null && !it.stale && it.loaded &&

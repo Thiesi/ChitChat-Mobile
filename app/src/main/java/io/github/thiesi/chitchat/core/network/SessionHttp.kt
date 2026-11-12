@@ -58,7 +58,18 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /** No redirects, automatic replay, logging or disk cache. The platform verifies TLS. */
-internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpClient()) {
+/** The app's identity for the server's signed-in session list. Version and Android release only,
+ * never a device model; header-unsafe characters are dropped.
+ */
+internal fun chitChatUserAgent(versionName: String? = io.github.thiesi.chitchat.BuildConfig.VERSION_NAME,
+    androidRelease: String? = android.os.Build.VERSION.RELEASE): String {
+    fun token(value: String?) = value?.filter { it in '!'..'~' && it != '(' && it != ')' }?.take(32)
+        ?.takeIf { it.isNotEmpty() } ?: "unknown"
+    return "ChitChat-Mobile/${token(versionName)} (Android ${token(androidRelease)})"
+}
+
+internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpClient(),
+    private val userAgent: String = chitChatUserAgent()) {
     private val origin = server.value.toHttpUrl()
     private val jar = OriginCookieJar(origin)
     private val client = base.newBuilder()
@@ -70,7 +81,7 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
             val url = chain.request().url
             if (url.scheme != "https" || url.host != origin.host || url.port != origin.port ||
                 !url.encodedPath.startsWith("/api/v1/")) throw ApiFailure(FailureKind.REDIRECT)
-            chain.proceed(chain.request())
+            chain.proceed(chain.request().newBuilder().header("User-Agent", userAgent).build())
         }.build()
 
     fun restoreCookies(cookies: List<String>) = jar.restore(cookies)

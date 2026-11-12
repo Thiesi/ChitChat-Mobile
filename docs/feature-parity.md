@@ -1,6 +1,14 @@
 # Feature-parity matrix
 
-[M5g6a image/preview metadata](milestones/M5g6a-attachment-preview-metadata.md) retains released oriented dimensions and validated rendition hints through room/DM history and inbox enrichment. It adds no binary fetch, cache, framing, autoload, viewer or save/share control and does not complete P-159. Native upload/picker/consent controls, authenticated downloads, sharing and provider/live acceptance remain pending; files/media is not usable and existing disclosures stay accurate.
+[M5g7d DM attachment controls](milestones/M5g7d-direct-attach-controls.md) brings the room attachment flow to direct messages through the DM actor, with DM availability, rate-limit and disclosure rules. Attachments can now be sent in rooms and DMs; downloads, previews, Save/Share, share-in and provider/live acceptance remain pending.
+
+[M5g7c room attachment reconciliation](milestones/M5g7c-room-attach-reconciliation.md) adds Check history, person-confirmed SHA evidence and the accepted "Send again?" risk dialog for unknown room uploads. Room attachments are usable end to end in the app; DM files, downloads, previews, sharing and provider/live acceptance remain pending.
+
+[M5g7b room attachment Send](milestones/M5g7b-room-attach-send.md) lets rooms send the attached file with progress, Cancel while the body is still sending, definite-refusal copy and a "Not sure your file arrived" state. Checking an unconfirmed file (M5g7c), DM files, downloads, previews and sharing remain pending.
+
+[M5g7a room attach controls](milestones/M5g7a-room-attach-controls.md) puts the first attachment controls on screen in rooms: paperclip, Photo/File choice sheet, pending card with privacy choice, local failures and policy pre-checks, Remove and Replace. Sending files is not available yet (room Send, progress/Cancel and reconciliation follow, then DMs); the in-app availability text says so. Downloads, previews, sharing and provider/live acceptance remain pending.
+
+[M5g6a image/preview metadata](milestones/M5g6a-attachment-preview-metadata.md) retains released oriented dimensions and validated rendition hints through room/DM history and inbox enrichment. It adds no binary fetch, cache, framing, autoload, viewer or save/share control and does not complete P-159. Sending files is delivered separately (M5g7a–d); authenticated downloads, previews, sharing and provider/live acceptance remain pending, and existing disclosures stay accurate.
 
 [M5g5f DM upload reconciliation](milestones/M5g5f-direct-attachment-reconciliation-state.md) adds private explicit history/SHA/person-confirmation/duplicate-risk state with current owner/entry/disclosure and independent uncertainty guards. Room/DM internal upload/reconciliation state is implemented; native picker/card/privacy/unknown-delivery controls, downloads/sharing and provider/live acceptance remain pending. Files/media is not usable; existing feature-availability disclosures remain accurate.
 

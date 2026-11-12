@@ -205,7 +205,7 @@ and [communication.md](communication.md). Nothing renders as a bubble before the
 | Uploaded, waiting for the server | Indeterminate ring, "Finishing…" | none. Cancel disappears here and nothing in this phase claims non-delivery. Any interruption after the full body is written (cancel race, connection loss, timeout, genuine background) is **Unknown** |
 | Confirmed (201) | The canonical message appears as a bubble; draft and card clear | — |
 | Definite failure (server error before commit, too large, type not allowed, membership, 429, block) | A level-2 notice with the server's meaning: "Your server refused this file: it's larger than the {limit} it accepts." (413 with `error.max_bytes`) or "Your server refused this file: it's too large." (a non-JSON 413 from a proxy, with an unknown limit, still a definite refusal and never Unknown) / "This file type isn't allowed on this server." / "You've reached the upload limit. Try again in {wait}." (429 with `retry_after_seconds`, phrased per status-presentation "Waiting times"), or "You've reached the upload limit. Try again later." when the delay is unknown. Send stays available, and nothing uploads by itself when the time is up. The file stays attached | Remove or replace, or send again later |
-| **Unknown** (anything after the full body was written: connection lost, timeout, a cancel that lost the race, ambiguous transport error) | The `unsureLine` notice: **"Not sure your file arrived."** with **Check history**. The file and caption stay attached | Check history runs the existing explicit reconciliation. If the message isn't found, the duplicate-risk dialog follows: "Send again? We checked and couldn't find it. Sending again may post it twice." |
+| **Unknown** (anything after the full body was written: connection lost, timeout, a cancel that lost the race, ambiguous transport error) | The `unsureLine` notice: **"Not sure your file arrived."** with **Check history**. The file and caption stay attached | Check history runs the existing explicit reconciliation. If the message isn't found, the duplicate-risk dialog follows: title **"Send again?"**, body "We couldn't find it in recent messages. It may still have arrived. Sending again may post it twice." (technical lead decision, #184 comment 6803701401). Accepting the risk only unlocks a later, separate Send |
 
 - **Reconciliation evidence (approved by the technical lead, 2026-11-07, PR #105):** the client
   computes the SHA-256 of the picked file. During Check history, a message of the viewer's own
@@ -215,7 +215,9 @@ and [communication.md](communication.md). Nothing renders as a bubble before the
     never logged or persisted;
   - only the viewer's own messages after the attempt start;
   - the person must confirm, and a match never resolves the state automatically;
-  - no match falls through to the existing duplicate-risk dialog;
+  - no match falls through to the existing duplicate-risk dialog (copy in the Unknown row
+    above). No match never proves non-delivery: the history page is bounded and clocks can
+    differ. Those limits belong in the engineering note, not the UI;
   - a message with no `sha256` is never evidence.
 
   This isn't text deduplication.
