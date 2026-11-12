@@ -2,13 +2,14 @@
 
 How the app shows an installation's own icon where it already shows the installation's name.
 
-**Status: Dependency ChitChat#211** (open, design first). ChitChat#211 lets a Super
-Administrator upload an installation icon, and the session response gains `application.icon`:
-`{url, sha256}` for a 512×512 PNG, or `null` for the ChitChat default (field shape as relayed
-by the technical lead on 2026-11-09; confirm it against the merged contract). It isn't in
-v3.5.0. Like every feature from a later release, it ships only once the technical lead raises
-the minimum server version (one rule: the minimum version, server-update.md). Until then,
-implementers leave it out and every place below keeps the initial lantern it has today.
+**Status: active.** ChitChat#211 shipped in v3.6.0 and is inside CCM's 3.7.0 minimum
+(server-update.md). A Super Administrator uploads an installation icon, and the session
+response carries `application.icon`: `null` for the ChitChat default, otherwise
+`{url, width: 512, height: 512, mime_type: "image/png", sha256}`, visible anonymously, to
+members and guests (`docs/api/installation-icon.md` at `v3.7.0`). The `url` is a versioned
+same-origin path (`/installation-icon.php?revision=…`). The icon presets and name-following
+initial (ChitChat#241) aren't in a release yet and stay a dependency: until the minimum
+includes them, nothing here changes for them.
 
 ## Where it appears
 
@@ -77,5 +78,5 @@ It doesn't appear anywhere else:
 
 | ID | Requirement | Verified by |
 |---|---|---|
-| P-210 | When the minimum includes ChitChat#211, step 3, the You hub's Server row, the server update notice and the Invite screen show the installation icon clipped to the lantern squircle, and the initial lantern before it's ready, when it's `null` or missing, and on any failed check. The name and host stay unchanged, and the launcher, notification and app marks stay ChitChat's. | U, C |
+| P-210 | Step 3, the You hub's Server row, the server update notice and the Invite screen show the installation icon clipped to the lantern squircle, and the initial lantern before it's ready, when it's `null` or missing, and on any failed check. The name and host stay unchanged, and the launcher, notification and app marks stay ChitChat's. | U, C |
 | P-211 | The icon is fetched only from the chosen origin (no redirects), at most 1 MiB, PNG, exactly 512×512 and matching `sha256`, held only in memory keyed by origin and hash, and never written to disk or logged. | U |

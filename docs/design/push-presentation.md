@@ -5,7 +5,7 @@ implements UnifiedPush/Web Push (see [push-architecture.md](../push-architecture
 decides presentation only. Transport, registration, key handling, instance and generation
 validation, and logout cleanup are M6 engineering under the existing architecture decision.
 Mockups: `PushShade` and `NotificationSettings` on the canvas. `NotificationSettings` shows the
-batch 3 target, which ships with the 3.5.0 minimum server version.
+batch 3 target, which ships with the minimum server version (3.7.0, which includes batch 3).
 
 ## What a push contains today
 
@@ -33,8 +33,8 @@ is complete.
 
 **One rule: the minimum server version.** #148 has no client check. All batch 3 push
 behavior, including the two settings lines below (honesty and quiet hours), **requires CCM's
-minimum server version of 3.5.0**, the release with batch 3 (#148, #147 and #150). The minimum
-was raised to 3.5.0 on 2026-11-09, and the push slice ships against it (server-update.md).
+minimum server version**, which includes batch 3 (#148, #147 and #150, shipped in 3.5.0). The
+minimum is 3.7.0 since 2026-11-11, and the push slice ships against it (server-update.md).
 There are no per-line or per-feature version checks.
 
 - **Delivery lifetime (#148):** mentions, pings and DM alerts live **30 minutes** from
@@ -98,7 +98,7 @@ payload `kind`**, through a fixed table in code:
 - `direct_message_received` goes to `direct`;
 - every other kind, known or unknown, goes to `account`. An unknown kind never gets a
   high-importance channel;
-- a push without `kind` can't come from a server at the 3.5.0 minimum. If one arrives
+- a push without `kind` can't come from a server at the minimum. If one arrives
   anyway, it goes to `account` (default importance), never to a high-importance channel.
 
 CCM never guesses a kind from the title, body or link text. A timeline-only kind
@@ -135,7 +135,7 @@ Built with `NotificationCompat`:
 
 ## Direct message alerts
 
-**ChitChat#150, merged** (ChitChat#194, main `6c4c475`). It ships with the 3.5.0 minimum
+**ChitChat#150, merged** (ChitChat#194, main `6c4c475`). It ships with the minimum
 server version, like the rest of batch 3. Server semantics, which presentation never changes:
 
 - kind `direct_message_received`; account preference `direct_message_push_enabled`,
@@ -201,7 +201,7 @@ Presentation:
   account's other local push state on sign-out or account removal. After process death the
   set is empty, so a late duplicate of a dismissed alert can appear once. That's accepted:
   it's rare, and it avoids storing new data.
-- A push without `event_id` can't come from a server at the 3.5.0 minimum. If one arrives
+- A push without `event_id` can't come from a server at the minimum. If one arrives
   anyway, it's a separate notification. Never deduplicate by comparing text.
 - Opening CCM does **not** automatically clear notifications. Viewing a destination may clear
   only that destination's own notification, once `notification_id` or the tag makes it
@@ -286,7 +286,7 @@ The screen shows:
   - **Off** clears the window (all three fields `null`);
   - the three values are always sent together (server rule);
   - copy: "Quiet hours are applied by your server, on all your devices."
-  - a second line (3.5.0 minimum, above): "Alerts during quiet hours
+  - a second line (minimum version, above): "Alerts during quiet hours
     aren't sent later. You'll find them in Activity." The server drops them for good (no
     morning replay), so the copy doesn't promise a catch-up.
 - **Devices** (from `GET push/preferences.php`): one row per subscription, newest first.
@@ -300,9 +300,13 @@ The screen shows:
     `device_label` when present, else the shortened user agent. CCM sends the fixed
     `device_label` "ChitChat for Android", never the device model or name, so no new device
     detail leaves the phone.
-  - Engineering note: sending a recognizable User-Agent from the push registration request
-    (for example including "ChitChat Android") makes the rows readable. That is an
-    engineering choice, not a presentation requirement.
+  - **Later (not in v1):** an optional device name that the person types in notification
+    settings, empty by default, could replace the fixed label. It's parked until the
+    maintainer approves a privacy-policy line for it (technical lead, 2026-11-11). Until then
+    the fixed label above and P-126 stay as they are.
+  - Engineering note: CCM's User-Agent contains `ChitChat-Mobile` on every request
+    (account-security.md, "Sessions"). Rows without a `device_label` fall back to it, and the
+    sign-in list reads "ChitChat app on Android". It never includes the device model or name.
   - **Turn on refusals** are definite and never retried automatically:
     - `409 push_subscription_conflict`: "This delivery address is already used by another
       account. Choose a different delivery app or remove it there first."
@@ -316,7 +320,7 @@ The screen shows:
     - `429`: the waiting-time copy (status-presentation.md).
   - Endpoint rotation by the distributor uses `replaces_id`, so it never counts toward the
     cap twice. A retry after a lost response returns the same `id` and `binding`.
-- **Honesty line** (3.5.0 minimum, above): "Notifications usually arrive
+- **Honesty line** (minimum version, above): "Notifications usually arrive
   within seconds, sometimes a little longer, and later if your phone was offline. Some never
   arrive. Open the app to see everything." Dispatch takes up to about 15 seconds unless the
   operator runs the listening worker, hence "sometimes a little longer". Mentions, pings and
@@ -370,5 +374,5 @@ The screen shows:
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
 | P-127 | Direct message alerts (ChitChat#150): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert shows who it's from, never what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content, and the lock-screen public version is "New direct message" without the sender. A mention-plus-DM event is one notification: `mentioned` in `mentions` when the mention alert is sent, else `direct_message_received` in `direct`. | U, C |
 | P-128 | One notification per event: the tag is `event_id`, so a duplicate replaces and never stacks, and a bounded, memory-only recent-event set keeps a dismissed duplicate from reappearing within the process lifetime. | U |
-| P-129 | No per-notification "late" badge or label. The honesty line says alerts usually arrive within seconds, sometimes a little longer, can come later or not arrive, and the quiet-hours line says they aren't sent after quiet hours. Both ship with the 3.5.0 minimum server version, with no per-line version check. | C, R |
+| P-129 | No per-notification "late" badge or label. The honesty line says alerts usually arrive within seconds, sometimes a little longer, can come later or not arrive, and the quiet-hours line says they aren't sent after quiet hours. Both ship with the minimum server version, with no per-line version check. | C, R |
 | P-126 | Settings offer only the mention and ping toggles (plus Direct messages per P-127) and whole-hour quiet hours with a time zone. Only the `current_session` row is labelled "This phone", and its action is Turn off. Remove revokes by ID. CCM sends the fixed `device_label` "ChitChat for Android". Turn on refusals show their copy and are never retried. Sign-out revokes this device by ID before the session ends. | C, R |
