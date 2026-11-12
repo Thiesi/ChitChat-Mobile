@@ -10,6 +10,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -26,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -110,18 +112,29 @@ private fun CappedText(maxHeight: androidx.compose.ui.unit.Dp, background: Color
     contentModifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val bounded = maxHeight != androidx.compose.ui.unit.Dp.Infinity
     val scroll = rememberScrollState()
-    val overflow = bounded && scroll.maxValue > 0
+    // Overflow is the text's own natural height against the cap, measured without the space reserved
+    // for More; otherwise that reserve would itself look like overflow (a feedback loop) and More
+    // would appear when nothing is cut off.
+    var textHeight by remember { mutableIntStateOf(0) }
+    val capPx = with(androidx.compose.ui.platform.LocalDensity.current) { if (bounded) maxHeight.roundToPx() else Int.MAX_VALUE }
+    val overflow = bounded && textHeight > capPx
     val atEnd by remember { derivedStateOf { scroll.value >= scroll.maxValue } }
     var full by remember { mutableStateOf(false) }
     // More sits over the capped area's bottom end on a solid backing (no extra row, so the composer
     // keeps its room); the scrolled text reserves space beneath it so the last line can clear it.
     Box(modifier) {
-        Column(contentModifier.then(if (bounded) Modifier.heightIn(max = maxHeight).verticalScroll(scroll) else Modifier)
-            .padding(bottom = if (overflow) Lantern.target else 0.dp).testTag(tag), content = content)
+        Column(contentModifier.then(if (bounded) Modifier.heightIn(max = maxHeight).verticalScroll(scroll) else Modifier).testTag(tag)) {
+            Column(Modifier.onSizeChanged { textHeight = it.height }, content = content)
+            if (overflow) Spacer(Modifier.height(Lantern.target))
+        }
         if (overflow && !atEnd) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(20.dp)
             .background(Brush.verticalGradient(listOf(Color.Transparent, background))))
-        if (overflow) TextButton(onClick = { full = true }, modifier = Modifier.align(Alignment.BottomEnd)
-            .background(background).heightIn(min = Lantern.target).testTag("${tag}_more")) { Text(stringResource(R.string.attach_more)) }
+        if (overflow) Row(Modifier.align(Alignment.BottomEnd), verticalAlignment = Alignment.CenterVertically) {
+            // A short leading fade so a long line meets the backing softly instead of being cut mid-letter.
+            Box(Modifier.size(16.dp, Lantern.target).background(Brush.horizontalGradient(listOf(Color.Transparent, background))))
+            TextButton(onClick = { full = true }, modifier = Modifier.background(background).heightIn(min = Lantern.target)
+                .testTag("${tag}_more")) { Text(stringResource(R.string.attach_more)) }
+        }
     }
     if (full) AlertDialog(onDismissRequest = { full = false }, modifier = Modifier.testTag("${tag}_dialog").lanternDialogEdge(),
         text = { Column(Modifier.verticalScroll(rememberScrollState()), content = content) },

@@ -25,3 +25,21 @@ The first native run exposed obsolete scroll-only fixture actions and a modal ca
 Original reports are preserved under `.tooling/room-composer-initial-fixture-scroll-failure`, `room-composer-modal-row-not-edge-failure` and `room-composer-proven-not-live-edge-failure`. An intermediate gesture/idling stall and debugger transport disconnect remain preserved under `room-composer-modal-idle-transport-failure` plus `room-fixture-hung.png`; no Java trace was obtained or cause claimed. The device recovered without root/security/trust changes; no debug forward remained. A bounded runner argument was diagnostic only, not increased application/test predicate timeouts or a passing result.
 
 Optional requested-orientation/font assertions verify actual configuration for explicitly scoped device runs. Earlier DM tests caught NOSENSOR overriding requested landscape; only asserted/dumpsys-confirmed results establish that coverage. Restore temporary owned-emulator rotation policy/font changes afterward. No live configuration, credentials or room/DM mutation was consumed. API26/device/TalkBack and live two-account acceptance remain pending. The native DM PR must integrate this reviewed prerequisite and rerun its own gates; this slice does not claim DM availability or complete issue24/16 root-cause resolution.
+
+## Narrow field: stacked composer (P-216)
+
+The shared `core/ui/ComposerLayout` places Details · field · Attach · Send in one row, or, when
+that row would leave the field under 9 × the body text size (144dp at 100%, 288dp at 200%), the
+field alone full width above Details (start) and Attach and Send (end). Both arrangements are one
+pinned block outside every scroller, so input and Send still stay together. The same
+`MessageInput` instance, tags and input contracts are used in both; the decision depends only on
+width and font scale, never on the draft. Keyboard Next follows placement and screen readers
+follow geometry, so both read field, Details, Attach, Send when stacked. Field corners are
+min(height / 2, 24dp) (`Lantern.field`). On 320dp test fixtures the composer stacks even at 100%
+(field would be 120dp); this is the specified geometry, accepted by the technical lead, and the
+strict native-input journeys are unchanged. `ComposerLayoutTest` covers 360dp at 100% (one row)
+and 115% (stacked), and the capture matrix shows one row at 100% and the stack at 200%.
+
+The capped attachment status and notice text (K1) now compare the text's natural height with
+its cap, so the space reserved under More no longer reads as overflow; More appears only when
+text is actually cut off, with a short leading fade onto its backing.

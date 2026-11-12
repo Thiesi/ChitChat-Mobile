@@ -103,6 +103,7 @@ import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import io.github.thiesi.chitchat.core.ui.InlineError
 import io.github.thiesi.chitchat.core.ui.MessageInput
+import io.github.thiesi.chitchat.core.ui.ComposerLayout
 import io.github.thiesi.chitchat.core.ui.MessageSendButton
 import io.github.thiesi.chitchat.core.ui.MessageActions
 import io.github.thiesi.chitchat.core.ui.MessageActionSelection
@@ -546,8 +547,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         if (!replyInline) replyControl(false)
         if (!compact) { attachNotices(headerLimit * 0.5f); attachmentCard(headerLimit * 0.5f) }
         if (inlineCompletion && !detailsOpen) CompletionSuggestions(completionComposer)
-        Row(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+        // One pinned block: a single row, or the field alone above Details/Attach/Send when narrow (P-216).
+        ComposerLayout(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
+            leading = {
             run {
                 val label = stringResource(if (completionComposer.choice!=null) R.string.completion_details else R.string.conversation_details)
                 val blocked = !ready || state.busy || !(model.canSend() || attachmentSendable)
@@ -570,10 +572,12 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 }
             }
             if (replyInline) replyControl(true)
+            }, field = {
             MessageInput(completionComposer.value, completionComposer::input,
                 !state.sending && model.canEditDraft() && !composerDialog && !obscured,
                 stringResource(if (attachment != null) R.string.attach_caption else R.string.conversation_message), compact,
-                Modifier.weight(1f).onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("conversation_composer"))
+                Modifier.onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("conversation_composer"))
+            }, trailing = {
             if (attachVisible) AttachButton(attachAvailable, enabled = !obscured && !composerDialog && !state.sending &&
                 (attachAvailable != AttachAvailability.AVAILABLE || (ready && model.canBeginAttachment() &&
                     attachment?.removable() != false)), onClick = ::onAttach, modifier = Modifier.testTag("conversation_attach"))
@@ -587,7 +591,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 enabled = !composerDialog && !obscured && (attachmentSendable ||
                     (ready && !state.busy && model.canSend() && state.draft.phpTrim().isNotEmpty())),
                 sending = state.sending, modifier = Modifier.testTag("conversation_send"), progress = attachment == null)
-        }
+            })
     }
     actions?.let { request ->
         val message = state.messages.firstOrNull { it.id == request.messageId }

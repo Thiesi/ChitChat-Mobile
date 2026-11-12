@@ -10,6 +10,8 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
+import androidx.compose.ui.unit.width
 import io.github.thiesi.chitchat.core.media.AttachmentPolicyObservation
 import io.github.thiesi.chitchat.core.media.PhotoPrivacyFailure
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
@@ -28,9 +30,9 @@ class AttachmentCardLayoutTest {
         2_400_000, AttachmentCardPhase.PRIVACY_CHOICE, privacyFailure = PhotoPrivacyFailure.UNSUPPORTED_IMAGE,
         observation = AttachmentPolicyObservation.TooLarge(2_400_000, 1_000_000)))
 
-    private fun pane() = compose.setContent {
+    private fun pane(fontScale: Float = 2f) = compose.setContent {
         val density = LocalDensity.current
-        CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+        CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
             ChitChatTheme(dark = false) {
                 Column(Modifier.size(360.dp, 640.dp).testTag("pane")) {
                     Spacer(Modifier.height(192.dp)) // The bounded header's 30% share.
@@ -79,6 +81,16 @@ class AttachmentCardLayoutTest {
             }
         }
         listOf("attach_check_again", "attachment_card_send_anyway", "composer").forEach(::fullyInsidePane)
+    }
+
+    /** K1: the space reserved under More must not itself read as overflow; text that fits shows no More. */
+    @Test fun textThatFitsItsCapShowsNoMore() {
+        pane(fontScale = 1f)
+        val status = compose.onNodeWithTag("attachment_card_status", useUnmergedTree = true).assertIsDisplayed()
+        compose.waitForIdle()
+        compose.onNodeWithTag("attachment_card_status_more", useUnmergedTree = true).assertDoesNotExist()
+        assertTrue("Fitting text keeps its natural height", status.getUnclippedBoundsInRoot().height <= 96.dp)
+        fullyInsidePane("attachment_card_send_anyway")
     }
 
     private fun text(id: Int, vararg args: Any) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)

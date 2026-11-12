@@ -61,6 +61,8 @@ internal object Lantern {
     val person = PersonShape
     val room = RoomTileShape
     val pill = CircleShape
+    /** Composer field corners: min(height / 2, 24dp), so a tall field never turns into a circle (P-216). */
+    val field = RoundedCornerShape(24.dp) // Compose clamps each corner to half the shorter side.
     val target = 48.dp
     val badge = 24.dp
     val gap = 8.dp

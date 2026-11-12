@@ -28,7 +28,7 @@ internal fun MessageInput(value: String, onValueChange: (String) -> Unit, enable
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), decorationBox = { inner ->
             OutlinedTextFieldDefaults.DecorationBox(value, inner, enabled, false, VisualTransformation.None,
                 interaction, label = { Text(label) }, contentPadding = PaddingValues(8.dp),
-                container = { OutlinedTextFieldDefaults.Container(enabled, false, interaction, shape = Lantern.pill) })
+                container = { OutlinedTextFieldDefaults.Container(enabled, false, interaction, shape = Lantern.field) })
         })
 }
 
@@ -43,6 +43,6 @@ internal fun MessageInput(value: TextFieldValue, onValueChange: (TextFieldValue)
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), decorationBox = { inner ->
             OutlinedTextFieldDefaults.DecorationBox(value.text, inner, enabled, false, VisualTransformation.None,
                 interaction, label = { Text(label) }, contentPadding = PaddingValues(8.dp),
-                container = { OutlinedTextFieldDefaults.Container(enabled, false, interaction, shape = Lantern.pill) })
+                container = { OutlinedTextFieldDefaults.Container(enabled, false, interaction, shape = Lantern.field) })
         })
 }
