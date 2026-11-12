@@ -68,6 +68,8 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.sse)
     implementation(libs.serialization.json)
+    implementation(libs.unifiedpush.connector)
+    implementation(libs.tink)
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
