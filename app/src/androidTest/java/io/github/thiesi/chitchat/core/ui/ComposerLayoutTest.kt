@@ -68,8 +68,8 @@ class ComposerLayoutTest {
         val block = at("block"); val details = at("details"); val field = at("field"); val attach = at("attach"); val send = at("send")
         close(328f, field.width.value)
         assertTrue("Field row above the controls row", field.bottom <= details.top && field.bottom <= send.top)
-        close(block.left.value + 16f, details.left.value)
-        close(block.right.value - 16f, send.right.value)
+        close(block.left.value, details.left.value) // The block's tag sits inside its 16dp side padding.
+        close(block.right.value, send.right.value)
         assertTrue(attach.right <= send.left)
         listOf(details, attach, send).forEach { close(48f, it.width.value); close(48f, it.height.value) }
     }

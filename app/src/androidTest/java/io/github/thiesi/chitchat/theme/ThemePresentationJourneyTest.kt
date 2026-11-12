@@ -316,13 +316,17 @@ class ThemePresentationJourneyTest {
         Regex("""View with bounds: \[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]""").findAll(message).take(4).forEach { m ->
             val (l,t,r,b)=m.destructured.toList().map(String::toInt)
             lines+="flagged [$l,$t][$r,$b]"
-            all.filter { n -> val o=n.positionOnScreen-n.positionInRoot; val x=n.boundsInRoot
-                kotlin.math.abs(x.left+o.x-l)<=1 && kotlin.math.abs(x.top+o.y-t)<=1 && kotlin.math.abs(x.right+o.x-r)<=1 && kotlin.math.abs(x.bottom+o.y-b)<=1
-            }.take(3).forEach { hit ->
+            // ATF reports clipped bounds, so rank clickable or merged nodes by their overlap with the rectangle.
+            fun screen(n: androidx.compose.ui.semantics.SemanticsNode)=n.boundsInRoot.translate(n.positionOnScreen-n.positionInRoot)
+            val flagged=androidx.compose.ui.geometry.Rect(l.toFloat(),t.toFloat(),r.toFloat(),b.toFloat())
+            all.filter { n -> n.config.contains(androidx.compose.ui.semantics.SemanticsActions.OnClick) || n.config.isMergingSemanticsOfDescendants }
+                .map { n -> n to screen(n).intersect(flagged).let { if (it.isEmpty) 0f else it.width*it.height } }
+                .filter { it.second>0f }.sortedByDescending { it.second }.map { it.first }
+                .take(3).forEach { hit ->
                 generateSequence(hit) { it.parent }.take(12).forEachIndexed { depth,n -> lines+="  ${"  ".repeat(depth)}${describe(n)}" }
             }
         }
-        listOf("conversation_timeline","attachment_card","conversation_composer","conversation_send").forEach { tag ->
+        listOf("bounded_header","header_more","conversation_timeline","attachment_card","conversation_composer","conversation_send").forEach { tag ->
             lines+="$tag: "+(all.firstOrNull { it.config.getOrElseNullable(SemanticsProperties.TestTag) { null }==tag }?.let(::describe) ?: "absent")
         }
         return lines.take(80).joinToString(" | ")
