@@ -278,43 +278,45 @@ class ThemePresentationJourneyTest {
     @Test fun capturesLightFont200()=captures(0,true)
     @Test fun capturesDarkFont200()=captures(1,true)
     @Test fun capturesPureBlackFont200()=captures(2,true) // THEME_ONLY
-}
 
-/** A small real JPEG without location data; the cleaner keeps its pixels and orientation. */
-private fun captureJpeg(): ByteArray {
-    val bitmap=android.graphics.Bitmap.createBitmap(16,12,android.graphics.Bitmap.Config.ARGB_8888)
-    bitmap.eraseColor(android.graphics.Color.rgb(240,106,59))
-    return try { ByteArrayOutputStream().also { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,90,it)) }.toByteArray() }
-    finally { bitmap.recycle() }
-}
-
-/** An ISO-BMFF header with a HEIC brand: recognized as an image the app can't clean. */
-private val HEIF_HEADER=byteArrayOf(0,0,0,24,0x66,0x74,0x79,0x70,0x68,0x65,0x69,0x63,0,0,0,0,
-    0x6d,0x69,0x66,0x31,0x68,0x65,0x69,0x63,0,0,0,0)
-
-/** Holds the READY allocation like the real transport; unknown() reports a full body then a lost connection. */
-private class CaptureUploads : AttachmentUploadOperations {
-    @Volatile var calls=0
-    private val stop=CompletableDeferred<Unit>()
-    private val result=CompletableDeferred<RoomUploadReceipt>()
-    private val facts=kotlinx.coroutines.flow.MutableStateFlow(UploadTransferFacts(23,fileBytesBuffered=9,multipartSizeBytes=200,
-        multipartAttemptedUpperBound=80,writerStarted=true,writerRunning=true))
-    fun unknown() {
-        facts.value=facts.value.copy(fileBytesBuffered=23,multipartAttemptedUpperBound=200,requestBodyEndObserved=true,requestBodyEndBytes=200)
-        stop.complete(Unit);result.completeExceptionally(ApiFailure(FailureKind.NETWORK))
+    // Nested, not top-level: the comparison helper copies this fixture under another class name,
+    // and file-private top-level classes would then clash in the same package.
+    /** A small real JPEG without location data; the cleaner keeps its pixels and orientation. */
+    private fun captureJpeg(): ByteArray {
+        val bitmap=android.graphics.Bitmap.createBitmap(16,12,android.graphics.Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(android.graphics.Color.rgb(240,106,59))
+        return try { ByteArrayOutputStream().also { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,90,it)) }.toByteArray() }
+        finally { bitmap.recycle() }
     }
-    override suspend fun room(expected: SessionState,roomId: Long,retained: RetainedAttachmentPreparation,
-        ready: AttachmentPreparation.Ready,caption: String,replyId: Long?,
-        onTransfer: (kotlinx.coroutines.flow.StateFlow<UploadTransferFacts>) -> Unit): RoomUploadReceipt {
-        val hold=checkNotNull(retained.holdUpload(ready));calls++
-        try { onTransfer(facts);return result.await() }
-        finally {
-            withContext(NonCancellable) { stop.await() }
-            facts.value=facts.value.copy(writerRunning=false,callbackFinished=true,stopped=true)
-            hold.close()
+
+    /** An ISO-BMFF header with a HEIC brand: recognized as an image the app can't clean. */
+    private val HEIF_HEADER=byteArrayOf(0,0,0,24,0x66,0x74,0x79,0x70,0x68,0x65,0x69,0x63,0,0,0,0,
+        0x6d,0x69,0x66,0x31,0x68,0x65,0x69,0x63,0,0,0,0)
+
+    /** Holds the READY allocation like the real transport; unknown() reports a full body then a lost connection. */
+    private class CaptureUploads : AttachmentUploadOperations {
+        @Volatile var calls=0
+        private val stop=CompletableDeferred<Unit>()
+        private val result=CompletableDeferred<RoomUploadReceipt>()
+        private val facts=kotlinx.coroutines.flow.MutableStateFlow(UploadTransferFacts(23,fileBytesBuffered=9,multipartSizeBytes=200,
+            multipartAttemptedUpperBound=80,writerStarted=true,writerRunning=true))
+        fun unknown() {
+            facts.value=facts.value.copy(fileBytesBuffered=23,multipartAttemptedUpperBound=200,requestBodyEndObserved=true,requestBodyEndBytes=200)
+            stop.complete(Unit);result.completeExceptionally(ApiFailure(FailureKind.NETWORK))
         }
+        override suspend fun room(expected: SessionState,roomId: Long,retained: RetainedAttachmentPreparation,
+            ready: AttachmentPreparation.Ready,caption: String,replyId: Long?,
+            onTransfer: (kotlinx.coroutines.flow.StateFlow<UploadTransferFacts>) -> Unit): RoomUploadReceipt {
+            val hold=checkNotNull(retained.holdUpload(ready));calls++
+            try { onTransfer(facts);return result.await() }
+            finally {
+                withContext(NonCancellable) { stop.await() }
+                facts.value=facts.value.copy(writerRunning=false,callbackFinished=true,stopped=true)
+                hold.close()
+            }
+        }
+        override suspend fun direct(expected: SessionState,peerId: Long,retained: RetainedAttachmentPreparation,
+            ready: AttachmentPreparation.Ready,caption: String,replyId: Long?,
+            onTransfer: (kotlinx.coroutines.flow.StateFlow<UploadTransferFacts>) -> Unit): DirectUploadReceipt=error("Room captures only")
     }
-    override suspend fun direct(expected: SessionState,peerId: Long,retained: RetainedAttachmentPreparation,
-        ready: AttachmentPreparation.Ready,caption: String,replyId: Long?,
-        onTransfer: (kotlinx.coroutines.flow.StateFlow<UploadTransferFacts>) -> Unit): DirectUploadReceipt=error("Room captures only")
 }

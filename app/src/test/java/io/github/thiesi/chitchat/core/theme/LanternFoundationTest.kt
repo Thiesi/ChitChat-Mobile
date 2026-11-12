@@ -33,6 +33,9 @@ class LanternFoundationTest {
             pair("filled primary/count/Send",p.onSignature,p.signature)
             pair("outgoing",p.onOutgoing,p.outgoing);pair("notice boundary",p.unsureLine,p.outgoing,3f)
             pair("notice ground boundary",p.unsureLine,p.ground,3f)
+            // Details attention markers and the more glyph are non-text graphics (A-02).
+            pair("attention dot",p.signatureText,p.ground,3f);pair("uncertain marker",p.warning,p.ground,3f)
+            pair("failed marker",p.error,p.ground,3f);pair("more glyph",p.textMuted,p.ground,3f)
             for(hue in p.identityHues) pair("identity",Lantern.ink,hue)
         }
     }

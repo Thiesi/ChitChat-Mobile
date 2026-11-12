@@ -20,6 +20,8 @@ internal data class LanternPalette(
     val boundary get() = fieldLine
     val muted get() = textMuted
     val actionText get() = signatureText
+    /** Warning-level glyphs and notices (status ladder); an alias, not a separate token. */
+    val warning get() = unsureLine
 }
 
 internal typealias ChitChatColors = LanternPalette
