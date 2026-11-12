@@ -38,7 +38,7 @@ class PushRegistrarTest {
     private val a = "a".repeat(64)
     private val b = "b".repeat(64)
     private val user = """{"id":7,"username":"Alice","roles":["member"],"session_version":2,"guest":false}"""
-    private val vapid = PushRecord.create("https://vapid.example", 1).publicKey
+    private val vapid = PushRecord.create("https://vapid.example", 1, 0).publicKey
 
     @Before fun setUp() {
         val certificate = HeldCertificate.Builder().addSubjectAlternativeName("localhost").build()
@@ -46,8 +46,10 @@ class PushRegistrarTest {
         val trust = HandshakeCertificates.Builder().addTrustedCertificate(certificate.certificate).build()
         server = MockWebServer().apply { useHttps(serverTls.sslSocketFactory()); start() }
         client = OkHttpClient.Builder().sslSocketFactory(trust.sslSocketFactory(), trust.trustManager).build()
-        sessions = SessionRepository(NoVault, push = local) { SessionHttp(it, client).also(apis::add) }
+        sessions = repository()
     }
+    private val savedSessions = MemorySessionVault()
+    private fun repository() = SessionRepository(savedSessions, push = local) { SessionHttp(it, client).also(apis::add) }
     @After fun tearDown() { apis.forEach(SessionHttp::close); server.close() }
 
     private fun origin() = address().value
@@ -78,7 +80,7 @@ class PushRegistrarTest {
     @Test fun newEndpointSubscribesAndAdoptsTheServersRegistration() = runTest {
         login()
         val registrar = registrar()
-        val record = local.prepare(origin(), 7)
+        val record = local.prepare(origin(), 7)!!
         server.enqueue(subscribed(12))
         registrar.onNewEndpoint(record.instance, "https://push.example/endpoint", record.publicKey, record.auth)
         registrar.status.first { it == PushPhoneStatus.On }
@@ -98,7 +100,7 @@ class PushRegistrarTest {
     @Test fun aChangedEndpointReplacesThePreviousRegistration() = runTest {
         login()
         val registrar = registrar()
-        val record = local.prepare(origin(), 7)
+        val record = local.prepare(origin(), 7)!!
         local.adopt(record.instance, PushRegistration(12, null))
         server.enqueue(subscribed(13))
         registrar.onNewEndpoint(record.instance, "https://push.example/moved", record.publicKey, record.auth)
@@ -110,7 +112,7 @@ class PushRegistrarTest {
     @Test fun aNamedRefusalIsShownAndNothingIsAdopted() = runTest {
         login()
         val registrar = registrar()
-        val record = local.prepare(origin(), 7)
+        val record = local.prepare(origin(), 7)!!
         server.enqueue(json("""{"error":{"code":"push_subscription_limit","message":"fixture"}}""", 409))
         registrar.onNewEndpoint(record.instance, "https://push.example/endpoint", record.publicKey, record.auth)
         assertEquals(PushPhoneStatus.Refused(PushSubscribeRefusal.LIMIT),
@@ -121,8 +123,8 @@ class PushRegistrarTest {
     @Test fun staleInstancesAndForeignKeysNeverReachTheServer() = runTest {
         login()
         val registrar = registrar()
-        val record = local.prepare(origin(), 7)
-        val other = PushRecord.create(origin(), 7)
+        val record = local.prepare(origin(), 7)!!
+        val other = PushRecord.create(origin(), 7, 0)
         // Callbacks are serialized, so the first request the server sees belongs to the last call.
         registrar.onNewEndpoint("stale-instance", "https://push.example/stale", record.publicKey, record.auth)
         registrar.onNewEndpoint(record.instance, "https://push.example/endpoint", other.publicKey, record.auth)
@@ -138,7 +140,7 @@ class PushRegistrarTest {
     }
 
     @Test fun anotherAccountsRecordIsWipedWhenThisAccountSignsIn() = runTest {
-        val foreign = PushRecord.create("https://elsewhere.example", 8)
+        val foreign = PushRecord.create("https://elsewhere.example", 8, 0)
         vault.record = foreign
         registrar()
         login()
@@ -162,10 +164,107 @@ class PushRegistrarTest {
         assertEquals(record.instance, vault.record!!.instance)
     }
 
-    private object NoVault : SessionVault {
-        override suspend fun read(): SavedSession? = null
-        override suspend fun save(session: SavedSession) {}
-        override suspend fun clear() {}
+    @Test fun aRestoredSessionKeepsTheRecordAndAReplacedOneDropsIt() = runTest {
+        login()
+        val record = local.prepare(origin(), 7)!!
+        // Process restart: the same saved login session is restored and revalidated.
+        sessions = repository()
+        server.enqueue(json(bootstrap(user)))
+        sessions.connect(address())
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertEquals(record.instance, vault.record!!.instance)
+        assertTrue(connector.unregistered.isEmpty())
+        // The saved session is gone (expired or unusable) and the server answers anonymously.
+        savedSessions.saved = null
+        sessions = repository()
+        server.enqueue(json(bootstrap("null")))
+        sessions.connect(address())
+        assertNull(vault.record)
+        assertEquals(listOf(record.instance), connector.unregistered)
+    }
+
+    @Test fun aSignInWithANewLoginSessionDropsTheOldRecord() = runTest {
+        login()
+        val record = local.prepare(origin(), 7)!!
+        // A fresh sign-in on top of an existing runtime (no sign-out in between) is a new login session.
+        sessions = repository()
+        savedSessions.saved = null
+        login()
+        assertNull(vault.record)
+        assertEquals(listOf(record.instance), connector.unregistered)
+    }
+
+    @Test fun anEndpointArrivingInAColdProcessIsHeldUntilItsSessionIsBack() = runTest {
+        login()
+        val record = local.prepare(origin(), 7)!!
+        sessions = repository() // Cold process: nothing has connected yet.
+        val registrar = registrar()
+        registrar.onNewEndpoint(record.instance, "https://push.example/rotated", record.publicKey, record.auth)
+        awaitReal { vault.record?.pendingEndpoint == "https://push.example/rotated" }
+        assertEquals(2, server.requestCount)
+        server.enqueue(json(bootstrap(user)))
+        server.enqueue(subscribed(21))
+        sessions.connect(address())
+        awaitReal { vault.record?.registrationId == 21L }
+        server.takeRequest(5, TimeUnit.SECONDS) // bootstrap
+        val body = apiJson.parseToJsonElement(server.takeRequest(5, TimeUnit.SECONDS)!!.body!!.utf8()).jsonObject
+        assertEquals("https://push.example/rotated", body.getValue("endpoint").jsonPrimitive.content)
+        assertNull(vault.record!!.pendingEndpoint)
+    }
+
+    @Test fun distributorUnregisterCleansUpLocallyAndRevokesOnce() = runTest {
+        login()
+        val registrar = registrar()
+        val record = local.prepare(origin(), 7)!!
+        local.adopt(record.instance, PushRegistration(12, null))
+        server.enqueue(json("""{"devices":[]}"""))
+        registrar.onUnregistered(record.instance)
+        awaitReal { server.requestCount == 3 }
+        val request = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("/api/v1/push/revoke-device.php", request.url.encodedPath)
+        assertEquals("""{"id":12}""", request.body!!.utf8())
+        assertNull(vault.record)
+        assertEquals(PushPhoneStatus.Off, registrar.status.value)
+        assertTrue("No unregister echo back to the distributor", connector.unregistered.isEmpty())
+        registrar.onUnregistered(record.instance) // A repeated callback finds nothing and sends nothing.
+        kotlinx.coroutines.withContext(Dispatchers.Default) { kotlinx.coroutines.delay(300) }
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test fun distributorRegistrationFailureIsShownHonestlyAndDropsTheRecord() = runTest {
+        login()
+        val registrar = registrar()
+        val record = local.prepare(origin(), 7)!!
+        registrar.onRegistrationFailed("another-instance", org.unifiedpush.android.connector.FailedReason.NETWORK)
+        registrar.onRegistrationFailed(record.instance, org.unifiedpush.android.connector.FailedReason.ACTION_REQUIRED)
+        assertEquals(PushPhoneStatus.DistributorFailed(DistributorFailure.ACTION_REQUIRED),
+            registrar.status.first { it is PushPhoneStatus.DistributorFailed })
+        assertNull(vault.record)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test fun noKeyMaterialEverReachesTheConnectorStore() = runTest {
+        login()
+        server.enqueue(json(bootstrap(user, ""","web_push":{"enabled":true,"vapid_public_key":"$vapid"}""")))
+        sessions.refresh()
+        val registrar = registrar()
+        assertTrue(registrar.start(sessions.state.value))
+        val record = vault.record!!
+        server.enqueue(subscribed(30))
+        registrar.onNewEndpoint(record.instance, "https://push.example/endpoint", record.publicKey, record.auth)
+        registrar.status.first { it == PushPhoneStatus.On }
+        local.retire(origin(), 7)
+        // Everything the app hands the connector (whose store is its SQLite database) is an instance name or the
+        // server's public VAPID key; the decryption keys stay in the vault, reached only via VaultKeyManager.
+        val handed = connector.registered.flatMap { listOf(it.first, it.second) } + connector.unregistered
+        for (secret in listOf(record.privateKey, record.auth, record.publicKey)) assertTrue(handed.none { secret in it })
+    }
+
+    private class MemorySessionVault : SessionVault {
+        @Volatile var saved: SavedSession? = null
+        override suspend fun read(): SavedSession? = saved
+        override suspend fun save(session: SavedSession) { saved = session }
+        override suspend fun clear() { saved = null }
     }
 
     private class MemoryPushVault : PushVault {

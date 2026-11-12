@@ -117,7 +117,7 @@ class PushProtocolTest {
         assertNull(pushDeviceLabel(device(null)))
     }
 
-    private val point = PushRecord.create("https://chat.example", 1).publicKey
+    private val point = PushRecord.create("https://chat.example", 1, 0).publicKey
     private val secret = "AAECAwQFBgcICQoLDA0ODw"
 
     @Test fun vapidKeyMustBeTheConnectorsForm() {

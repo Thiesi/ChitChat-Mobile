@@ -26,21 +26,25 @@ so this part changes nothing a person can see. Receiving and rendering is P3.
 ## Keys and storage
 
 One `PushRecord` per phone holds:
-- the server origin and account that turned push on;
+- the server origin, account and **login session** that turned push on. The session is identified by the
+  saved session's sign-in time, which is unique per sign-in and unchanged by restore and revalidation;
 - a random instance UUID (the connector's instance name);
 - the P-256 key pair and auth secret;
-- once known, the server's registration id and binding.
+- once known, the server's registration id and binding;
+- briefly, an endpoint that arrived before its session was signed in.
 
 It is sealed by `KeystorePushVault`, which follows `KeystoreSessionVault`: AES-GCM with its own
 non-exportable Keystore key, the `noBackupFilesDir` file `push.v1.enc` and fresh nonces. Clearing
 deletes the key first, so the file can't be opened even if deleting it fails.
 
-The record is scoped to origin and account, not to the local generation counter. That counter
-lives in memory and changes on every launch and restore. Instead, every event that ends a session
-generation destroys the record:
-- sign-out;
-- a session the server ended;
-- a different account signing in.
+**The record never outlives its login session.** Whenever the session repository publishes or saves
+a session (`persist`, under its lock), it tells `PushLocal`:
+- restoring or revalidating the same saved session keeps the record;
+- any other session drops it: a new sign-in (same or another account), an anonymous answer at
+  bootstrap, a guest visit or pending MFA;
+- sign-out and a session the server ended destroy it too.
+
+The local generation counter isn't used, because it lives in memory and changes on every launch.
 
 `VaultKeyManager` replaces the connector's `DefaultKeyManager`, which would keep keys in the
 connector's SQLite `keys` table. It knows only the record's own instance, never mints keys for an
@@ -56,9 +60,9 @@ no service to declare.
 
 | Callback | What happens |
 | --- | --- |
-| New endpoint | Subscribe only if the record, instance, account and authenticated session all match; send `replaces_id` when an earlier registration exists; save the answer only into the record that asked |
+| New endpoint | Check the endpoint and keys first. Subscribe only if the record, instance, account and authenticated session all match. In a cold process with no signed-in session yet, the endpoint is held in the sealed record and sent once that session is signed in again. Send `replaces_id` when an earlier registration exists; save the answer only into the record that asked. Each endpoint is sent once: a refusal or an unknown outcome drops it |
 | Message | Ignored unless the connector decrypted it with our keys. The connector falls back to plain text when decryption fails, so plain text is never trusted. Rendering is P3 |
-| Unregistered | Forget the record locally, then best-effort revoke for the same signed-in account |
+| Unregistered | Forget the record locally, then one best-effort revoke for the same signed-in account. Nothing is sent back to the distributor, so there's no loop |
 | Registration failed | Forget the record and report network, action-required or other |
 
 ## Sign-out and ended sessions
@@ -72,7 +76,9 @@ no service to declare.
 On sign-out, the revoke request (`revoke-device.php {"id":N}`) is built from the still-valid cookies
 and CSRF before they're retired. It runs **concurrently** with the existing bounded logout, so
 sign-out waits no longer than before. Logout also removes this session's registrations on the
-server; the explicit revoke covers a failed logout.
+server; the explicit revoke covers a failed logout. A logout failure is caught inside the shared
+scope, so it never cancels the revoke. If logout wins and the revoke then gets a 401, that isn't an
+error either. Neither result is shown, and neither touches the next session.
 
 A session the server ended gets local cleanup only, with no request. A failing cleanup never blocks
 sign-out. Copy never claims the server removed the device.
@@ -108,7 +114,8 @@ report and the release APK size change.
 ## Verification
 
 JVM tests:
-- `PushProtocolTest`: discovery, keys, subscribe body and reply, refusals;
+- `PushProtocolTest`: discovery, VAPID form, endpoint and key validation, subscribe body and reply,
+  refusal mapping;
 - `PushLocalTest`:
   - a real Web Push encrypt/decrypt round trip through `VaultKeyManager`;
   - only its own instance;
@@ -116,11 +123,21 @@ JVM tests:
   - a revoke id only for the matching account;
   - unreadable records drop every registration;
   - stale answers can't revive a record;
-- `PushRegistrarTest`: subscribe and adopt, `replaces_id`, named refusal, stale-instance and
-  foreign-key fencing, cross-account wipe, start gated on discovery;
+  - the record lives exactly as long as its login session (restore keeps it; a new sign-in, another
+    account or no account drops it);
+- `PushRegistrarTest`:
+  - subscribe and adopt; rotation with `replaces_id`; named refusal;
+  - stale-instance and foreign-key fencing;
+  - a restored session keeps the record, and a replaced or new sign-in drops it;
+  - a cold-process endpoint is held, then sent after sign-in;
+  - distributor unregister cleans up with one revoke and no echo;
+  - registration failure shows an honest status and drops the record;
+  - start is gated on discovery;
+  - nothing handed to the connector (whose store is its SQLite database) contains key material;
 - `SessionRepositoryTest`:
   - the revoke carries the retiring cookies and CSRF;
   - cleanup runs before the saved session clears;
+  - a failed logout doesn't cancel the revoke;
   - offline sign-out completes;
   - a failing cleanup doesn't block sign-out;
   - an ended session cleans up with no request.
@@ -131,5 +148,8 @@ installed):
 - decryption;
 - retirement removes the file and key alias;
 - the connector's `keys` table stays empty.
+
+With no distributor installed, the connector never stores a registration, so the `keys` table check
+is weak. Checking that table after a real distributor registration is **pending device acceptance**.
 
 There's no distributor, delivery or live-server evidence yet.

@@ -27,13 +27,16 @@ import org.unifiedpush.android.connector.data.PublicKeySet
 import org.unifiedpush.android.connector.keys.KeyManager
 
 /**
- * This phone's one push registration, scoped to the server origin and account that turned it on.
- * Holds the Web Push decryption keys, so it lives only in [PushVault]; never logged, never in bundles.
+ * This phone's one push registration, scoped to the server origin, account and login session
+ * ([signedInAt], the saved session's sign-in time) that turned it on: a restored session keeps it,
+ * any replacement session retires it. Holds the Web Push decryption keys, so it lives only in
+ * [PushVault]; never logged, never in bundles.
  */
 @Serializable
 class PushRecord(
     val origin: String,
     val userId: Long,
+    val signedInAt: Long,
     /** Random per turn-on; the connector's instance name. Unrelated to any account identifier. */
     val instance: String,
     /** Raw 32-byte P-256 private scalar, base64url. */
@@ -44,30 +47,36 @@ class PushRecord(
     val auth: String,
     val registrationId: Long? = null,
     val binding: String? = null,
+    /** A distributor endpoint that arrived while its session wasn't signed in; sent once it is. */
+    val pendingEndpoint: String? = null,
     val schema: Int = 1,
 ) {
     fun belongsTo(origin: String, userId: Long) = this.origin == origin && this.userId == userId
+    fun ownedBy(origin: String, userId: Long, signedInAt: Long) = belongsTo(origin, userId) && this.signedInAt == signedInAt
 
-    fun registered(registration: PushRegistration) = PushRecord(origin, userId, instance, privateKey, publicKey, auth,
-        registration.id, registration.binding, schema)
+    fun registered(registration: PushRegistration) = PushRecord(origin, userId, signedInAt, instance, privateKey, publicKey,
+        auth, registration.id, registration.binding, null, schema)
+    fun pending(endpoint: String?) = PushRecord(origin, userId, signedInAt, instance, privateKey, publicKey, auth,
+        registrationId, binding, endpoint, schema)
 
-    fun valid(): Boolean = schema == 1 && userId > 0 && origin.startsWith("https://") &&
+    fun valid(): Boolean = schema == 1 && userId > 0 && signedInAt >= 0 && origin.startsWith("https://") &&
         instance.length in 1..64 && decode(privateKey)?.size == 32 &&
         decode(publicKey)?.let { it.size == 65 && it[0] == 4.toByte() } == true && decode(auth)?.size == 16 &&
         (registrationId == null || registrationId > 0) &&
-        binding?.let { b -> b.length in 1..64 && b.all { it.code in 0x21..0x7e } } != false
+        binding?.let { b -> b.length in 1..64 && b.all { it.code in 0x21..0x7e } } != false &&
+        (pendingEndpoint == null || pendingEndpoint.length in 1..2048)
 
     override fun toString() = "PushRecord"
 
     companion object {
         /** Fresh keys for a new turn-on. Software keys, sealed at rest by [KeystorePushVault]. */
-        fun create(origin: String, userId: Long, random: SecureRandom = SecureRandom()): PushRecord {
+        fun create(origin: String, userId: Long, signedInAt: Long, random: SecureRandom = SecureRandom()): PushRecord {
             val pair = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1"), random) }
                 .generateKeyPair()
             val public = pair.public as ECPublicKey
             val point = byteArrayOf(4) + fixed(public.w.affineX) + fixed(public.w.affineY)
             val secret = ByteArray(16).also(random::nextBytes)
-            return PushRecord(origin, userId, UUID.randomUUID().toString(),
+            return PushRecord(origin, userId, signedInAt, UUID.randomUUID().toString(),
                 encode(fixed((pair.private as ECPrivateKey).s)), encode(point), encode(secret))
         }
 

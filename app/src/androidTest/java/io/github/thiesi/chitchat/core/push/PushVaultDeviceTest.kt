@@ -21,7 +21,8 @@ class PushVaultDeviceTest {
         val keys = VaultKeyManager(vault)
         val local = PushLocal(vault, UnifiedPushConnector(context, keys)) {}
         try {
-            val record = local.prepare("https://chat.example.org", 7)
+            local.sessionChanged("https://chat.example.org", 7, 100)
+            val record = local.prepare("https://chat.example.org", 7)!!
             assertFalse(file.readBytes().decodeToString().contains(record.auth))
             assertEquals(record.instance, KeystorePushVault(file, alias).read()!!.instance)
 

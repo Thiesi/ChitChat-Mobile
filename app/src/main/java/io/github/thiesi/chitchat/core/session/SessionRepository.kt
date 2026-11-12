@@ -80,13 +80,21 @@ interface SessionController {
 
 /** Local transitions and vault writes are serialized; network calls never hold the lock. */
 /**
- * Local push teardown, run inside the session lock when an account's session ends: cancel its
- * notifications, wipe the push record and keys, and ask the distributor to unregister without
- * waiting for it. Returns the server registration to revoke when it belongs to [origin]/[userId].
+ * Local push teardown, run inside the session lock. [retire] runs when an account's session ends:
+ * cancel its notifications, wipe the push record and keys, and ask the distributor to unregister
+ * without waiting. It returns the server registration to revoke when that belongs to
+ * [origin]/[userId]. [sessionChanged] runs whenever a session is published or saved; a record
+ * created under any other login session (identified by its sign-in time) is retired.
  */
-fun interface PushTeardown {
+interface PushTeardown {
     fun retire(origin: String?, userId: Long?): Long?
-    companion object { val NONE = PushTeardown { _, _ -> null } }
+    fun sessionChanged(origin: String, userId: Long?, signedInAt: Long?)
+    companion object {
+        val NONE = object : PushTeardown {
+            override fun retire(origin: String?, userId: Long?): Long? = null
+            override fun sessionChanged(origin: String, userId: Long?, signedInAt: Long?) {}
+        }
+    }
 }
 
 class SessionRepository internal constructor(
@@ -354,6 +362,11 @@ class SessionRepository internal constructor(
 
     private suspend fun persist(active: Runtime, user: SessionUser?, finishOperation: Boolean = true) {
         // Called under lock: a late save cannot run after logout/server change.
+        val person = user?.takeIf { !it.guest }
+        if (person != null && active.signedInAt == null) active.signedInAt = clock.millis()
+        try { withContext(Dispatchers.IO) { push.sessionChanged(active.server.value, person?.id, person?.let { active.signedInAt }) } }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { /* Push state never decides the session. */ }
         try {
             if (user == null || user.guest) vault.clear() else {
                 val now = clock.millis()
@@ -591,14 +604,15 @@ class SessionRepository internal constructor(
         try {
             coroutineScope {
                 // Concurrent with logout, so the bounded logout wait is not extended. Logout also removes this
-                // session's registrations on the server; the explicit revoke covers a failed logout.
+                // session's registrations on the server; the explicit revoke covers a failed logout, so a
+                // logout failure is caught inside the scope and never cancels the revoke.
                 pending.revoke?.let { revoke -> launch {
                     try { pending.runtime.api.sendRevokePush(revoke) } catch (_: ApiFailure) { /* Best effort. */ }
                 } }
-                pending.runtime.api.sendLogout(pending.logout); confirmed = true
+                confirmed = try { pending.runtime.api.sendLogout(pending.logout); true }
+                    catch (_: ApiFailure) { false } // Local sign-out is immediate even without connectivity.
             }
         }
-        catch (_: ApiFailure) { /* Local sign-out is immediate even without connectivity. */ }
         catch (cancelled: CancellationException) { throw cancelled }
         finally {
             withContext(NonCancellable) {

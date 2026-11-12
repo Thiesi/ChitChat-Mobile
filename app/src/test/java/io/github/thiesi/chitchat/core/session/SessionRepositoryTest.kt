@@ -260,6 +260,7 @@ class SessionRepositoryTest {
             if (fail) throw IllegalStateException("fixture")
             return id
         }
+        override fun sessionChanged(origin: String, userId: Long?, signedInAt: Long?) {}
     }
 
     private fun drain() = generateSequence { server.takeRequest(500, TimeUnit.MILLISECONDS) }.toList()
@@ -287,6 +288,27 @@ class SessionRepositoryTest {
         assertEquals(SessionPhase.SIGNED_OUT, sessions.state.value.phase)
         assertFalse(sessions.state.value.logoutUnconfirmed)
         assertFalse(sessions.state.value.busy)
+    }
+
+    @Test fun aFailedLogoutNeverCancelsTheExplicitRevoke() = runTest {
+        val push = RecordingTeardown(5, vault)
+        sessions = repository(push)
+        login()
+        drain()
+        server.dispatcher = object : mockwebserver3.Dispatcher() {
+            override fun dispatch(request: mockwebserver3.RecordedRequest) = when (request.url.encodedPath) {
+                "/api/v1/push/revoke-device.php" -> MockResponse.Builder().code(200).addHeader("Content-Type", "application/json")
+                    .body("""{"devices":[]}""").headersDelay(400, TimeUnit.MILLISECONDS).build()
+                else -> error("server_error", 500)
+            }
+        }
+        val started = System.nanoTime()
+        sessions.signOut()
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+        assertTrue("Sign-out must wait for the revoke reply after logout failed (took ${elapsedMs}ms)", elapsedMs >= 350)
+        assertTrue(sessions.state.value.logoutUnconfirmed)
+        assertFalse(sessions.state.value.busy)
+        assertEquals(setOf("/api/v1/push/revoke-device.php", "/api/v1/logout.php"), drain().map { it.url.encodedPath }.toSet())
     }
 
     @Test fun offlineSignOutStillCompletesPushCleanupLocally() = runTest {

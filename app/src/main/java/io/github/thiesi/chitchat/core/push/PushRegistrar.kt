@@ -13,9 +13,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -77,12 +74,30 @@ class PushLocal(
         return record
     }
 
-    /** The account's existing record, or a fresh one; any other account's record is retired first. */
-    @Synchronized fun prepare(origin: String, userId: Long): PushRecord {
+    /** The login session last published by the session repository; null when none is signed in. */
+    private var session: Triple<String, Long, Long>? = null
+
+    /**
+     * The current login session's record, or a fresh one. Null when [origin]/[userId] isn't the
+     * published session. Any other session's record is retired first.
+     */
+    @Synchronized fun prepare(origin: String, userId: Long): PushRecord? {
+        val (sessionOrigin, sessionUser, signedInAt) = session ?: return null
+        if (sessionOrigin != origin || sessionUser != userId) return null
         val existing = record()
-        if (existing?.belongsTo(origin, userId) == true) return existing
+        if (existing?.ownedBy(origin, userId, signedInAt) == true) return existing
         if (existing != null) retire(null, null) else clearQuietly() // Also drops an unreadable leftover file.
-        return PushRecord.create(origin, userId).also { vault.save(it) }
+        session = Triple(origin, userId, signedInAt) // retire() forgets the session; this one continues.
+        return PushRecord.create(origin, userId, signedInAt).also { vault.save(it) }
+    }
+
+    /** Under the session lock: a restored session keeps its record, any other session drops it. */
+    @Synchronized override fun sessionChanged(origin: String, userId: Long?, signedInAt: Long?) {
+        val next = if (userId != null && signedInAt != null) Triple(origin, userId, signedInAt) else null
+        if (next != null && next == session) return
+        val record = record()
+        if (record != null && (next == null || !record.ownedBy(next.first, next.second, next.third))) retire(null, null)
+        session = next
     }
 
     /** Saves the server's answer only into the record it was requested for. */
@@ -90,6 +105,13 @@ class PushLocal(
         val current = record()?.takeIf { it.instance == instance } ?: return false
         vault.save(current.registered(registration))
         mutableStatus.value = PushPhoneStatus.On
+        return true
+    }
+
+    /** Keeps (or with null, drops) an endpoint for [instance] until its session can send it. */
+    @Synchronized fun hold(instance: String, endpoint: String?): Boolean {
+        val current = record()?.takeIf { it.instance == instance } ?: return false
+        if (current.pendingEndpoint != endpoint) vault.save(current.pending(endpoint))
         return true
     }
 
@@ -112,12 +134,8 @@ class PushLocal(
         try { if (record != null) connector.unregister(record.instance) else connector.unregisterAll() }
         catch (_: Exception) { /* The keys are gone, so anything still delivered can't be decrypted. */ }
         mutableStatus.value = PushPhoneStatus.Off
+        session = null
         return record?.takeIf { origin != null && userId != null && it.belongsTo(origin, userId) }?.registrationId
-    }
-
-    @Synchronized fun retireIfForeign(origin: String, userId: Long) {
-        val record = record() ?: return
-        if (!record.belongsTo(origin, userId)) retire(null, null) // That account's session is gone: local only.
     }
 
     private fun clearQuietly() { try { vault.clear() } catch (_: IOException) { /* Key deletion is attempted first. */ } }
@@ -135,13 +153,15 @@ class PushRegistrar(
     private val lock = Mutex()
 
     init {
+        // A held endpoint goes out when its own account's session is signed in again.
         scope.launch {
-            sessions.state.map { state ->
-                state.server?.value?.takeIf { state.phase == SessionPhase.AUTHENTICATED }?.let { origin ->
-                    state.user?.takeIf { !it.guest }?.let { origin to it.id }
-                }
-            }.distinctUntilChanged().filterNotNull().collect { (origin, userId) ->
-                withContext(io) { local.retireIfForeign(origin, userId) }
+            sessions.state.collect { state ->
+                if (state.phase != SessionPhase.AUTHENTICATED || state.busy) return@collect
+                val origin = state.server?.value ?: return@collect
+                val userId = state.user?.takeIf { !it.guest }?.id ?: return@collect
+                val held = withContext(io) { local.record() }
+                    ?.takeIf { it.pendingEndpoint != null && it.belongsTo(origin, userId) } ?: return@collect
+                lock.withLock { subscribe(held.instance, held.pendingEndpoint!!, held.publicKey, held.auth) }
             }
         }
     }
@@ -154,11 +174,11 @@ class PushRegistrar(
         val current = sessions.state.value
         if (current.generation != expected.generation || current.user?.id != user.id) return@withLock false
         withContext(io) {
-            val record = local.prepare(origin, user.id)
+            val record = local.prepare(origin, user.id) ?: return@withContext false
             local.publish(record.instance, if (record.registrationId != null) PushPhoneStatus.On else PushPhoneStatus.Waiting)
             connector.register(record.instance, vapid)
+            true
         }
-        true
     }
 
     fun onNewEndpoint(instance: String, endpoint: String, p256dh: String?, auth: String?) {
@@ -167,14 +187,21 @@ class PushRegistrar(
 
     private suspend fun subscribe(instance: String, endpoint: String, p256dh: String?, auth: String?) {
         val record = withContext(io) { local.record() }?.takeIf { it.instance == instance } ?: return
-        val state = sessions.state.value
-        // Only the account that turned push on may register it; otherwise wait for its next sign-in.
-        if (state.phase != SessionPhase.AUTHENTICATED || !record.belongsTo(state.server?.value.orEmpty(), state.user?.id ?: -1)) return
         val keys = if (p256dh == null || auth == null) null else validEndpointKeys(endpoint, p256dh, auth)
         if (keys == null || keys.p256dh != record.publicKey || keys.auth != record.auth) {
+            withContext(io) { local.hold(instance, null) }
             local.publish(instance, PushPhoneStatus.Refused(PushSubscribeRefusal.DESTINATION))
             return
         }
+        val state = sessions.state.value
+        // Only the account that turned push on may register it. A cold process (a distributor callback
+        // with no signed-in session yet) keeps the endpoint sealed until that session is back.
+        if (state.phase != SessionPhase.AUTHENTICATED || !record.belongsTo(state.server?.value.orEmpty(), state.user?.id ?: -1)) {
+            withContext(io) { local.hold(instance, endpoint) }
+            return
+        }
+        // Sent once: a refusal or unknown outcome drops the held endpoint, so nothing is replayed later.
+        withContext(io) { local.hold(instance, null) }
         val body = pushSubscribeBody(keys, record.registrationId)
         try {
             val access = sessions.openAccess(state)

@@ -14,16 +14,16 @@ class PushLocalTest {
     private val keys = VaultKeyManager(vault)
 
     @Test fun createdRecordIsValidAndNeverPrintsItsKeys() {
-        val record = PushRecord.create(origin, 7)
+        val record = PushRecord.create(origin, 7, 100)
         assertTrue(record.valid())
         assertEquals("PushRecord", record.toString())
         val point = PushRecord.decode(record.publicKey)!!
         assertEquals(65, point.size); assertEquals(4.toByte(), point[0])
-        assertNotEquals(PushRecord.create(origin, 7).instance, record.instance)
+        assertNotEquals(PushRecord.create(origin, 7, 100).instance, record.instance)
     }
 
     @Test fun keyManagerOpensAWebPushMessageOnlyForItsOwnInstance() {
-        val record = local.prepare(origin, 7)
+        val record = prep(7)
         val sealed = WebPushHybridEncrypt.Builder()
             .withAuthSecret(PushRecord.decode(record.auth))
             .withRecipientPublicKey(PushRecord.decode(record.publicKey))
@@ -39,7 +39,7 @@ class PushLocalTest {
     }
 
     @Test fun retireWipesKeysUnregistersAndCancelsNotifications() {
-        val record = local.prepare(origin, 7)
+        val record = prep(7)
         assertTrue(local.adopt(record.instance, PushRegistration(9, "bind")))
         assertEquals(PushPhoneStatus.On, local.status.value)
         assertEquals(9L, local.retire(origin, 7))
@@ -51,7 +51,7 @@ class PushLocalTest {
     }
 
     @Test fun retireForAnotherAccountStillWipesButRevokesNothing() {
-        val record = local.prepare(origin, 7)
+        val record = prep(7)
         local.adopt(record.instance, PushRegistration(9, null))
         assertNull(local.retire(origin, 8))
         assertNull(local.retire("https://other.example", 7))
@@ -59,7 +59,7 @@ class PushLocalTest {
     }
 
     @Test fun unreadableRecordDropsEveryConnectorRegistration() {
-        local.prepare(origin, 7)
+        prep(7)
         vault.failReads = true
         val clears = vault.clears
         assertNull(local.retire(origin, 7))
@@ -68,7 +68,7 @@ class PushLocalTest {
     }
 
     @Test fun clearFailureNeverStopsTheRestOfTheCleanup() {
-        val record = local.prepare(origin, 7)
+        val record = prep(7)
         vault.failClears = true
         local.retire(origin, 7)
         assertEquals(listOf(record.instance), connector.unregistered)
@@ -76,28 +76,41 @@ class PushLocalTest {
     }
 
     @Test fun lateServerAnswerCannotReviveARetiredRegistration() {
-        val first = local.prepare(origin, 7)
+        val first = prep(7)
         local.retire(origin, 7)
-        val second = local.prepare(origin, 7)
+        val second = prep(7)
         assertNotEquals(first.instance, second.instance)
         assertFalse(local.adopt(first.instance, PushRegistration(9, null)))
         assertNull(vault.record!!.registrationId)
     }
 
-    @Test fun anotherAccountsRecordIsRetiredBeforeANewOne() {
-        val first = local.prepare(origin, 7)
-        assertEquals(first.instance, local.prepare(origin, 7).instance)
-        val second = local.prepare(origin, 8)
-        assertNotEquals(first.instance, second.instance)
+    @Test fun aRecordLivesExactlyAsLongAsItsLoginSession() {
+        val first = prep(7)
+        local.sessionChanged(origin, 7, 100) // The same saved session restored or revalidated.
+        assertEquals(first.instance, vault.record!!.instance)
+        assertEquals(first.instance, prep(7).instance)
+        local.sessionChanged(origin, 7, 200) // Same account, new login session.
+        assertNull(vault.record)
         assertEquals(listOf(first.instance), connector.unregistered)
-        local.retireIfForeign(origin, 8)
-        assertEquals(second.instance, vault.record!!.instance)
-        local.retireIfForeign(origin, 7)
+        val second = prep(7, 200)
+        local.sessionChanged(origin, 8, 300) // Another account.
+        assertNull(vault.record)
+        assertEquals(listOf(first.instance, second.instance), connector.unregistered)
+        prep(8, 300)
+        local.sessionChanged(origin, null, null) // Anonymous, guest or pending MFA: no account session.
         assertNull(vault.record)
     }
 
+    @Test fun prepareNeedsTheMatchingPublishedSession() {
+        assertNull(local.prepare(origin, 7))
+        local.sessionChanged(origin, 7, 100)
+        assertNull(local.prepare(origin, 8))
+        assertNull(local.prepare("https://other.example", 7))
+        assertEquals(100L, local.prepare(origin, 7)!!.signedInAt)
+    }
+
     @Test fun forgetOnlyTouchesTheMatchingInstance() {
-        val record = local.prepare(origin, 7)
+        val record = prep(7)
         assertNull(local.forget("another-instance", PushPhoneStatus.Off))
         assertNotNull(vault.record)
         assertEquals(record.instance, local.forget(record.instance, PushPhoneStatus.DistributorFailed(DistributorFailure.NETWORK))!!.instance)
@@ -107,11 +120,16 @@ class PushLocalTest {
     }
 
     @Test fun malformedRecordsAreRejected() {
-        val record = PushRecord.create(origin, 7)
-        assertFalse(PushRecord("http://chat.example", 7, record.instance, record.privateKey, record.publicKey, record.auth).valid())
-        assertFalse(PushRecord(origin, 7, record.instance, record.privateKey, record.publicKey, record.auth, binding = "has space").valid())
-        assertFalse(PushRecord(origin, 7, record.instance, record.privateKey, record.auth, record.auth).valid())
-        assertFalse(PushRecord(origin, 7, record.instance, record.privateKey, record.publicKey, record.auth, registrationId = 0).valid())
+        val record = PushRecord.create(origin, 7, 100)
+        assertFalse(PushRecord("http://chat.example", 7, 100, record.instance, record.privateKey, record.publicKey, record.auth).valid())
+        assertFalse(PushRecord(origin, 7, 100, record.instance, record.privateKey, record.publicKey, record.auth, binding = "has space").valid())
+        assertFalse(PushRecord(origin, 7, 100, record.instance, record.privateKey, record.auth, record.auth).valid())
+        assertFalse(PushRecord(origin, 7, 100, record.instance, record.privateKey, record.publicKey, record.auth, registrationId = 0).valid())
+    }
+
+    private fun prep(userId: Long, signedInAt: Long = 100): PushRecord {
+        local.sessionChanged(origin, userId, signedInAt)
+        return local.prepare(origin, userId)!!
     }
 
     private class MemoryPushVault : PushVault {

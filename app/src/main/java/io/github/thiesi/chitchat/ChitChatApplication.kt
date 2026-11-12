@@ -88,7 +88,6 @@ class ChitChatApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        pushRegistrar // Watches for a record left by another account; distributor callbacks also reach it.
         realtimeRuntime = AndroidRealtimeRuntime(this, ProcessLifecycleOwner.get().lifecycle,
             { foreground -> realtimeCoordinator.setForeground(foreground); typingCoordinator.setForeground(foreground) },
             realtimeCoordinator::setNetworkAvailable)
