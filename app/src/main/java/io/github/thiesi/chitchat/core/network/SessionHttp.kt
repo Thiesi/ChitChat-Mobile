@@ -473,8 +473,11 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         val files = decode<DirectAttachmentsReply>(request("direct-messages/attachments/metadata.php?message_ids=$query").require200()).attachments
         incompatibleUnless(files.size <= ids.size && files.map { it.id }.distinct().size == files.size &&
             files.map { it.messageId }.distinct().size == files.size)
-        files.forEach { incompatibleUnless(it.id > 0 && it.messageId in ids && it.sizeBytes >= 0 &&
-            it.name.isNotBlank() && it.mimeType.isNotBlank() && it.sha256.matches(Regex("[a-fA-F0-9]{64}"))) }
+        files.forEach {
+            incompatibleUnless(it.id > 0 && it.messageId in ids && it.sizeBytes >= 0 &&
+                it.name.isNotBlank() && it.mimeType.isNotBlank() && it.sha256.matches(Regex("[a-fA-F0-9]{64}")))
+            requireValidAttachmentMetadata(it.model(), direct = true)
+        }
         return mutations.associateBy { it.id } to files.associateBy { it.messageId }
     }
 
