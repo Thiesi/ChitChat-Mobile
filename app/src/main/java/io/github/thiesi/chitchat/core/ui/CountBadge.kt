@@ -41,6 +41,18 @@ internal fun attentionKind(uncertain: Boolean, failed: Boolean)=when {
     AttentionKind.GENERIC -> generic
 }
 
+/** The Details button's spoken state. A blocked composer keeps its existing description first and
+ * adds an uncertain or failed state after it, so neither fact is lost.
+ */
+@Composable
+internal fun detailsStateDescription(kind: AttentionKind, @StringRes generic: Int, @StringRes blocked: Int?=null): String {
+    val state=androidx.compose.ui.res.stringResource(attentionDescription(kind,generic))
+    return if (blocked==null) state else {
+        val unavailable=androidx.compose.ui.res.stringResource(blocked)
+        if (kind==AttentionKind.GENERIC) unavailable else "$unavailable $state"
+    }
+}
+
 /** States differ by shape, never color alone (A-05): a dot, a question mark or an octagon,
  * each on a ground-ringed 16dp badge so it holds against whatever is behind it.
  */

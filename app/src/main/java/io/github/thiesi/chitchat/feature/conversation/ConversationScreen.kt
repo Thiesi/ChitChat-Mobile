@@ -34,7 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import io.github.thiesi.chitchat.core.ui.AttentionBadge
 import io.github.thiesi.chitchat.core.ui.MoreIcon
-import io.github.thiesi.chitchat.core.ui.attentionDescription
+import io.github.thiesi.chitchat.core.ui.detailsStateDescription
 import io.github.thiesi.chitchat.core.ui.attentionKind
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.IconButton
@@ -554,8 +554,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val markerUncertain = state.uncertainSend || state.authorUnknown != null || state.reactionUnknown != null
                 val markerFailed = state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
                     (compact && attachmentFacts?.needsAttention == true)
-                val status = stringResource(attentionDescription(attentionKind(markerUncertain, markerFailed),
-                    if (blocked) R.string.conversation_send_unavailable_details else R.string.conversation_details_attention))
+                val status = detailsStateDescription(attentionKind(markerUncertain, markerFailed), R.string.conversation_details_attention,
+                    R.string.conversation_send_unavailable_details.takeIf { blocked })
                 val attention = (compact && (attachmentFacts != null || attach.notice != null || attach.picked != null)) ||
                     completionComposer.choice!=null || state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend || state.authorUnknown != null || state.authorLimit ||
                     state.error != null || state.syncError != null || state.readError != null || state.validation != null ||

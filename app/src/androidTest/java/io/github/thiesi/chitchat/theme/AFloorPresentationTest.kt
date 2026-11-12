@@ -112,4 +112,22 @@ class AFloorPresentationTest {
             compose.onNodeWithTag("attention_badge:$kind", useUnmergedTree = true).assertExists()
         }
     }
+
+    @Test fun blockedComposerKeepsItsDescriptionAndAddsTheMarkerState() {
+        val blocked = text(R.string.conversation_send_unavailable_details)
+        val cases = listOf(
+            io.github.thiesi.chitchat.core.ui.AttentionKind.GENERIC to blocked,
+            io.github.thiesi.chitchat.core.ui.AttentionKind.UNCERTAIN to "$blocked ${text(R.string.details_attention_uncertain)}",
+            io.github.thiesi.chitchat.core.ui.AttentionKind.FAILED to "$blocked ${text(R.string.details_attention_failed)}")
+        val kind = androidx.compose.runtime.mutableStateOf(cases.first().first)
+        compose.setContent { ChitChatTheme(dark = false) {
+            Text(io.github.thiesi.chitchat.core.ui.detailsStateDescription(kind.value, R.string.conversation_details_attention,
+                R.string.conversation_send_unavailable_details), Modifier.testTag("description"))
+        } }
+        for ((state, expected) in cases) {
+            compose.runOnIdle { kind.value = state }
+            compose.onNodeWithTag("description").assertTextEquals(expected)
+        }
+    }
 }
+
