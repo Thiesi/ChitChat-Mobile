@@ -71,8 +71,11 @@ rather than fake it:
 - Admin "Looking after this server" card, guest visits and moderation actions: M7.
 - Invite QR codes: specified in invite-codes.md (D5), not yet implemented or scheduled.
 - ~~Installation icon~~: ChitChat#211 shipped in v3.6.0 and is inside the 3.7.0 minimum,
-  designed in installation-icon.md. Its presets and name-following initial (ChitChat#241) are
-  still a dependency.
+  designed in installation-icon.md. Its presets and name-following initial (ChitChat#241)
+  shipped in v3.8.0 and need no app change.
+- ~~Required username change~~: ChitChat#164 shipped in v3.8.0, designed in play-readiness.md
+  and required for the first Play release. The minimum stays 3.7.0; it's gated by the session
+  fields.
 - ~~Signed-in sessions and authenticator codes~~: ChitChat#205 and #204 shipped in v3.7.0, the
   minimum since 2026-11-11, designed in account-security.md.
 
