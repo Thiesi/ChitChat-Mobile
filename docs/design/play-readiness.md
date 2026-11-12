@@ -201,10 +201,17 @@ unknown kind is never an error.
 
 ### Required username change (ChitChat#164, merged)
 
-**Status: Dependency.** ChitChat#164 is merged (`363fcde`) and ships in the release after
-3.7.0. Like every later feature, it ships only once the technical lead raises the minimum server
-version to include it (one rule, server-update.md), with no capability check. Until then,
-implementers leave it out. The contract is `docs/api/username-change.md` on ChitChat main.
+**Status: active, required for the first Play release** (technical lead, 2026-11-12).
+ChitChat#164 shipped in v3.8.0 (`ec31655`). CCM's minimum stays 3.7.0, so this is gated by what
+the server sends, never by a version check: on a server without it, `user.username_change` is
+missing and treated as `null`, and no `403 username_change_required`, `user_renamed` or
+`username_change_required` notification ever arrives, so nothing here shows. A missing field
+never triggers the server update notice. The contract is `docs/api/username-change.md` at
+`v3.8.0`. `capabilities.moderated_username_change` is informational only; the screens key on
+the session fields and the server's signals.
+- **Server signals win over the flag** (technical lead, 2026-11-12): a `403
+  username_change_required`, a `user_renamed` event and a `username_change_required`
+  notification are honored whatever the capability flag says or whether it's present.
 
 **What the server does.** A Global Moderator or above can require a new username when a name
 breaks the community rules. The server replaces the name at once with a placeholder such as
@@ -293,7 +300,12 @@ re-acceptance)
   composer (text, reply and attached file). An edit dialog keeps its text. A refused reaction
   leaves the chip unchanged. A refused profile picture leaves the current one in place. No
   unknown-send state is set.
-- The app re-reads the session (one GET), then the chooser opens. After **Save**, the person
+- The app re-reads the session (one GET). If `user.username_change` is then non-null, the
+  chooser opens. If it's still missing or `null`, the write stays a definite refusal with the
+  draft kept, and the composer shows the generic line "Choose a new username to write." without
+  opening the chooser. That re-read happens once per refused write and is never repeated in a
+  loop.
+- After **Save**, the person
   returns to the same place with the draft intact. **Nothing resends automatically.** The
   person presses Send (or adds the reaction) again.
 - Never gated, and never showing the chooser: reading, discovery and search, sign-in and
@@ -481,8 +493,8 @@ re-verify them at release. How they map to the form's answers is the maintainer'
 | P-170 | No write action is possible before the guidelines are accepted for the current version, server and account. Acceptance is stored locally and versioned. | C |
 | P-171 | With `policies.rules`, one I agree covers the app guidelines and the server rules and posts the shown version. Sign-up sends `accepted_rules_version`. `409` and unknown results re-read the session and never accept or resend on their own. `rules: null` or a missing `policies` shows only the app guidelines. | U, C |
 | P-175 | A `403 rules_acceptance_required` is a definite refusal: the draft, reply, file or edit text is kept, no unknown state is set, re-acceptance opens, and nothing resends after I agree. Ungated actions never show re-acceptance. | U, C |
-| P-212 | When the minimum includes ChitChat#164, the Choose a new username screen shows the moderators' `reason` as plain text (newlines kept, no markup or links, up to 500 characters in full, with Save reachable at 2.0 font on 360×640dp) and generic copy when it's missing or empty. It shows the placeholder, the previous-name sign-in line only when `sign_in_with_previous_username` is true, and never the previous name. One field and Save: a local format check makes no request; `invalid_username`, `username_taken` (one copy for taken, reserved and placeholder-pattern names), `429`, `username_change_not_required` and Unknown each show their copy. Unknown checks with one session GET, and Save is never resent automatically. | U, C |
-| P-213 | A `403 username_change_required` is a definite refusal, as in P-175: the draft, reply, file or edit text is kept, no unknown state is set, the session is re-read and the chooser opens, and nothing resends after Save. When rules acceptance is also required, re-acceptance comes first and the chooser follows. Ungated actions (reading, search, reporting, block, ignore, removals, settings, export, closure) never show the chooser. | U, C |
+| P-212 | The Choose a new username screen shows the moderators' `reason` as plain text (newlines kept, no markup or links, up to 500 characters in full, with Save reachable at 2.0 font on 360×640dp) and generic copy when it's missing or empty. It shows the placeholder, the previous-name sign-in line only when `sign_in_with_previous_username` is true, and never the previous name. One field and Save: a local format check makes no request; `invalid_username`, `username_taken` (one copy for taken, reserved and placeholder-pattern names), `429`, `username_change_not_required` and Unknown each show their copy. Unknown checks with one session GET, and Save is never resent automatically. | U, C |
+| P-213 | On a server without ChitChat#164 (a missing `user.username_change`), nothing in this section shows and the update notice isn't triggered. Server signals (the 403, `user_renamed`, the notification) are honored whatever the capability flag says; after a 403, a re-read that still shows no required change keeps the draft with the generic line "Choose a new username to write." and never loops. A `403 username_change_required` is a definite refusal, as in P-175: the draft, reply, file or edit text is kept, no unknown state is set, the session is re-read and the chooser opens, and nothing resends after Save. When rules acceptance is also required, re-acceptance comes first and the chooser follows. Ungated actions (reading, search, reporting, block, ignore, removals, settings, export, closure) never show the chooser. | U, C |
 | P-214 | The `username_change_required` notification is tolerated in Activity, opens the chooser through the guarded link flow (or the "already chosen" line), and its lock-screen public version is "New notification". `user_renamed` updates every rendered occurrence of that user ID without a visual cue, and the viewer's own ID re-reads the session. No surface shows a name the session has replaced. | U, C |
 | P-176 | Hosted policy documents render `markdown` through the bounded formatter's display subset (escaped HTML, http(s) and mailto links only, no images, headings level 2 and below, flattened quotes, plain code) with literal fallback, never server HTML or a WebView. External documents and the legal notice open only `https` URLs, through an explicit Open in browser. | U, C |
 | P-177 | `privacy_policy_updated` notifications are tolerated in Activity and never fail parsing. `change_summary` shows as plain text. | U |
