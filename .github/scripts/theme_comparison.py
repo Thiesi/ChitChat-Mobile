@@ -8,7 +8,9 @@ BEFORE='3093e71b4236bb27689cef130f3a7b788794b005'
 FIXTURE='app/src/androidTest/java/io/github/thiesi/chitchat/theme/ThemePresentationJourneyTest.kt'
 TARGET=ROOT/'.tooling/worktrees/theme-baseline'
 REPORT=ROOT/'app/build/reports/theme-comparison'
-SCENES=('server','auth','home','settings','rooms','room','direct','thread','activity','account','search')
+SCENES=('server','auth','home','settings','rooms','room','direct','thread','activity','account','search',
+    # Synthetic attach states; the base ref must already contain room attachments (#190 or later).
+    'room-attach-photo','room-attach-privacy','room-attach-sending','room-attach-unknown','room-attach-too-large','room-attach-settings')
 
 def display_snapshot():
     saved={}
@@ -34,8 +36,9 @@ def collect(source,destination,kind,baseline_theme=False):
         for palette in palettes for scale in ('default','font200') for scene in SCENES}
     expected|={f'{prefix}-{palette}-{scale}-configuration.json'
         for palette in palettes for scale in ('default','font200')}
-    files=list(islice(source.rglob(folder+'/*'),81))
-    if len(files)>80 or len({p.name for p in files})!=len(files):
+    limit=len(expected) # Exactly the expected matrix; never an open-ended directory walk.
+    files=list(islice(source.rglob(folder+'/*'),limit+1))
+    if len(files)>limit or len({p.name for p in files})!=len(files):
         raise ValueError('Ambiguous or excess capture output')
     records=[]
     for path in files:
