@@ -26,7 +26,7 @@ LOGCAT = ["adb", "logcat", "-d", "-v", "threadtime", "-s", "ImeTracker:I", "Test
 # Unknown platform reasons remain omitted, rather than expanding a privacy boundary implicitly.
 DETAILS = PHASES | REASONS | frozenset("ORIGIN_CLIENT ORIGIN_SERVER ORIGIN_IME ORIGIN_WM_SHELL".split())
 EVENTS = frozenset("onRequestShow onRequestHide onProgress onShown onHidden onCancelled onFailed setFinished".split())
-TOKEN = re.compile(r"(?:io\.github\.thiesi\.chitchat\.debug(?:\.test)?|system_server):[0-9a-fA-F]{1,16}:")
+TOKEN = re.compile(r"(?:de\.networkxxiii\.chitchat\.debug(?:\.test)?|system_server):[0-9a-fA-F]{1,16}:")
 METHOD = re.compile(r"[A-Za-z_][A-Za-z_0-9]*\(io\.github\.thiesi\.chitchat\.[A-Za-z_0-9.$]+\)")
 DATE = re.compile(r"[0-9]{2}-[0-9]{2}")
 TIME = re.compile(r"[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}")

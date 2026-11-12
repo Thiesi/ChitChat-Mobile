@@ -6,8 +6,8 @@ import org.junit.Test
 class FocusMetadataTest {
     @Test fun recognizesOnlyExactHostComponentPositions() {
         val state = focusMetadata("""
-            mCurrentFocus=Window{abc u0 io.github.thiesi.chitchat.debug/androidx.activity.ComponentActivity}
-            mFocusedApp=ActivityRecord{def u0 io.github.thiesi.chitchat.debug/androidx.activity.ComponentActivity t7}
+            mCurrentFocus=Window{abc u0 de.networkxxiii.chitchat.debug/androidx.activity.ComponentActivity}
+            mFocusedApp=ActivityRecord{def u0 de.networkxxiii.chitchat.debug/androidx.activity.ComponentActivity t7}
         """.trimIndent())
         assertEquals(FocusOwner.TARGET_HOST, state.window)
         assertEquals(FocusOwner.TARGET_HOST, state.app)
@@ -15,13 +15,13 @@ class FocusMetadataTest {
     @Test fun reportsSystemUiSeparatelyFromResumedTargetApp() {
         val state = focusMetadata("""
             mCurrentFocus=Window{abc u0 com.android.systemui/.SomeWindow}
-            mFocusedApp=ActivityRecord{def u0 io.github.thiesi.chitchat.debug/androidx.activity.ComponentActivity t7}
+            mFocusedApp=ActivityRecord{def u0 de.networkxxiii.chitchat.debug/androidx.activity.ComponentActivity t7}
         """.trimIndent())
         assertEquals(FocusOwner.SYSTEM_UI, state.window)
         assertEquals(FocusOwner.TARGET_HOST, state.app)
     }
     @Test fun arbitraryTitlesCannotImpersonateTheHostOrSystemUi() {
-        listOf("Error: io.github.thiesi.chitchat.debug/androidx.activity.ComponentActivity",
+        listOf("Error: de.networkxxiii.chitchat.debug/androidx.activity.ComponentActivity",
             "Private text com.android.systemui/.SomeWindow", "com.android.systemui").forEach { title ->
             val state = focusMetadata("mCurrentFocus=Window{abc u0 $title}")
             assertNull(state.window)
@@ -46,7 +46,7 @@ class FocusMetadataTest {
         val state = focusMetadata("$line\n$line")
         assertNull(state.window)
         assertEquals(2, state.windowFields)
-        val app = "mFocusedApp=ActivityRecord{def u0 io.github.thiesi.chitchat.debug/androidx.activity.ComponentActivity t7}"
+        val app = "mFocusedApp=ActivityRecord{def u0 de.networkxxiii.chitchat.debug/androidx.activity.ComponentActivity t7}"
         assertNull(focusMetadata("$line\n$line\n$app").app)
         assertNull(focusMetadata("$line\n$app\n$app").window)
     }

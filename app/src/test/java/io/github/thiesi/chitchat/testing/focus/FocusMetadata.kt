@@ -8,7 +8,7 @@ internal data class FocusMetadata(val window: FocusOwner?, val app: FocusOwner?,
 private val field = Regex("^\\s*(mCurrentFocus|mFocusedApp)=(.*)$")
 private val windowComponent = Regex("Window\\{[0-9a-fA-F]+ u[0-9]+ ([A-Za-z0-9_.$]+/[A-Za-z0-9_.$]+)\\}")
 private val appComponent = Regex("ActivityRecord\\{[0-9a-fA-F]+ u[0-9]+ ([A-Za-z0-9_.$]+/[A-Za-z0-9_.$]+) t[0-9]+(?: [^{}]*)?\\}")
-private const val TARGET = "io.github.thiesi.chitchat.debug/androidx.activity.ComponentActivity"
+private const val TARGET = "de.networkxxiii.chitchat.debug/androidx.activity.ComponentActivity"
 
 /** Missing, malformed, truncated or multiple-display observations are unknown, never unlocked/ready.
  * Parse only the component position in the platform grammar, not a substring in a window title.
