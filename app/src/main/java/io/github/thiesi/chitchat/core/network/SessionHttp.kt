@@ -172,6 +172,9 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
     suspend fun updatePushPreferences(body: String, csrf: String): io.github.thiesi.chitchat.core.push.PushPreferences =
         decode<io.github.thiesi.chitchat.core.push.PushPreferencesReply>(request("push/update-preferences.php", body, csrf)
             .require200()).preferences.domain()
+    /** One subscribe POST, never replayed: an unknown outcome is reconciled by the device list (GET). */
+    suspend fun subscribePush(body: String, csrf: String): io.github.thiesi.chitchat.core.push.PushRegistration =
+        decode<io.github.thiesi.chitchat.core.push.PushSubscribeReply>(request("push/subscribe.php", body, csrf).require200()).domain()
     suspend fun revokePushDevice(id: Long, csrf: String): List<io.github.thiesi.chitchat.core.push.PushDevice> =
         decode<io.github.thiesi.chitchat.core.push.PushDevicesReply>(request("push/revoke-device.php",
             "{\"id\":$id}", csrf).require200()).domain()

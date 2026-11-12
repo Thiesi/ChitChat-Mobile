@@ -57,6 +57,8 @@ data class SessionState(
     val privacy: MessagePrivacy? = null,
     val shareTyping: Boolean? = null,
     val attachmentPolicy: AttachmentPolicy = AttachmentPolicy.Unknown,
+    /** Bootstrap Web Push discovery; like the attachment policy, never persisted and cleared on revalidation. */
+    val webPush: io.github.thiesi.chitchat.core.push.WebPushDiscovery = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
 ) {
     val canChangeServer get() = phase !in setOf(SessionPhase.AUTHENTICATED, SessionPhase.PENDING_MFA, SessionPhase.GUEST) && !storageWarning && !busy
 }
@@ -140,7 +142,7 @@ class SessionRepository internal constructor(
                 invalidate(active, ApiFailure(FailureKind.EXPIRED))
                 return@withLock null
             }
-            mutable.value = mutable.value.copy(busy = true, error = null, attachmentPolicy = AttachmentPolicy.Unknown)
+            mutable.value = mutable.value.copy(busy = true, error = null, attachmentPolicy = AttachmentPolicy.Unknown, webPush = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown)
             active
         } ?: return
         bootstrap(active)
@@ -293,6 +295,7 @@ class SessionRepository internal constructor(
                     shareTyping = reply.shareTyping.takeIf { reply.user != null },
                     attachmentPolicy = if (reply.user != null && !reply.user.guest) reply.attachmentPolicy
                         else AttachmentPolicy.Unavailable,
+                    webPush = if (reply.user != null && !reply.user.guest) reply.webPush else io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unavailable,
                 )
                 active.bootstrapActive = false
                 persist(active, reply.user)
@@ -307,7 +310,7 @@ class SessionRepository internal constructor(
                     active.csrf = null
                     active.bootstrapActive = false
                     mutable.value = current.copy(busy = false, refreshRequired = true,
-                        shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown,
+                        shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown, webPush = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
                         phase = if (current.phase == SessionPhase.CONNECTING) SessionPhase.INVALIDATED else current.phase,
                         error = if (current.phase == SessionPhase.CONNECTING) current.error ?: ApiFailure(FailureKind.NETWORK) else current.error)
                 }
@@ -322,14 +325,14 @@ class SessionRepository internal constructor(
         if (reply.mfaRequired) {
             mutable.value = mutable.value.copy(phase = SessionPhase.PENDING_MFA, user = null, busy = true,
                 error = null, recoveryCodesRemaining = null, chatPolicy = null, privacy = null, shareTyping = null,
-                attachmentPolicy = AttachmentPolicy.Unknown)
+                attachmentPolicy = AttachmentPolicy.Unknown, webPush = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown)
             persist(active, null)
         } else {
             active.signedInAt = clock.millis()
             active.expectedUserId = reply.user!!.id
             mutable.value = mutable.value.copy(phase = SessionPhase.AUTHENTICATED, user = reply.user,
                 busy = true, error = null, recoveryCodesRemaining = reply.recoveryCodesRemaining,
-                chatPolicy = null, privacy = null, shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown,
+                chatPolicy = null, privacy = null, shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown, webPush = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
                 accountRestored = reply.restored, registrationMayHaveSucceeded = false)
             persist(active, reply.user)
         }
