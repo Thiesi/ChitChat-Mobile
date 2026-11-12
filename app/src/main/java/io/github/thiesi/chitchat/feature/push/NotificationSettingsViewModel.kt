@@ -13,6 +13,9 @@ import io.github.thiesi.chitchat.core.push.PushPreferences
 import io.github.thiesi.chitchat.core.push.PushSettings
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +28,8 @@ data class NotificationSettingsState(
     val loading: Boolean = false,
     val settings: PushSettings? = null,
     val error: ApiFailure? = null,
+    /** Whether [error] came from a read (GET) rather than a write, so the copy matches. */
+    val readError: Boolean = false,
     val writing: Boolean = false,
     /** A write whose outcome isn't known. A new choice needs an explicit Refresh (GET) first. */
     val unconfirmed: Boolean = false,
@@ -38,7 +43,8 @@ class NotificationSettingsViewModel(private val operations: PushOperations) : Vi
     private val mutable = MutableStateFlow(NotificationSettingsState())
     val state: StateFlow<NotificationSettingsState> = mutable.asStateFlow()
     val session = operations.session
-    private var owner: Identity? = null
+    // Snapshot state, so a screen checking belongsTo() recomposes when the owner binds.
+    private var owner: Identity? by mutableStateOf(null)
     private var job: Job? = null
 
     private data class Identity(val server: String?, val generation: Long, val user: Long, val version: Int)
@@ -74,7 +80,7 @@ class NotificationSettingsViewModel(private val operations: PushOperations) : Vi
                 if (owner == identity) mutable.value = mutable.value.copy(loading = false)
                 throw cancelled
             } catch (failure: ApiFailure) {
-                if (owner == identity) mutable.value = mutable.value.copy(loading = false, error = failure)
+                if (owner == identity) mutable.value = mutable.value.copy(loading = false, error = failure, readError = true)
             }
         }
     }
@@ -94,7 +100,7 @@ class NotificationSettingsViewModel(private val operations: PushOperations) : Vi
                 if (owner == identity) mutable.value = mutable.value.copy(writing = false, unconfirmed = true)
                 throw cancelled
             } catch (failure: ApiFailure) {
-                if (owner == identity) mutable.value = mutable.value.copy(writing = false, error = failure,
+                if (owner == identity) mutable.value = mutable.value.copy(writing = false, error = failure, readError = false,
                     unconfirmed = failure.ambiguous())
             }
         }
@@ -114,7 +120,7 @@ class NotificationSettingsViewModel(private val operations: PushOperations) : Vi
                 if (owner == identity) mutable.value = mutable.value.copy(writing = false, unconfirmed = true)
                 throw cancelled
             } catch (failure: ApiFailure) {
-                if (owner == identity) mutable.value = mutable.value.copy(writing = false, error = failure,
+                if (owner == identity) mutable.value = mutable.value.copy(writing = false, error = failure, readError = false,
                     unconfirmed = failure.ambiguous())
             }
         }

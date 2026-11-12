@@ -65,11 +65,24 @@ class NotificationSettingsViewModelTest {
         assertEquals("Reconciliation is a GET, never a replayed POST", 1, ops.writes)
     }
 
-    @Test fun cancellingAWriteMakesItUnconfirmed() {
+    @Test fun retiringDuringAWriteClearsFactsAndTheNextOpenReconcilesByGetWithoutReplay() {
         opened(); ops.gate = CompletableDeferred()
         model.choose(signedIn, prefs.copy(mentioned = false)); dispatcher.scheduler.runCurrent()
         model.retire(); dispatcher.scheduler.runCurrent()
         assertNull("Retirement clears private facts", model.state.value.settings)
+        model.open(signedIn); dispatcher.scheduler.runCurrent()
+        assertEquals("The next open re-reads once", 2, ops.gets)
+        assertEquals("The cancelled write is never replayed", 1, ops.writes)
+    }
+
+    @Test fun aFailedReconciliationReadIsAReadErrorNotASaveError() {
+        opened(); ops.failure = ApiFailure(FailureKind.TIMEOUT)
+        model.choose(signedIn, prefs.copy(mentioned = false)); dispatcher.scheduler.runCurrent()
+        assertTrue(model.state.value.unconfirmed)
+        ops.readFailure = ApiFailure(FailureKind.NETWORK)
+        model.refresh(signedIn); dispatcher.scheduler.runCurrent()
+        assertTrue(model.state.value.readError); assertTrue("Still unconfirmed", model.state.value.unconfirmed)
+        assertEquals(1, ops.writes)
     }
 
     @Test fun removeRevokesByIdAndKeepsTheServersRemainingList() {
@@ -93,9 +106,10 @@ class NotificationSettingsViewModelTest {
             server = (ServerAddress.parse("https://fixture.example/") as AddressResult.Valid).address,
             user = SessionUser(7, "Viewer", listOf("member"), 1, false)))
         var gets = 0; var writes = 0; val revoked = mutableListOf<Long>()
-        var failure: ApiFailure? = null; var gate: CompletableDeferred<Unit>? = null
+        var failure: ApiFailure? = null; var readFailure: ApiFailure? = null; var gate: CompletableDeferred<Unit>? = null
         private var devices = listOf(PushDevice(4, "Firefox/128 Linux", null, false, "2026-07-18T09:12:00+00:00", null))
         override suspend fun settings(expected: SessionState): PushSettings { gets++
+            readFailure?.let { throw it }
             return PushSettings(PushPreferences(true, true, null, null), devices) }
         override suspend fun update(expected: SessionState, preferences: PushPreferences): PushPreferences { writes++
             gate?.await(); failure?.let { throw it }; return preferences }

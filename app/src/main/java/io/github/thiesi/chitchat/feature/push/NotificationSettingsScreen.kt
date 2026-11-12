@@ -58,7 +58,9 @@ fun NotificationSettingsScreen(model: NotificationSettingsViewModel, session: Se
         }
         if (state.loading && settings == null) CircularProgressIndicator()
         state.error?.let { failure ->
-            InlineError(stringResource(if (settings == null) R.string.push_load_failed else pushWriteError(failure)))
+            // A failed read (first load or the reconciliation Refresh) is never shown as a failed save;
+            // an unconfirmed change stays unconfirmed with its own line below.
+            InlineError(stringResource(if (settings == null || state.readError) R.string.push_load_failed else pushWriteError(failure)))
         }
         if (state.unconfirmed) Text(stringResource(R.string.push_unconfirmed), Modifier.testTag("push_unconfirmed"))
         if (settings == null && !state.loading || state.unconfirmed) TextButton(onClick = { model.refresh(displayedSession) },
