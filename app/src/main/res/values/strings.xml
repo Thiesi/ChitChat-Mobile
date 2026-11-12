@@ -479,4 +479,6 @@
     <string name="attach_review_failed_title">Couldn’t check</string>
     <string name="attach_review_failed">Recent messages couldn’t be loaded, so it’s still not known whether your file arrived.</string>
     <string name="attach_refused_dm_unavailable">You can’t send files to this person right now. Nothing was sent.</string>
+    <string name="header_more">More</string>
+    <string name="header_back_to_top">Back to top</string>
 </resources>

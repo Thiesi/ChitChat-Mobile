@@ -4,6 +4,9 @@ import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
 
 import io.github.thiesi.chitchat.core.ui.PrimaryButton
 import io.github.thiesi.chitchat.core.ui.AttentionBadge
+import io.github.thiesi.chitchat.core.ui.MoreIcon
+import io.github.thiesi.chitchat.core.ui.attentionDescription
+import io.github.thiesi.chitchat.core.ui.attentionKind
 
 import androidx.compose.material3.MaterialTheme
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
@@ -389,7 +392,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     write={ model.updateDraft(displayedSession,peer,it) },
                     onTextChanged={ model.typing?.input(displayedSession,TypingTarget.Direct(peer),hasTypingContent(it)) },inlineChoices=inlineCompletion && !detailsOpen)
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (!compact) Column(Modifier.fillMaxWidth().heightIn(max = headerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+                    if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(headerLimit) {
                         SessionNotice(session, now, onRefreshSession)
                         Text(state.context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleLarge)
                         state.context?.let { Text(stringResource(R.string.dm_privacy_short, it.privacy.direct.retention), style = MaterialTheme.typography.bodySmall) }
@@ -725,7 +728,7 @@ internal fun DirectPrivacyNotice(privacy: MessagePrivacy?, title: Int = R.string
     actions: @Composable (() -> Unit) -> Unit = {}) {
     if (!compact) privacy?.let { Text(stringResource(R.string.dm_privacy_short, it.direct.retention), style = MaterialTheme.typography.bodySmall) }
     val label = stringResource(title)
-    val status = stringResource(R.string.dm_details_attention)
+    val status = stringResource(attentionDescription(attentionKind(uncertain, failed), R.string.dm_details_attention))
     BadgedBox(badge = { if (needsAttention) AttentionBadge(uncertain=uncertain,failed=failed) }) {
         if (!compact) TextButton(onClick = { onExpandedChange(true) }, modifier = Modifier.semantics {
             if (needsAttention) stateDescription = status
@@ -734,7 +737,7 @@ internal fun DirectPrivacyNotice(privacy: MessagePrivacy?, title: Int = R.string
             IconButton(onClick = { onExpandedChange(true) }, modifier = Modifier.semantics {
                 contentDescription = label
                 if (needsAttention) stateDescription = status
-            }) { Text("\u22ee") }
+            }) { MoreIcon() }
         }
     }
     if (expanded) AlertDialog(onDismissRequest = { onExpandedChange(false) }, title = { Text(stringResource(title)) }, text = {

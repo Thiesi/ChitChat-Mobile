@@ -33,6 +33,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import io.github.thiesi.chitchat.core.ui.AttentionBadge
+import io.github.thiesi.chitchat.core.ui.MoreIcon
+import io.github.thiesi.chitchat.core.ui.attentionDescription
+import io.github.thiesi.chitchat.core.ui.attentionKind
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
@@ -477,7 +480,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             }
     }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (!compact) Column(Modifier.fillMaxWidth().heightIn(max = headerLimit).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+        if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(headerLimit) {
             header(false) {}
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("conversation_timeline"), state = timeline,
@@ -548,22 +551,22 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             run {
                 val label = stringResource(if (completionComposer.choice!=null) R.string.completion_details else R.string.conversation_details)
                 val blocked = !ready || state.busy || !(model.canSend() || attachmentSendable)
-                val status = stringResource(if (blocked) R.string.conversation_send_unavailable_details else R.string.conversation_details_attention)
+                val markerUncertain = state.uncertainSend || state.authorUnknown != null || state.reactionUnknown != null
+                val markerFailed = state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
+                    (compact && attachmentFacts?.needsAttention == true)
+                val status = stringResource(attentionDescription(attentionKind(markerUncertain, markerFailed),
+                    if (blocked) R.string.conversation_send_unavailable_details else R.string.conversation_details_attention))
                 val attention = (compact && (attachmentFacts != null || attach.notice != null || attach.picked != null)) ||
                     completionComposer.choice!=null || state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend || state.authorUnknown != null || state.authorLimit ||
                     state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
                     state.notice != null || blocked || connection?.takeIf { it.generation == session.generation }?.let {
                         it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null || it.roomId == roomId }
                     } == true
-                BadgedBox(badge = { if (attention) AttentionBadge(
-                    uncertain = state.uncertainSend || state.authorUnknown != null || state.reactionUnknown != null,
-                    failed = state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
-                        (compact && attachmentFacts?.needsAttention == true))
-                }) {
+                BadgedBox(badge = { if (attention) AttentionBadge(uncertain = markerUncertain, failed = markerFailed) }) {
                     IconButton(onClick = { completionDetailsToken=Any(); detailsOpen = true }, modifier = Modifier.semantics {
                         contentDescription = label
                         if (attention) stateDescription = status
-                    }) { Text("\u22ee") }
+                    }) { MoreIcon() }
                 }
             }
             if (replyInline) replyControl(true)
