@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.core.network
 
 import io.github.thiesi.chitchat.core.conversation.*
 import io.github.thiesi.chitchat.core.direct.*
+import io.github.thiesi.chitchat.core.media.AttachmentPreview
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -30,10 +31,15 @@ import kotlinx.serialization.Serializable
     @SerialName("can_delete") @Serializable(with = StrictJsonBoolean::class) val canDelete: Boolean,
     val mentions: List<DirectMention>, val reactions: List<MessageReaction>)
 @Serializable internal class DirectAttachmentsReply(val attachments: List<DirectAttachment>)
-@Serializable internal class DirectAttachment(val id: Long, @SerialName("message_id") val messageId: Long,
+@Serializable(with = DirectAttachmentSerializer::class)
+internal class DirectAttachment(val id: Long, @SerialName("message_id") val messageId: Long,
     val name: String, @SerialName("mime_type") val mimeType: String, @SerialName("size_bytes") val sizeBytes: Long,
-    val sha256: String, val previewable: Boolean) {
-    fun model() = MessageAttachment(id, name, mimeType, sizeBytes, sha256, previewable)
+    val sha256: String, val previewable: Boolean, val width: Int? = null, val height: Int? = null,
+    val preview: AttachmentPreview? = null,
+    val dimensionsAdvertised: Boolean = width != null && height != null) {
+    fun model() = MessageAttachment(id, name, mimeType, sizeBytes, sha256, previewable,
+        width, height, preview, dimensionsAdvertised)
+    override fun toString() = "DirectAttachment"
 }
 
 internal fun requireDirectPeer(peerId: Long, viewer: Long) {

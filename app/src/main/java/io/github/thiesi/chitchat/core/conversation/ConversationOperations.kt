@@ -1,5 +1,9 @@
 package io.github.thiesi.chitchat.core.conversation
 
+import io.github.thiesi.chitchat.core.media.AttachmentDimensions
+import io.github.thiesi.chitchat.core.media.AttachmentPreview
+import io.github.thiesi.chitchat.core.network.MessageAttachmentSerializer
+
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
 import io.github.thiesi.chitchat.core.mutations.AuthorMessageActions
 import io.github.thiesi.chitchat.core.network.StrictJsonBoolean
@@ -25,9 +29,17 @@ import java.time.OffsetDateTime
     // Client enrichment from message-mutations.php, NOT a room-history wire field.
     @kotlinx.serialization.Transient val authorActions: AuthorMessageActions? = null,
 )
-@Serializable class MessageAttachment(val id: Long, val name: String,
+@Serializable(with = MessageAttachmentSerializer::class)
+class MessageAttachment(val id: Long, val name: String,
     @SerialName("mime_type") val mimeType: String, @SerialName("size_bytes") val sizeBytes: Long,
-    val sha256: String, val previewable: Boolean)
+    val sha256: String, val previewable: Boolean, val width: Int? = null, val height: Int? = null,
+    val preview: AttachmentPreview? = null,
+    val dimensionsAdvertised: Boolean = width != null && height != null) {
+    val displayDimensions: AttachmentDimensions?
+        get() = if (dimensionsAdvertised && width != null && height != null && width > 0 && height > 0)
+            AttachmentDimensions(width, height) else null
+    override fun toString() = "MessageAttachment"
+}
 @Serializable class MessageReply(val kind: String, @SerialName("message_id") val messageId: Long,
     val available: Boolean, val message: ReplyMessage?)
 @Serializable class ReplyMessage(val id: Long, val sender: MessagePerson?, val type: String,

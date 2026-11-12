@@ -27,7 +27,7 @@ internal fun requireValidMessage(value: RoomMessage, roomId: Long) {
     incompatibleUnless(value.id > 0 && value.roomId == roomId && (value.senderId == null || value.senderId > 0) &&
         value.type in setOf("text", "emote", "system", "attachment") && serverInstant(value.createdAt) != null &&
         (value.deleted || value.body != null))
-    value.attachment?.let { incompatibleUnless(it.id > 0 && it.sizeBytes >= 0) }
+    value.attachment?.let { requireValidAttachmentMetadata(it, direct = false) }
     value.replyTo?.let { reply ->
         incompatibleUnless(reply.kind == "room" && reply.messageId > 0 && (reply.available == (reply.message != null)))
         reply.message?.let { incompatibleUnless(it.id == reply.messageId && (it.sender == null || it.sender.id > 0)) }
@@ -39,6 +39,11 @@ internal fun requireValidAttention(mentions: List<MessageMention>, reactions: Li
     incompatibleUnless(mentions.all { it.userId > 0 } && reactions.all { reaction ->
         reaction.emoji.isNotEmpty() && reaction.users.all { it.id > 0 }
     })
+}
+
+internal fun requireValidAttachmentMetadata(value: MessageAttachment, direct: Boolean) {
+    incompatibleUnless(value.id > 0 && value.sizeBytes >= 0)
+    value.preview?.let { incompatibleUnless(it.validFor(value.id, direct)) }
 }
 
 internal fun requireValidPing(value: RoomPing, roomId: Long, viewerId: Long) {

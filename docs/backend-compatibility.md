@@ -1,5 +1,7 @@
 # Backend contract and compatibility
 
+[M5g6a image/preview metadata](milestones/M5g6a-attachment-preview-metadata.md) consumes the existing v3.5.0 nullable dimensions and typed rendition descriptor, preserving both-key presence and exact room/DM namespace/attachment URL validation. Original geometry is a framing hint; no byte request/cache/original fallback is added. Identity-only upload ACKs remain independent of optional display metadata. No endpoint, minimum version, timeout or HTTP budget change.
+
 [M5g5f DM upload reconciliation](milestones/M5g5f-direct-attachment-reconciliation-state.md) reuses one explicit bounded original-session DM context/history pass, with current disclosure checks before/after awaits. Own outgoing final-byte SHA matches after attempt start require person confirmation; absence is not non-delivery. No endpoint, minimum version, HTTP budget, upload or retry change. Existing independent mutation/read/relationship semantics remain separate; no live acceptance claim.
 
 [M5g5e DM upload actor](milestones/M5g5e-direct-attachment-upload-state.md) adds original-bound serialized state over the existing multipart route. The concrete DM transport now validates the current disclosure after original access, independently of an older rendered snapshot, without bootstrap/replay. Positive201 precedes canonical GET and grants no read/block/send-unknown consent. No endpoint, minimum version, timeout or HTTP budget changes.
