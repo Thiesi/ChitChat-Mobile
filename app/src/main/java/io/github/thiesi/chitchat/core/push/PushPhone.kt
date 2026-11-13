@@ -1,6 +1,5 @@
 package io.github.thiesi.chitchat.core.push
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -51,6 +50,8 @@ class UnifiedPushDistributors(private val context: Context) : PushDistributors {
 /**
  * The notification channels, created only when the person turns push on. The IDs never change once
  * shipped, because Android keeps the person's settings per channel ID. `moderation` comes with M7.
+ * Android ignores an app's lock-screen visibility on a channel, so lock-screen privacy is set on each
+ * notification instead (private, with a generic public version) when P3 posts it.
  */
 object PushChannels {
     const val MENTIONS = "mentions"
@@ -67,7 +68,5 @@ object PushChannels {
     }
 
     private fun channel(context: Context, id: String, name: Int, importance: Int) =
-        NotificationChannel(id, context.getString(name), importance).apply {
-            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-        }
+        NotificationChannel(id, context.getString(name), importance)
 }

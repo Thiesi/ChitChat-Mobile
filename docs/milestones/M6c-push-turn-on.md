@@ -40,8 +40,10 @@ for every failure state. Nothing is retried automatically.
    UnifiedPush project's [distributor list](https://unifiedpush.org/users/distributors/), opened in the
    browser only on that tap. Once the optional embedded FCM distributor (P4) ships, only builds
    without it can reach that case.
-4. **Channels**: `mentions` (high) and `account` (default) are created now, never at install, both with
-   private lock-screen visibility. `direct` (high) is created only when the account's DM alert
+4. **Channels**: `mentions` (high) and `account` (default) are created now, never at install. Android
+   ignores an app's lock-screen visibility on a channel (only the system and the person can change it),
+   so lock-screen privacy comes from each notification: P3 posts them private, with a generic public
+   version. `direct` (high) is created only when the account's DM alert
    preference is on while this phone isn't Off. P3 also creates it on the first DM alert. `moderation`
    waits for M7.
 5. **Registration**: the distributor is saved and `PushRegistrar.start` runs. If it refuses (session or
@@ -95,7 +97,8 @@ Instrumented tests:
     collected by `native_presentation.py` into `push-presentation`. Each scene also asserts its copy;
     captures are for the presentation lead's review, not a visual pass.
 - `PushChannelsDeviceTest`: the real NotificationManager creates `mentions` and `account` with their
-  importance and private lock-screen visibility, `direct` only when asked, and no `moderation`.
+  names and importance, `direct` only when asked, and no `moderation`. Its first CI run (705f041) failed
+  on a channel lock-screen visibility assertion, which is how the ignored channel setting was found.
 
 Tests grant `POST_NOTIFICATIONS` up front, so CI never shows the system prompt. The prompt itself,
 two real distributors, the no-distributor link and the Blocked path are **pending device acceptance**.
