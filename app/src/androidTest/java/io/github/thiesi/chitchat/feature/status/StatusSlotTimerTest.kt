@@ -54,7 +54,7 @@ class StatusSlotTimerTest {
     @Before fun start() { compose.mainClock.autoAdvance = false }
 
     @androidx.compose.runtime.Composable
-    private fun content() {
+    private fun SlotContent() {
         CompositionLocalProvider(LocalLifecycleOwner provides owner) {
             ChitChatTheme(dark = false) { Surface { if (shown) StatusSlot(session, realtime, {}, {}, {}, nowMillis = { now }) } }
         }
@@ -62,12 +62,12 @@ class StatusSlotTimerTest {
 
     private fun show() {
         owner = TestOwner().also { it.registry.currentState = Lifecycle.State.RESUMED }
-        compose.setContent { content() }
+        compose.setContent { SlotContent() }
     }
 
     private fun restorable(): StateRestorationTester {
         owner = TestOwner().also { it.registry.currentState = Lifecycle.State.RESUMED }
-        return StateRestorationTester(compose).also { it.setContent { content() } }
+        return StateRestorationTester(compose).also { it.setContent { SlotContent() } }
     }
 
     private fun stop() = compose.runOnIdle { owner.registry.currentState = Lifecycle.State.CREATED }
