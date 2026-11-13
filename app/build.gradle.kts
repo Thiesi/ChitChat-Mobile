@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.okhttp.sse)
     implementation(libs.serialization.json)
     implementation(libs.unifiedpush.connector)
+    implementation(libs.unifiedpush.embedded.fcm)
     implementation(libs.tink)
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)

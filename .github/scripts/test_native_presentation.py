@@ -120,7 +120,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_excess_ambiguous_or_foreign_push_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"push-light-on-{n}.png") for n in range(13)],
+        for files in ([Path(f"push-light-on-{n}.png") for n in range(17)],
             [Path("a/push-dark-on.png"), Path("b/push-dark-on.png")], [Path("other-app.png")]):
             self.copy.reset_mock(); self.mkdir.reset_mock(); self.push_files(files)
             self.assertEqual(0, runner.main())

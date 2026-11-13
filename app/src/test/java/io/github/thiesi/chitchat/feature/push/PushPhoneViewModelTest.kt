@@ -40,6 +40,62 @@ class PushPhoneViewModelTest {
     }
     @After fun stop() { store.clear(); Dispatchers.resetMain() }
 
+    private val google = PushDistributor("de.networkxxiii.chitchat", "Google")
+    private val ntfy = PushDistributor("org.example.ntfy", "ntfy")
+
+    @Test fun googleIsOfferedOnlyWithoutADeliveryAppAndOnlyOnAnExplicitChoice() {
+        distributors.google = google
+        model.turnOn(signedIn); model.proceed(signedIn, direct = false)
+        val step = model.state.value.step as TurnOnStep.UseGoogle
+        assertSame(google, step.google)
+        assertEquals("Never automatic", 0, phone.starts)
+        assertFalse("Not the no-delivery-app status", model.state.value.noDistributor)
+        model.useGoogle(signedIn, direct = false)
+        assertEquals(listOf(google.packageName), distributors.chosen)
+        assertEquals(1, phone.starts)
+        assertEquals("Google", model.state.value.distributor)
+    }
+
+    @Test fun withADeliveryAppGoogleIsNeverOffered() {
+        distributors.google = google
+        distributors.installed = listOf(ntfy)
+        model.turnOn(signedIn); model.proceed(signedIn, direct = false)
+        assertEquals(listOf(ntfy.packageName), distributors.chosen)
+        model.useGoogle(signedIn, direct = false)
+        assertEquals("useGoogle outside its dialog does nothing", listOf(ntfy.packageName), distributors.chosen)
+        distributors.installed = listOf(ntfy, PushDistributor("org.example.other", "Other"))
+        model.turnOn(signedIn); model.proceed(signedIn, direct = false)
+        val choice = model.state.value.step as TurnOnStep.Choose
+        assertTrue("Only installed delivery apps are listed", choice.distributors.none { it.packageName == google.packageName })
+    }
+
+    @Test fun withoutADeliveryAppOrPlayServicesItStillNeedsSetup() {
+        model.turnOn(signedIn); model.proceed(signedIn, direct = false)
+        assertEquals(TurnOnStep.NoDistributor, model.state.value.step)
+        assertTrue(model.state.value.noDistributor)
+        assertEquals(0, phone.starts)
+    }
+
+    @Test fun onGoogleALaterDeliveryAppIsOfferedButNothingSwitchesByItself() {
+        distributors.google = google
+        distributors.current = google.packageName
+        phone.status.value = PushPhoneStatus.On
+        model.open(signedIn)
+        assertEquals("Google", model.state.value.distributor)
+        assertFalse(model.state.value.deliveryAppInstead)
+        distributors.installed = listOf(ntfy)
+        model.open(signedIn) // Back on the screen after installing a delivery app.
+        assertTrue(model.state.value.deliveryAppInstead)
+        assertEquals("Still delivered by Google", "Google", model.state.value.distributor)
+        assertEquals("Nothing switched", 0, phone.starts + phone.turnOffs)
+        // Turn on again takes the switch path: the old registration goes first, then fresh keys.
+        model.turnOn(signedIn); model.proceed(signedIn, direct = false)
+        assertEquals(listOf("turnOff", "start"), phone.order)
+        assertEquals(listOf(ntfy.packageName), distributors.chosen)
+        assertFalse(model.state.value.deliveryAppInstead)
+        assertEquals("ntfy", model.state.value.distributor)
+    }
+
     @Test fun oneDistributorTurnsOnAfterTheExplanationWithChannelsCreatedFirst() {
         distributors.installed = listOf(PushDistributor("org.example.ntfy", "ntfy"))
         model.open(signedIn)
@@ -158,10 +214,12 @@ class PushPhoneViewModelTest {
 
     private inner class FakeDistributors : PushDistributors {
         var installed = emptyList<PushDistributor>()
+        var google: PushDistributor? = null
         var current: String? = null
         val chosen = mutableListOf<String>()
         var lists = 0
         override fun installed(): List<PushDistributor> { lists++; return installed }
+        override fun google(): PushDistributor? = google
         override fun current(): String? = current
         override fun choose(packageName: String) { chosen += packageName; log += "choose" }
     }

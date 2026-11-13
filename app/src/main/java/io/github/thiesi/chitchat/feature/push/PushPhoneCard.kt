@@ -50,6 +50,8 @@ internal fun PushPhoneCard(phone: PushPhoneViewModel, session: SessionState, dir
     var allowed by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { allowed = NotificationManagerCompat.from(context).areNotificationsEnabled() }
     LaunchedEffect(session.generation, session.user?.id) { phone.open(session) }
+    // A delivery app installed while away shows up on return; no polling and no package receiver.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { phone.open(session) }
     // The `direct` channel appears when the person turns Direct messages on while this phone receives.
     LaunchedEffect(direct, status) { if (direct) phone.directChosen() }
     var asking by remember { mutableStateOf(false) }
@@ -75,8 +77,11 @@ internal fun PushPhoneCard(phone: PushPhoneViewModel, session: SessionState, dir
             if (state.startFailed) Text(stringResource(R.string.push_start_failed))
             if (state.turnOffUnconfirmed) Text(stringResource(R.string.push_turned_off_local))
             if (!canTurnOn && status == PushPhoneStatus.Off) Text(stringResource(R.string.push_unavailable), color = colors.textMuted)
+            val instead = status == PushPhoneStatus.On && state.deliveryAppInstead
+            if (instead) Text(stringResource(R.string.push_google_app_installed), color = colors.textMuted,
+                modifier = Modifier.testTag("push_google_app_installed"))
             if (state.busy) CircularProgressIndicator(Modifier.size(24.dp))
-            val showTurnOn = canTurnOn && status != PushPhoneStatus.On && status != PushPhoneStatus.Waiting
+            val showTurnOn = canTurnOn && (instead || status != PushPhoneStatus.On && status != PushPhoneStatus.Waiting)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (showTurnOn) PrimaryButton(
                     onClick = { phone.turnOn(session) }, enabled = ready,
@@ -127,7 +132,21 @@ internal fun PushPhoneCard(phone: PushPhoneViewModel, session: SessionState, dir
                     Text(stringResource(R.string.push_continue)) } },
                 dismissButton = { TextButton(onClick = phone::cancel) { Text(stringResource(R.string.cancel)) } })
         }
-        // Once the embedded FCM distributor (P4) ships, only builds without it can reach this case.
+        // No delivery app, but Play services: Google delivery, only on an explicit "Use Google".
+        is TurnOnStep.UseGoogle -> AlertDialog(onDismissRequest = phone::cancel,
+            modifier = Modifier.testTag("push_google").lanternDialogEdge(),
+            title = { Text(stringResource(R.string.push_none_title)) },
+            text = { Column {
+                Text(stringResource(R.string.push_google_body))
+                TextButton(onClick = {
+                    try { context.startActivity(Intent(Intent.ACTION_VIEW, DISTRIBUTOR_GUIDE.toUri())) }
+                    catch (_: ActivityNotFoundException) { /* No browser: the explanation above still stands. */ }
+                }, modifier = Modifier.heightIn(min = 48.dp).testTag("push_google_guide")) { Text(stringResource(R.string.push_google_link)) }
+            } },
+            confirmButton = { TextButton(onClick = { phone.useGoogle(session, direct) }, enabled = !state.busy,
+                modifier = Modifier.testTag("push_use_google")) { Text(stringResource(R.string.push_use_google)) } },
+            dismissButton = { TextButton(onClick = phone::cancel) { Text(stringResource(R.string.cancel)) } })
+        // Neither a delivery app nor Play services (or a build without the embedded distributor).
         TurnOnStep.NoDistributor -> AlertDialog(onDismissRequest = phone::cancel,
             modifier = Modifier.testTag("push_none").lanternDialogEdge(),
             title = { Text(stringResource(R.string.push_none_title)) },

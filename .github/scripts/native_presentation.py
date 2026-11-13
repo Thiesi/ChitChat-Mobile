@@ -14,7 +14,7 @@ DESTINATION = ROOT / "app/build/reports/androidTests/completion-presentation"
 THEME_DESTINATION = ROOT / "app/build/reports/androidTests/theme-foundation"
 SOURCE = ROOT / "app/build/outputs/connected_android_test_additional_output"
 PUSH_DESTINATION = ROOT / "app/build/reports/androidTests/push-presentation"
-PUSH_NAME = re.compile(r"push-(light|dark)-(off|waiting|on|refused|needs-setup|explain)\.png")
+PUSH_NAME = re.compile(r"push-(light|dark)-(off|waiting|on|refused|needs-setup|explain|google|google-instead)\.png")
 THEME_NAME = re.compile(r"theme-(light|dark|black)-(default|font200)-(?:"
     r"(?:server|auth|home|settings|rooms|room|direct|thread|activity|account|search)\.png|configuration\.json)")
 
@@ -33,14 +33,14 @@ def collect_theme():
 
 def collect_push():
     # Two presentation cases (light, dark): six notification-card scenes each.
-    files = list(islice(SOURCE.rglob("ccm-push-presentation/*"), 13))
-    if (not files or len(files) > 12 or len({p.name for p in files}) != len(files)
+    files = list(islice(SOURCE.rglob("ccm-push-presentation/*"), 17))
+    if (not files or len(files) > 16 or len({p.name for p in files}) != len(files)
         or any(PUSH_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous push presentation output")
     PUSH_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, PUSH_DESTINATION / path.name)
-    print(f"Push presentation captures collected: {len(files)} of 12.")
+    print(f"Push presentation captures collected: {len(files)} of 16.")
 
 
 def main() -> int:

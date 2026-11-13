@@ -27,15 +27,26 @@ class PushDistributor(val packageName: String, val label: String) {
 
 /** The installed distributors and the person's choice, behind an interface so JVM tests need no phone. */
 interface PushDistributors {
+    /** UnifiedPush delivery apps installed on this phone. Never this app's own Google fallback. */
     fun installed(): List<PushDistributor>
+    /**
+     * Google delivery (P4, the embedded FCM distributor), when Play services is present. The privacy policy
+     * allows it only when no delivery app is installed, so Turn on offers it only when [installed] is empty.
+     */
+    fun google(): PushDistributor? = null
     /** The distributor this app registered with or last chose, if any. */
     fun current(): String?
     fun choose(packageName: String)
 }
 
 class UnifiedPushDistributors(private val context: Context) : PushDistributors {
-    override fun installed(): List<PushDistributor> =
-        UnifiedPush.getDistributors(context).map { PushDistributor(it, label(it)) }.sortedBy { it.label.lowercase() }
+    // The connector lists this app's own package as a distributor only when the embedded FCM library is
+    // present and Play services is installed. It registers straight with FCM: no gateway, no Firebase SDK.
+    override fun installed(): List<PushDistributor> = UnifiedPush.getDistributors(context)
+        .filter { it != context.packageName }.map { PushDistributor(it, label(it)) }.sortedBy { it.label.lowercase() }
+
+    override fun google(): PushDistributor? = context.packageName.takeIf { it in UnifiedPush.getDistributors(context) }
+        ?.let { PushDistributor(it, context.getString(R.string.push_distributor_google)) }
 
     override fun current(): String? = UnifiedPush.getAckDistributor(context) ?: UnifiedPush.getSavedDistributor(context)
 
