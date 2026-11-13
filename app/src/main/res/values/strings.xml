@@ -521,6 +521,10 @@
     <string name="push_google_body">ChitChat can use Google’s Firebase Cloud Messaging instead. Your notifications stay encrypted: Google can’t read them, but it sees when this phone gets one.</string>
     <string name="push_use_google">Use Google</string>
     <string name="push_google_link">How to choose a delivery app</string>
+    <string name="oss_licences_open">Open-source licences</string>
+    <string name="oss_licences_title">Open-source licences</string>
+    <string name="oss_licences_intro">ChitChat is built with these open-source projects. Tap one to see its licence.</string>
+    <string name="oss_licence_source">Source code</string>
     <string name="push_google_app_installed">A delivery app is installed now. Turn on again to use it instead of Google.</string>
     <string name="push_channel_mentions">Mentions and pings</string>
     <string name="push_channel_account">Account and server notices</string>

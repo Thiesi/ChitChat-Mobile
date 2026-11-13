@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [Open-source licences](docs/third-party-licenses.md): every shipped artifact must be covered by `assets/licenses/oss_licenses.json` (`:app:checkLicenceCoverage` in CI; `OssLicencesTest` for catalog entries and versions). Add an entry with its licence text when a dependency changes; never silence the check.
+
 - [M6e Google delivery](docs/milestones/M6e-embedded-fcm.md) uses the unmodified embedded FCM distributor 3.1.0 (no Firebase SDK, direct FCM endpoint, `gateway = null`, LGPL-2.1 compliance per docs/third-party-licenses.md). Offer it only when no UnifiedPush delivery app is installed and only on an explicit Use Google; never list it beside delivery apps or switch away from it automatically.
 
 - [M6d receive](docs/milestones/M6d-push-receive.md) shows a push only for the sealed record's own instance and exact binding, without publishing a session or making a request. Every notification is `VISIBILITY_PRIVATE` with a generic public version (installation name and kind, never sender, room or text). A tap lands on Activity only for the signed-in account it was for and routes its link through the guarded flow; otherwise it is dropped, never replayed.
