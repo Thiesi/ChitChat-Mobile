@@ -1,8 +1,8 @@
-# M6d: receive and post pushes (push P3, part A)
+# M6d: receive, post and open pushes (push P3)
 
 A decrypted push becomes a notification, following
-[push presentation](../design/push-presentation.md). Tapping a notification opens the app.
-Routing the tap to its destination is part B.
+[push presentation](../design/push-presentation.md). Part A receives and posts it. Part B routes a
+tap to its destination.
 
 ## When a push is shown
 
@@ -80,6 +80,27 @@ Anything else drops the push; nothing is repaired. The server's own "…" trimmi
 
 Sign-out and the other session-ending events already cancel this app's notifications (M6b).
 
+## Tap (part B)
+
+The tap is an immutable `PendingIntent` carrying the push's server, account and `link`. A summary
+carries no link. `SINGLE_TOP` brings a running app forward in place, so drafts and other screen state
+survive. Each notification gets a distinct intent.
+
+The activity is exported, so any app could send the same intent. It grants nothing: the link is a hint,
+like a notification-center row. `MainActivity` keeps at most one pending tap in an activity-scoped
+holder. Only a fresh launch or `onNewIntent` offers one. A restored activity or a relaunch from Recents
+never replays one, and nothing is saved.
+
+Routing only happens for the signed-in account the push was posted for:
+- **That account is signed in:** the app opens Activity. That entry consumes the tap and sends the link
+  through the native parser and the guarded destination flow (M4c4d), the same router a center row
+  uses. Access is checked fresh and nothing is marked read.
+- **No usable destination:** a missing, unsupported or foreign link stays on Activity, as does a
+  destination that turns out unauthorized or stale. It never opens a browser.
+- **Anything else drops the tap:** sign-in needed, a guest, another account or server, no server, or a
+  failed connection. It is not replayed after a later sign-in. Only start-up waits, while the saved
+  server is selected and bootstrapped.
+
 ## Verification
 
 JVM tests:
@@ -96,6 +117,21 @@ Device test: `PushPosterDeviceTest` posts through the real NotificationManager a
 - the `direct` channel created on a DM alert;
 - each alert kept in its account's group, not regrouped by the system;
 - the private counting summary, which never alerts itself;
-- normal versus silent foreground alerting.
+- normal versus silent foreground alerting;
+- an immutable tap intent on every notification.
 
-Real distributor delivery, Doze and lock-screen appearance are **pending device acceptance**.
+`PushTapDeviceTest`: the tap intent round-trips server, account and link, opens in place, and is distinct
+per notification. Recents relaunches, foreign, malformed and wrongly typed intents are no tap; an
+oversized link opens Activity.
+
+JVM `PushTapTest`: only the account the push was for matches; only start-up waits; one pending tap is
+consumed exactly once, and a newer one replaces it.
+
+`PushTapJourneyTest`, through the real app shell:
+- a DM mention link opens the requested message through the guarded flow, with no read POST;
+- a missing or foreign link lands on Activity;
+- a tap before sign-in, for another account or for another server is dropped, and sign-in doesn't
+  replay it.
+
+Real distributor delivery, Doze, lock-screen appearance and tapping a real notification are **pending
+device acceptance**.

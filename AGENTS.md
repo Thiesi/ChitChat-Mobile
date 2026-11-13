@@ -1,6 +1,6 @@
 # ChitChat Android engineering
 
-- [M6d receive](docs/milestones/M6d-push-receive.md) shows a push only for the sealed record's own instance and exact binding, without publishing a session or making a request. Every notification is `VISIBILITY_PRIVATE` with a generic public version (installation name and kind, never sender, room or text).
+- [M6d receive](docs/milestones/M6d-push-receive.md) shows a push only for the sealed record's own instance and exact binding, without publishing a session or making a request. Every notification is `VISIBILITY_PRIVATE` with a generic public version (installation name and kind, never sender, room or text). A tap lands on Activity only for the signed-in account it was for and routes its link through the guarded flow; otherwise it is dropped, never replayed.
 
 - [M6c Turn on](docs/milestones/M6c-push-turn-on.md) asks for the notification permission and creates channels only inside Turn on, and its status copy never claims more than `PushPhoneStatus`. Turn off wipes this phone's keys first and sends one revoke, never retried.
 

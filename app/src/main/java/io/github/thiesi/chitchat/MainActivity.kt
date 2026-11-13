@@ -1,5 +1,6 @@
 package io.github.thiesi.chitchat
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.Build
 import android.app.UiModeManager
@@ -10,7 +11,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModelProvider
+import io.github.thiesi.chitchat.core.push.PushTap
 import io.github.thiesi.chitchat.core.theme.BackgroundNightModeSync
+import io.github.thiesi.chitchat.feature.push.PushTapViewModel
 import io.github.thiesi.chitchat.app.ChitChatApp
 import io.github.thiesi.chitchat.app.SettingsViewModel
 import io.github.thiesi.chitchat.feature.auth.AuthViewModel
@@ -29,12 +32,16 @@ import io.github.thiesi.chitchat.feature.completion.CompletionViewModel
 
 class MainActivity : ComponentActivity() {
     private lateinit var settingsModel: SettingsViewModel
+    private lateinit var pushTaps: PushTapViewModel
     private val nightModeSync=BackgroundNightModeSync()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         settingsModel=ViewModelProvider(this,SettingsViewModel.factory(
             (application as ChitChatApplication).settingsRepository))[SettingsViewModel::class.java]
+        pushTaps=ViewModelProvider(this)[PushTapViewModel::class.java]
+        // Only a fresh launch carries a tap. A restored activity's intent is old and never replays.
+        if (savedInstanceState==null) pushTaps.taps.offer(PushTap.from(intent))
         setContent {
             val model=settingsModel
             val auth: AuthViewModel = viewModel(factory = AuthViewModel.factory((application as ChitChatApplication).sessions))
@@ -76,6 +83,7 @@ class MainActivity : ComponentActivity() {
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
                 notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings, pushPhone = pushPhone,
+                pushTaps = pushTaps.taps,
                 onThemeChanged = { dark ->
                 enableEdgeToEdge(
                     statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
@@ -83,6 +91,12 @@ class MainActivity : ComponentActivity() {
                 )
             })
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pushTaps.taps.offer(PushTap.from(intent))
     }
 
     override fun onStop() {
