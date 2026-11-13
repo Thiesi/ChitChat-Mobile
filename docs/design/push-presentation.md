@@ -294,7 +294,9 @@ The screen shows:
      - **A delivery app installed later** doesn't switch anything by itself: the Google
        registration stays and the card still reads "On, delivered by Google", plus one muted
        line, "A delivery app is installed now. Turn on again to use it instead of Google.",
-       with **Turn on again**. The next Turn on lists only the installed delivery apps.
+       with **Turn on again**. The next Turn on lists only the installed delivery apps. The
+       maintainer confirmed this meets the privacy-policy checklist (2026-11-13, relayed by
+       the technical lead); the policy sentence stays as written.
 
   Battery-optimization exemptions belong to the distributor, not CCM. CCM never asks for one
   for itself.
@@ -410,5 +412,5 @@ The screen shows:
 | P-127 | Direct message alerts (ChitChat#150): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert shows who it's from, never what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content, and the lock-screen public version is "New direct message" without the sender. A mention-plus-DM event is one notification: `mentioned` in `mentions` when the mention alert is sent, else `direct_message_received` in `direct`. | U, C |
 | P-128 | One notification per event: the tag is `event_id`, so a duplicate replaces and never stacks, and a bounded, memory-only recent-event set keeps a dismissed duplicate from reappearing within the process lifetime. | U |
 | P-129 | No per-notification "late" badge or label. The honesty line says alerts usually arrive within seconds, sometimes a little longer, can come later or not arrive, and the quiet-hours line says they aren't sent after quiet hours. Both ship with the minimum server version, with no per-line version check. | C, R |
-| P-219 | (Push P4.) Google's Firebase Cloud Messaging is offered only when no UnifiedPush delivery app is installed and Play services are present, through the "No delivery app found" dialog with **Use Google**, never preselected or chosen automatically, never beside another distributor and never called "built in". The status reads "On, delivered by Google". A delivery app installed later adds the muted "Turn on again to use it instead of Google" line and never switches by itself. Without Play services the existing no-app guidance is unchanged. | U, C |
+| P-219 | (Push P4.) Google's Firebase Cloud Messaging is offered only when no UnifiedPush delivery app is installed and Play services are present, through the "No delivery app found" dialog with **Use Google**, never preselected or chosen automatically, never beside another distributor and never called "built in". The status reads "On, delivered by Google". A delivery app installed later adds the muted "Turn on again to use it instead of Google" line and never switches by itself (maintainer-confirmed, 2026-11-13). Without Play services the existing no-app guidance is unchanged. | U, C |
 | P-126 | Settings offer only the mention and ping toggles (plus Direct messages per P-127) and whole-hour quiet hours with a time zone. Only the `current_session` row is labelled "This phone", and its action is Turn off. Remove revokes by ID. CCM sends the fixed `device_label` "ChitChat for Android". Turn on refusals show their copy and are never retried. Sign-out revokes this device by ID before the session ends. | C, R |
