@@ -209,11 +209,14 @@ Presentation:
 
 ## Lock screen
 
-- Channel visibility is `VISIBILITY_PRIVATE`, with a public version whose title is the
+- Each notification is `VISIBILITY_PRIVATE`, with a public version whose title is the
   installation name and whose text follows the `kind`: "New mention", "New ping", "New direct
   message", and "New notification" for everything else.
   Rendered notices can contain usernames and moderation reasons (M4c4a), so the full text
   shows only when unlocked or when the person's system settings allow it.
+- It's set per notification, never on the channel: Android ignores an app's lock-screen
+  visibility on a channel, which only the system and the person can change (engineer, PR210
+  CI, 2026-11-13).
 - The setting text says so plainly: "On the lock screen, ChitChat shows only that something
   arrived, unless your phone is set to show all notification content."
 
@@ -248,11 +251,26 @@ Presentation:
 
 The screen shows:
 
-- **Status card** for this phone, one of:
-  - "Off";
-  - "On, delivered by {distributor}";
+- **Status card** for this phone ("This phone"), one of:
+  - "Off", with **Turn on**;
+  - "Turning on: waiting for your delivery app", with **Turn off**;
+  - "On, delivered by {distributor}" ("On" when the delivery app gives no name), with
+    **Turn off**;
   - "Needs setup: no delivery app found";
+  - "Needs setup: notifications for this phone may have stopped.", with **Turn on again**
+    and **Turn off**;
+  - "Needs setup: not sure this phone is registered. Your server's answer didn't arrive."
+    (the subscribe answer was lost);
+  - the delivery app's own failures: "Needs setup: your delivery app couldn't connect.",
+    "…needs your attention. Open it, then turn on again." or "…couldn't set this up.";
+  - a Turn on refusal (below), shown in the card with **Turn on again** and **Turn off**;
   - "Blocked in Android settings" (with a button to the system settings).
+
+  The attention states (every "Needs setup", a refusal, Blocked) start with the `warning`
+  triangle glyph before the ink status text; Off, Waiting and On have none (presentation
+  lead, PR210 J review). A Turn off whose removal the server didn't confirm reads "Turned
+  off on this phone. Your server didn't confirm the removal, so this phone may still be
+  listed under Devices. You can remove it there." The muted lock-screen line ends the card.
 - **Turn on** walks through:
   1. a one-paragraph explanation ("ChitChat doesn't run in the background. A delivery app you
      choose wakes it when something arrives, which saves battery.");
@@ -369,7 +387,7 @@ The screen shows:
 | P-120 | Channels are created only on Turn on (or `direct` on the first DM alert) with stable IDs. The channel comes only from the explicit payload `kind` through the fixed table: unknown or missing kinds go to `account`, never a high-importance channel. The kind is never guessed from text. | U, C |
 | P-121 | The notification shows the payload title and text, `app_name` as sub-text, the mark and persimmon accent, with no large icon, no action buttons and no MessagingStyle. | U, S |
 | P-122 | Tap routes through native link parsing and the guarded destination flow (no read, no browser), falling back to Activity. | C |
-| P-123 | Lock-screen visibility is private with a generic public version. | U, M |
+| P-123 | Each notification's lock-screen visibility is private, with a generic public version; set per notification, never on the channel. | U, M |
 | P-124 | Sign-out, account removal, account switch and generation change cancel that account's visible notifications locally at once and drop later pushes. A push whose `binding` doesn't match a signed-in account and generation is dropped silently. | U, C |
 | P-125 | The notification permission is requested only inside Turn on. The app requests no battery exemption for itself, and no local re-engagement notifications exist. | C, R |
 | P-127 | Direct message alerts (ChitChat#150): an opt-in toggle, off by default and shown only when the server returns the Boolean preference, with copy that says the alert shows who it's from, never what was written. Alerts use `direct` only with an explicit kind, never MessagingStyle or content, and the lock-screen public version is "New direct message" without the sender. A mention-plus-DM event is one notification: `mentioned` in `mentions` when the mention alert is sent, else `direct_message_received` in `direct`. | U, C |
