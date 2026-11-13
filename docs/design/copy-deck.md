@@ -233,6 +233,6 @@ technical-lead sign-off, and the affected tests are listed.
   - `preview_limit` and `auth_preview_limit` become one short line naming only what's actually missing
     today: downloading, previewing and sharing files; profile pictures; guest invite links.
   - `dm_no_push` no longer claims there's no background push, since push shipped in M6c–M6e. It now says
-    direct-message alerts are off unless turned on in Account → Notifications.
+    direct-message alerts are optional and can be chosen in Account → Notifications. It shows always, because the DM screen doesn't know without a new request whether the server offers the preference (P-127).
 
-  Drafts for presentation-lead review.
+  Wording approved by the presentation lead (PR224 J review).

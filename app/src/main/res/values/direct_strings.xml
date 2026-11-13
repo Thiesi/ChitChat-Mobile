@@ -24,7 +24,7 @@
     <string name="dm_additional_read">The server may have marked additional, unseen messages read. Check older history too. “New here” is local attention, not a restored server unread count.</string>
     <string name="dm_checked_additional">I have checked this conversation</string>
     <string name="dm_read_policy">Read confirmations apply to all unread messages from this person. This app refetches afterward and separately tracks arrivals you have not seen here.</string>
-    <string name="dm_no_push">Alerts for direct messages are off unless you turn them on in Account → Notifications.</string>
+    <string name="dm_no_push">Direct message alerts are optional. You can choose them in Account → Notifications.</string>
     <string name="dm_privacy_short">Not end-to-end encrypted. Retention: %1$s.</string>
     <string name="dm_privacy">Privacy and retention</string>
     <string name="dm_details">Conversation details</string>
