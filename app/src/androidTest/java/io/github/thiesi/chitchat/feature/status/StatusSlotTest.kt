@@ -88,7 +88,17 @@ class StatusSlotTest {
         compose.onNodeWithTag("status_action").assertIsNotEnabled()
         session = session.copy(refreshRequired = false)
         compose.onNodeWithText(text(R.string.status_rate_limited, text(R.string.wait_seconds, 12))).assertExists()
-        session = session.copy(error = ApiFailure(FailureKind.HTTP, 503, "unavailable"))
+        // The wait ends with no other recomposition: the gate itself wakes the slot (PR221 review).
+        compose.mainClock.autoAdvance = false
+        now = 12_000
+        compose.mainClock.advanceTimeBy(1_100)
+        compose.onNodeWithTag("status_slot").assertDoesNotExist()
+        session = session.copy(refreshRequired = true)
+        compose.mainClock.advanceTimeBy(100)
+        compose.onNodeWithTag("status_action").assertIsEnabled()
+        compose.mainClock.autoAdvance = true
+        now = 0
+        session = session.copy(refreshRequired = false, retryAtMillis = 12_000, error = ApiFailure(FailureKind.HTTP, 503, "unavailable"))
         compose.onNodeWithText(text(R.string.status_rate_limited_unknown)).assertExists()
         session = signedIn.copy(storageWarning = true)
         compose.onNodeWithTag("status_action").performClick()

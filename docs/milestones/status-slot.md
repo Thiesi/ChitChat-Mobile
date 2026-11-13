@@ -29,12 +29,14 @@ limits and every write rule stay as they are.
   - it is announced politely once per change of notice;
   - Retry and Refresh session call the existing actions with their existing gating;
   - the storage action is the existing refresh.
-- **Timers:** there are only two (P-105 as amended):
+- **Timers:** besides the existing session wait gate (P-25), there are only two (P-105 as amended):
   - the row-8 five-second one-shot;
   - the Back online dismissal, after about 2 s, shown only for the first `LIVE` after rows 2–5 or 8.
 
-  Both are bound to the slot's composition, never run while the app isn't visible, and carry no elapsed
-  time across the background.
+  The gate wakes the slot when the wait ends, so row 7 clears and Refresh session enables. Under a minute
+  it counts down each second; longer waits wake once when they drop under a minute. All of these are bound
+  to the slot's composition, never run while the app isn't visible, and carry no elapsed time across the
+  background.
 - **Waits** (ChitChat#157): only a positive `retry_after_seconds` on a 429 shows a number. It is always
   rounded up: "12 s", "about a minute", "about N minutes", "about N hours". Otherwise the copy reads "Try
   again in a little while". The session layer's 30 s fallback is never presented as the server's wait.

@@ -94,8 +94,9 @@ internal fun StatusSlot(
         delay(RECONNECT_GRACE_MILLIS)
         monotonicNow = since + RECONNECT_GRACE_MILLIS
     }
-    // Row 9: the first LIVE after a disconnection notice shows Back online for about two seconds.
-    LaunchedEffect(phase, visible, disconnected) {
+    // Row 9: the first LIVE after a disconnection notice shows Back online for about two seconds. Not keyed
+    // on `disconnected`: clearing it here must not cancel this effect's own dismissal (PR221 review).
+    LaunchedEffect(phase, visible) {
         if (!visible) { recovered = false; return@LaunchedEffect }
         if (phase == RealtimePhase.LIVE && disconnected) {
             recovered = true; disconnected = false
@@ -104,12 +105,25 @@ internal fun StatusSlot(
         }
     }
 
+    // P-25: the existing session wait gate re-renders when it ends, so row 7 clears and Refresh session
+    // enables. Under a minute it counts down each second; longer waits wake once when under a minute.
+    var clock by remember { mutableLongStateOf(nowMillis()) }
+    LaunchedEffect(session.retryAtMillis, visible) {
+        if (!visible) return@LaunchedEffect
+        while (true) {
+            clock = nowMillis()
+            val remaining = session.retryAtMillis - clock
+            if (remaining <= 0) break
+            delay(if (remaining <= 60_000) minOf(1_000L, remaining) else remaining - 60_000)
+        }
+    }
+
     val inputs = StatusInputs(
         phase = phase,
         errorKind = realtime?.error?.kind,
         storageWarning = session.storageWarning,
         refreshRequired = session.refreshRequired,
-        nowMillis = nowMillis(),
+        nowMillis = clock,
         retryAtMillis = session.retryAtMillis,
         retryAfterKnown = session.error?.status == 429 && (session.error?.retryAfterSeconds ?: 0L) > 0L,
         reconnectingSinceMillis = reconnectingSince,
@@ -122,7 +136,7 @@ internal fun StatusSlot(
     val notice = resolveStatus(inputs)
     LaunchedEffect(notice) { if (notice.isDisconnection()) disconnected = true }
     if (notice != null && session.phase == SessionPhase.AUTHENTICATED) key(notice) {
-        StatusNoticeView(notice, session, onRetry, onRefresh, onStorageAction, nowMillis, modifier)
+        StatusNoticeView(notice, session, onRetry, onRefresh, onStorageAction, { clock }, modifier)
     }
 }
 
