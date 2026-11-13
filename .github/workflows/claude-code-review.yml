@@ -50,8 +50,13 @@ jobs:
           comment_text=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --comments)
           diff_bytes=$(printf '%s' "$diff_text" | wc -c)
           comment_bytes=$(printf '%s' "$comment_text" | wc -c)
-          echo "diff_chars=$(printf '%s' "$diff_text" | wc -m)" >> "$GITHUB_OUTPUT"
-          echo "comment_chars=$(printf '%s' "$comment_text" | wc -m)" >> "$GITHUB_OUTPUT"
+          # The model's Bash tool trims trailing whitespace from command output (a diff can end in a
+          # whitespace-only context line), so measure the delivered length the same way. Only trailing
+          # whitespace is excluded; the byte budget below still uses the untrimmed output.
+          diff_delivered="${diff_text%"${diff_text##*[![:space:]]}"}"
+          comment_delivered="${comment_text%"${comment_text##*[![:space:]]}"}"
+          echo "diff_chars=$(printf '%s' "$diff_delivered" | wc -m)" >> "$GITHUB_OUTPUT"
+          echo "comment_chars=$(printf '%s' "$comment_delivered" | wc -m)" >> "$GITHUB_OUTPUT"
           if [[ "$diff_bytes" -gt 126000 || "$comment_bytes" -gt 126000 ]]; then
             echo "::error::Review input exceeds the bounded output/context budget. Split the PR or reduce comment history; no partial review will count."
             exit 1
