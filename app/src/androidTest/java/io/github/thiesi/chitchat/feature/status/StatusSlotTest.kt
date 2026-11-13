@@ -136,6 +136,17 @@ class StatusSlotTest {
         compose.onNodeWithTag("status_slot").assertDoesNotExist()
     }
 
+    @Test fun withoutAConnectionTheSessionRowsStillShowAndNothingClaimsStale() {
+        compose.setContent { ChitChatTheme(dark = false) { Surface {
+            StatusSlot(session, null, {}, { refreshes++ }, {}, connection = false, nowMillis = { now })
+        } } }
+        compose.onNodeWithTag("status_slot").assertDoesNotExist()
+        session = signedIn.copy(refreshRequired = true)
+        compose.onNodeWithText(text(R.string.status_refresh_title), substring = true).assertExists()
+        compose.onNodeWithTag("status_action").performClick()
+        assertEquals(1, refreshes)
+    }
+
     @Test fun anAnnouncementIsACardReadAndDismissedSeparatelyFromStatus() {
         realtime = realtime.copy(broadcasts = listOf(BroadcastNotice(17, null, "Private fixture announcement", Instant.EPOCH),
             BroadcastNotice(18, 43, "Other room", Instant.EPOCH)))

@@ -373,6 +373,10 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         syncing = screenStatus.current.syncing || session.busy, stale = screenStatus.current.stale)
                     io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(connection, realtime::dismissBroadcast,
                         roomId = entry?.arguments?.getLong("roomId")?.takeIf { it > 0 })
+                } else if (!compactConversation && session.phase == SessionPhase.AUTHENTICATED) {
+                    // No current connection snapshot: the session rows still show, so Refresh session stays reachable (PR223 review).
+                    io.github.thiesi.chitchat.feature.status.StatusSlot(session, null, {}, auth::refresh, auth::refresh,
+                        syncing = screenStatus.current.syncing || session.busy, stale = screenStatus.current.stale, connection = false)
                 }
                 if (state.loading) {
                     CircularProgressIndicator()

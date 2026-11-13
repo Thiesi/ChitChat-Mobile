@@ -468,7 +468,8 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                     io.github.thiesi.chitchat.feature.status.StatusSlot(session, connection, model.realtime::retry, onRefreshSession, onRefreshSession,
                                         syncing = session.busy, stale = state.stale && state.loaded)
                                     io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(connection, model.realtime::dismissBroadcast, roomId = null)
-                                }
+                                } else io.github.thiesi.chitchat.feature.status.StatusSlot(session, null, {}, onRefreshSession, onRefreshSession,
+                                    syncing = session.busy, stale = state.stale && state.loaded, connection = false)
                                 Text(context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleMedium)
                                 if (compact) { attachNotices(androidx.compose.ui.unit.Dp.Infinity); attachmentCard(androidx.compose.ui.unit.Dp.Infinity) }
                                 if (completionComposer.choice!=null) {

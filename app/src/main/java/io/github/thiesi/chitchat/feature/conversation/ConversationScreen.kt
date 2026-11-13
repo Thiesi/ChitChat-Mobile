@@ -681,12 +681,14 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     if (detailsOpen) AlertDialog(onDismissRequest = { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } },
         title = { Text(stringResource(R.string.conversation_details)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-            connection?.takeIf { it.generation == session.generation }?.let {
+            val current = connection?.takeIf { it.generation == session.generation }
+            if (current != null) {
                 val realtime = model.realtime
-                io.github.thiesi.chitchat.feature.status.StatusSlot(session, it, realtime::retry, onRefreshSession, onRefreshSession,
+                io.github.thiesi.chitchat.feature.status.StatusSlot(session, current, realtime::retry, onRefreshSession, onRefreshSession,
                     syncing = state.syncing || session.busy, stale = state.stale && state.loaded)
-                io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(it, realtime::dismissBroadcast, roomId = roomId)
-            }
+                io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(current, realtime::dismissBroadcast, roomId = roomId)
+            } else io.github.thiesi.chitchat.feature.status.StatusSlot(session, null, {}, onRefreshSession, onRefreshSession,
+                syncing = state.syncing || session.busy, stale = state.stale && state.loaded, connection = false)
             header(true) { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } }
         } },
         confirmButton = { TextButton(onClick = { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } }) { Text(stringResource(R.string.rooms_close)) } }, modifier = Modifier.lanternDialogEdge())
