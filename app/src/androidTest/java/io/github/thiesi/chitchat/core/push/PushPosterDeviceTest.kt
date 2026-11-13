@@ -2,6 +2,8 @@ package io.github.thiesi.chitchat.core.push
 
 import android.app.Notification
 import android.app.NotificationManager
+import android.os.SystemClock
+import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
@@ -24,6 +26,8 @@ class PushPosterDeviceTest {
         if (android.os.Build.VERSION.SDK_INT >= 33) instrumentation.uiAutomation.grantRuntimePermission(
             context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
         manager.cancelAll()
+        // Cancelling is asynchronous too: start from an empty list so an earlier test can't interfere.
+        awaitActive("an empty list after cancelAll") { active -> Unit.takeIf { active.isEmpty() } }
     }
 
     @After fun cleanUp() {
@@ -36,7 +40,21 @@ class PushPosterDeviceTest {
         """{"title":"$title","body":"$body","app_name":"Schmidt Family Chat","kind":"$kind","event_id":"$event","binding":"${record.binding}"}"""
             .encodeToByteArray()))!!
 
-    private fun posted(tag: String) = manager.activeNotifications.single { it.tag == tag }
+    /**
+     * `notify` is asynchronous: wait up to 5 s for the system's active list to show it. This only reads;
+     * nothing is posted again.
+     */
+    private fun <T : Any> awaitActive(what: String, find: (Array<StatusBarNotification>) -> T?): T {
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        while (true) {
+            find(manager.activeNotifications)?.let { return it }
+            if (SystemClock.uptimeMillis() > deadline) fail("Not active within 5 s: $what; active: " +
+                manager.activeNotifications.joinToString { "${it.id}/${it.tag}/${it.notification.group}/${it.notification.flags}/${it.notification.extras.getCharSequence(Notification.EXTRA_TEXT)}" })
+            Thread.sleep(50)
+        }
+    }
+
+    private fun posted(tag: String) = awaitActive(tag) { active -> active.singleOrNull { it.tag == tag } }
 
     @Test fun everyNotificationIsPrivateWithAGenericPublicVersion() {
         val poster = AndroidPushPoster(context) { false }
@@ -50,6 +68,7 @@ class PushPosterDeviceTest {
             assertEquals("Rowan mentioned you in #garden", notification.extras.getString(Notification.EXTRA_TITLE))
             assertEquals("Schmidt Family Chat", notification.extras.getString(Notification.EXTRA_SUB_TEXT))
             assertEquals(alert.kind.channel, notification.channelId)
+            assertEquals("Kept in this account's group, not regrouped by the system", alert.group, notification.group)
             val public = checkNotNull(notification.publicVersion) { "No public version for $kind" }
             assertEquals("Schmidt Family Chat", public.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
             assertEquals(publicText, public.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString())
@@ -65,13 +84,20 @@ class PushPosterDeviceTest {
         val poster = AndroidPushPoster(context) { true }
         val first = alert("mentioned", "evt-a")
         poster.post(first)
-        poster.post(alert("pinged", "evt-b"))
-        val summary = manager.activeNotifications.single { it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0 }
-        assertEquals(first.group, summary.notification.group)
-        assertEquals("2 new in Schmidt Family Chat", summary.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString())
+        posted(first.tag!!) // Pushes arrive one at a time: the first is showing before the second comes.
+        val second = alert("pinged", "evt-b")
+        poster.post(second)
+        posted(second.tag!!)
+        // The system may show the second child before the summary update queued ahead of it.
+        val summary = awaitActive("this account's summary counting 2") { active -> active.singleOrNull {
+            it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0 && it.notification.group == first.group &&
+                it.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() == "2 new in Schmidt Family Chat" } }
+        assertEquals(first.group, posted(second.tag!!).notification.group)
         assertEquals(Notification.VISIBILITY_PRIVATE, summary.notification.visibility)
         assertNotNull(summary.notification.publicVersion)
-        // Foreground posts are silent: NotificationCompat lets only the (silent) summary alert.
+        assertEquals("The summary itself never alerts", NotificationCompat.GROUP_ALERT_CHILDREN,
+            NotificationCompat.getGroupAlertBehavior(summary.notification))
+        // Foreground posts are silent: the child defers to the summary, and the summary to its children.
         assertEquals(NotificationCompat.GROUP_ALERT_SUMMARY, NotificationCompat.getGroupAlertBehavior(posted(first.tag!!).notification))
     }
 }

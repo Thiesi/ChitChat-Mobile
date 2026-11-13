@@ -39,7 +39,10 @@ class AndroidPushPoster(private val context: Context, private val foreground: ()
             .setGroup(alert.group)
             .setPublicVersion(builder(channel, installation, publicText(alert.kind)).build())
             .build()
-        if (notifyChecked(alert.tag ?: untaggedTag(alert), NOTIFICATION_ID, notification)) summarize(alert, channel, installation)
+        val tag = alert.tag ?: untaggedTag(alert)
+        // The summary goes first: Android 16 regroups a child whose group has no summary into its own
+        // section group, overriding ours. SystemUI hides a summary while it has a single child.
+        if (summarize(alert, tag, channel, installation)) notifyChecked(tag, NOTIFICATION_ID, notification)
     }
 
     private fun builder(channel: String, title: String, text: String) = NotificationCompat.Builder(context, channel)
@@ -62,20 +65,24 @@ class AndroidPushPoster(private val context: Context, private val foreground: ()
         PushKind.OTHER -> R.string.push_public_other
     })
 
-    /** Two or more showing for one account: a summary that counts them and lists no names. */
-    private fun summarize(alert: PushAlert, channel: String, installation: String) {
-        val system = context.getSystemService(NotificationManager::class.java) ?: return
-        val count = system.activeNotifications.count {
-            it.id == NOTIFICATION_ID && it.notification.group == alert.group && !it.isGroup()
+    /**
+     * A summary per account that counts its alerts and lists no names. `notify` is asynchronous, so the
+     * active list may not hold earlier posts yet: count this alert plus the other active ones. Only the
+     * children alert; the summary itself never makes a sound.
+     */
+    private fun summarize(alert: PushAlert, tag: String, channel: String, installation: String): Boolean {
+        val active = context.getSystemService(NotificationManager::class.java)?.activeNotifications.orEmpty()
+        val count = 1 + active.count {
+            it.id == NOTIFICATION_ID && it.tag != tag && it.notification.group == alert.group && !it.isSummary()
         }
-        if (count < 2) return
         val text = context.resources.getQuantityString(R.plurals.push_summary, count, count, installation)
         val summary = builder(channel, installation, text)
             .setGroup(alert.group)
             .setGroupSummary(true)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
             .setPublicVersion(builder(channel, installation, text).build())
             .build()
-        notifyChecked(alert.group, SUMMARY_ID, summary)
+        return notifyChecked(alert.group, SUMMARY_ID, summary)
     }
 
     private fun notifyChecked(tag: String, id: Int, notification: android.app.Notification): Boolean {
@@ -85,7 +92,8 @@ class AndroidPushPoster(private val context: Context, private val foreground: ()
         catch (_: SecurityException) { false } // Permission withdrawn in between: nothing is shown.
     }
 
-    private fun android.service.notification.StatusBarNotification.isGroup() =
+    // Not `isGroup()`: StatusBarNotification's member of that name (true for any grouped post) would win.
+    private fun android.service.notification.StatusBarNotification.isSummary() =
         notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY != 0
 
     /** P3a opens the app; routing a tap to its destination arrives with P3b. */

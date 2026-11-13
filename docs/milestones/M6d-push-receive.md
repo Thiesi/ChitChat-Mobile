@@ -69,8 +69,11 @@ Anything else drops the push; nothing is repaired. The server's own "…" trimmi
   set of recent event IDs (512) drops repeats, so a duplicate never stacks or comes back after
   dismissal. Sign-out, Turn off and a session change clear it with the record. After process death it
   starts empty, which is accepted.
-- **Grouping**: one group per server and account. With two or more showing, a summary reads
-  "{n} new in {app_name}", without names.
+- **Grouping**: one group per server and account, with a summary that reads "{n} new in {app_name}",
+  without names. The summary is posted before each alert: Android 16 moves an alert whose group has no
+  summary into its own section group. SystemUI hides a summary that has only one alert under it. Only
+  the alerts make a sound, never the summary. `notify` is asynchronous, so the count is this alert plus
+  the other active ones.
 - **Foreground**: while the app is in the foreground, notifications post silently.
 - **Permission**: nothing is posted while notifications are blocked or, on Android 13 and later, the
   permission is missing.
@@ -91,7 +94,8 @@ Device test: `PushPosterDeviceTest` posts through the real NotificationManager a
 - `VISIBILITY_PRIVATE` and the public version's title and text for all four kinds, with no sender,
   room or body in it;
 - the `direct` channel created on a DM alert;
-- the private counting summary;
+- each alert kept in its account's group, not regrouped by the system;
+- the private counting summary, which never alerts itself;
 - normal versus silent foreground alerting.
 
 Real distributor delivery, Doze and lock-screen appearance are **pending device acceptance**.
