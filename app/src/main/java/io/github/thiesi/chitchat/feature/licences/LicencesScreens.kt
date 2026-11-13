@@ -73,9 +73,10 @@ internal fun LicenceScreen(index: Int) {
             catch (_: ActivityNotFoundException) { /* No browser: the address is shown below. */ }
         }, modifier = Modifier.heightIn(min = 48.dp).testTag("licence_source")) { Text(stringResource(R.string.oss_licence_source)) }
         Text(licence.source, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+        // Reflowed into paragraphs so the terms read at any width and font size (presentation lead, PR220).
         texts?.forEach { text ->
             HorizontalDivider()
-            Text(text, style = MaterialTheme.typography.bodySmall)
+            OssLicences.paragraphs(text).forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }

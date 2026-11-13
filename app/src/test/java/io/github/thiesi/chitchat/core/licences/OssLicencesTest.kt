@@ -36,6 +36,28 @@ class OssLicencesTest {
         assertNotNull(fcm.copyright)
     }
 
+    @Test fun reflowKeepsEveryWordInOrderAndOnlyChangesLineBreaks() {
+        for (file in licences.flatMap { it.texts }.toSet()) {
+            val original = File(assets, file).readText()
+            val paragraphs = OssLicences.paragraphs(original)
+            fun words(text: String) = text.split(Regex("\\s+")).filter { it.isNotEmpty() }
+            assertEquals("$file: same words, same order", words(original), words(paragraphs.joinToString(" ")))
+            assertTrue("$file: no hard line breaks left", paragraphs.none { '\n' in it })
+        }
+        val lgpl = OssLicences.paragraphs(File(assets, "lgpl-2.1.txt").readText())
+        assertEquals("GNU LESSER GENERAL PUBLIC LICENSE", lgpl.first())
+        assertTrue("Centred headings stay on their own", "Preamble" in lgpl)
+        assertTrue("A wrapped sentence reads as one line",
+            lgpl.any { "Everyone is permitted to copy and distribute verbatim copies of this license document" in it })
+        assertEquals("Apache License", OssLicences.paragraphs(File(assets, "apache-2.0.txt").readText()).first())
+    }
+
+    @Test fun theListShowsOnlyTheDeclaredLicence() {
+        fun entry(artifact: String) = licences.single { artifact in it.covers }
+        assertEquals("LGPL-2.1", entry("org.unifiedpush.android:embedded-fcm-distributor").license)
+        assertEquals("BSD-3-Clause", entry("com.google.code.findbugs:jsr305").license)
+    }
+
     @Test fun everyCatalogRuntimeDependencyHasItsOwnEntryAtTheCatalogVersion() {
         val catalog = File(module.parentFile, "gradle/libs.versions.toml").readLines()
         val versions = section(catalog, "versions").associate { line -> line.substringBefore('=').trim() to value(line) }
