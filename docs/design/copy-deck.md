@@ -197,6 +197,9 @@ change with them.
 - **The edited-retention sentence** stays reachable (message details beside `author_retention`),
   and the tests that assert it move with it.
 
+**Sign-off (technical lead, 2026-11-13, on PR #225):** the `dm_read_policy`, `dm_read_failed`
+and `dm_additional_read` rows (item 12), applied in the transcript/lists slice with the other rows.
+
 
 
 These carry contract meaning. The proposals keep the meaning and only change voice. Each needs
@@ -215,7 +218,9 @@ technical-lead sign-off, and the affected tests are listed.
 | `author_unconfirmed` / `reaction_unconfirmed` / `rooms_unconfirmed` / `notifications_unknown_read` / `typing_unconfirmed` / `ignore_unconfirmed` | (various "may have succeeded… will not be retried") | Pattern: "We're not sure your {change} went through. Check before choosing again; nothing is retried by itself." | Unknown-write contracts | TypingPreferenceJourneyTest (`typing_unconfirmed`) |
 | `typing_preference_unknown` | …unknown does not mean enabled. | We couldn't confirm this setting. Until we can, typing isn't treated as on. Refresh, or choose on or off. | Unknown is not consent | — |
 | `notifications_read_scope` / `notifications_all_body` | Reading a notification is separate from reading a chat… | Reading an item here doesn't mark the chat as read. / This also marks activity that isn't loaded yet or arrives meanwhile. It doesn't mark chats as read. | Read-scope disclosures | — |
-| `dm_read_policy` / `dm_read_failed` / `dm_additional_read` | (whole-peer read explanations) | Keep meaning; plain wording proposal in a later pass with the technical lead | Whole-peer read contract | — |
+| `dm_read_policy` | Read confirmations apply to all unread messages from this person. This app refetches afterward and separately tracks arrivals… | ChitChat marks this conversation read only when the newest message is on your screen. That covers every message from this person, not just the ones you see. | Whole-peer read contract (M4a, M4b1/M4b2): visible proof only, whole conversation, no read-up-to point | — |
+| `dm_read_failed` | Read confirmation failed or is unknown. Retry only after checking current history; the server marks all unread messages… | Not sure this conversation was marked read. Check the latest messages, then try again. | Failed or unknown read is never retried automatically; the explicit try again follows a look at current history | — |
+| `dm_additional_read` | The server may have marked additional, unseen messages read. Check older history too. "New here" is local attention… | Messages you haven't seen here may have been marked read too, so check further up. "New here" is this app's own marker, not the server's unread count. | After the re-fetch, arrivals keep the separate local marker; no restored server count | — |
 | `privacy_body`, `dm_privacy_short`, `dm_inspection`, `dm_no_inspection`, `dm_revision_review`, `dm_retained_edits`, `author_retention` | Non-E2EE, retention and inspection disclosures | **No change proposed**: wording matches the approved privacy policy | Disclosure contract | — |
 | `step_up_*`, `mfa_recovery_explanation`, `recovery_*`, `step_up_recovery_warning`, `registration_unknown`, `export_privacy`, `export_partial_warning` | Step-up, recovery and export disclosures | **No change proposed** | Security contracts | — |
 
