@@ -64,6 +64,13 @@ incomplete ranges and stale footers with their own Refresh.
 Where the top slot can't be seen, inside a dialog or in Details at compact heights, one session-only
 `StatusSlot` (`connection = false`) keeps Refresh session reachable, one notice per surface.
 
+## Offline live edge (S3)
+
+While realtime is `OFFLINE` and a room or DM transcript shows its latest window, a quiet caption at the
+live edge reads "Newer messages appear when you reconnect." There's no "Loaded at" time: no screen records
+when it last loaded, and nothing is tracked just for this. The presence subtitle for offline belongs to the
+P-86 header and comes with that slice. Online, the caption renders nothing, so journey layouts are unchanged.
+
 ## Interim copy
 
 The spec's row-2 text promises that messages go out when you're back. That is Send when back online (S4),

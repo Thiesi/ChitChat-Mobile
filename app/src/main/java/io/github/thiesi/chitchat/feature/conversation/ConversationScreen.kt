@@ -530,7 +530,12 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                         onReactions = { openReactions(message) }, canReact = model.canBeginReactions(displayedSession, roomId, message))
                 }
             }
-            item(key = "history_end") { Spacer(Modifier.height(1.dp)) }
+            item(key = "history_end") {
+                // Offline at the live edge: say plainly that newer messages wait for the connection (S3).
+                io.github.thiesi.chitchat.feature.status.OfflineLiveEdgeCaption(
+                    connection?.phase == io.github.thiesi.chitchat.core.realtime.RealtimePhase.OFFLINE && state.loaded && state.latestWindow)
+                Spacer(Modifier.height(1.dp))
+            }
         }
         TypingStatus(model.typing, session, TypingTarget.Room(roomId),
             viewing = state.loaded && !state.stale && state.context != null && !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured,

@@ -147,6 +147,14 @@ class StatusSlotTest {
         assertEquals(1, refreshes)
     }
 
+    @Test fun theOfflineLiveEdgeCaptionShowsOnlyWhenAsked() {
+        var offline by mutableStateOf(false)
+        compose.setContent { ChitChatTheme(dark = false) { Surface { OfflineLiveEdgeCaption(offline) } } }
+        compose.onNodeWithTag("offline_live_edge").assertDoesNotExist()
+        offline = true
+        compose.onNodeWithText(text(R.string.status_offline_live_edge)).assertExists()
+    }
+
     @Test fun anAnnouncementIsACardReadAndDismissedSeparatelyFromStatus() {
         realtime = realtime.copy(broadcasts = listOf(BroadcastNotice(17, null, "Private fixture announcement", Instant.EPOCH),
             BroadcastNotice(18, 43, "Other room", Instant.EPOCH)))
@@ -168,6 +176,7 @@ class StatusSlotTest {
         val label = if (dark) "dark" else "light"
         var scale by mutableStateOf(1f)
         var details by mutableStateOf(false)
+        var edge by mutableStateOf(false)
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
@@ -175,6 +184,7 @@ class StatusSlotTest {
                     if (details) AlertDialog(onDismissRequest = {}, title = { Text(text(R.string.conversation_details)) },
                         text = { Column { StatusSlot(session, realtime, {}, {}, {}, nowMillis = { now }) } },
                         confirmButton = { TextButton(onClick = {}) { Text(text(R.string.rooms_close)) } })
+                    else if (edge) OfflineLiveEdgeCaption(true)
                     else StatusSlot(session, realtime, {}, {}, {}, nowMillis = { now })
                 } } }
             }
@@ -198,7 +208,13 @@ class StatusSlotTest {
                 capture("status-$label-$name-$scene")
             }
         }
-        scale = 1f; session = signedIn; realtime = RealtimeState(RealtimePhase.OFFLINE, 1); details = true
+        scale = 1f; session = signedIn; realtime = RealtimeState(RealtimePhase.OFFLINE, 1)
+        for ((name, fontScale) in listOf("default" to 1f, "font200" to 2f)) {
+            scale = fontScale; edge = true; compose.waitForIdle()
+            compose.onNodeWithTag("offline_live_edge").assertExists()
+            capture("status-$label-$name-offline-edge")
+        }
+        edge = false; scale = 1f; details = true
         compose.waitForIdle()
         compose.onNode(hasTestTag("status_slot") and hasAnyAncestor(isDialog())).assertExists()
         capture("status-$label-default-details", dialog = true)

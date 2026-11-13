@@ -432,7 +432,11 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                     onReactions = { openReactions(message) })
                             }
                         }
-                        item("end") { Spacer(Modifier.height(1.dp)) }
+                        item("end") {
+                            io.github.thiesi.chitchat.feature.status.OfflineLiveEdgeCaption(
+                                connection?.phase == RealtimePhase.OFFLINE && state.loaded && state.latestWindow)
+                            Spacer(Modifier.height(1.dp))
+                        }
                     }
                     TypingStatus(model.typing, session, TypingTarget.Direct(peer),
                         viewing = state.loaded && !state.stale && !blockConfirm && !detailsOpen && !composerDialog && !obscured && state.context?.relationship?.messagingAvailable == true,

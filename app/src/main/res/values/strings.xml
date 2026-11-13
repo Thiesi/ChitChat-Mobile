@@ -155,6 +155,7 @@
     <string name="status_unreachable_title">Can’t reach %1$s.</string>
     <string name="status_unreachable_body">We’ll keep trying.</string>
     <string name="status_back_online">Back online</string>
+    <string name="status_offline_live_edge">Newer messages appear when you reconnect.</string>
     <string name="status_rate_limited">Try again in %1$s.</string>
     <string name="status_rate_limited_unknown">Try again in a little while.</string>
     <string name="status_rate_limited_under_minute">Try again in less than a minute.</string>
