@@ -52,14 +52,23 @@ limits and every write rule stay as they are.
 - **Placement:** the slot sits under the top bar, and moves into Details at compact conversation heights,
   as before.
 
-## Interim gaps
+## Per-screen rows (S1b)
 
-- **Closed by S1b:** a screen can still show the slot plus its own syncing, stale or session line (refresh
-  needed, rate limit, checking session). S1b moves each screen's row-10/11 state into the slot and removes
-  those lines. Until then P-100's "one notice" isn't met on those screens.
-- **Offline copy:** the spec's row-2 text promises that messages go out when you're back. That is Send when
-  back online (S4), which doesn't exist yet. The slot reads "No connection. What's here stays readable.
-  Sending needs a connection." until S4 ships.
+Rooms, conversation, the DM inbox and thread, and notifications report their syncing and stale state to
+the slot through `ReportScreenStatus`, a CompositionLocal holder. They no longer show their own syncing,
+stale or session lines (checking session, refresh needed, rate limit). A busy session reads as row 11's
+"Updating…". The latest reporter speaks, and a leaving screen clears only its own status. Content notices
+specified by the lists and transcript specs stay in their screens: uncertain writes, unknown reads,
+incomplete ranges and stale footers with their own Refresh.
+
+Where the top slot can't be seen, inside a dialog or in Details at compact heights, one session-only
+`StatusSlot` (`connection = false`) keeps Refresh session reachable, one notice per surface.
+
+## Interim copy
+
+The spec's row-2 text promises that messages go out when you're back. That is Send when back online (S4),
+which doesn't exist yet. The slot reads "No connection. You can still read what's here. Sending needs a
+connection." (presentation lead, PR221 J review) until S4 ships.
 
 ## Verification
 

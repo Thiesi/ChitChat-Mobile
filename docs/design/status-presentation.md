@@ -57,9 +57,6 @@ Highest first. Only the highest applicable notice shows.
 
 - `{host}` is the installation's display name, `application.name` from the session
   (ChitChat#149, merged), else the host.
-- **Row 2 interim copy, until Send when back online (S4) ships:** "**No connection.** You can
-  still read what's here. Sending needs a connection." The table's line promises S4's
-  behavior, so it returns only with S4 (presentation lead, S1a J review, 2026-11-13).
 - `LIVE` alone shows **nothing**. The old "Session events connected" line is removed.
   Per-screen syncing and stale lines (row 11) carry the "history may still be synchronizing"
   honesty where it matters.
@@ -124,10 +121,6 @@ delay is **display-only**: it never starts an automatic resend, replay or retry.
 - **Timers:** only a gate that already exists counts down (the session gate's `retryAtMillis`,
   P-25). Waits of a minute or more don't tick and simply re-render when the screen does. P-105
   stays unchanged: this adds no new timer.
-- **Screen readers** (S1a, presentation lead, 2026-11-13): the spoken text may differ from
-  the visible countdown. A seconds wait is announced once as "Try again in less than a
-  minute." while the visible "{s} s" counts down; minute and hour waits re-announce at most
-  once a minute. A live region never speaks every second.
 - **When the delay is unknown,** each screen keeps its generic copy ("Try again in a little
   while"), and nothing shows a number. Any engineering fallback gate (for example the session
   layer's 30 s default) is never presented as the server's wait.
@@ -301,5 +294,5 @@ Other offline composer rules:
 | P-103 | Send when back online: one waiting draft per conversation, made only by pressing Send on a clean draft (never on an uncertain, busy or consent-pending one; waiting is not an attempt and never touches delivery-unknown state). At most one automatic attempt, only after reconnect, completed session revalidation and that conversation's post-reconnect reconciliation, while the app is visible, through the ordinary guarded send path with policy re-read after the last await. Never retried; ambiguous results use the existing uncertain-send flow; the waiting flag is dropped on background, sign-out, generation change or process death. No background work. | U, C (fakes), existing unknown-send tests |
 | P-104 | Announcements render as one dismissible steward-edged card, separate from status. | C, S |
 | P-105 | No new polling or background work, and no timers beyond P-102, P-25 and row 8's one-shot 5 s reconnect delay (bound to the slot's composition, cancelled on `ON_STOP`, leaving or when the phase leaves `RECONNECTING`/`CONNECTING`, never running while the app isn't visible). Connectivity comes from the existing callback. | R, C |
-| P-106 | Rate-limit waits use only a positive integer `error.retry_after_seconds` on a 429, are rounded up per "Waiting times", fall back to generic copy when unknown, never show an invented number and never trigger an automatic send, upload or retry. A seconds countdown is announced once ("less than a minute"), and longer waits at most once a minute. | U, C |
+| P-106 | Rate-limit waits use only a positive integer `error.retry_after_seconds` on a 429, are rounded up per "Waiting times", fall back to generic copy when unknown, never show an invented number and never trigger an automatic send, upload or retry. | U, C |
 | P-107 | Send when back online with a 429: on a reconnect revalidation or reconciliation GET it waits in the foreground for the known local deadline (or the next ordinary trigger when unknown) and then makes its single attempt; on the draft's send POST it clears the waiting flag, returns the draft to the composer with the wait shown, and never sends again automatically. | U, C (fakes) |

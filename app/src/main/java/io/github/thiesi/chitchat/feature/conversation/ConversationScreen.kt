@@ -390,25 +390,16 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 CompletionSuggestions(completionComposer,fromDetails=true,onAccepted=close)
             }
             Text(state.context?.room?.name ?: stringResource(R.string.conversation_title), style = MaterialTheme.typography.titleLarge)
-            Text(stringResource(if (model.realtime == null) R.string.conversation_manual else R.string.conversation_realtime),
-                style = MaterialTheme.typography.bodySmall)
+            // Live updates need no line: the status slot speaks only when something is wrong (S1b).
+            if (model.realtime == null) Text(stringResource(R.string.conversation_manual), style = MaterialTheme.typography.bodySmall)
             if (model.realtime != null && state.loaded) RoomPresencePanel(
                 presenceHere,
                 state.context?.let(model::presenceEligible) == true,
                 canEnter = ready && !state.busy && !state.stale, enter = { close(); model.enterRoom() })
-            if (state.syncing) Text(stringResource(R.string.conversation_syncing))
             if (state.anchorUnavailable && state.messages.isNotEmpty()) Text(stringResource(R.string.conversation_anchor_unavailable))
             if (state.newerAvailable) TextButton(onClick = { close(); model.latest() }, enabled = ready && !state.busy) {
                 Text(stringResource(R.string.conversation_jump_new))
             }
-            if (state.stale && state.loaded) Text(stringResource(R.string.conversation_stale))
-            if (session.busy) Text(stringResource(R.string.checking_session))
-            if (session.refreshRequired || session.storageWarning) {
-                TextButton(onClick = { close(); onRefreshSession() }, enabled = !session.busy && now >= session.retryAtMillis) {
-                    Text(stringResource(R.string.refresh_session))
-                }
-            }
-            if (now < session.retryAtMillis) Text(stringResource(R.string.rate_limited))
             if (state.draftLimit || !model.canEditDraft()) Text(stringResource(R.string.room_draft_limit))
             if (state.authorLimit || model.authorCapacityFull()) Text(stringResource(R.string.author_limit))
             state.authorUnknown?.let { pending ->
@@ -479,6 +470,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 if (state.busy || state.syncing) TextButton(onClick = { close(); model.cancelRequest() }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cancel)) }
             }
     }
+    io.github.thiesi.chitchat.feature.status.ReportScreenStatus(syncing = state.syncing, stale = state.stale && state.loaded)
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(headerLimit) {
             header(false) {}
@@ -691,7 +683,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
             connection?.takeIf { it.generation == session.generation }?.let {
                 val realtime = model.realtime
-                io.github.thiesi.chitchat.feature.status.StatusSlot(session, it, realtime::retry, onRefreshSession, onRefreshSession)
+                io.github.thiesi.chitchat.feature.status.StatusSlot(session, it, realtime::retry, onRefreshSession, onRefreshSession,
+                    syncing = state.syncing || session.busy, stale = state.stale && state.loaded)
                 io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(it, realtime::dismissBroadcast, roomId = roomId)
             }
             header(true) { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } }

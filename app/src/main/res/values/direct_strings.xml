@@ -6,7 +6,6 @@
     <string name="dm_search_empty">No matching people.</string>
     <string name="dm_inbox_empty">No conversations yet. Find someone to start a conversation.</string>
     <string name="dm_inbox_cap">The server lists at most 100 recent conversations. Find a person to open an older conversation.</string>
-    <string name="dm_stale">History or counts may be out of date. Refresh before sending.</string>
     <string name="dm_refresh">Refresh</string>
     <string name="dm_latest">Jump to latest</string>
     <string name="dm_check_latest">Check latest history</string>

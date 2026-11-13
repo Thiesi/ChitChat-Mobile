@@ -115,16 +115,16 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
         var detailsOpen by remember { mutableStateOf(false) }
         DirectLifecycle(model::foreground, model::background, model::invalidate)
         val list = rememberLazyListState()
+        // Session and stale notices live in the status slot under the top bar (S1b).
+        io.github.thiesi.chitchat.feature.status.ReportScreenStatus(syncing = false, stale = state.stale)
         LazyColumn(Modifier.fillMaxSize().testTag("dm_inbox"), list, contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
-                SessionNotice(session, now, onRefreshSession)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.dm_title), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
                     TextButton(onClick = model::refresh, enabled = ready && !state.busy) { Text(stringResource(R.string.dm_refresh)) }
                 }
                 if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (state.stale) Text(stringResource(R.string.dm_stale))
                 state.error?.let { InlineError(directError(it)) }
                 DirectPrivacyNotice(state.inbox?.privacy, R.string.dm_inbox_details,
                     expanded = detailsOpen, onExpandedChange = { detailsOpen = it },
@@ -394,9 +394,9 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         else interactive() && actions==null && replyOptions==null },canOffer=::completionAllowed,
                     write={ model.updateDraft(displayedSession,peer,it) },
                     onTextChanged={ model.typing?.input(displayedSession,TypingTarget.Direct(peer),hasTypingContent(it)) },inlineChoices=inlineCompletion && !detailsOpen)
+                io.github.thiesi.chitchat.feature.status.ReportScreenStatus(syncing = false, stale = state.stale && state.loaded)
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(headerLimit) {
-                        SessionNotice(session, now, onRefreshSession)
                         Text(state.context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleLarge)
                         state.context?.let { Text(stringResource(R.string.dm_privacy_short, it.privacy.direct.retention), style = MaterialTheme.typography.bodySmall) }
                         ThreadFeedback(model, state, attention[peer], ready, onAuthorCheck = checkAuthorHistory,
@@ -465,7 +465,8 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                     context?.relationship?.messagingAvailable == false || context?.mutedEverywhere != null || !ready ||
                                     connection?.let { it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null } } == true) { dismiss ->
                                 if (connection != null) {
-                                    io.github.thiesi.chitchat.feature.status.StatusSlot(session, connection, model.realtime::retry, onRefreshSession, onRefreshSession)
+                                    io.github.thiesi.chitchat.feature.status.StatusSlot(session, connection, model.realtime::retry, onRefreshSession, onRefreshSession,
+                                        syncing = session.busy, stale = state.stale && state.loaded)
                                     io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(connection, model.realtime::dismissBroadcast, roomId = null)
                                 }
                                 Text(context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleMedium)
@@ -476,7 +477,6 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                         if (detailsOpen && profileSource!=null && profileDetailsToken===profileSource) dismiss()
                                     })
                                 }
-                                SessionNotice(session, now, onRefreshSession)
                                 ThreadFeedback(model, state, attention[peer], ready, true, dismiss, checkAuthorHistory, checkReactionHistory)
                                 if (onProfile != null && context != null) TextButton(onClick = {
                                     val current = model.state.value
@@ -627,7 +627,6 @@ private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadStat
     ready: Boolean, alwaysRefresh: Boolean = false, dismiss: () -> Unit = {}, onAuthorCheck: (DirectAuthorUnknown) -> Unit,
     onReactionCheck: (DirectReactionUnknown) -> Unit) {
     if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-    if (state.stale && state.loaded) Text(stringResource(R.string.dm_stale))
     if (state.anchorLost) Text(stringResource(R.string.conversation_anchor_unavailable))
     if (state.incompleteRange) Text(stringResource(R.string.conversation_range_unavailable))
     state.error?.let { InlineError(directError(it)) }
@@ -799,14 +798,6 @@ private fun rememberSessionNow(retryAt: Long): Long {
     return now
 }
 private fun sessionReady(session: SessionState, now: Long) = !session.busy && !session.refreshRequired && !session.storageWarning && now >= session.retryAtMillis
-@Composable
-private fun SessionNotice(session: SessionState, now: Long, refresh: () -> Unit) {
-    if (session.busy) Text(stringResource(R.string.checking_session))
-    if (session.refreshRequired || session.storageWarning) TextButton(onClick = refresh, enabled = !session.busy && now >= session.retryAtMillis) {
-        Text(stringResource(R.string.refresh_session))
-    }
-    if (now < session.retryAtMillis) Text(stringResource(R.string.rate_limited))
-}
 
 @Composable
 private fun directError(error: ApiFailure) = stringResource(when {

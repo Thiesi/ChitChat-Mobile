@@ -2,7 +2,6 @@
     <string name="conversation_title">Conversation</string>
     <string name="conversation_manual">Manual refresh; realtime and active presence are not implemented yet.</string>
     <string name="conversation_refresh">Refresh latest</string>
-    <string name="conversation_stale">Messages may be out of date. Refresh replaces this window with the latest history; it does not replay an interrupted send.</string>
     <string name="conversation_pings">Private pings</string>
     <string name="conversation_pings_private">Only pings you sent or received are shown. Pings are private attention signals, not room messages. Ignored senders are hidden.</string>
     <string name="conversation_no_pings">No private pings in this room.</string>
