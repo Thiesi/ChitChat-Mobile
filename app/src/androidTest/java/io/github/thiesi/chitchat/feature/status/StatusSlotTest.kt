@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
@@ -155,6 +156,19 @@ class StatusSlotTest {
         compose.onNodeWithText(text(R.string.status_offline_live_edge)).assertExists()
     }
 
+    @Test fun theWaitingComposerShowsItsNoticeCancelAndAClockSend() {
+        var cancels = 0
+        compose.setContent { ChitChatTheme(dark = false) { Surface { Column {
+            io.github.thiesi.chitchat.core.ui.WaitingToSendNotice(text(R.string.room_waiting_to_send)) { cancels++ }
+            io.github.thiesi.chitchat.core.ui.MessageSendButton(text(R.string.send_waiting_label), enabled = true, sending = true,
+                onClick = {}, modifier = Modifier.testTag("waiting_send"), progress = false)
+        } } } }
+        compose.onNodeWithText(text(R.string.room_waiting_to_send)).assertExists()
+        compose.onNodeWithTag("waiting_cancel").assertHeightIsAtLeast(48.dp).performClick()
+        assertEquals(1, cancels)
+        compose.onNodeWithContentDescription(text(R.string.send_waiting_label)).assertIsNotEnabled()
+    }
+
     @Test fun anAnnouncementIsACardReadAndDismissedSeparatelyFromStatus() {
         realtime = realtime.copy(broadcasts = listOf(BroadcastNotice(17, null, "Private fixture announcement", Instant.EPOCH),
             BroadcastNotice(18, 43, "Other room", Instant.EPOCH)))
@@ -177,6 +191,7 @@ class StatusSlotTest {
         var scale by mutableStateOf(1f)
         var details by mutableStateOf(false)
         var edge by mutableStateOf(false)
+        var waitingComposer by mutableStateOf(false)
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
@@ -184,6 +199,11 @@ class StatusSlotTest {
                     if (details) AlertDialog(onDismissRequest = {}, title = { Text(text(R.string.conversation_details)) },
                         text = { Column { StatusSlot(session, realtime, {}, {}, {}, nowMillis = { now }) } },
                         confirmButton = { TextButton(onClick = {}) { Text(text(R.string.rooms_close)) } })
+                    else if (waitingComposer) Column {
+                        io.github.thiesi.chitchat.core.ui.WaitingToSendNotice(text(R.string.room_waiting_to_send)) {}
+                        io.github.thiesi.chitchat.core.ui.MessageSendButton(text(R.string.send_waiting_label), enabled = true, sending = true,
+                            onClick = {}, progress = false)
+                    }
                     else if (edge) OfflineLiveEdgeCaption(true)
                     else StatusSlot(session, realtime, {}, {}, {}, nowMillis = { now })
                 } } }
@@ -214,7 +234,13 @@ class StatusSlotTest {
             compose.onNodeWithTag("offline_live_edge").assertExists()
             capture("status-$label-$name-offline-edge")
         }
-        edge = false; scale = 1f; details = true
+        edge = false
+        for ((name, fontScale) in listOf("default" to 1f, "font200" to 2f)) {
+            scale = fontScale; waitingComposer = true; compose.waitForIdle()
+            compose.onNodeWithTag("waiting_notice").assertExists()
+            capture("status-$label-$name-waiting")
+        }
+        waitingComposer = false; scale = 1f; details = true
         compose.waitForIdle()
         compose.onNode(hasTestTag("status_slot") and hasAnyAncestor(isDialog())).assertExists()
         capture("status-$label-default-details", dialog = true)

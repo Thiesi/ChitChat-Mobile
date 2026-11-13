@@ -51,10 +51,12 @@ import io.github.thiesi.chitchat.core.targets.TargetRequest
 import io.github.thiesi.chitchat.core.targets.withCurrentPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withTimeout
@@ -72,6 +74,8 @@ data class ConversationUiState(
     val unreadDividerId: Long? = null, val readCursor: Long = 0,
     val error: ApiFailure? = null, val readError: ApiFailure? = null, val validation: String? = null,
     val uncertainSend: Boolean = false, val reconciledAfterUncertain: Boolean = false,
+    /** Send when back online (S4a): this room's draft waits for the connection; it is not an attempt. */
+    val waitingToSend: Boolean = false,
     val revealed: Set<Long> = emptySet(), val notice: String? = null,
     val syncing: Boolean = false, val syncError: ApiFailure? = null,
     val newerAvailable: Boolean = false, val anchorUnavailable: Boolean = false,
@@ -91,7 +95,9 @@ class ConversationViewModel internal constructor(private val operations: Convers
     private val mutations: MessageMutationOperations? = null,
     private val reactions: MessageReactionOperations? = null,
     private val attachmentBudget: AttachmentMemoryBudget? = null,
-    private val uploads: AttachmentUploadOperations? = null) : ViewModel() {
+    private val uploads: AttachmentUploadOperations? = null,
+    /** The existing session refresh; Send when back online asks for one revalidation per reconnect. */
+    private val revalidate: (suspend () -> Unit)? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(ConversationUiState())
     val state = mutable.asStateFlow()
@@ -129,6 +135,11 @@ class ConversationViewModel internal constructor(private val operations: Convers
     }
     private val attachments = mutableMapOf<Long, AttachmentWork>()
     private var uploadPosting: RoomAttachmentUpload? = null
+
+    /** A clean draft frozen at Send while offline: exactly this text and reply target go out, once. Memory only. */
+    private class WaitingSend(val roomId: Long, val body: String, val replyId: Long?)
+    private var waiting: WaitingSend? = null
+    private var waitJob: Job? = null
 
     init { viewModelScope.launch { session.collect { current ->
         if (current.identity() != identity) {
@@ -182,6 +193,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     }
     fun background() {
         foreground = false
+        dropWaiting() // Waiting never outlives the foreground or the room on screen.
         val anchor = viewport
         cancelRequest()
         mutable.value = mutable.value.copy(revealed = emptySet(), atLatest = false, anchor = anchor, draftsOpen = false)
@@ -197,8 +209,9 @@ class ConversationViewModel internal constructor(private val operations: Convers
             return
         }
         foreground = false
+        dropWaiting()
         visibleNewest = null
-        mutable.value = value.copy(revealed = emptySet(), atLatest = false, anchor = viewport, draftsOpen = false)
+        mutable.value = mutable.value.copy(revealed = emptySet(), atLatest = false, anchor = viewport, draftsOpen = false)
         realtime?.selectRoom(null, false)
         // Keep original operation/sequence markers until ACK/failure. Real background still retires them.
     }
@@ -216,7 +229,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     fun updateDraft(expected: SessionState, roomId: Long?, value: String): Boolean {
         if (roomId == null || roomId != mutable.value.roomId || expected.identity() == null ||
             expected.identity() != identity || expected.identity() != session.value.identity() || mutable.value.sending ||
-            mutable.value.attachmentReview != null || mutable.value.authorDialog != null || mutable.value.authorWriting || mutable.value.reactionDialog != null ||
+            waiting != null || mutable.value.attachmentReview != null || mutable.value.authorDialog != null || mutable.value.authorWriting || mutable.value.reactionDialog != null ||
             mutable.value.reactionWriting) return false
         if (!canEditDraft() && value.isNotEmpty()) { mutable.value = mutable.value.copy(draftLimit = true); return false }
         mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false)
@@ -234,14 +247,14 @@ class ConversationViewModel internal constructor(private val operations: Convers
     fun canReplyTo(expected: SessionState, roomId: Long?, message: RoomMessage) =
         canUseMessage(expected, roomId, message) && composerCanSend() && !mutable.value.busy && !mutable.value.sending
     fun replyTo(expected: SessionState, roomId: Long?, message: RoomMessage): Boolean {
-        if (!canReplyTo(expected, roomId, message)) return false
+        if (waiting != null || !canReplyTo(expected, roomId, message)) return false
         mutable.value = mutable.value.copy(composerReply = ComposerReply(message.id), validation = null,
             error = mutable.value.error?.takeUnless { it.code == "invalid_reply_target" })
         rememberDraft(); return true
     }
     fun cancelReply(expected: SessionState, roomId: Long?, original: ComposerReply) {
         val value = mutable.value
-        if (!foreground || !belongsTo(expected) || roomId == null || roomId != value.roomId ||
+        if (!foreground || !belongsTo(expected) || roomId == null || roomId != value.roomId || waiting != null ||
             value.sending || value.attachmentReview != null || value.composerReply !== original) return
         mutable.value = value.copy(composerReply = null, draftLimit = false,
             error = value.error?.takeUnless { it.code == "invalid_reply_target" })
@@ -418,6 +431,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     }
     private fun retireAttachments() { attachments.keys.toList().forEach { removeAttachmentWork(it) } }
     private fun retireOwnerWork() {
+        dropWaiting()
         retireAttachments()
         retire()
         // The retired generation keeps its own transport allocation until actual stop, but
@@ -1169,15 +1183,20 @@ class ConversationViewModel internal constructor(private val operations: Convers
         if (belongsTo(expected) && roomId != null && mutable.value.roomId == roomId) send()
     }
     fun send() {
+        if (canWaitToSend()) { startWaiting(); return }
         val value = mutable.value
         if (!canSend() || value.busy) return
         val invalid = validateMessageBody(value.draft)
         if (invalid != null) { mutable.value = value.copy(validation = invalid); return }
-        val body = value.draft
+        performSend(value.draft, value.composerReply?.messageId)
+    }
+
+    private fun performSend(body: String, replyId: Long?) {
+        val value = mutable.value
         val typingSession = session.value
         request(sending = true) { current ->
             postInFlight = true
-            val result = operations.send(checkNotNull(value.roomId), body, value.composerReply?.messageId)
+            val result = operations.send(checkNotNull(value.roomId), body, replyId)
             current(); postInFlight = false
             typing?.sent(typingSession, TypingTarget.Room(checkNotNull(value.roomId)))
             realtime?.activity(checkNotNull(value.roomId)) // Only an acknowledged, current send/ping.
@@ -1194,6 +1213,90 @@ class ConversationViewModel internal constructor(private val operations: Convers
                 is SendResult.Ping -> mutable.value = mutable.value.copy(pings = (mutable.value.pings + result.ping)
                     .distinctBy { it.id }.filterNot { it.sender.id in currentPolicy(value.context!!).policy.ignoredUserIds }.sortedBy { it.id }.takeLast(100))
             }
+        }
+    }
+
+    /**
+     * Send when back online (S4a): only a clean text or reply draft in the room on screen can wait, and only
+     * while offline. Attachments, sends in progress, unknown delivery and pending choices keep today's flow.
+     */
+    fun canWaitToSend(): Boolean {
+        val value = mutable.value
+        val controller = realtime ?: return false
+        val context = value.context ?: return false
+        val current = session.value
+        val connection = controller.state.value
+        return foreground && waiting == null && revalidate != null && connection.phase == RealtimePhase.OFFLINE &&
+            connection.generation == current.generation && belongsTo(current) && value.roomId != null &&
+            attachments[value.roomId] == null && uploadPosting == null && !postInFlight && !value.busy && !value.sending &&
+            value.attachmentReview == null && value.pingSelection == null && value.authorDialog == null && !value.authorWriting &&
+            value.reactionDialog == null && !value.reactionWriting && canEditDraft() && !value.uncertainSend &&
+            context.room.isMember && (current.user?.guest != true || context.room.guestAccess == "write") && context.mute == null &&
+            value.draft.phpTrim().isNotEmpty() && validateMessageBody(value.draft) == null
+    }
+
+    /** Cancel returns the text to an editable draft; it never touches delivery state or consent. */
+    fun cancelWaiting() { dropWaiting() }
+
+    private fun startWaiting() {
+        val value = mutable.value
+        val roomId = value.roomId ?: return
+        val expected = identity ?: return
+        val entry = WaitingSend(roomId, value.draft, value.composerReply?.messageId)
+        waiting = entry
+        mutable.value = value.copy(waitingToSend = true, validation = null)
+        waitJob = viewModelScope.launch { awaitThenSendOnce(entry, expected) }
+    }
+
+    private fun dropWaiting() {
+        waitJob?.cancel(); waitJob = null
+        if (waiting == null) return
+        waiting = null
+        mutable.value = mutable.value.copy(waitingToSend = false)
+    }
+
+    private fun stillWaiting(entry: WaitingSend, expected: Any): Boolean = waiting === entry && foreground &&
+        identity == expected && session.value.identity() == expected && mutable.value.roomId == entry.roomId
+
+    /**
+     * The one automatic attempt, never on bare LIVE: the connection is back, a session revalidation strictly
+     * newer than this reconnect has completed, and this room has reconciled. Then policy is re-read through
+     * canSend() and exactly the frozen content is sent once. Any guard refusal returns the draft to normal.
+     * No timer except a known 429 deadline, and none at all off screen (the job ends with dropWaiting()).
+     */
+    private suspend fun awaitThenSendOnce(entry: WaitingSend, expected: Any) {
+        val controller = realtime ?: return
+        var snapshot = session.value.bootstrapSequence
+        while (true) {
+            controller.state.first { it.phase == RealtimePhase.LIVE }
+            if (!stillWaiting(entry, expected)) return
+            if (session.value.bootstrapSequence <= snapshot) revalidate?.invoke()
+            val settled = combine(session, controller.state) { s, c -> s to c }.first { (s, c) ->
+                c.phase != RealtimePhase.LIVE || s.identity() != expected || (!s.busy && !s.refreshRequired && s.bootstrapSequence > snapshot) ||
+                    (!s.busy && s.bootstrapSequence <= snapshot)
+            }
+            val (state, connection) = settled
+            if (!stillWaiting(entry, expected)) return
+            if (connection.phase != RealtimePhase.LIVE) { snapshot = state.bootstrapSequence; continue }
+            if (state.bootstrapSequence <= snapshot || state.refreshRequired) {
+                // Revalidation failed. A known 429 deadline is waited out while on screen, then revalidated once more;
+                // otherwise this reconnect is spent and only the next one tries again.
+                val wait = state.retryAtMillis - System.currentTimeMillis()
+                if (state.error?.status == 429 && (state.error?.retryAfterSeconds ?: 0L) > 0L && wait > 0) { delay(wait); continue }
+                controller.state.first { it.phase != RealtimePhase.LIVE }
+                snapshot = session.value.bootstrapSequence
+                continue
+            }
+            val reconciled = combine(mutable, controller.state) { v, c -> v to c }.first { (v, c) ->
+                c.phase != RealtimePhase.LIVE || (v.loaded && !v.stale && !v.syncing && !v.busy)
+            }
+            if (!stillWaiting(entry, expected)) return
+            if (reconciled.second.phase != RealtimePhase.LIVE) { snapshot = session.value.bootstrapSequence; continue }
+            waiting = null; waitJob = null
+            mutable.value = mutable.value.copy(waitingToSend = false)
+            // Policy and target are re-read here, after the last await; the server stays the final check.
+            if (canSend() && !mutable.value.busy) performSend(entry.body, entry.replyId)
+            return
         }
     }
 
@@ -1487,8 +1590,9 @@ class ConversationViewModel internal constructor(private val operations: Convers
             typing: TypingController? = null, mutations: MessageMutationOperations? = null,
             reactions: MessageReactionOperations? = null,
             attachmentBudget: AttachmentMemoryBudget? = null,
-            uploads: AttachmentUploadOperations? = null): ViewModelProvider.Factory = viewModelFactory {
-            initializer { ConversationViewModel(operations, realtime, typing, mutations, reactions, attachmentBudget, uploads) }
+            uploads: AttachmentUploadOperations? = null,
+            revalidate: (suspend () -> Unit)? = null): ViewModelProvider.Factory = viewModelFactory {
+            initializer { ConversationViewModel(operations, realtime, typing, mutations, reactions, attachmentBudget, uploads, revalidate) }
         }
     }
 }

@@ -98,6 +98,15 @@ class SessionRepositoryTest {
         assertNotNull(sessions.state.value.privacy)
     }
 
+    @Test fun onlyASuccessfulBootstrapMovesTheSequenceAndOnlyByOne() = runTest {
+        login()
+        val start = sessions.state.value.bootstrapSequence
+        server.enqueue(json(bootstrapBody(user))); sessions.refresh(); server.takeRequest()
+        assertEquals(start + 1, sessions.state.value.bootstrapSequence)
+        server.enqueue(json("{}", 503)); sessions.refresh(); server.takeRequest()
+        assertEquals("A failed revalidation never counts", start + 1, sessions.state.value.bootstrapSequence)
+    }
+
     @Test fun attachmentPolicyRefreshReplacesRatherThanRetainsMissingOrNullFacts() = runTest {
         login()
         val before = server.requestCount

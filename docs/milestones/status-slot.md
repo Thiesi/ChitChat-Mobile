@@ -71,6 +71,56 @@ live edge reads "Newer messages appear when you reconnect." There's no "Loaded a
 when it last loaded, and nothing is tracked just for this. The presence subtitle for offline belongs to the
 P-86 header and comes with that slice. Online, the caption renders nothing, so journey layouts are unchanged.
 
+## Send when back online (S4a, rooms on screen)
+
+**What can wait:** pressing Send in the room on screen while realtime is `OFFLINE` marks the draft
+waiting, but only a clean text or reply draft:
+- no send in progress;
+- no unknown delivery;
+- no pending choice, review or dialog;
+- the person may post.
+
+**What can't:** an attachment draft keeps today's behaviour and never waits. Waiting is not an attempt.
+Cancel, or dropping the flag, returns the text to an editable draft and never touches delivery-unknown
+state or consent. The waiting text and reply target are frozen at Send: the field and the reply are
+read-only, and exactly that content is sent.
+
+**The automatic attempt.** The view model runs one attempt per waiting draft, only after all of these, in
+order:
+1. **Connection:** realtime is `LIVE`.
+2. **Session revalidation:** a revalidation strictly newer than this reconnect has completed.
+   - `SessionState.bootstrapSequence` counts successful bootstraps in the generation. The view model
+     snapshots it whenever the connection leaves `LIVE` and needs a newer value.
+   - A reconnect alone never revalidates the session, so this adds **one new session GET per reconnect**.
+     It is made only while a draft waits and the room is on screen. It goes through the existing session
+     refresh, so an in-flight bootstrap (for example a foreground one) is reused rather than duplicated,
+     with no retry and no polling.
+3. **Room reconcile:** the room's own post-reconnect sync has finished, so the room is loaded, not stale
+   and not syncing.
+4. **Policy re-read:** policy and target are re-read after the last await through `canSend()`.
+
+Then it sends the frozen content once through the ordinary send path, with all its guards. A guard refusal
+returns the draft to normal with that guard's message.
+
+**Outcomes and limits:**
+- **Outcomes:** confirmed clears the draft; a definite refusal returns it; an ambiguous result enters the
+  existing uncertain-send flow (Check history, then duplicate risk).
+- **No automatic second attempt** after anything. Every new attempt needs a fresh Send press.
+- **Classification:** every failure that isn't a definite 4xx, including 5xx and all network errors, is
+  treated as ambiguous.
+- **429 on the revalidation:** the known local deadline is waited out while on screen, then it revalidates
+  once more. Without a known deadline, the draft waits for the next reconnect.
+- **429 on the send itself:** a definite refusal with the wait shown. Nothing is resent.
+- **Timers:** only that known 429 deadline, and only while on screen.
+- **Dropping the flag:** leaving the room, background, sign-out, a generation change or process death
+  drops it. The text stays an ordinary draft, and nothing is saved.
+
+**Scope:** S4b brings the same flow to DMs. Sending for a conversation that isn't on screen (S4c) is in the
+backlog. Until then the copy says so:
+- the composer: "Will send when you're back online, if you stay in this room.";
+- the offline slot: "No connection. You can read and write. In a room, messages you send go out when you're
+  back, if you stay in the room." (presentation lead, PR227, interim).
+
 ## Interim copy
 
 The spec's row-2 text promises that messages go out when you're back. That is Send when back online (S4),

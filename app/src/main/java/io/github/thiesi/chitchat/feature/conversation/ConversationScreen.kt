@@ -543,6 +543,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         if (!replyInline) replyControl(false)
         if (!compact) { attachNotices(headerLimit * 0.5f); attachmentCard(headerLimit * 0.5f) }
         if (inlineCompletion && !detailsOpen) CompletionSuggestions(completionComposer)
+        // Send when back online (S4a): the draft waits only while this room stays on screen.
+        if (state.waitingToSend) io.github.thiesi.chitchat.core.ui.WaitingToSendNotice(stringResource(R.string.room_waiting_to_send)) {
+            if (interactive()) model.cancelWaiting()
+        }
         // One pinned block: a single row, or the field alone above Details/Attach/Send when narrow (P-216).
         ComposerLayout(Modifier.fillMaxWidth().heightIn(max = composerLimit).padding(horizontal = if (compact) 4.dp else 16.dp, vertical = 4.dp),
             leading = {
@@ -570,14 +574,15 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (replyInline) replyControl(true)
             }, field = {
             MessageInput(completionComposer.value, completionComposer::input,
-                !state.sending && model.canEditDraft() && !composerDialog && !obscured,
+                !state.sending && !state.waitingToSend && model.canEditDraft() && !composerDialog && !obscured,
                 stringResource(if (attachment != null) R.string.attach_caption else R.string.conversation_message), compact,
                 Modifier.onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("conversation_composer"))
             }, trailing = {
             if (attachVisible) AttachButton(attachAvailable, enabled = !obscured && !composerDialog && !state.sending &&
                 (attachAvailable != AttachAvailability.AVAILABLE || (ready && model.canBeginAttachment() &&
                     attachment?.removable() != false)), onClick = ::onAttach, modifier = Modifier.testTag("conversation_attach"))
-            MessageSendButton(stringResource(if (state.sending) R.string.conversation_sending else R.string.conversation_send),
+            MessageSendButton(stringResource(when { state.waitingToSend -> R.string.send_waiting_label
+                state.sending -> R.string.conversation_sending; else -> R.string.conversation_send }),
                 onClick = { if (interactive() && actions == null && replyOptions == null) {
                     val file = model.visibleAttachment(displayedSession, roomId, isCurrentEntry)
                     if (file == null) model.send(displayedSession, roomId)
@@ -585,8 +590,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                         model.sendAttachment(displayedSession, roomId, completionEntryId, file, isCurrentEntry)
                 } },
                 enabled = !composerDialog && !obscured && (attachmentSendable ||
-                    (ready && !state.busy && model.canSend() && state.draft.phpTrim().isNotEmpty())),
-                sending = state.sending, modifier = Modifier.testTag("conversation_send"), progress = attachment == null)
+                    (ready && !state.busy && model.canSend() && state.draft.phpTrim().isNotEmpty()) ||
+                    (attachment == null && model.canWaitToSend())),
+                // Waiting shows the clock glyph, not progress: nothing has been attempted yet.
+                sending = state.sending || state.waitingToSend, modifier = Modifier.testTag("conversation_send"),
+                progress = attachment == null && !state.waitingToSend)
             })
     }
     actions?.let { request ->
