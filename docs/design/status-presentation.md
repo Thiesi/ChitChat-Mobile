@@ -184,6 +184,11 @@ conversation's current draft **waiting to send**:
   read-only. Above the composer, a notice reads **"Will send when you're back online."**
   with **Cancel**, which returns the text to an editable draft. Send shows a small clock and
   the accessible label "Waiting to send".
+  **Notice layout:** Cancel sits beside the notice only while the notice fits in two lines at
+  the available width. Otherwise the notice takes the full width and Cancel moves to its own
+  row below it, end-aligned, keeping its 48dp target. Decide by the measured line count, never
+  by font scale, so a narrow phone at 100 % gets the same fallback as 200 %. Reading order is
+  notice, then Cancel. Room and direct-message variants share this rule.
 - **One automatic attempt, foreground only, after fresh state.** `LIVE` alone is **not**
   the trigger: a connected stream doesn't mean policy and history are current. After a long
   offline period the person may have been muted, blocked or removed, or the reply target may
@@ -303,6 +308,7 @@ Other offline composer rules:
   - an ambiguous result enters the standard uncertain state with no second attempt;
   - several waiting conversations send in press order;
   - compact heights move the slot into Details;
+  - the waiting notice moves Cancel below once the notice needs more than two lines;
   - announcements render as a card with Read and Dismiss.
 - Existing realtime, reconnect and notification tests run unchanged. Screens with text-based
   selectors on the old realtime strings are updated in the same PR.
@@ -319,3 +325,4 @@ Other offline composer rules:
 | P-105 | No new polling or background work, and no timers beyond P-102, P-25 and row 8's one-shot 5 s reconnect delay (bound to the slot's composition, cancelled on `ON_STOP`, leaving or when the phase leaves `RECONNECTING`/`CONNECTING`, never running while the app isn't visible). Connectivity comes from the existing callback. | R, C |
 | P-106 | Rate-limit waits use only a positive integer `error.retry_after_seconds` on a 429, are rounded up per "Waiting times", fall back to generic copy when unknown, never show an invented number and never trigger an automatic send, upload or retry. A seconds countdown is announced once ("less than a minute"), and longer waits at most once a minute. | U, C |
 | P-107 | Send when back online with a 429: on a reconnect revalidation or reconciliation GET it waits in the foreground for the known local deadline (or the next ordinary trigger when unknown) and then makes its single attempt; on the draft's send POST it clears the waiting flag, returns the draft to the composer with the wait shown, and never sends again automatically. | U, C (fakes) |
+| P-108 | The waiting-to-send notice keeps Cancel inline only while the notice fits in two lines at the available width; otherwise Cancel takes its own end-aligned 48dp row below. The choice uses measured line count, not font scale. Captures show the read-only field, notice and clock Send for room and direct message at default and 200 % font, light and dark. | C, S |
