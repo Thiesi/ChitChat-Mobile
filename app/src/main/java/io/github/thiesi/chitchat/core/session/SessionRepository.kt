@@ -64,6 +64,11 @@ data class SessionState(
     val webPush: io.github.thiesi.chitchat.core.push.WebPushDiscovery = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
     /** `application.name` from the last bootstrap, for copy only; null means use the host. */
     val installationName: String? = null,
+    /**
+     * Counts successful bootstraps (fresh session and policy) in this generation; a new generation starts at 0.
+     * Read only by Send when back online, which needs a revalidation strictly newer than its reconnect.
+     */
+    val bootstrapSequence: Long = 0,
 ) {
     val canChangeServer get() = phase !in setOf(SessionPhase.AUTHENTICATED, SessionPhase.PENDING_MFA, SessionPhase.GUEST) && !storageWarning && !busy
 }
@@ -321,6 +326,7 @@ class SessionRepository internal constructor(
                         else AttachmentPolicy.Unavailable,
                     webPush = if (reply.user != null && !reply.user.guest) reply.webPush else io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unavailable,
                     installationName = io.github.thiesi.chitchat.core.network.installationName(reply.application),
+                    bootstrapSequence = mutable.value.bootstrapSequence + 1,
                 )
                 active.bootstrapActive = false
                 persist(active, reply.user)

@@ -55,7 +55,8 @@ class MainActivity : ComponentActivity() {
             val conversations: ConversationViewModel = viewModel(factory = ConversationViewModel.factory((application as ChitChatApplication).conversations,
                 (application as ChitChatApplication).realtime, (application as ChitChatApplication).typing,
                 (application as ChitChatApplication).messageMutations, (application as ChitChatApplication).messageReactions,
-                (application as ChitChatApplication).attachmentMemory, (application as ChitChatApplication).attachmentUploads))
+                (application as ChitChatApplication).attachmentMemory, (application as ChitChatApplication).attachmentUploads,
+                revalidate = { (application as ChitChatApplication).sessions.refresh() }))
             val directInbox: DirectInboxViewModel = viewModel(factory = DirectInboxViewModel.factory(
                 (application as ChitChatApplication).directMessages, (application as ChitChatApplication).realtime))
             val directThread: DirectThreadViewModel = viewModel(factory = DirectThreadViewModel.factory(

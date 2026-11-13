@@ -441,14 +441,17 @@ class ConversationRealtimeTest {
         var firstRaw: Long? = null
         val windows = mutableListOf<WindowCall>()
         var sends = 0; var reads = 0; var cancelledReads = 0
+        val sentBodies = mutableListOf<String>()
+        val sentReplies = mutableListOf<Long?>()
         var readResult: Long? = null
         var sendGate: CompletableDeferred<Unit>? = null; var readGate: CompletableDeferred<Unit>? = null
         var windowGate: CompletableDeferred<Unit>? = null
         var sendFailure: ApiFailure? = null; var readFailure: ApiFailure? = null; var windowFailure: ApiFailure? = null
         var answer: ((Long, Long?) -> WindowSnapshot)? = null
         private fun rows(room: Long) = if (room == 42L) rows else listOf(message(20, room), message(21, room))
+        var mutedEverywhere: RoomMute? = null
         override suspend fun context(roomId: Long) = ConversationContext(RoomInfo(roomId, "lounge", "Lounge", "", "public", 0, 0,
-            7, "member", false, "none", 2, 1), ChatPolicy(emptySet(), null, DisplayPreferences()))
+            7, "member", false, "none", 2, 1), ChatPolicy(emptySet(), mutedEverywhere, DisplayPreferences()))
         override suspend fun history(roomId: Long, beforeId: Long?, limit: Int): MessagePage {
             val page = rows(roomId).filter { beforeId == null || it.id < beforeId }.takeLast(limit)
             return MessagePage(page, if (beforeId == null) firstRaw ?: page.firstOrNull()?.id else page.firstOrNull()?.id, page.size == limit)
@@ -463,7 +466,7 @@ class ConversationRealtimeTest {
         override suspend fun pings(roomId: Long) = listOf(RoomPing(9, roomId, MessagePerson(8, "Other"),
             MessagePerson(7, "Viewer"), "Private ping", "2026-10-20T12:00:00Z"))
         override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult {
-            sends++; val acknowledged = message((rows(roomId).lastOrNull()?.id ?: 0) + 1, roomId, 7)
+            sends++; sentBodies += body; sentReplies += replyId; val acknowledged = message((rows(roomId).lastOrNull()?.id ?: 0) + 1, roomId, 7)
             sendGate?.let { withContext(NonCancellable) { it.await() } }
             sendFailure?.let { throw it }
             if (roomId == 42L) rows = (rows + acknowledged).distinctBy { it.id }.sortedBy { it.id }
@@ -475,6 +478,161 @@ class ConversationRealtimeTest {
             catch (cancelled: CancellationException) { cancelledReads++; throw cancelled }
         }
     }
+    // Send when back online (S4a) -----------------------------------------------------------------
+
+    private var revalidations = 0
+    /** A revalidation that succeeds moves the session's bootstrap sequence, as SessionRepository does. */
+    private var revalidationSucceeds = true
+    /** A failing revalidation leaves this error on the session (null keeps it unchanged). */
+    private var revalidationError: (() -> ApiFailure?)? = null
+    private fun waitingModel() = ConversationViewModel(api, realtime, revalidate = {
+        revalidations++
+        val error = revalidationError?.invoke()
+        if (error != null) api.session.value = api.session.value.copy(error = error, retryAtMillis =
+            if (error.status == 429 && (error.retryAfterSeconds ?: 0) > 0) System.currentTimeMillis() + error.retryAfterSeconds!! * 1000 else 0)
+        else if (revalidationSucceeds) api.session.value = api.session.value.copy(error = null, retryAtMillis = 0,
+            bootstrapSequence = api.session.value.bootstrapSequence + 1)
+    }).also { model.cancel(); model = it }
+
+    private fun TestScope.offline() {
+        realtime.state.value = realtime.state.value.copy(phase = RealtimePhase.OFFLINE); model.connectionLost(); runCurrent()
+    }
+    private fun TestScope.backOnline() {
+        realtime.state.value = realtime.state.value.copy(phase = RealtimePhase.LIVE, reconcileVersion = realtime.state.value.reconcileVersion + 1)
+        model.invalidate(); advanceUntilIdle()
+    }
+
+    @Test fun anOfflineCleanDraftWaitsThenSendsExactlyTheFrozenTextOnceAfterRevalidationAndReconcile() = runTest(dispatcher) {
+        waitingModel(); open(); advanceUntilIdle()
+        model.updateDraft("Frozen fixture"); offline()
+        assertFalse("Offline, an ordinary send isn't possible", model.canSend())
+        assertTrue(model.canWaitToSend())
+        model.send(); runCurrent()
+        assertTrue(model.state.value.waitingToSend)
+        assertEquals("Waiting is not an attempt", 0, api.sends)
+        assertFalse("The waiting text is read-only", model.updateDraft(api.session.value, 42, "Changed"))
+        backOnline()
+        assertEquals("One revalidation for this reconnect", 1, revalidations)
+        assertEquals(listOf("Frozen fixture"), api.sentBodies)
+        assertFalse(model.state.value.waitingToSend)
+        assertEquals("", model.state.value.draft)
+    }
+
+    @Test fun bareLiveWithoutANewerRevalidationNeverSends() = runTest(dispatcher) {
+        revalidationSucceeds = false
+        waitingModel(); open(); advanceUntilIdle()
+        model.updateDraft("Waiting fixture"); offline(); model.send(); runCurrent()
+        backOnline()
+        assertEquals(1, revalidations)
+        assertEquals("No send on bare LIVE", 0, api.sends)
+        assertTrue("It keeps waiting for the next ordinary trigger", model.state.value.waitingToSend)
+    }
+
+    @Test fun cancelAndLeavingAreNeutralAndNothingSendsLater() = runTest(dispatcher) {
+        waitingModel(); open(); advanceUntilIdle()
+        model.updateDraft("Kept fixture"); offline(); model.send(); runCurrent()
+        model.cancelWaiting()
+        assertFalse(model.state.value.waitingToSend)
+        assertEquals("Cancel keeps the text", "Kept fixture", model.state.value.draft)
+        assertFalse("Cancel never creates delivery-unknown state", model.state.value.uncertainSend)
+        model.send(); runCurrent(); assertTrue(model.state.value.waitingToSend)
+        model.background(); runCurrent()
+        assertFalse("Leaving the foreground drops the flag", model.state.value.waitingToSend)
+        model.foreground(); backOnline()
+        assertEquals("Nothing sends without a new Send press", 0, api.sends)
+        assertEquals("Kept fixture", model.state.value.draft)
+    }
+
+    @Test fun anAmbiguousResultEntersTheUncertainFlowWithNoSecondAttempt() = runTest(dispatcher) {
+        waitingModel(); open(); advanceUntilIdle()
+        model.updateDraft("Once fixture"); offline(); model.send(); runCurrent()
+        api.sendFailure = ApiFailure(FailureKind.TIMEOUT)
+        backOnline()
+        assertEquals(1, api.sends)
+        assertTrue(model.state.value.uncertainSend)
+        assertFalse(model.state.value.waitingToSend)
+        offline(); assertFalse("An uncertain draft can't wait", model.canWaitToSend())
+        backOnline()
+        assertEquals("Never a second automatic attempt", 1, api.sends)
+    }
+
+    @Test fun theReplyTargetIsFrozenWithTheTextAndCantChangeWhileWaiting() = runTest(dispatcher) {
+        waitingModel(); open(); advanceUntilIdle()
+        val original = model.state.value.messages.first()
+        assertTrue(model.replyTo(api.session.value, 42, original))
+        model.updateDraft("Reply fixture"); offline(); model.send(); runCurrent()
+        val reply = checkNotNull(model.state.value.composerReply)
+        model.cancelReply(api.session.value, 42, reply)
+        assertSame("The reply can't be removed while waiting", reply, model.state.value.composerReply)
+        backOnline()
+        assertEquals(listOf(original.id), api.sentReplies)
+    }
+
+    @Test fun aRateLimitOnTheSendItselfIsDefiniteAndNeverRetried() = runTest(dispatcher) {
+        waitingModel(); open(); advanceUntilIdle()
+        model.updateDraft("Limited fixture"); offline(); model.send(); runCurrent()
+        api.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", retryAfterSeconds = 30)
+        backOnline()
+        assertEquals(1, api.sends)
+        assertFalse("A 429 refusal is definite, not unknown", model.state.value.uncertainSend)
+        assertFalse(model.state.value.waitingToSend)
+        assertEquals("The draft comes back", "Limited fixture", model.state.value.draft)
+        advanceUntilIdle(); assertEquals("No automatic second attempt", 1, api.sends)
+    }
+
+    @Test fun aMuteWhileOfflineMeansNoSendAndTheDraftReturns() = runTest(dispatcher) {
+        waitingModel(); open(); advanceUntilIdle()
+        model.updateDraft("Muted fixture"); offline(); model.send(); runCurrent()
+        api.mutedEverywhere = RoomMute(1, "global", null, null, "fixture")
+        backOnline()
+        assertEquals("The re-read policy refuses: no send", 0, api.sends)
+        assertFalse(model.state.value.waitingToSend)
+        assertEquals("The draft is editable again", "Muted fixture", model.state.value.draft)
+        assertNotNull("The guard's own state shows", model.state.value.context?.mute)
+    }
+
+    @Test fun aKnown429OnRevalidationIsWaitedOutThenRevalidatedOnce() = runTest(dispatcher) {
+        var failures = 1
+        revalidationError = { if (failures-- > 0) ApiFailure(FailureKind.HTTP, 429, "rate_limited", retryAfterSeconds = 5) else null }
+        waitingModel(); open(); advanceUntilIdle()
+        model.updateDraft("Later fixture"); offline(); model.send(); runCurrent()
+        backOnline()
+        assertEquals("Waited out the known deadline, then once more", 2, revalidations)
+        assertEquals(listOf("Later fixture"), api.sentBodies)
+    }
+
+    @Test fun anUnknownDelayOrOtherFailureWaitsForTheNextReconnectWithoutReRequesting() = runTest(dispatcher) {
+        revalidationError = { ApiFailure(FailureKind.HTTP, 503, "unavailable") }
+        waitingModel(); open(); advanceUntilIdle()
+        model.updateDraft("Patient fixture"); offline(); model.send(); runCurrent()
+        backOnline(); advanceUntilIdle()
+        assertEquals("No re-request on its own", 1, revalidations)
+        assertEquals(0, api.sends); assertTrue(model.state.value.waitingToSend)
+        revalidationError = null
+        offline(); backOnline()
+        assertEquals("The next reconnect tries again", 2, revalidations)
+        assertEquals(listOf("Patient fixture"), api.sentBodies)
+    }
+
+    @Test fun aManualSendWhileLiveButNotYetRevalidatedCannotPostASecondCopy() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        model.cancel()
+        model = ConversationViewModel(api, realtime, revalidate = {
+            revalidations++; gate.await()
+            api.session.value = api.session.value.copy(bootstrapSequence = api.session.value.bootstrapSequence + 1)
+        })
+        open(); advanceUntilIdle()
+        model.updateDraft("Single fixture"); offline(); model.send(); runCurrent()
+        realtime.state.value = realtime.state.value.copy(phase = RealtimePhase.LIVE, reconcileVersion = realtime.state.value.reconcileVersion + 1)
+        model.invalidate(); runCurrent()
+        assertEquals("Revalidation is still pending", 1, revalidations)
+        assertFalse("No manual send while the draft waits", model.canSend())
+        model.send(); advanceUntilIdle()
+        assertEquals(0, api.sends)
+        gate.complete(Unit); advanceUntilIdle()
+        assertEquals("Exactly one POST", listOf("Single fixture"), api.sentBodies)
+    }
+
     private class Connection : RealtimeController {
         override val state = MutableStateFlow(RealtimeState(phase = RealtimePhase.LIVE, generation = 1))
         override val events = MutableSharedFlow<RealtimeEvent>()

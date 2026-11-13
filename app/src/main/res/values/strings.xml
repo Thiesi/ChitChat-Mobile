@@ -144,7 +144,10 @@
     <string name="attachment_room_unavailable">This room isn’t available any more. Your file wasn’t sent.</string>
     <string name="status_offline_title">No connection.</string>
     <!-- Interim until Send when back online (S4) ships; the spec's line promises that behaviour. -->
-    <string name="status_offline_body">You can still read what’s here. Sending needs a connection.</string>
+    <!-- Interim while Send when back online covers the room on screen only (S4a; presentation lead, PR227). -->
+    <string name="status_offline_body">You can read and write. In a room, messages you send go out when you’re back, if you stay in the room.</string>
+    <string name="room_waiting_to_send">Will send when you’re back online, if you stay in this room.</string>
+    <string name="send_waiting_label">Waiting to send</string>
     <string name="status_tls_title">Can’t connect securely to %1$s.</string>
     <string name="status_tls_body">The certificate couldn’t be verified; this can’t be bypassed.</string>
     <string name="status_incompatible_title">%1$s sent something ChitChat doesn’t understand.</string>
