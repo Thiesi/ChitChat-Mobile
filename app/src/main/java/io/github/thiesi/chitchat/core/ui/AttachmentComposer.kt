@@ -192,6 +192,8 @@ internal sealed interface AttachmentSendFailure {
     data object Empty : AttachmentSendFailure
     class RateLimited(val retryAfterSeconds: Long?) : AttachmentSendFailure
     data object Membership : AttachmentSendFailure
+    /** 404 `room_not_found` (ChitChat #326): a definite refusal, never unknown and never replayed. */
+    data object RoomUnavailable : AttachmentSendFailure
     data object Unavailable : AttachmentSendFailure
     data object NotSent : AttachmentSendFailure
     data object PolicyChanged : AttachmentSendFailure
@@ -241,6 +243,7 @@ private fun sendFailureText(failure: AttachmentSendFailure, locale: java.util.Lo
         ?.let { stringResource(R.string.attach_refused_rate_wait, waitText(it)) }
         ?: stringResource(R.string.attach_refused_rate)
     AttachmentSendFailure.Membership -> stringResource(R.string.conversation_membership)
+    AttachmentSendFailure.RoomUnavailable -> stringResource(R.string.attachment_room_unavailable)
     AttachmentSendFailure.Unavailable -> stringResource(R.string.attach_refused_dm_unavailable)
     AttachmentSendFailure.NotSent -> stringResource(R.string.attach_not_sent)
     AttachmentSendFailure.PolicyChanged -> stringResource(R.string.attach_policy_changed)

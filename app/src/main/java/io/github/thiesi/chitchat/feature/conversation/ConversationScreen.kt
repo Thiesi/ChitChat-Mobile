@@ -788,6 +788,7 @@ private fun conversationError(error: ApiFailure) = stringResource(when {
     error.code == "cannot_ping_self" -> R.string.conversation_ping_self
     error.code == "guest_not_allowed" -> R.string.conversation_guest_ping
     error.code == "membership_required" -> R.string.conversation_membership
+    error.code == ROOM_UNAVAILABLE_ON_SEND -> R.string.conversation_send_room_unavailable
     error.code == "guest_read_only" -> R.string.conversation_guest_readonly
     error.status in setOf(403, 404) && error.code != "csrf_failed" -> R.string.conversation_unavailable
     error.status == 429 -> R.string.rate_limited
