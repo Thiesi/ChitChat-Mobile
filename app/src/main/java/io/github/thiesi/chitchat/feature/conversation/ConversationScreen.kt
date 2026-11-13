@@ -100,7 +100,6 @@ import io.github.thiesi.chitchat.core.ui.AttachmentEvidenceRow
 import io.github.thiesi.chitchat.core.ui.AttachmentReviewDialog
 import io.github.thiesi.chitchat.core.ui.AttachmentReviewPhase
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
-import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import io.github.thiesi.chitchat.core.ui.InlineError
 import io.github.thiesi.chitchat.core.ui.MessageInput
 import io.github.thiesi.chitchat.core.ui.ComposerLayout
@@ -692,7 +691,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
             connection?.takeIf { it.generation == session.generation }?.let {
                 val realtime = model.realtime
-                RealtimeStatus(it, realtime::retry, realtime::dismissBroadcast, roomId)
+                io.github.thiesi.chitchat.feature.status.StatusSlot(session, it, realtime::retry, onRefreshSession, onRefreshSession)
+                io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(it, realtime::dismissBroadcast, roomId = roomId)
             }
             header(true) { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } }
         } },

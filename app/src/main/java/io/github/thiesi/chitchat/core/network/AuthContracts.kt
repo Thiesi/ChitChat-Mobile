@@ -42,7 +42,19 @@ internal class SessionReply(
     val attachmentPolicy: AttachmentPolicy = AttachmentPolicy.Unknown,
     @SerialName("web_push") @Serializable(with = io.github.thiesi.chitchat.core.push.WebPushDiscoverySerializer::class)
     val webPush: io.github.thiesi.chitchat.core.push.WebPushDiscovery = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
+    /** Read leniently: a malformed `application` never fails the bootstrap; see [installationName]. */
+    val application: kotlinx.serialization.json.JsonElement? = null,
 )
+
+/**
+ * The installation's display name (`application.name`, ChitChat#149), for copy only: trimmed, 1–80
+ * characters and free of control characters, else null so the UI uses the host.
+ */
+internal fun installationName(application: kotlinx.serialization.json.JsonElement?): String? {
+    val name = ((application as? kotlinx.serialization.json.JsonObject)?.get("name") as? kotlinx.serialization.json.JsonPrimitive)
+        ?.takeIf { it.isString }?.content?.trim() ?: return null
+    return name.takeIf { it.length in 1..80 && it.none { c -> c.isISOControl() } }
+}
 
 @Serializable
 internal class AuthReply(

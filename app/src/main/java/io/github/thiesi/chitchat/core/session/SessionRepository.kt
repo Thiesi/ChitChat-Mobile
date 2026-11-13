@@ -62,6 +62,8 @@ data class SessionState(
     val attachmentPolicy: AttachmentPolicy = AttachmentPolicy.Unknown,
     /** Bootstrap Web Push discovery; like the attachment policy, never persisted and cleared on revalidation. */
     val webPush: io.github.thiesi.chitchat.core.push.WebPushDiscovery = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
+    /** `application.name` from the last bootstrap, for copy only; null means use the host. */
+    val installationName: String? = null,
 ) {
     val canChangeServer get() = phase !in setOf(SessionPhase.AUTHENTICATED, SessionPhase.PENDING_MFA, SessionPhase.GUEST) && !storageWarning && !busy
 }
@@ -318,6 +320,7 @@ class SessionRepository internal constructor(
                     attachmentPolicy = if (reply.user != null && !reply.user.guest) reply.attachmentPolicy
                         else AttachmentPolicy.Unavailable,
                     webPush = if (reply.user != null && !reply.user.guest) reply.webPush else io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unavailable,
+                    installationName = io.github.thiesi.chitchat.core.network.installationName(reply.application),
                 )
                 active.bootstrapActive = false
                 persist(active, reply.user)

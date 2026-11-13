@@ -123,7 +123,6 @@ import io.github.thiesi.chitchat.core.push.pushTapSettled
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
-import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.currentStateAsState
@@ -367,7 +366,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (!compactConversation && session.phase == SessionPhase.AUTHENTICATED && realtime != null && connection?.generation == session.generation) {
-                    RealtimeStatus(connection, realtime::retry, realtime::dismissBroadcast,
+                    io.github.thiesi.chitchat.feature.status.StatusSlot(session, connection, realtime::retry, auth::refresh, auth::refresh)
+                    io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(connection, realtime::dismissBroadcast,
                         roomId = entry?.arguments?.getLong("roomId")?.takeIf { it > 0 })
                 }
                 if (state.loading) {

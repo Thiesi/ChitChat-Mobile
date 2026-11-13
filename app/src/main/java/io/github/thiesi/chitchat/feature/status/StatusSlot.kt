@@ -1,0 +1,206 @@
+package io.github.thiesi.chitchat.feature.status
+
+import android.os.SystemClock
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
+import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.core.realtime.RealtimePhase
+import io.github.thiesi.chitchat.core.realtime.RealtimeState
+import io.github.thiesi.chitchat.core.session.SessionPhase
+import io.github.thiesi.chitchat.core.session.SessionState
+import io.github.thiesi.chitchat.core.status.BACK_ONLINE_MILLIS
+import io.github.thiesi.chitchat.core.status.RECONNECT_GRACE_MILLIS
+import io.github.thiesi.chitchat.core.status.StatusInputs
+import io.github.thiesi.chitchat.core.status.StatusLevel
+import io.github.thiesi.chitchat.core.status.StatusNotice
+import io.github.thiesi.chitchat.core.status.Wait
+import io.github.thiesi.chitchat.core.status.isDisconnection
+import io.github.thiesi.chitchat.core.status.resolveStatus
+import io.github.thiesi.chitchat.core.theme.ChitChatTheme
+import kotlinx.coroutines.delay
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+
+/** The installation's display name: `application.name`, else the host. */
+internal fun SessionState.installationDisplayName(): String =
+    installationName ?: server?.value?.toHttpUrlOrNull()?.host.orEmpty()
+
+/**
+ * The one status slot under the top bar (status-presentation.md, P-100 to P-102). Its only timers are the
+ * row-8 five-second one-shot and the Back online dismissal: both are bound to this composition, never run
+ * while the app isn't visible, and carry no elapsed time across the background (P-105 as amended).
+ */
+@Composable
+internal fun StatusSlot(
+    session: SessionState,
+    realtime: RealtimeState?,
+    onRetry: () -> Unit,
+    onRefresh: () -> Unit,
+    onStorageAction: () -> Unit,
+    modifier: Modifier = Modifier,
+    screen: StatusNotice.Screen? = null,
+    syncing: Boolean = false,
+    stale: Boolean = false,
+    nowMillis: () -> Long = System::currentTimeMillis,
+) {
+    val visible = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.STARTED)
+    val phase = realtime?.phase ?: RealtimePhase.STOPPED
+    val reconnecting = phase == RealtimePhase.CONNECTING || phase == RealtimePhase.RECONNECTING
+    var reconnectingSince by remember { mutableStateOf<Long?>(null) }
+    var monotonicNow by remember { mutableLongStateOf(SystemClock.uptimeMillis()) }
+    var disconnected by remember { mutableStateOf(false) }
+    var recovered by remember { mutableStateOf(false) }
+
+    // Row 8: start counting on entering CONNECTING/RECONNECTING while visible; leaving either state or the
+    // foreground drops the count, so nothing carries over.
+    LaunchedEffect(reconnecting, visible) {
+        if (!reconnecting || !visible) { reconnectingSince = null; return@LaunchedEffect }
+        val since = SystemClock.uptimeMillis().also { reconnectingSince = it; monotonicNow = it }
+        delay(RECONNECT_GRACE_MILLIS)
+        monotonicNow = since + RECONNECT_GRACE_MILLIS
+    }
+    // Row 9: the first LIVE after a disconnection notice shows Back online for about two seconds.
+    LaunchedEffect(phase, visible, disconnected) {
+        if (!visible) { recovered = false; return@LaunchedEffect }
+        if (phase == RealtimePhase.LIVE && disconnected) {
+            recovered = true; disconnected = false
+            delay(BACK_ONLINE_MILLIS)
+            recovered = false
+        }
+    }
+
+    val inputs = StatusInputs(
+        phase = phase,
+        errorKind = realtime?.error?.kind,
+        storageWarning = session.storageWarning,
+        refreshRequired = session.refreshRequired,
+        nowMillis = nowMillis(),
+        retryAtMillis = session.retryAtMillis,
+        retryAfterKnown = session.error?.status == 429 && (session.error?.retryAfterSeconds ?: 0L) > 0L,
+        reconnectingSinceMillis = reconnectingSince,
+        monotonicNowMillis = monotonicNow,
+        recovered = recovered,
+        screen = screen,
+        syncing = syncing,
+        stale = stale,
+    )
+    val notice = resolveStatus(inputs)
+    LaunchedEffect(notice) { if (notice.isDisconnection()) disconnected = true }
+    if (notice != null && session.phase == SessionPhase.AUTHENTICATED) key(notice) {
+        StatusNoticeView(notice, session, onRetry, onRefresh, onStorageAction, nowMillis, modifier)
+    }
+}
+
+@Composable
+private fun StatusNoticeView(
+    notice: StatusNotice, session: SessionState, onRetry: () -> Unit, onRefresh: () -> Unit,
+    onStorageAction: () -> Unit, nowMillis: () -> Long, modifier: Modifier,
+) {
+    val colors = ChitChatTheme.colors
+    val host = session.installationDisplayName()
+    // Announced politely once per notice: the key above recreates this node only when the notice changes.
+    val announce = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+    if (notice.level == StatusLevel.CAPTION) {
+        Text(captionText(notice), modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).then(announce)
+            .testTag("status_slot"), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+        return
+    }
+    val (title, body) = blockText(notice, host)
+    val background: Color = when (notice) {
+        StatusNotice.Offline, StatusNotice.Unreachable, StatusNotice.BackOnline -> colors.raised
+        StatusNotice.SecureConnectionFailed, StatusNotice.Incompatible, StatusNotice.LiveUpdatesStopped -> colors.surface
+        else -> colors.presenceWash
+    }
+    val (glyph, tint) = when (notice) {
+        StatusNotice.SecureConnectionFailed, StatusNotice.Incompatible, StatusNotice.LiveUpdatesStopped -> R.drawable.ic_error to colors.error
+        StatusNotice.StorageWarning, StatusNotice.RefreshRequired, StatusNotice.Unreachable, StatusNotice.Offline -> R.drawable.ic_warning to colors.warning
+        else -> R.drawable.ic_info to colors.textMuted
+    }
+    Column(modifier.fillMaxWidth().background(background).padding(horizontal = 16.dp, vertical = 12.dp).testTag("status_slot"),
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(painterResource(glyph), contentDescription = null, Modifier.size(20.dp), tint = tint)
+            Text(buildAnnotatedString {
+                withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(title) }
+                body?.let { append(' '); append(it) }
+            }, Modifier.weight(1f).then(announce), style = MaterialTheme.typography.bodyMedium, color = colors.text)
+        }
+        val action: Pair<Int, () -> Unit>? = when (notice) {
+            StatusNotice.SecureConnectionFailed, StatusNotice.Incompatible, StatusNotice.LiveUpdatesStopped -> R.string.retry to onRetry
+            StatusNotice.RefreshRequired -> R.string.refresh_session to onRefresh
+            StatusNotice.StorageWarning -> R.string.retry_secure_storage to onStorageAction
+            else -> null
+        }
+        action?.let { (label, onClick) ->
+            // Refresh session keeps its existing gate: disabled until the server's wait is over.
+            val enabled = notice != StatusNotice.RefreshRequired || (!session.busy && nowMillis() >= session.retryAtMillis)
+            TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).padding(start = 20.dp)
+                .testTag("status_action")) { Text(stringResource(label)) }
+        }
+    }
+}
+
+@Composable
+private fun blockText(notice: StatusNotice, host: String): Pair<String, String?> = when (notice) {
+    StatusNotice.StorageWarning -> stringResource(R.string.session_storage_warning) to null
+    StatusNotice.Offline -> stringResource(R.string.status_offline_title) to stringResource(R.string.status_offline_body)
+    StatusNotice.SecureConnectionFailed -> stringResource(R.string.status_tls_title, host) to stringResource(R.string.status_tls_body)
+    StatusNotice.Incompatible -> stringResource(R.string.status_incompatible_title, host) to stringResource(R.string.status_incompatible_body)
+    StatusNotice.LiveUpdatesStopped -> stringResource(R.string.status_stopped_title) to stringResource(R.string.status_stopped_body)
+    StatusNotice.RefreshRequired -> stringResource(R.string.status_refresh_title) to null
+    StatusNotice.Unreachable -> stringResource(R.string.status_unreachable_title, host) to stringResource(R.string.status_unreachable_body)
+    StatusNotice.BackOnline -> stringResource(R.string.status_back_online) to null
+    is StatusNotice.Screen, is StatusNotice.RateLimited, StatusNotice.Syncing, StatusNotice.Stale -> captionText(notice) to null
+}
+
+@Composable
+private fun captionText(notice: StatusNotice): String = when (notice) {
+    is StatusNotice.RateLimited -> notice.wait?.let { stringResource(R.string.status_rate_limited, waitText(it)) }
+        ?: stringResource(R.string.status_rate_limited_unknown)
+    StatusNotice.Syncing -> stringResource(R.string.status_syncing)
+    StatusNotice.Stale -> stringResource(R.string.status_stale)
+    else -> ""
+}
+
+@Composable
+internal fun waitText(wait: Wait): String = when (wait) {
+    is Wait.Seconds -> stringResource(R.string.wait_seconds, wait.seconds)
+    Wait.AboutAMinute -> stringResource(R.string.wait_about_a_minute)
+    is Wait.AboutMinutes -> pluralStringResource(R.plurals.wait_about_minutes, wait.minutes, wait.minutes)
+    is Wait.AboutHours -> pluralStringResource(R.plurals.wait_about_hours, wait.hours, wait.hours)
+}
