@@ -445,6 +445,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     internal fun sendAttachment(expected: SessionState, roomId: Long, entryId: String, original: RoomAttachmentDraft,
         isCurrentEntry: () -> Boolean): Boolean {
         val sender = uploads ?: return false
+        if (waiting != null) return false
         val value = mutable.value
         val work = attachments[roomId] ?: return false
         val memo = savedDrafts.value[roomId] ?: return false
@@ -1300,12 +1301,13 @@ class ConversationViewModel internal constructor(private val operations: Convers
         }
     }
 
-    fun canSend(): Boolean = attachments[mutable.value.roomId] == null && composerCanSend()
+    /** Never while a draft waits: the waiting job owns that draft's one attempt (no manual second POST). */
+    fun canSend(): Boolean = waiting == null && attachments[mutable.value.roomId] == null && composerCanSend()
 
     /** Paperclip/admission readiness only. selectAttachment still rechecks every original fact. */
     internal fun canBeginAttachment(): Boolean {
         val value = mutable.value
-        return foreground && attachmentBudget != null && !value.busy && !value.sending && composerCanSend()
+        return foreground && waiting == null && attachmentBudget != null && !value.busy && !value.sending && composerCanSend()
     }
 
     private fun composerCanSend(): Boolean {

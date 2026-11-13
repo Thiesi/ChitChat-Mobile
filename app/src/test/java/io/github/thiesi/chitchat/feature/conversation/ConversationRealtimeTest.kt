@@ -614,6 +614,25 @@ class ConversationRealtimeTest {
         assertEquals(listOf("Patient fixture"), api.sentBodies)
     }
 
+    @Test fun aManualSendWhileLiveButNotYetRevalidatedCannotPostASecondCopy() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        model.cancel()
+        model = ConversationViewModel(api, realtime, revalidate = {
+            revalidations++; gate.await()
+            api.session.value = api.session.value.copy(bootstrapSequence = api.session.value.bootstrapSequence + 1)
+        })
+        open(); advanceUntilIdle()
+        model.updateDraft("Single fixture"); offline(); model.send(); runCurrent()
+        realtime.state.value = realtime.state.value.copy(phase = RealtimePhase.LIVE, reconcileVersion = realtime.state.value.reconcileVersion + 1)
+        model.invalidate(); runCurrent()
+        assertEquals("Revalidation is still pending", 1, revalidations)
+        assertFalse("No manual send while the draft waits", model.canSend())
+        model.send(); advanceUntilIdle()
+        assertEquals(0, api.sends)
+        gate.complete(Unit); advanceUntilIdle()
+        assertEquals("Exactly one POST", listOf("Single fixture"), api.sentBodies)
+    }
+
     private class Connection : RealtimeController {
         override val state = MutableStateFlow(RealtimeState(phase = RealtimePhase.LIVE, generation = 1))
         override val events = MutableSharedFlow<RealtimeEvent>()
