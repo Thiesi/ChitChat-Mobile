@@ -154,6 +154,15 @@ class PushLocal(
         return record?.takeIf { origin != null && userId != null && it.belongsTo(origin, userId) }?.registrationId
     }
 
+    /** Turn off on this phone: like [retire], but the signed-in session continues and may turn push on again. */
+    @Synchronized fun turnOff(): PushRecord? {
+        val record = record()
+        val current = session
+        retire(null, null)
+        session = current
+        return record
+    }
+
     private fun clearQuietly() { try { vault.clear() } catch (_: IOException) { /* Key deletion is attempted first. */ } }
 }
 
@@ -164,8 +173,8 @@ class PushRegistrar(
     private val sessions: SessionRepository,
     private val scope: CoroutineScope,
     private val io: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
-) {
-    val status: StateFlow<PushPhoneStatus> = local.status
+) : PushPhone {
+    override val status: StateFlow<PushPhoneStatus> = local.status
     private val lock = Mutex()
 
     init {
@@ -183,7 +192,7 @@ class PushRegistrar(
     }
 
     /** Registers with the distributor the person already chose. False when this session can't turn push on. */
-    suspend fun start(expected: SessionState): Boolean = lock.withLock {
+    override suspend fun start(expected: SessionState): Boolean = lock.withLock {
         val origin = expected.server?.value ?: return@withLock false
         val user = expected.user?.takeIf { !it.guest && expected.phase == SessionPhase.AUTHENTICATED } ?: return@withLock false
         val vapid = (expected.webPush as? WebPushDiscovery.Available)?.vapidKey ?: return@withLock false
@@ -196,6 +205,26 @@ class PushRegistrar(
             true
         }
     }
+
+    /**
+     * Turn off, asked for by the person: wipes this phone's keys and distributor registration at once,
+     * then one revoke for the registration of the signed-in account that turned it on. Never retried.
+     */
+    override suspend fun turnOff(expected: SessionState): Boolean {
+        val record = lock.withLock { withContext(io) { local.turnOff() } } ?: return true
+        val id = record.registrationId ?: return true
+        val current = sessions.state.value
+        if (current.phase != SessionPhase.AUTHENTICATED || current.generation != expected.generation ||
+            !record.belongsTo(current.server?.value.orEmpty(), current.user?.id ?: -1)) return false
+        return try {
+            val access = sessions.openAccess(current)
+            sessions.authorized(access) { revokePushDevice(id, access.csrf) }
+            true
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: ApiFailure) { false }
+    }
+
+    override suspend fun turnOffLocally() { lock.withLock { withContext(io) { local.turnOff() } } }
 
     fun onNewEndpoint(instance: String, endpoint: String, p256dh: String?, auth: String?) {
         scope.launch { lock.withLock { subscribe(instance, endpoint, p256dh, auth) } }

@@ -259,6 +259,42 @@ class PushRegistrarTest {
         assertEquals(3, server.requestCount)
     }
 
+    @Test fun turnOffWipesKeysUnregistersRevokesOnceAndTheSessionCanTurnOnAgain() = runTest {
+        login()
+        val registrar = registrar()
+        val record = local.prepare(origin(), 7)!!
+        local.adopt(record.instance, PushRegistration(12, null))
+        server.enqueue(json("""{"devices":[]}"""))
+        assertTrue(registrar.turnOff(sessions.state.value))
+        assertNull(vault.record)
+        assertEquals(listOf(record.instance), connector.unregistered)
+        assertEquals(PushPhoneStatus.Off, registrar.status.value)
+        val request = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("/api/v1/push/revoke-device.php", request.url.encodedPath)
+        assertEquals("""{"id":12}""", request.body!!.utf8())
+        assertEquals(3, server.requestCount)
+        val again = local.prepare(origin(), 7)
+        assertNotNull("The signed-in session continues after Turn off", again)
+        assertNotEquals("Turning on again uses fresh keys", record.instance, again!!.instance)
+    }
+
+    @Test fun turnOffIsLocalFirstAndReportsAnUnconfirmedServerRemoval() = runTest {
+        login()
+        val registrar = registrar()
+        assertTrue("Nothing to remove anywhere", registrar.turnOff(sessions.state.value))
+        assertEquals(2, server.requestCount)
+        val record = local.prepare(origin(), 7)!!
+        local.adopt(record.instance, PushRegistration(12, null))
+        server.enqueue(json("""{"error":{"code":"internal_error"}}""", 500))
+        assertFalse(registrar.turnOff(sessions.state.value))
+        assertNull("The keys are gone even though the server didn't confirm", vault.record)
+        assertEquals(3, server.requestCount)
+        val unsent = local.prepare(origin(), 7)!!
+        assertTrue(registrar.turnOff(sessions.state.value)) // Never registered with the server: no request.
+        assertEquals(3, server.requestCount)
+        assertEquals(listOf(record.instance, unsent.instance), connector.unregistered)
+    }
+
     @Test fun distributorRegistrationFailureIsShownHonestlyAndDropsTheRecord() = runTest {
         login()
         val registrar = registrar()

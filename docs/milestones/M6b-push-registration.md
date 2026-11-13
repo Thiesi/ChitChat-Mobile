@@ -3,9 +3,8 @@
 The parts of turning push on for this phone that have no screen of their own: Web Push
 discovery, the subscribe protocol, sealed keys, the connector receiver, registration and the
 sign-out cleanup. The Turn on flow in Account → Notifications (explanation, notification
-permission, distributor choice, channels, status card) is part B. Until it lands, nothing calls
-[`PushRegistrar.start`](../../app/src/main/java/io/github/thiesi/chitchat/core/push/PushRegistrar.kt),
-so this part changes nothing a person can see. Receiving and rendering is P3.
+permission, distributor choice, channels, status card) is part B, [M6c](M6c-push-turn-on.md), which calls
+[`PushRegistrar.start`](../../app/src/main/java/io/github/thiesi/chitchat/core/push/PushRegistrar.kt). Receiving and rendering is P3.
 
 ## Discovery and subscribe
 
