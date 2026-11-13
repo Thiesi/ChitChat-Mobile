@@ -22,7 +22,8 @@ This page records licence facts that need more than the dependency's metadata.
   [LICENSE at tag 3.1.0](https://codeberg.org/UnifiedPush/android-embedded_fcm_distributor/src/tag/3.1.0/LICENSE)
   is the GNU LGPL v2.1. Commit `2fe24cc532` (2026-11-04, after the tag) changed the repository's LICENSE
   to Apache 2.0 "to match what is published on Maven".
-- **What we do:** comply with the stricter LGPL-2.1 reading (owner decision, 2026-11-13). The app's
+- **What we do:** comply with the stricter LGPL-2.1 reading (owner decision, 2026-11-13). The app shows
+  "LGPL-2.1"; the discrepancy is recorded only here. The app's
   open-source notice credits it under LGPL-2.1, with a link to the source at tag 3.1.0 and its copyright
   line ("Copyright (C) 2022 Simon Gougeon", from the licence appendix). ChitChat's own source is public
   under BSD-2.
@@ -34,8 +35,9 @@ This page records licence facts that need more than the dependency's metadata.
 - **Dependency:** `com.google.code.findbugs:jsr305:3.0.2`, transitive.
 - **Conflict:** its POM declares Apache-2.0, while the JSR-305 annotations project has long described the
   code as BSD-3-Clause.
-- **What we do:** meet both cheaply (technical lead, 2026-11-13). The entry shows "Apache-2.0 (POM) /
-  BSD-3-Clause (project)" and bundles both texts. The published artifact carries no copyright line.
+- **What we do:** meet both cheaply (technical lead, 2026-11-13). The app shows "BSD-3-Clause" and
+  bundles both texts; the discrepancy is recorded only here. The published artifact carries no
+  copyright line.
 
 ## Protocol Buffers
 

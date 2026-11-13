@@ -1,5 +1,7 @@
 # ChitChat Android engineering
 
+- [Status slot](docs/milestones/status-slot.md): a signed-in screen shows at most one connection/session notice, chosen by `resolveStatus`. Its only timers are the existing P-25 wait gate, the row-8 one-shot and Back online, all composition-bound and never running in the background; waits show only the server's positive 429 `retry_after_seconds`, rounded up, and never trigger a send. Never claim behaviour that isn't shipped (offline copy waits for S4).
+
 - [Open-source licences](docs/third-party-licenses.md): every shipped artifact must be covered by `assets/licenses/oss_licenses.json` (`:app:checkLicenceCoverage` in CI; `OssLicencesTest` for catalog entries and versions). Add an entry with its licence text when a dependency changes; never silence the check.
 
 - [M6e Google delivery](docs/milestones/M6e-embedded-fcm.md) uses the unmodified embedded FCM distributor 3.1.0 (no Firebase SDK, direct FCM endpoint, `gateway = null`, LGPL-2.1 compliance per docs/third-party-licenses.md). Offer it only when no UnifiedPush delivery app is installed and only on an explicit Use Google; never list it beside delivery apps or switch away from it automatically.

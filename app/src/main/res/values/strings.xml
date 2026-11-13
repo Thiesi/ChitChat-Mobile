@@ -138,14 +138,35 @@
     <string name="step_up_recovery_warning">This is an emergency fallback, not routine passkey verification. One unused recovery code is consumed immediately, even if the export later fails or is cancelled. Codes are finite. Continue only if you intend to spend one.</string>
     <string name="recovery_may_be_spent">The recovery request may have consumed that code. It was not repeated. Refresh security information before using another code.</string>
     <string name="step_up_retry_rejected">The server did not accept the action after verification. It will not be retried again. Start a new export only when ready to verify again.</string>
-    <string name="realtime_stopped">Session events paused. Refresh checks room history.</string>
-    <string name="realtime_connecting">Connecting session events.</string>
-    <string name="realtime_live">Session events connected. History may still be synchronizing.</string>
-    <string name="realtime_reconnecting">Reconnecting session events.</string>
-    <string name="realtime_offline">Offline. Loaded room chat may be out of date.</string>
-    <string name="realtime_tls_error">Secure event connection failed. Check the server certificate; it was not bypassed.</string>
-    <string name="realtime_incompatible">The server event stream is incompatible. Room chat still uses Refresh.</string>
-    <string name="realtime_error">Session events stopped. Retry the connection or use Refresh for room chat.</string>
+    <!-- The status slot (status-presentation.md). Titles are bold; bodies follow on the same line. -->
+    <string name="status_offline_title">No connection.</string>
+    <!-- Interim until Send when back online (S4) ships; the spec's line promises that behaviour. -->
+    <string name="status_offline_body">What’s here stays readable. Sending needs a connection.</string>
+    <string name="status_tls_title">Can’t connect securely to %1$s.</string>
+    <string name="status_tls_body">The certificate couldn’t be verified; this can’t be bypassed.</string>
+    <string name="status_incompatible_title">%1$s sent something ChitChat doesn’t understand.</string>
+    <string name="status_incompatible_body">Live updates are off; use Refresh to update.</string>
+    <string name="status_stopped_title">Live updates stopped.</string>
+    <string name="status_stopped_body">Use Refresh to update, or try again.</string>
+    <string name="status_refresh_title">Your session needs a refresh.</string>
+    <string name="status_unreachable_title">Can’t reach %1$s.</string>
+    <string name="status_unreachable_body">We’ll keep trying.</string>
+    <string name="status_back_online">Back online</string>
+    <string name="status_rate_limited">Try again in %1$s.</string>
+    <string name="status_rate_limited_unknown">Try again in a little while.</string>
+    <string name="status_rate_limited_under_minute">Try again in less than a minute.</string>
+    <string name="status_syncing">Updating…</string>
+    <string name="status_stale">This may be out of date. Refresh to update it.</string>
+    <string name="wait_seconds">%1$d s</string>
+    <string name="wait_about_a_minute">about a minute</string>
+    <plurals name="wait_about_minutes">
+        <item quantity="one">about %1$d minute</item>
+        <item quantity="other">about %1$d minutes</item>
+    </plurals>
+    <plurals name="wait_about_hours">
+        <item quantity="one">about %1$d hour</item>
+        <item quantity="other">about %1$d hours</item>
+    </plurals>
     <string name="realtime_global_notice">Server announcement</string>
     <string name="realtime_room_notice">Room announcement</string>
     <string name="realtime_view_notice">Read announcement</string>

@@ -91,7 +91,6 @@ import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.typing.hasTypingContent
 import io.github.thiesi.chitchat.feature.realtime.TypingStatus
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
-import io.github.thiesi.chitchat.feature.realtime.RealtimeStatus
 import io.github.thiesi.chitchat.core.targets.MessageTarget
 import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
 import io.github.thiesi.chitchat.feature.targets.ReplyPreview
@@ -130,7 +129,10 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
                 DirectPrivacyNotice(state.inbox?.privacy, R.string.dm_inbox_details,
                     expanded = detailsOpen, onExpandedChange = { detailsOpen = it },
                     needsAttention = connection?.let { it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null } } == true) {
-                    if (connection != null) RealtimeStatus(connection, thread.realtime::retry, thread.realtime::dismissBroadcast, roomId = null)
+                    if (connection != null) {
+                        io.github.thiesi.chitchat.feature.status.StatusSlot(session, connection, thread.realtime::retry, onRefreshSession, onRefreshSession)
+                        io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(connection, thread.realtime::dismissBroadcast, roomId = null)
+                    }
                 }
                 Text(stringResource(R.string.dm_no_push), style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(state.query, model::updateQuery, Modifier.fillMaxWidth().testTag("dm_search_input"),
@@ -462,8 +464,10 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                     attention[peer] != null || state.draftLimit || !model.canEditDraft() ||
                                     context?.relationship?.messagingAvailable == false || context?.mutedEverywhere != null || !ready ||
                                     connection?.let { it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null } } == true) { dismiss ->
-                                if (connection != null)
-                                    RealtimeStatus(connection, model.realtime::retry, model.realtime::dismissBroadcast, roomId = null)
+                                if (connection != null) {
+                                    io.github.thiesi.chitchat.feature.status.StatusSlot(session, connection, model.realtime::retry, onRefreshSession, onRefreshSession)
+                                    io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(connection, model.realtime::dismissBroadcast, roomId = null)
+                                }
                                 Text(context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleMedium)
                                 if (compact) { attachNotices(androidx.compose.ui.unit.Dp.Infinity); attachmentCard(androidx.compose.ui.unit.Dp.Infinity) }
                                 if (completionComposer.choice!=null) {
