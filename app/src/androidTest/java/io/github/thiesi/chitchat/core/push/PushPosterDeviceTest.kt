@@ -69,6 +69,7 @@ class PushPosterDeviceTest {
             assertEquals("Schmidt Family Chat", notification.extras.getString(Notification.EXTRA_SUB_TEXT))
             assertEquals(alert.kind.channel, notification.channelId)
             assertEquals("Kept in this account's group, not regrouped by the system", alert.group, notification.group)
+            if (android.os.Build.VERSION.SDK_INT >= 31) assertTrue("Tap intent is immutable", notification.contentIntent.isImmutable)
             val public = checkNotNull(notification.publicVersion) { "No public version for $kind" }
             assertEquals("Schmidt Family Chat", public.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString())
             assertEquals(publicText, public.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString())

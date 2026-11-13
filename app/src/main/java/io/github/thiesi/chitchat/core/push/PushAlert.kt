@@ -80,7 +80,8 @@ enum class PushKind(val channel: String) {
 }
 
 /** What to post: the checked payload with its channel, tag and group, all scoped by server and account. */
-class PushAlert(val payload: PushPayload, val kind: PushKind, val tag: String?, val group: String) {
+class PushAlert(val payload: PushPayload, val kind: PushKind, val tag: String?, val group: String,
+    val origin: String, val userId: Long) {
     override fun toString() = "PushAlert"
 }
 
@@ -94,7 +95,8 @@ fun pushAlert(record: PushRecord?, instance: String, payload: PushPayload?): Pus
     // Both null is not a match: a record without an adopted binding shows nothing.
     if (record.binding == null || record.binding != payload.binding) return null
     val scope = "${record.origin}|${record.userId}"
-    return PushAlert(payload, PushKind.of(payload.kind), payload.eventId?.let { "$scope|$it" }, "chitchat:$scope")
+    return PushAlert(payload, PushKind.of(payload.kind), payload.eventId?.let { "$scope|$it" }, "chitchat:$scope",
+        record.origin, record.userId)
 }
 
 /**

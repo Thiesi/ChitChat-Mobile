@@ -1,6 +1,6 @@
 # Independently verifiable implementation milestones
 
-[M6a notification settings](milestones/M6a-push-settings.md) is push P1. [M6b](milestones/M6b-push-registration.md) is P2 part A (discovery, subscribe, keys and binding in a separate Keystore push vault, receiver, sign-out destruction). [M6c](milestones/M6c-push-turn-on.md) is P2 part B (status card, Turn on with permission, distributor choice and channels, Turn off). [M6d](milestones/M6d-push-receive.md) is P3 part A (receive, check, post). Next: P3b tap routing, P4 the optional embedded FCM distributor.
+[M6a notification settings](milestones/M6a-push-settings.md) is push P1. [M6b](milestones/M6b-push-registration.md) is P2 part A (discovery, subscribe, keys and binding in a separate Keystore push vault, receiver, sign-out destruction). [M6c](milestones/M6c-push-turn-on.md) is P2 part B (status card, Turn on with permission, distributor choice and channels, Turn off). [M6d](milestones/M6d-push-receive.md) is P3 (receive, check, post, and tap routing through the guarded destination flow). Next: P4, the optional embedded FCM distributor.
 
 [M5g7d DM attachment controls](milestones/M5g7d-direct-attach-controls.md) completes native attachment sending. Next: authenticated downloads and memory-only previews (after PR187's metadata disposition), then the image viewer, Save/Share and share-in.
 

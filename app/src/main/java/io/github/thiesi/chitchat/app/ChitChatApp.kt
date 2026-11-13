@@ -118,6 +118,8 @@ import io.github.thiesi.chitchat.feature.notifications.noticeIdentity
 import io.github.thiesi.chitchat.core.targets.TargetSnapshot
 import io.github.thiesi.chitchat.core.targets.MessageTarget
 import io.github.thiesi.chitchat.core.notifications.NotificationDestination
+import io.github.thiesi.chitchat.core.notifications.notificationDestination
+import io.github.thiesi.chitchat.core.push.pushTapSettled
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
@@ -139,6 +141,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     completion: CompletionViewModel? = null,
     pushSettings: io.github.thiesi.chitchat.feature.push.NotificationSettingsViewModel? = null,
     pushPhone: io.github.thiesi.chitchat.feature.push.PushPhoneViewModel? = null,
+    pushTaps: io.github.thiesi.chitchat.core.push.PendingPushTap? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session = auth.state.collectAsStateWithLifecycle().value
@@ -237,6 +240,44 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 conversations.open(id, interacted = true, expected = displayedSession)
                 nav.navigate("conversation/$id") { launchSingleTop = true }
             }
+        }
+        /**
+         * One router for a notice link, from a center row or a tapped push. The [source] entry must be the
+         * current Activity entry: targets load against its ID and the guarded flow re-checks access.
+         * Nothing is marked read. Unsupported destinations stay on Activity.
+         */
+        fun openNoticeLink(source: NavBackStackEntry, link: NotificationDestination) {
+            val targets = messageTargets ?: return
+            when (link) {
+                is NotificationDestination.Room -> {
+                    val target = link.messageId?.let { MessageTarget.RoomMessage(link.roomId, it) }
+                        ?: link.pingId?.let { MessageTarget.RoomPing(link.roomId, it) }
+                    if (target != null) targets.load(displayedSession, target, source.id)
+                    else notificationRoomRoute(displayedSession, link.roomId)?.let { route ->
+                        focus.clearFocus(); conversations.open(link.roomId, interacted = true, expected = displayedSession)
+                        nav.navigate(route) { launchSingleTop = true }
+                    }
+                }
+                is NotificationDestination.Direct -> if (link.messageId != null)
+                    targets.load(displayedSession, MessageTarget.DirectMessage(link.peerId, link.messageId), source.id)
+                    else openDirect(link.peerId)
+                NotificationDestination.DirectInbox -> openDirect(null)
+                NotificationDestination.Account -> notificationAccountRoute(displayedSession)?.let { route ->
+                    focus.clearFocus(); nav.navigate(route) { launchSingleTop = true }
+                }
+                NotificationDestination.Registration -> Unit // Explicitly unavailable, never an auth mutation.
+            }
+        }
+        // A tapped push lands on Activity for the signed-in account it was posted for; that entry then
+        // routes its link (below). Sign-in first, another account or server, or no server drops it, and
+        // it is never replayed after a later sign-in.
+        val pendingTap = pushTaps?.state?.collectAsStateWithLifecycle()?.value
+        LaunchedEffect(pendingTap, session, state.hasLoadedSettings, state.settings.server, entry, entryStarted, inNotifications) {
+            val tap = pendingTap ?: return@LaunchedEffect
+            if (tap.matches(session)) {
+                if (!inNotifications && entryStarted && nav.currentBackStackEntry === entry)
+                    notificationRoute(session)?.let { focus.clearFocus(); nav.navigate(it) { launchSingleTop = true } }
+            } else if (pushTapSettled(session, state.hasLoadedSettings, state.settings.server != null)) pushTaps.take(tap)
         }
         val atHome = entry?.destination?.route.let { it == null || it == "home" }
         LaunchedEffect(entry, session.phase, session.server, session.generation,
@@ -445,32 +486,23 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             if (notifications != null && args != null && matchesNotificationScope(session,
                                 args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server"))) {
                                 key(session.noticeIdentity()) {
+                                    val started = destination.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.STARTED)
+                                    LaunchedEffect(pendingTap, started) {
+                                        val tap = pendingTap ?: return@LaunchedEffect
+                                        val current = auth.state.value
+                                        if (started && nav.currentBackStackEntry === destination && tap.matches(current) &&
+                                            notifications.belongsTo(displayedSession) && displayedSession.noticeIdentity() == current.noticeIdentity() &&
+                                            pushTaps.take(tap)) {
+                                            val server = displayedSession.server ?: return@LaunchedEffect
+                                            notificationDestination(server, tap.link)?.let { openNoticeLink(destination, it) }
+                                        }
+                                    }
                                     NotificationCenterScreen(notifications, displayedSession, auth::refresh,
                                         onOpen = if (messageTargets == null) null else { item, link ->
                                             val current = auth.state.value
                                             if (nav.currentBackStackEntry === destination && notifications.belongsTo(displayedSession) &&
                                                 displayedSession.noticeIdentity() == current.noticeIdentity() &&
-                                                notifications.state.value.notifications.any { it === item }) {
-                                                when (link) {
-                                                    is NotificationDestination.Room -> {
-                                                        val target = link.messageId?.let { MessageTarget.RoomMessage(link.roomId, it) }
-                                                            ?: link.pingId?.let { MessageTarget.RoomPing(link.roomId, it) }
-                                                        if (target != null) messageTargets.load(displayedSession, target, destination.id)
-                                                        else notificationRoomRoute(displayedSession, link.roomId)?.let { route ->
-                                                            focus.clearFocus(); conversations.open(link.roomId, interacted = true, expected = displayedSession)
-                                                            nav.navigate(route) { launchSingleTop = true }
-                                                        }
-                                                    }
-                                                    is NotificationDestination.Direct -> if (link.messageId != null)
-                                                        messageTargets.load(displayedSession, MessageTarget.DirectMessage(link.peerId, link.messageId), destination.id)
-                                                        else openDirect(link.peerId)
-                                                    NotificationDestination.DirectInbox -> openDirect(null)
-                                                    NotificationDestination.Account -> notificationAccountRoute(displayedSession)?.let { route ->
-                                                        focus.clearFocus(); nav.navigate(route) { launchSingleTop = true }
-                                                    }
-                                                    NotificationDestination.Registration -> Unit // Explicitly unavailable, never an auth mutation.
-                                                }
-                                            }
+                                                notifications.state.value.notifications.any { it === item }) openNoticeLink(destination, link)
                                         }) {
                                         nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
                                     }
