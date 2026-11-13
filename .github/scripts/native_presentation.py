@@ -15,6 +15,8 @@ THEME_DESTINATION = ROOT / "app/build/reports/androidTests/theme-foundation"
 SOURCE = ROOT / "app/build/outputs/connected_android_test_additional_output"
 PUSH_DESTINATION = ROOT / "app/build/reports/androidTests/push-presentation"
 PUSH_NAME = re.compile(r"push-(light|dark)-(off|waiting|on|refused|needs-setup|explain|google|google-instead)\.png")
+LICENCES_DESTINATION = ROOT / "app/build/reports/androidTests/licences-presentation"
+LICENCES_NAME = re.compile(r"licences-(light|dark)-(default|font200)-(list|detail)\.png")
 THEME_NAME = re.compile(r"theme-(light|dark|black)-(default|font200)-(?:"
     r"(?:server|auth|home|settings|rooms|room|direct|thread|activity|account|search)\.png|configuration\.json)")
 
@@ -41,6 +43,18 @@ def collect_push():
     for path in files:
         shutil.copyfile(path, PUSH_DESTINATION / path.name)
     print(f"Push presentation captures collected: {len(files)} of 16.")
+
+
+def collect_licences():
+    # Two presentation cases (light, dark): list and detail at default and 2.0 font each.
+    files = list(islice(SOURCE.rglob("ccm-licences-presentation/*"), 9))
+    if (not files or len(files) > 8 or len({p.name for p in files}) != len(files)
+        or any(LICENCES_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous licences presentation output")
+    LICENCES_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, LICENCES_DESTINATION / path.name)
+    print(f"Licences presentation captures collected: {len(files)} of 8.")
 
 
 def main() -> int:
@@ -70,6 +84,10 @@ def main() -> int:
         collect_push()
     except Exception:
         print("Push presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_licences()
+    except Exception:
+        print("Licences presentation captures unavailable; original native status retained.", file=sys.stderr)
     return 128 - status if status < 0 else status
 
 

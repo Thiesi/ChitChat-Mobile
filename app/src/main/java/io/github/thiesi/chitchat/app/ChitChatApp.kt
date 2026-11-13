@@ -344,6 +344,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         "settings" -> R.string.settings
                         "account", NOTIFICATION_ACCOUNT_ROUTE -> R.string.account
                         "notification_settings" -> R.string.notification_settings_title
+                        LICENCES_ROUTE, LICENCE_ROUTE -> R.string.oss_licences_title
                         "rooms" -> R.string.rooms_title
                         else -> R.string.app_name
                     }) },
@@ -457,7 +458,20 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                     Text(stringResource(R.string.notification_settings_open))
                                 }
                                 typingPreferences?.let { TypingPreferenceCard(it, session, auth::refresh) }
+                                // The nav shell may move this to About later.
+                                TextButton(onClick = { nav.navigate(LICENCES_ROUTE) { launchSingleTop = true } },
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag("licences_open")) {
+                                    Text(stringResource(R.string.oss_licences_open))
+                                }
                             }
+                        }
+                        composable(LICENCES_ROUTE) {
+                            ScreenContent { io.github.thiesi.chitchat.feature.licences.LicencesScreen { index ->
+                                nav.navigate("licences/$index") { launchSingleTop = true }
+                            } }
+                        }
+                        composable(LICENCE_ROUTE, arguments = listOf(navArgument("index") { type = NavType.IntType })) { destination ->
+                            ScreenContent { io.github.thiesi.chitchat.feature.licences.LicenceScreen(destination.arguments?.getInt("index") ?: -1) }
                         }
                         composable("notification_settings") {
                             if (session.phase == SessionPhase.AUTHENTICATED && pushSettings != null) ScreenContent {
@@ -654,6 +668,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         }
     }
 }
+
+private const val LICENCES_ROUTE = "licences"
+private const val LICENCE_ROUTE = "licences/{index}"
 
 @Composable
 private fun ScreenContent(content: @Composable () -> Unit) {

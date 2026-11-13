@@ -85,3 +85,26 @@ dependencies {
     debugImplementation(libs.compose.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 }
+
+// Every artifact the release app ships must be covered by the in-app open-source licences list, one by
+// one or by a group rule. Transitive dependencies are where this drifts; the build job runs this check.
+val checkLicenceCoverage by tasks.registering {
+    group = "verification"
+    description = "Fails when a release runtime artifact isn't covered by assets/licenses/oss_licenses.json."
+    val list = layout.projectDirectory.file("src/main/assets/licenses/oss_licenses.json")
+    inputs.file(list)
+    notCompatibleWithConfigurationCache("Resolves releaseRuntimeClasspath when run.")
+    doLast {
+        @Suppress("UNCHECKED_CAST")
+        val entries = groovy.json.JsonSlurper().parse(list.asFile) as List<Map<String, Any?>>
+        val rules = entries.flatMap { (it["covers"] as List<*>).map { rule -> rule.toString() } }
+            .map { rule -> Regex(rule.split('*').joinToString(".*") { Regex.escape(it) }) }
+        val shipped = configurations.getByName("releaseRuntimeClasspath").incoming.resolutionResult.allComponents
+            .mapNotNull { it.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+            .map { "${it.group}:${it.module}" }.toSortedSet()
+        val missing = shipped.filter { id -> rules.none { it.matches(id) } }
+        if (missing.isNotEmpty()) throw GradleException(
+            "Not in the open-source licences list (src/main/assets/licenses/oss_licenses.json):\n" + missing.joinToString("\n"))
+        logger.lifecycle("Licence coverage: ${shipped.size} release artifacts covered.")
+    }
+}

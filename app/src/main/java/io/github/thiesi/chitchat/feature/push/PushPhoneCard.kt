@@ -78,8 +78,9 @@ internal fun PushPhoneCard(phone: PushPhoneViewModel, session: SessionState, dir
             if (state.turnOffUnconfirmed) Text(stringResource(R.string.push_turned_off_local))
             if (!canTurnOn && status == PushPhoneStatus.Off) Text(stringResource(R.string.push_unavailable), color = colors.textMuted)
             val instead = status == PushPhoneStatus.On && state.deliveryAppInstead
-            if (instead) Text(stringResource(R.string.push_google_app_installed), color = colors.textMuted,
-                modifier = Modifier.testTag("push_google_app_installed"))
+            // A secondary line, one step below the status text (presentation lead, PR219 J review).
+            if (instead) Text(stringResource(R.string.push_google_app_installed), style = MaterialTheme.typography.bodyMedium,
+                color = colors.textMuted, modifier = Modifier.testTag("push_google_app_installed"))
             if (state.busy) CircularProgressIndicator(Modifier.size(24.dp))
             val showTurnOn = canTurnOn && (instead || status != PushPhoneStatus.On && status != PushPhoneStatus.Waiting)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -141,7 +142,10 @@ internal fun PushPhoneCard(phone: PushPhoneViewModel, session: SessionState, dir
                 TextButton(onClick = {
                     try { context.startActivity(Intent(Intent.ACTION_VIEW, DISTRIBUTOR_GUIDE.toUri())) }
                     catch (_: ActivityNotFoundException) { /* No browser: the explanation above still stands. */ }
-                }, modifier = Modifier.heightIn(min = 48.dp).testTag("push_google_guide")) { Text(stringResource(R.string.push_google_link)) }
+                // The label lines up with the body and sits close to it; the 48dp target stays, and the
+                // dialog's own spacing comes before the buttons (PR219 J review).
+                }, contentPadding = PaddingValues(start = 0.dp, top = 0.dp, end = 12.dp, bottom = 0.dp),
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("push_google_guide")) { Text(stringResource(R.string.push_google_link)) }
             } },
             confirmButton = { TextButton(onClick = { phone.useGoogle(session, direct) }, enabled = !state.busy,
                 modifier = Modifier.testTag("push_use_google")) { Text(stringResource(R.string.push_use_google)) } },
