@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -63,10 +64,9 @@ internal fun PushPhoneCard(phone: PushPhoneViewModel, session: SessionState, dir
     Card(Modifier.fillMaxWidth().testTag("push_status"), shape = MaterialTheme.shapes.large, border = lanternSurfaceBorder()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.push_this_phone), style = MaterialTheme.typography.titleMedium)
-            Text(statusText(status, state, session), style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.testTag("push_status_text"))
+            StatusLine(statusText(status, state, session), attention = needsAttention(status, state), tag = "push_status_text")
             if (!allowed && (status != PushPhoneStatus.Off || state.permissionDenied)) {
-                Text(stringResource(R.string.push_status_blocked), modifier = Modifier.testTag("push_blocked"))
+                StatusLine(stringResource(R.string.push_status_blocked), attention = true, tag = "push_blocked")
                 LanternOutlinedButton(onClick = {
                     context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                         .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
@@ -76,14 +76,18 @@ internal fun PushPhoneCard(phone: PushPhoneViewModel, session: SessionState, dir
             if (state.turnOffUnconfirmed) Text(stringResource(R.string.push_turned_off_local))
             if (!canTurnOn && status == PushPhoneStatus.Off) Text(stringResource(R.string.push_unavailable), color = colors.textMuted)
             if (state.busy) CircularProgressIndicator(Modifier.size(24.dp))
+            val showTurnOn = canTurnOn && status != PushPhoneStatus.On && status != PushPhoneStatus.Waiting
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (canTurnOn && status != PushPhoneStatus.On && status != PushPhoneStatus.Waiting) PrimaryButton(
+                if (showTurnOn) PrimaryButton(
                     onClick = { phone.turnOn(session) }, enabled = ready,
                     modifier = Modifier.heightIn(min = 48.dp).testTag("push_turn_on")) {
                     Text(stringResource(if (status == PushPhoneStatus.Off) R.string.push_turn_on else R.string.push_turn_on_again))
                 }
                 if (status != PushPhoneStatus.Off && status !is PushPhoneStatus.DistributorFailed) TextButton(
                     onClick = { confirmOff = true }, enabled = ready,
+                    // Alone, the label lines up with the status text; the 48dp target stays.
+                    contentPadding = if (showTurnOn) ButtonDefaults.TextButtonContentPadding
+                        else PaddingValues(start = 0.dp, top = 8.dp, end = 12.dp, bottom = 8.dp),
                     modifier = Modifier.heightIn(min = 48.dp).testTag("push_phone_off")) { Text(stringResource(R.string.push_turn_off)) }
             }
             Text(stringResource(R.string.push_lock_screen), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
@@ -144,6 +148,22 @@ internal fun PushPhoneCard(phone: PushPhoneViewModel, session: SessionState, dir
         confirmButton = { TextButton(onClick = { confirmOff = false; phone.turnOff(session) },
             modifier = Modifier.testTag("push_phone_off_confirm")) { Text(stringResource(R.string.push_turn_off)) } },
         dismissButton = { TextButton(onClick = { confirmOff = false }) { Text(stringResource(R.string.cancel)) } })
+}
+
+/** States that need the person's attention carry the decorative warning glyph; the words say it already. */
+private fun needsAttention(status: PushPhoneStatus, state: PushPhoneState) = when (status) {
+    PushPhoneStatus.Off -> state.noDistributor
+    PushPhoneStatus.Waiting, PushPhoneStatus.On -> false
+    else -> true
+}
+
+@Composable
+private fun StatusLine(text: String, attention: Boolean, tag: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (attention) Icon(painterResource(R.drawable.ic_warning), contentDescription = null,
+            Modifier.size(20.dp).testTag("$tag:warning"), tint = ChitChatTheme.colors.warning)
+        Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag(tag))
+    }
 }
 
 @Composable
