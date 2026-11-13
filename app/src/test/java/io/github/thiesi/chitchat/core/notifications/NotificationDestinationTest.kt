@@ -20,8 +20,20 @@ class NotificationDestinationTest {
         val direct = route("/messages.php?user_id=8&peer_name=Not%20the%20identity%20%26%20%3F&message_id=91") as NotificationDestination.Direct
         assertEquals(8L, direct.peerId); assertEquals(91L, direct.messageId)
         assertEquals(8L, (route("/messages.php?user_id=8") as NotificationDestination.Direct).peerId)
-        // The parser does not invent that the browser's separate `with` parameter is a server notification contract.
-        assertNull(route("/messages.php?with=8&message_id=91"))
+    }
+    @Test fun releasedDirectAlertAndMentionLinksRouteToThePerson() {
+        // ChitChat v3.9.0 PrivacyNotificationService: DM alerts use `with`, DM mentions carry user_id and `with`.
+        val alert = route("/messages.php?with=8") as NotificationDestination.Direct
+        assertEquals(8L, alert.peerId); assertNull(alert.messageId)
+        val mention = route("/messages.php?user_id=8&peer_name=Rowan&message_id=91&with=8") as NotificationDestination.Direct
+        assertEquals(8L, mention.peerId); assertEquals(91L, mention.messageId)
+        assertEquals(91L, (route("/messages.php?with=8&message_id=91") as NotificationDestination.Direct).messageId)
+        assertSame("A closed or deleted sender opens the Direct inbox", NotificationDestination.DirectInbox, route("/messages.php"))
+    }
+    @Test fun disagreeingOrMalformedPeopleNeverRoute() {
+        listOf("/messages.php?user_id=8&with=9", "/messages.php?user_id=8&peer_name=Rowan&message_id=91&with=9",
+            "/messages.php?with=0", "/messages.php?with=", "/messages.php?with=8&with=8", "/messages.php?with=-8",
+            "/messages.php?with=8&room_id=42", "/messages.php?message_id=91", "/messages.php?").forEach { assertNull(it, route(it)) }
     }
     @Test fun accountAndFutureGuestRegistrationAreHintsNotAuthorization() {
         assertSame(NotificationDestination.Account, route("/account.php"))

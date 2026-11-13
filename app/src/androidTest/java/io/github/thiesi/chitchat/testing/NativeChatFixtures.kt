@@ -247,11 +247,13 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
             notice(55, "/messages.php?user_id=8"), notice(54, "/?room_id=43&ping_id=80"),
             notice(53, "/?room_id=43&ping_id=999"), notice(52, "/account.php"), notice(51, "https://foreign.example.test/account.php"),
             notice(50, "/?register=1"), notice(49, "/messages.php?user_id=7"), notice(48, "/unknown.php"))
-        private fun notice(id: Long, link: String) = AccountNotification(id, "mentioned", "Notice $id", "Private fixture notice $id",
+        /** Opt-in older rows for one test; empty by default so other journeys see the same center. */
+        @Volatile var extraRows = emptyList<AccountNotification>()
+        fun notice(id: Long, link: String) = AccountNotification(id, "mentioned", "Notice $id", "Private fixture notice $id",
             emptyList(), link, false, null, timestamp)
         override suspend fun page(expected: io.github.thiesi.chitchat.core.session.SessionState, beforeId: Long?, limit: Int): NotificationPage {
             check(expected.noticeIdentity() == session.value.noticeIdentity())
-            val visible = if (expected.user?.id == 7L) rows else emptyList()
+            val visible = if (expected.user?.id == 7L) rows + extraRows else emptyList()
             val page = visible.filter { beforeId == null || it.id < beforeId }.take(limit).map {
                 if (it.id in readIds) AccountNotification(it.id, it.kind, it.title, it.message, it.details, it.link, true, timestamp, it.createdAt) else it
             }

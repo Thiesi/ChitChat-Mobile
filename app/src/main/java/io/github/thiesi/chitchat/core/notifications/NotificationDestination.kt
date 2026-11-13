@@ -8,6 +8,8 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 sealed interface NotificationDestination {
     class Room(val roomId: Long, val messageId: Long? = null, val pingId: Long? = null) : NotificationDestination
     class Direct(val peerId: Long, val messageId: Long? = null) : NotificationDestination
+    /** Bare `/messages.php`: a DM alert whose sender is closed or deleted. */
+    data object DirectInbox : NotificationDestination
     data object Account : NotificationDestination
     data object Registration : NotificationDestination
 }
@@ -33,9 +35,14 @@ fun notificationDestination(server: ServerAddress, link: String?): NotificationD
     return when (path) {
         "/account.php" -> NotificationDestination.Account.takeIf { keys.isEmpty() }
         "/messages.php" -> {
-            if (keys.any { it !in setOf("user_id", "peer_name", "message_id") } ||
+            if (keys.isEmpty()) return NotificationDestination.DirectInbox
+            if (keys.any { it !in setOf("user_id", "peer_name", "message_id", "with") } ||
                 ("peer_name" in keys && url.queryParameter("peer_name").isNullOrEmpty())) return null
-            val peer = positive("user_id") ?: return null
+            // Released #150 links: DM alerts carry `with`; DM mentions carry both, which must name the same person.
+            val user = if ("user_id" in keys) positive("user_id") ?: return null else null
+            val with = if ("with" in keys) positive("with") ?: return null else null
+            if (user != null && with != null && user != with) return null
+            val peer = user ?: with ?: return null
             val message = if ("message_id" in keys) positive("message_id") ?: return null else null
             NotificationDestination.Direct(peer, message)
         }
