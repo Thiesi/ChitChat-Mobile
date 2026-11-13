@@ -40,8 +40,8 @@ class PushAlertTest {
         assertEquals(PushChannels.DIRECT, PushKind.of("direct_message_received").channel)
         for (other in listOf("account_security", "room_invite", "brand_new_kind", null))
             assertEquals("Unknown or missing kinds never get a high-importance channel", PushChannels.ACCOUNT, PushKind.of(other).channel)
-        val textOnly = PushPayload.parse("""{"title":"Rowan mentioned you","body":"direct message"}""".encodeToByteArray())!!
-        assertEquals(PushKind.OTHER, pushAlert(record.copy(binding = null), record.instance, textOnly)!!.kind)
+        val textOnly = PushPayload.parse("""{"title":"Rowan mentioned you","body":"direct message","binding":"$binding"}""".encodeToByteArray())!!
+        assertEquals(PushKind.OTHER, pushAlert(record, record.instance, textOnly)!!.kind)
     }
 
     @Test fun onlyTheRecordsOwnInstanceAndExactBindingPost() {
@@ -55,6 +55,7 @@ class PushAlertTest {
         assertNull("Missing binding once this phone holds one", pushAlert(record, record.instance, PushPayload.parse(payload(bind = null))))
         assertNull("Unknown binding", pushAlert(record, record.instance, PushPayload.parse(payload(bind = "b2".repeat(32)))))
         assertNull("A binding this phone never recorded", pushAlert(record.copy(binding = null), record.instance, PushPayload.parse(payload())))
+        assertNull("No binding on either side is not a match", pushAlert(record.copy(binding = null), record.instance, PushPayload.parse(payload(bind = null))))
     }
 
     @Test fun recentEventsStopRepeatsWithinABoundAndClear() {

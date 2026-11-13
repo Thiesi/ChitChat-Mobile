@@ -91,7 +91,8 @@ class PushAlert(val payload: PushPayload, val kind: PushKind, val tag: String?, 
  */
 fun pushAlert(record: PushRecord?, instance: String, payload: PushPayload?): PushAlert? {
     if (record == null || record.instance != instance || payload == null) return null
-    if (record.binding != payload.binding) return null
+    // Both null is not a match: a record without an adopted binding shows nothing.
+    if (record.binding == null || record.binding != payload.binding) return null
     val scope = "${record.origin}|${record.userId}"
     return PushAlert(payload, PushKind.of(payload.kind), payload.eventId?.let { "$scope|$it" }, "chitchat:$scope")
 }
