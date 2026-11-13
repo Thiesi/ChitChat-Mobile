@@ -104,6 +104,8 @@ The onboarding spec's copy table already covers `welcome_title`, `welcome_body`,
 | `conversation_membership` | Join this room from its room details before posting. | Join this room to post. | — |
 | `conversation_guest_readonly` | Guests may read this room but cannot post. | Guests can read this room but not post. | — |
 | `conversation_unavailable` | This room or its history is unavailable, or your permission changed. Refresh to check access. | This room isn't available to you right now. Refresh to check. | — |
+| `conversation_send_room_unavailable` | (new) | **This room isn't available any more.** Your message wasn't sent. (`404 room_not_found` on a room send, ChitChat #326; a definite refusal with no retry, and the draft stays) | — |
+| `attachment_room_unavailable` | (new) | **This room isn't available any more.** Your file wasn't sent. (`404 room_not_found` on a room attachment upload, ChitChat #326; the caption and file stay) | — |
 | `conversation_read_failed` | Read acknowledgement could not be confirmed. Retry it or refresh; no message will be resent. | Couldn't mark this room as read. Try again; nothing will be resent. | — |
 | `conversation_retry_read` | Retry read acknowledgement | Mark as read again | — |
 | `conversation_anchor_unavailable` | Your previous position was removed from retained history. Showing the nearest available message. | That message is no longer kept. Showing the closest one. | — |
@@ -227,3 +229,10 @@ technical-lead sign-off, and the affected tests are listed.
   that ships the feature. `conversation_manual` and `notifications_link_pending` are still
   referenced in code; revisit their copy when the status and navigation slices touch those
   screens.
+- **S2a (gap 1 honesty pass):**
+  - `preview_limit` and `auth_preview_limit` become one short line naming only what's actually missing
+    today: downloading, previewing and sharing files; profile pictures; guest invite links.
+  - `dm_no_push` no longer claims there's no background push, since push shipped in M6c–M6e. It now says
+    direct-message alerts are optional and can be chosen in Account → Notifications. It shows always, because the DM screen doesn't know without a new request whether the server offers the preference (P-127).
+
+  Wording approved by the presentation lead (PR224 J review).

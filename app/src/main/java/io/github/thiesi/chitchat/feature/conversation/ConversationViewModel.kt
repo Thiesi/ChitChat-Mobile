@@ -1418,7 +1418,10 @@ class ConversationViewModel internal constructor(private val operations: Convers
                 if (isCurrent(expected, attempt, roomId)) {
                     if (failure.status in setOf(403, 404) && failure.code != "csrf_failed" &&
                         (!postInFlight || failure.code in setOf("room_forbidden", "room_not_found")))
-                        clearUnauthorized(failure, unknownWrite = false) // A definitive rejection of this request.
+                        // A definitive rejection of this request. A send refused with room_not_found says so
+                        // in its own words (ChitChat #326); the draft stays as it is.
+                        clearUnauthorized(if (sending && failure.code == "room_not_found")
+                            ApiFailure(failure.kind, failure.status, ROOM_UNAVAILABLE_ON_SEND) else failure, unknownWrite = false)
                     else mutable.value = mutable.value.copy(error = failure, stale = true,
                         uncertainSend = mutable.value.uncertainSend || (postInFlight && failure.ambiguous()),
                         reconciledAfterUncertain = false)
@@ -1489,3 +1492,6 @@ class ConversationViewModel internal constructor(private val operations: Convers
         }
     }
 }
+
+/** Local marker for a room send refused with 404 `room_not_found`; never a server code. */
+internal const val ROOM_UNAVAILABLE_ON_SEND = "room_not_found_on_send"

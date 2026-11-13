@@ -19,6 +19,8 @@ class AttachmentSendFailureTest {
         assertEquals(90L, (attachmentSendFailure(http(429, "rate_limited", retry = 90), false) as AttachmentSendFailure.RateLimited).retryAfterSeconds)
         assertNull((attachmentSendFailure(http(429, "rate_limited"), false) as AttachmentSendFailure.RateLimited).retryAfterSeconds)
         assertSame(AttachmentSendFailure.Membership, attachmentSendFailure(http(403, "membership_required"), false))
+        assertSame("404 room_not_found is its own definite refusal (ChitChat #326)",
+            AttachmentSendFailure.RoomUnavailable, attachmentSendFailure(http(404, "room_not_found"), false))
         assertSame(AttachmentSendFailure.Rejected, attachmentSendFailure(http(400, "validation_error"), false))
         assertSame(AttachmentSendFailure.Unavailable, attachmentSendFailure(http(403, "direct_message_unavailable"), false))
     }

@@ -70,6 +70,7 @@ internal fun attachmentSendFailure(error: ApiFailure?, policyBlocked: Boolean): 
     error.code == "attachment_empty" -> AttachmentSendFailure.Empty
     error.status == 429 -> AttachmentSendFailure.RateLimited(error.retryAfterSeconds)
     error.code == "membership_required" -> AttachmentSendFailure.Membership
+    error.status == 404 && error.code == "room_not_found" -> AttachmentSendFailure.RoomUnavailable
     error.code == "direct_message_unavailable" -> AttachmentSendFailure.Unavailable
     error.status == null && error.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.TLS) -> AttachmentSendFailure.NotSent
     else -> AttachmentSendFailure.Rejected

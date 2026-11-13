@@ -250,6 +250,15 @@ class ConversationViewModelTest {
         assertEquals(1, fake.sends)
     }
 
+    @Test fun roomNotFoundOnSendIsADefiniteRefusalThatKeepsTheDraft() = runTest(dispatcher) {
+        open(); fake.sendFailure = ApiFailure(FailureKind.HTTP, 404, "room_not_found")
+        model.updateDraft("Unsent fixture"); model.send(); advanceUntilIdle()
+        assertEquals(ROOM_UNAVAILABLE_ON_SEND, model.state.value.error?.code)
+        assertFalse("Definite, never unknown", model.state.value.uncertainSend)
+        assertEquals("The draft stays", "Unsent fixture", model.state.value.draft)
+        assertEquals("Never replayed", 1, fake.sends)
+    }
+
     private class Conversations : ConversationOperations {
         override val session = MutableStateFlow(SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED,
             user = SessionUser(7, "Alice", listOf("member"), 1, false)))
