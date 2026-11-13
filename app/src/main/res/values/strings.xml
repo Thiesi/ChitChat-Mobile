@@ -490,7 +490,7 @@
     <string name="push_status_on">On, delivered by %1$s</string>
     <string name="push_status_on_unnamed">On</string>
     <string name="push_status_needs_setup">Needs setup: notifications for this phone may have stopped.</string>
-    <string name="push_status_unconfirmed">Needs setup: your server’s answer didn’t arrive, so it isn’t known whether this phone is registered.</string>
+    <string name="push_status_unconfirmed">Needs setup: not sure this phone is registered. Your server’s answer didn’t arrive.</string>
     <string name="push_status_no_distributor">Needs setup: no delivery app found</string>
     <string name="push_status_blocked">Blocked in Android settings</string>
     <string name="push_open_settings">Open Android settings</string>
@@ -508,7 +508,7 @@
     <string name="push_continue">Continue</string>
     <string name="push_close">Close</string>
     <string name="push_start_failed">Couldn’t start turning on notifications. Try again.</string>
-    <string name="push_turned_off_local">Turned off on this phone. Your server didn’t confirm removing it, so it may still be listed under Devices. You can remove it there.</string>
+    <string name="push_turned_off_local">Turned off on this phone. Your server didn’t confirm the removal, so this phone may still be listed under Devices. You can remove it there.</string>
     <string name="push_lock_screen">On the lock screen, ChitChat shows only that something arrived, unless your phone is set to show all notification content.</string>
     <string name="push_explain_title">Turn on notifications</string>
     <string name="push_explain_body">ChitChat doesn’t run in the background. A delivery app you choose wakes it when something arrives, which saves battery.</string>

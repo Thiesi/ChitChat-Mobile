@@ -17,7 +17,7 @@ than that status:
 | On | "On, delivered by {distributor}" (the distributor's app label, read once when the screen opens) |
 | Needs setup | "Needs setup: notifications for this phone may have stopped." |
 | Refused | The fixed refusal copy for conflict, the 20-device limit, provider unavailable, destination (naming the installation) and 429 |
-| Unconfirmed | "Needs setup: your server's answer didn't arrive, so it isn't known whether this phone is registered." |
+| Unconfirmed | "Needs setup: not sure this phone is registered. Your server's answer didn't arrive." |
 | Distributor failed | Network, action required (open the delivery app) or other |
 
 "Blocked in Android settings", with a button to the app's notification settings, shows whenever this
@@ -56,7 +56,7 @@ the new app starts with fresh keys and the old one can't keep a live registratio
   unregisters from the distributor and cancels this app's notifications **locally first**. It then sends
   one revoke for the record's server registration, only for the same signed-in account and generation.
   If the server doesn't confirm, the card reads: "Turned off on this phone. Your server didn't confirm
-  removing it, so it may still be listed under Devices. You can remove it there." The next turn-on uses
+  the removal, so this phone may still be listed under Devices. You can remove it there." The next turn-on uses
   fresh keys without `replaces_id`, so it never replaces that row. The signed-in session continues, so
   Turn on works again at once.
 - **The "This phone" device row's Turn off** revokes through the existing settings model (its
