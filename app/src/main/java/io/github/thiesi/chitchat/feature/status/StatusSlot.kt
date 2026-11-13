@@ -81,7 +81,8 @@ internal fun StatusSlot(
     val visible = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.STARTED)
     val phase = realtime?.phase ?: RealtimePhase.STOPPED
     val reconnecting = phase == RealtimePhase.CONNECTING || phase == RealtimePhase.RECONNECTING
-    var reconnectingSince by remember { mutableStateOf<Long?>(null) }
+    // Saveable so a configuration change keeps the row-8 count (uptime is device-wide); the background still clears it.
+    var reconnectingSince by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Long?>(null) }
     var monotonicNow by remember { mutableLongStateOf(SystemClock.uptimeMillis()) }
     var disconnected by remember { mutableStateOf(false) }
     var recovered by remember { mutableStateOf(false) }
@@ -90,18 +91,22 @@ internal fun StatusSlot(
     // foreground drops the count, so nothing carries over.
     LaunchedEffect(reconnecting, visible) {
         if (!reconnecting || !visible) { reconnectingSince = null; return@LaunchedEffect }
-        val since = SystemClock.uptimeMillis().also { reconnectingSince = it; monotonicNow = it }
-        delay(RECONNECT_GRACE_MILLIS)
+        val now = SystemClock.uptimeMillis()
+        val since = reconnectingSince ?: now.also { reconnectingSince = it }
+        monotonicNow = now
+        delay((since + RECONNECT_GRACE_MILLIS - now).coerceAtLeast(0))
         monotonicNow = since + RECONNECT_GRACE_MILLIS
     }
     // Row 9: the first LIVE after a disconnection notice shows Back online for about two seconds. Not keyed
     // on `disconnected`: clearing it here must not cancel this effect's own dismissal (PR221 review).
+    // A flap out of LIVE during the window cancels this effect; finally clears it (PR221 second review).
     LaunchedEffect(phase, visible) {
-        if (!visible) { recovered = false; return@LaunchedEffect }
-        if (phase == RealtimePhase.LIVE && disconnected) {
+        // A recovery that happened while away isn't announced on return.
+        if (!visible) disconnected = false
+        if (!visible || phase != RealtimePhase.LIVE) { recovered = false; return@LaunchedEffect }
+        if (disconnected) {
             recovered = true; disconnected = false
-            delay(BACK_ONLINE_MILLIS)
-            recovered = false
+            try { delay(BACK_ONLINE_MILLIS) } finally { recovered = false }
         }
     }
 
@@ -134,7 +139,7 @@ internal fun StatusSlot(
         stale = stale,
     )
     val notice = resolveStatus(inputs)
-    LaunchedEffect(notice) { if (notice.isDisconnection()) disconnected = true }
+    LaunchedEffect(notice, visible) { if (visible && notice.isDisconnection()) disconnected = true }
     if (notice != null && session.phase == SessionPhase.AUTHENTICATED) key(notice) {
         StatusNoticeView(notice, session, onRetry, onRefresh, onStorageAction, { clock }, modifier)
     }

@@ -123,6 +123,17 @@ class StatusSlotTest {
         realtime = realtime.copy(phase = RealtimePhase.LIVE)
         compose.mainClock.advanceTimeBy(100)
         compose.onNodeWithText(text(R.string.status_back_online), substring = true).assertDoesNotExist()
+        // A flap during the Back online window never leaves it stuck on.
+        realtime = realtime.copy(phase = RealtimePhase.OFFLINE)
+        compose.mainClock.advanceTimeBy(100)
+        realtime = realtime.copy(phase = RealtimePhase.LIVE)
+        compose.mainClock.advanceTimeBy(500)
+        compose.onNodeWithText(text(R.string.status_back_online), substring = true).assertExists()
+        realtime = realtime.copy(phase = RealtimePhase.RECONNECTING)
+        compose.mainClock.advanceTimeBy(500)
+        realtime = realtime.copy(phase = RealtimePhase.LIVE)
+        compose.mainClock.advanceTimeBy(3_000)
+        compose.onNodeWithTag("status_slot").assertDoesNotExist()
     }
 
     @Test fun anAnnouncementIsACardReadAndDismissedSeparatelyFromStatus() {
