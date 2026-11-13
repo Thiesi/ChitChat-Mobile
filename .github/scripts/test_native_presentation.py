@@ -106,6 +106,35 @@ class PresentationGateTests(unittest.TestCase):
         self.assertEqual(7,runner.main());self.assert_once()
         self.assertNotIn("private-canary",self.stderr.getvalue())
 
+    def push_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-push-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_push_captures_are_copied_and_keep_the_original_status(self):
+        self.results(7)
+        files = [Path("push-light-off.png"), Path("push-dark-explain.png")]
+        self.push_files(files)
+        self.assertEqual(7, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.PUSH_DESTINATION / path.name)
+        self.assertEqual(3, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_push_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"push-light-on-{n}.png") for n in range(13)],
+            [Path("a/push-dark-on.png"), Path("b/push-dark-on.png")], [Path("other-app.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.push_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+        self.assertEqual(3, self.run.call_count)
+
+    def test_push_copy_error_never_replaces_the_result_or_logs_details(self):
+        self.results(7); self.push_files([Path("push-dark-refused.png")])
+        def copy(source, destination):
+            if destination.parent == runner.PUSH_DESTINATION: raise OSError("private-canary")
+        self.copy.side_effect = copy
+        self.assertEqual(7, runner.main()); self.assert_once()
+        self.assertNotIn("private-canary", self.stderr.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
