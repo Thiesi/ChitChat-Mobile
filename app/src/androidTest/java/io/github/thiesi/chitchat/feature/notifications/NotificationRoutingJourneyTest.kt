@@ -163,6 +163,19 @@ class NotificationRoutingJourneyTest {
         compose.runOnIdle { assertTrue(direct.state.value.uncertainSend); assertFalse(direct.state.value.checkedUnknown)
             assertEquals(1, api.directs.sends); assertEquals(0, api.notices.posts) }
     }
+    @Test fun releasedDirectAlertMentionAndClosedSenderLinksRoute() {
+        // ChitChat v3.9.0 links: a DM alert (`with`), a DM mention (user_id plus `with`) and a closed sender (bare page).
+        api.notices.extraRows = listOf(api.notices.notice(47, "/messages.php?with=8"),
+            api.notices.notice(46, "/messages.php?user_id=9&peer_name=Peer&message_id=20&with=9"),
+            api.notices.notice(45, "/messages.php"), api.notices.notice(44, "/messages.php?user_id=8&with=9"))
+        root()
+        at("notification:44"); compose.onNodeWithTag("notification_view:44").assertDoesNotExist()
+        view(47); compose.waitUntil(5_000) { direct.state.value.peerId == 8L && direct.state.value.loaded && !direct.state.value.busy }
+        back(); view(46); directTarget(20)
+        compose.runOnIdle { assertEquals(9L, direct.state.value.peerId) }
+        back(); view(45); compose.onNodeWithTag("dm_inbox").assertExists()
+        compose.runOnIdle { assertEquals(0, api.notices.posts) }
+    }
     @Test fun missingAndDeniedTargetsStayInTheCenterAndRetryIsAnExplicitFreshLookup() {
         root(); compose.runOnIdle { api.lookups.found = false }; view(60)
         dialog(R.string.message_target_unavailable).assertIsDisplayed()

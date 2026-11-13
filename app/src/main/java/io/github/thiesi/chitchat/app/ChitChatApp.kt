@@ -464,6 +464,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                                     is NotificationDestination.Direct -> if (link.messageId != null)
                                                         messageTargets.load(displayedSession, MessageTarget.DirectMessage(link.peerId, link.messageId), destination.id)
                                                         else openDirect(link.peerId)
+                                                    NotificationDestination.DirectInbox -> openDirect(null)
                                                     NotificationDestination.Account -> notificationAccountRoute(displayedSession)?.let { route ->
                                                         focus.clearFocus(); nav.navigate(route) { launchSingleTop = true }
                                                     }
