@@ -197,6 +197,9 @@ change with them.
 - **The edited-retention sentence** stays reachable (message details beside `author_retention`),
   and the tests that assert it move with it.
 
+**Sign-off (technical lead, 2026-11-13, on PR #225):** the `dm_read_policy`, `dm_read_failed`
+and `dm_additional_read` rows (item 12), applied in the transcript/lists slice with the other rows.
+
 
 
 These carry contract meaning. The proposals keep the meaning and only change voice. Each needs
