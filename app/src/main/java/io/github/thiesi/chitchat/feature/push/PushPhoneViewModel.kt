@@ -27,6 +27,10 @@ sealed interface TurnOnStep {
     class Choose(val distributors: List<PushDistributor>, val current: String?) : TurnOnStep {
         override fun toString() = "TurnOnStep.Choose"
     }
+    /** No delivery app is installed, but Google delivery is available. Never automatic: the person chooses it. */
+    class UseGoogle(val google: PushDistributor) : TurnOnStep {
+        override fun toString() = "TurnOnStep.UseGoogle"
+    }
     data object NoDistributor : TurnOnStep
 }
 
@@ -42,6 +46,8 @@ data class PushPhoneState(
     val startFailed: Boolean = false,
     /** Turned off here, but the server's removal of this phone wasn't confirmed. */
     val turnOffUnconfirmed: Boolean = false,
+    /** This phone uses Google delivery while a delivery app is installed now: offer Turn on again, never switch. */
+    val deliveryAppInstead: Boolean = false,
 ) {
     override fun toString() = "PushPhoneState"
 }
@@ -72,12 +78,16 @@ class PushPhoneViewModel(
         return true
     }
 
-    /** On screen start: which distributor this phone uses, read once rather than on every frame. */
+    /** On screen start and resume: which distributor this phone uses, read then rather than on every frame. */
     fun open(session: SessionState) {
         if (!bind(session)) return
         viewModelScope.launch {
-            val label = withContext(io) { currentLabel() }
-            mutable.value = mutable.value.copy(distributor = label)
+            val (label, instead) = withContext(io) {
+                val current = distributors.current()
+                val google = distributors.google()
+                currentLabel() to (current != null && current == google?.packageName && distributors.installed().isNotEmpty())
+            }
+            mutable.value = mutable.value.copy(distributor = label, deliveryAppInstead = instead)
         }
     }
 
@@ -98,7 +108,11 @@ class PushPhoneViewModel(
         viewModelScope.launch {
             val installed = withContext(io) { distributors.installed() }
             when (installed.size) {
-                0 -> mutable.value = mutable.value.copy(busy = false, step = TurnOnStep.NoDistributor, noDistributor = true)
+                0 -> {
+                    val google = withContext(io) { distributors.google() }
+                    mutable.value = if (google != null) mutable.value.copy(busy = false, step = TurnOnStep.UseGoogle(google))
+                        else mutable.value.copy(busy = false, step = TurnOnStep.NoDistributor, noDistributor = true)
+                }
                 1 -> start(session, installed.single(), direct)
                 else -> mutable.value = mutable.value.copy(busy = false,
                     step = TurnOnStep.Choose(installed, withContext(io) { distributors.current() }))
@@ -111,6 +125,14 @@ class PushPhoneViewModel(
         if (!bind(session) || mutable.value.busy || step.distributors.none { it === distributor }) return
         mutable.value = mutable.value.copy(busy = true)
         viewModelScope.launch { start(session, distributor, direct) }
+    }
+
+    /** "Use Google" in the no-delivery-app dialog. */
+    fun useGoogle(session: SessionState, direct: Boolean) {
+        val step = mutable.value.step as? TurnOnStep.UseGoogle ?: return
+        if (!bind(session) || mutable.value.busy) return
+        mutable.value = mutable.value.copy(busy = true)
+        viewModelScope.launch { start(session, step.google, direct) }
     }
 
     private suspend fun start(session: SessionState, distributor: PushDistributor, direct: Boolean) {
@@ -126,7 +148,7 @@ class PushPhoneViewModel(
             phone.start(session)
         }
         if (owner == identity) mutable.value = mutable.value.copy(busy = false, startFailed = !started,
-            turnOffUnconfirmed = !revoked, distributor = distributor.label)
+            turnOffUnconfirmed = !revoked, distributor = distributor.label, deliveryAppInstead = false)
     }
 
     fun turnOff(session: SessionState) {
@@ -153,8 +175,9 @@ class PushPhoneViewModel(
         if (!mutable.value.busy) mutable.value = mutable.value.copy(step = TurnOnStep.None)
     }
 
+    // Someone already on Google keeps it after installing a delivery app; their status still names it.
     private fun currentLabel(): String? = distributors.current()?.let { current ->
-        distributors.installed().firstOrNull { it.packageName == current }?.label
+        (distributors.installed() + listOfNotNull(distributors.google())).firstOrNull { it.packageName == current }?.label
     }
 
     companion object {

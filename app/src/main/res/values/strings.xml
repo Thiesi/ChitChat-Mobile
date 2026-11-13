@@ -516,6 +516,12 @@
     <string name="push_none_title">No delivery app found</string>
     <string name="push_none_body">ChitChat needs a UnifiedPush delivery app to receive notifications. Install one, then come back and turn on notifications.</string>
     <string name="push_none_link">How to choose one</string>
+    <!-- P4: Google delivery, offered only when no delivery app is installed (privacy policy). Copy: presentation lead. -->
+    <string name="push_distributor_google">Google</string>
+    <string name="push_google_body">ChitChat can use Google’s Firebase Cloud Messaging instead. Your notifications stay encrypted: Google can’t read them, but it sees when this phone gets one.</string>
+    <string name="push_use_google">Use Google</string>
+    <string name="push_google_link">How to choose a delivery app</string>
+    <string name="push_google_app_installed">A delivery app is installed now. Turn on again to use it instead of Google.</string>
     <string name="push_channel_mentions">Mentions and pings</string>
     <string name="push_channel_account">Account and server notices</string>
     <string name="push_channel_direct">Direct messages</string>

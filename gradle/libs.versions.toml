@@ -18,10 +18,17 @@ serialization = "1.10.0"
 # runtime dependency, pinned here so the set is reviewed together.
 unifiedpush-connector = "3.3.5"
 tink = "1.23.0"
+# Push P4 (technical lead approval and owner licence decision, 2026-11-13): the embedded FCM
+# distributor, an unmodified separate AAR. No Firebase SDK or com.google.* artifact; its only
+# dependencies are kotlin-stdlib and kotlinx-coroutines-core. Licence conflict: the 3.1.0 POM says
+# Apache-2.0, the LICENSE at tag 3.1.0 is LGPL-2.1; we comply with LGPL-2.1 (docs/third-party-licenses.md).
+# Move to the first release tagged after 2026-11-04 (Apache-2.0) as a normal update.
+unifiedpush-embedded-fcm = "3.1.0"
 
 [libraries]
 unifiedpush-connector = { module = "org.unifiedpush.android:connector", version.ref = "unifiedpush-connector" }
 tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
+unifiedpush-embedded-fcm = { module = "org.unifiedpush.android:embedded-fcm-distributor", version.ref = "unifiedpush-embedded-fcm" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 compose-ui = { module = "androidx.compose.ui:ui" }
 compose-tooling = { module = "androidx.compose.ui:ui-tooling" }

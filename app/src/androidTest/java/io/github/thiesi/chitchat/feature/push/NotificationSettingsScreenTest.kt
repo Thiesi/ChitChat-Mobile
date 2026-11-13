@@ -149,6 +149,57 @@ class NotificationSettingsScreenTest {
         compose.onNodeWithTag("push_turn_on").performClick()
         capture(compose.onNode(isDialog()), "push-$label-explain")
         compose.onNodeWithText(text(R.string.cancel)).performClick()
+        // P4: no delivery app but Play services, then on Google after a delivery app arrives.
+        distributors.installed = emptyList(); distributors.google = google
+        compose.onNodeWithTag("push_turn_on").performClick()
+        compose.onNodeWithTag("push_explain_continue").performClick()
+        compose.waitUntil(5_000) { phone.state.value.step is TurnOnStep.UseGoogle }
+        compose.onNodeWithText(text(R.string.push_google_body)).assertExists()
+        capture(compose.onNode(isDialog()), "push-$label-google")
+        compose.onNodeWithText(text(R.string.cancel)).performClick()
+        onGoogleWithADeliveryApp()
+        capture(compose.onNodeWithTag("push_status"), "push-$label-google-instead")
+    }
+
+    private val google = PushDistributor("de.networkxxiii.chitchat", "Google")
+
+    private fun onGoogleWithADeliveryApp() {
+        distributors.google = google; distributors.current = google.packageName
+        distributors.installed = listOf(PushDistributor("org.example.delivery", "Fixture Delivery"))
+        phoneFake.status.value = PushPhoneStatus.On
+        phone.open(ops.session.value)
+        compose.waitUntil(5_000) { phone.state.value.deliveryAppInstead }
+        compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext
+            .getString(R.string.push_status_on, "Google")).assertExists()
+        compose.onNodeWithTag("push_google_app_installed").assertExists()
+        compose.onNodeWithText(text(R.string.push_turn_on_again)).assertExists()
+    }
+
+    @Test fun googleIsOfferedOnlyWithoutADeliveryAppAndStartsOnlyOnUseGoogle() {
+        grantNotifications()
+        distributors.google = google
+        show(direct = null)
+        compose.onNodeWithTag("push_turn_on").performClick()
+        compose.onNodeWithTag("push_explain_continue").performClick()
+        compose.waitUntil(5_000) { phone.state.value.step is TurnOnStep.UseGoogle }
+        compose.onNodeWithTag("push_google").assertExists()
+        compose.onNodeWithTag("push_google_guide").assertExists()
+        assertEquals("Never automatic", 0, phoneFake.starts)
+        compose.onNodeWithTag("push_use_google").performClick()
+        compose.waitUntil(5_000) { phoneFake.starts == 1 }
+        assertEquals(listOf(google.packageName), distributors.chosen)
+    }
+
+    @Test fun onGoogleALaterDeliveryAppIsOfferedAndTurnOnAgainSwitchesThroughTurnOff() {
+        grantNotifications()
+        show(direct = null)
+        onGoogleWithADeliveryApp()
+        assertEquals("Nothing switched by itself", 0, phoneFake.starts + phoneFake.turnOffs)
+        compose.onNodeWithTag("push_turn_on").performClick()
+        compose.onNodeWithTag("push_explain_continue").performClick()
+        compose.waitUntil(5_000) { phoneFake.starts == 1 }
+        assertEquals("The Google registration is turned off first", 1, phoneFake.turnOffs)
+        assertEquals(listOf("org.example.delivery"), distributors.chosen)
     }
 
     /** Granted up front, so no test shows the system prompt (that prompt is manual acceptance) and captures are stable. */
@@ -184,8 +235,12 @@ class NotificationSettingsScreenTest {
 
     private class FakeDistributors : PushDistributors {
         @Volatile var installed = emptyList<PushDistributor>()
+        @Volatile var google: PushDistributor? = null
+        @Volatile var current: String? = null
+        val chosen = java.util.concurrent.CopyOnWriteArrayList<String>()
         override fun installed() = installed
-        override fun current(): String? = installed.firstOrNull()?.packageName
-        override fun choose(packageName: String) = Unit
+        override fun google() = google
+        override fun current(): String? = current ?: installed.firstOrNull()?.packageName
+        override fun choose(packageName: String) { chosen += packageName }
     }
 }

@@ -14,6 +14,8 @@ No Firebase Console project, Android Firebase registration, `google-services.jso
 
 ## Optional embedded FCM distributor
 
+Implemented in [M6e](milestones/M6e-embedded-fcm.md) with 3.1.0, offered only when no UnifiedPush delivery app is installed (privacy policy). Device acceptance is pending.
+
 When no external distributor is usable, the app may offer UnifiedPush's embedded FCM distributor on devices with compatible Google Play Services. The user can choose the external-distributor path instead. The embedded path obtains Web Push endpoints using the ChitChat installation's public VAPID key; ChitChat sends encrypted Web Push directly to those endpoints.
 
 The investigated version is 3.1.0; review a maintained compatible version during implementation. Its Play Services registration IPC is not the supported Firebase Messaging SDK contract, so continued compatibility is a maintenance risk requiring real-device testing. No Firebase project configuration file is consumed. See [official guide](https://unifiedpush.org/kdoc/embedded_fcm_distributor/) and the [accepted decision](push-architecture.md).
