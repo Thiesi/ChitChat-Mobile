@@ -58,10 +58,11 @@ Highest first. Only the highest applicable notice shows.
 - `{host}` is the installation's display name, `application.name` from the session
   (ChitChat#149, merged), else the host.
 - **Row 2 interim copy.** Until S4a: "**No connection.** You can still read what's here.
-  Sending needs a connection." (presentation lead, S1a J review, 2026-11-13). **From S4a**,
-  while a draft waits only in its open conversation: "**No connection.** You can read and
-  write. Messages you send will go out when you're back, if you stay in the conversation."
-  The table's line ("…while ChitChat is open") returns only if app-wide waiting (a possible
+  Sending needs a connection." (presentation lead, S1a J review, 2026-11-13). **From S4a**
+  (rooms only): "**No connection.** You can read and write. In a room, messages you send go
+  out when you're back, if you stay in the room." **From S4b** (rooms and direct messages):
+  "**No connection.** You can read and write. Messages you send will go out when you're back,
+  if you stay in the conversation." The table's line ("…while ChitChat is open") returns only if app-wide waiting (a possible
   S4c) ships (presentation lead, 2026-11-13).
 - `LIVE` alone shows **nothing**. The old "Session events connected" line is removed.
   Per-screen syncing and stale lines (row 11) carry the "history may still be synchronizing"
@@ -153,12 +154,14 @@ At most one card shows, chosen as today (the first matching broadcast).
 
 ### Send when back online (approved behavior, own slice)
 
-> **Interim scope, S4a (technical lead, 2026-11-13):** a draft waits only while its
-> conversation is on screen. Leaving the conversation, backgrounding, signing out or switching
+> **Interim scope, S4a/S4b (technical lead, 2026-11-13):** S4a covers rooms, S4b adds direct
+> messages. Only clean text or reply drafts wait; attachments never do. A draft waits only
+> while its conversation is on screen. Leaving the conversation, backgrounding, signing out or switching
 > account drops the waiting flag, and the text stays an ordinary draft. Sending while the
 > person is elsewhere in the app, and the list and drafts-manager "Waiting to send" labels,
 > wait for a possible S4c. Interim copy: the composer notice reads "**Will send when you're
-> back online, if you stay in this conversation.**" with **Cancel**; the Send button's clock
+> back online, if you stay in this room.**" (in a direct message: "…if you stay in this
+> conversation.") with **Cancel**; the Send button's clock
 > and "Waiting to send" label are unchanged. Returning to a conversation whose flag was
 > dropped shows the editable draft with nothing extra. The rest of this section is the full
 > behavior; where it says "on any screen", S4a means "in that conversation".
