@@ -97,8 +97,8 @@ class StatusSlotTest {
         compose.mainClock.advanceTimeBy(100)
         compose.onNodeWithTag("status_action").assertIsEnabled()
         compose.mainClock.autoAdvance = true
-        now = 0
-        session = session.copy(refreshRequired = false, retryAtMillis = 12_000, error = ApiFailure(FailureKind.HTTP, 503, "unavailable"))
+        // A later refusal sets a new deadline (clocks never run backwards); its delay is unknown.
+        session = session.copy(refreshRequired = false, retryAtMillis = 42_000, error = ApiFailure(FailureKind.HTTP, 503, "unavailable"))
         compose.onNodeWithText(text(R.string.status_rate_limited_unknown)).assertExists()
         session = signedIn.copy(storageWarning = true)
         compose.onNodeWithTag("status_action").performClick()
