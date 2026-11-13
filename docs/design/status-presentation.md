@@ -85,10 +85,10 @@ its own row-10 notice, so there is never a second status line.
 - The Back online notice (row 9) uses a timer bound to the slot's composition and cancelled on
   leaving or backgrounding (P-25). It never runs while the app isn't visible.
 - The 5 s threshold for row 8 is a **one-shot delay**, not polling: it starts when the
-  connection state becomes `RECONNECTING` or `CONNECTING`, is bound to the slot's
-  composition, and is cancelled on `ON_STOP`, on leaving, or on any connection-state change
-  (a new one starts only for a new `RECONNECTING`/`CONNECTING` state). It never runs while the
-  app isn't visible, and on return the slot starts from the current state, never from an
+  phase enters `RECONNECTING` or `CONNECTING`, keeps running while the phase moves between
+  those two, is bound to the slot's composition, and is cancelled on `ON_STOP`, on leaving, or
+  when the phase leaves `RECONNECTING`/`CONNECTING`. It never runs while the app isn't
+  visible, and on return the slot starts from the current state, never from an
   elapsed time carried across the background.
 - Hidden in compact conversation heights (today's `compactConversation`) and moved into
   Details there, as today. Hidden while the IME is open only if today's rules hide it.
@@ -293,6 +293,6 @@ Other offline composer rules:
 | P-102 | Back online appears only after a recovery and dismisses after about 2 s, with a lifecycle-bound timer. | C |
 | P-103 | Send when back online: one waiting draft per conversation, made only by pressing Send on a clean draft (never on an uncertain, busy or consent-pending one; waiting is not an attempt and never touches delivery-unknown state). At most one automatic attempt, only after reconnect, completed session revalidation and that conversation's post-reconnect reconciliation, while the app is visible, through the ordinary guarded send path with policy re-read after the last await. Never retried; ambiguous results use the existing uncertain-send flow; the waiting flag is dropped on background, sign-out, generation change or process death. No background work. | U, C (fakes), existing unknown-send tests |
 | P-104 | Announcements render as one dismissible steward-edged card, separate from status. | C, S |
-| P-105 | No new polling or background work, and no timers beyond P-102, P-25 and row 8's one-shot 5 s reconnect delay (bound to the slot's composition, cancelled on `ON_STOP`, leaving or a connection-state change, never running while the app isn't visible). Connectivity comes from the existing callback. | R, C |
+| P-105 | No new polling or background work, and no timers beyond P-102, P-25 and row 8's one-shot 5 s reconnect delay (bound to the slot's composition, cancelled on `ON_STOP`, leaving or when the phase leaves `RECONNECTING`/`CONNECTING`, never running while the app isn't visible). Connectivity comes from the existing callback. | R, C |
 | P-106 | Rate-limit waits use only a positive integer `error.retry_after_seconds` on a 429, are rounded up per "Waiting times", fall back to generic copy when unknown, never show an invented number and never trigger an automatic send, upload or retry. | U, C |
 | P-107 | Send when back online with a 429: on a reconnect revalidation or reconciliation GET it waits in the foreground for the known local deadline (or the next ordinary trigger when unknown) and then makes its single attempt; on the draft's send POST it clears the waiting flag, returns the draft to the composer with the wait shown, and never sends again automatically. | U, C (fakes) |
