@@ -68,9 +68,14 @@ class MainActivity : ComponentActivity() {
                 (application as ChitChatApplication).roomMentions))
             val pushSettings: io.github.thiesi.chitchat.feature.push.NotificationSettingsViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.push.NotificationSettingsViewModel.factory((application as ChitChatApplication).push))
+            val pushPhone: io.github.thiesi.chitchat.feature.push.PushPhoneViewModel = viewModel(
+                factory = io.github.thiesi.chitchat.feature.push.PushPhoneViewModel.factory((application as ChitChatApplication).pushRegistrar,
+                    (application as ChitChatApplication).pushDistributors) { direct ->
+                    io.github.thiesi.chitchat.core.push.PushChannels.create(applicationContext, direct)
+                })
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
-                notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings,
+                notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings, pushPhone = pushPhone,
                 onThemeChanged = { dark ->
                 enableEdgeToEdge(
                     statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },

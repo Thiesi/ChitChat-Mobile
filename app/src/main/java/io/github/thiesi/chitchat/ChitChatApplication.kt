@@ -60,6 +60,7 @@ class ChitChatApplication : Application() {
     internal val pushRegistrar by lazy {
         io.github.thiesi.chitchat.core.push.PushRegistrar(pushLocal, pushConnector, sessionRepository, processScope)
     }
+    internal val pushDistributors by lazy { io.github.thiesi.chitchat.core.push.UnifiedPushDistributors(this) }
     val sessions: SessionController get() = sessionRepository
     val accounts: AccountOperations by lazy { SessionAccountRepository(sessionRepository) }
     val typingPreferences: TypingPreferenceOperations by lazy { SessionTypingPreferences(sessionRepository) }

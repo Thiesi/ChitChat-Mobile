@@ -138,6 +138,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     profiles: ProfileViewModel? = null,
     completion: CompletionViewModel? = null,
     pushSettings: io.github.thiesi.chitchat.feature.push.NotificationSettingsViewModel? = null,
+    pushPhone: io.github.thiesi.chitchat.feature.push.PushPhoneViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session = auth.state.collectAsStateWithLifecycle().value
@@ -189,12 +190,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         val entryStarted = entry?.lifecycle?.currentStateAsState()?.value?.isAtLeast(Lifecycle.State.STARTED) == true
         LifecycleEventEffect(Lifecycle.Event.ON_START) { profiles?.foreground(); completion?.foreground() }
         LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-            if (activity?.isChangingConfigurations != true) { profiles?.background(); completion?.background(); pushSettings?.retire() }
+            if (activity?.isChangingConfigurations != true) { profiles?.background(); completion?.background(); pushSettings?.retire(); pushPhone?.retire() }
         }
         // Push facts live only while Notifications is the current entry; leaving it (including
         // sign-out, which navigates away) clears them. Configuration change keeps the entry.
         val pushRoute = entry?.destination?.route
-        LaunchedEffect(pushSettings, pushRoute) { if (pushRoute != null && pushRoute != "notification_settings") pushSettings?.retire() }
+        LaunchedEffect(pushSettings, pushPhone, pushRoute) { if (pushRoute != null && pushRoute != "notification_settings") { pushSettings?.retire(); pushPhone?.retire() } }
         LaunchedEffect(completion, entry, entryStarted, completionState?.entryId) {
             val actual=entry
             if (actual!=null && entryStarted && nav.currentBackStackEntry===actual) completion?.navigate(actual.id)
@@ -419,7 +420,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         }
                         composable("notification_settings") {
                             if (session.phase == SessionPhase.AUTHENTICATED && pushSettings != null) ScreenContent {
-                                io.github.thiesi.chitchat.feature.push.NotificationSettingsScreen(pushSettings, session)
+                                io.github.thiesi.chitchat.feature.push.NotificationSettingsScreen(pushSettings, session, pushPhone)
                             }
                         }
                         composable(NOTIFICATION_ACCOUNT_ROUTE, arguments = notificationArguments()) { destination ->

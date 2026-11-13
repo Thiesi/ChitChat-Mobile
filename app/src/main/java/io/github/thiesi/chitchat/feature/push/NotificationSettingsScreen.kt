@@ -28,20 +28,19 @@ import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
-import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
 import io.github.thiesi.chitchat.core.ui.InlineError
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
-/** You → Notifications. The account's push choices and devices; this phone's delivery comes later. */
+/** You → Notifications: this phone's Turn on and status, then the account's push choices and devices. */
 @Composable
-fun NotificationSettingsScreen(model: NotificationSettingsViewModel, session: SessionState) {
+fun NotificationSettingsScreen(model: NotificationSettingsViewModel, session: SessionState, phone: PushPhoneViewModel? = null) {
     val state by model.state.collectAsStateWithLifecycle()
     val displayedSession = session
     val activity = LocalActivity.current
     LaunchedEffect(session.server, session.generation, session.user?.id, session.user?.sessionVersion) { model.open(displayedSession) }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) model.retire() }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) { model.retire(); phone?.retire() } }
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.open(displayedSession) }
     if (!model.belongsTo(displayedSession)) return
     val colors = ChitChatTheme.colors
@@ -49,13 +48,7 @@ fun NotificationSettingsScreen(model: NotificationSettingsViewModel, session: Se
     val settings = state.settings
     val canChoose = model.canChoose() && !session.busy
     Column(Modifier.fillMaxWidth().testTag("notification_settings"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Card(Modifier.fillMaxWidth().testTag("push_status"), shape = MaterialTheme.shapes.large, border = lanternSurfaceBorder()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.push_this_phone), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(R.string.push_status_off), style = MaterialTheme.typography.bodyLarge)
-                Text(stringResource(R.string.push_turn_on_later), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
-            }
-        }
+        if (phone != null) PushPhoneCard(phone, session, settings?.preferences?.direct == true, !session.busy)
         if (state.loading && settings == null) CircularProgressIndicator()
         state.error?.let { failure ->
             // A failed read (first load or the reconciliation Refresh) is never shown as a failed save;
@@ -119,7 +112,11 @@ fun NotificationSettingsScreen(model: NotificationSettingsViewModel, session: Se
         AlertDialog(onDismissRequest = { removing = null }, modifier = Modifier.testTag("push_remove_dialog").lanternDialogEdge(),
             title = { Text(stringResource(if (device.currentSession) R.string.push_turn_off_title else R.string.push_remove_title)) },
             text = { Text(stringResource(R.string.push_remove_body)) },
-            confirmButton = { TextButton(onClick = { removing = null; model.remove(displayedSession, device) },
+            confirmButton = { TextButton(onClick = {
+                removing = null
+                // This phone's own row: the server revoke goes through the settings model, the local wipe here.
+                if (model.remove(displayedSession, device) && device.currentSession) phone?.turnOffLocally(displayedSession)
+            },
                 modifier = Modifier.testTag("push_remove_confirm")) {
                 Text(stringResource(if (device.currentSession) R.string.push_turn_off else R.string.push_remove)) } },
             dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } })

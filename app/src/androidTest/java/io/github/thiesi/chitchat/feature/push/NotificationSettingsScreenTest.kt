@@ -30,7 +30,10 @@ class NotificationSettingsScreenTest {
     @get:Rule val compose = createComposeRule()
     private val ops = Fake()
     private val model = NotificationSettingsViewModel(ops)
-    private val store = ViewModelStore().also { it.put("push", model) }
+    private val phoneFake = FakePhone()
+    private val channels = mutableListOf<Boolean>()
+    private val phone = PushPhoneViewModel(phoneFake, NoDistributors, { channels += it })
+    private val store = ViewModelStore().also { it.put("push", model); it.put("phone", phone) }
     @After fun stop() = store.clear()
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
@@ -38,7 +41,7 @@ class NotificationSettingsScreenTest {
         ops.direct = direct
         val signedIn = ops.session.value // Frozen before composition, like the root's rendered session.
         compose.setContent { ChitChatTheme(dark = false) {
-            Column(Modifier.verticalScroll(rememberScrollState())) { NotificationSettingsScreen(model, signedIn) }
+            Column(Modifier.verticalScroll(rememberScrollState())) { NotificationSettingsScreen(model, signedIn, phone) }
         } }
         compose.waitUntil(5_000) { model.state.value.settings != null }
     }
@@ -48,6 +51,38 @@ class NotificationSettingsScreenTest {
         compose.onNodeWithTag("push_mentions").assertExists()
         compose.onNodeWithTag("push_direct").assertDoesNotExist()
         compose.onNodeWithText(text(R.string.push_status_off)).assertExists()
+        compose.onNodeWithTag("push_turn_on").assertExists()
+        compose.onNodeWithTag("push_phone_off").assertDoesNotExist()
+    }
+
+    @Test fun turnOnExplainsFirstThenGuidesWhenNoDeliveryAppIsInstalled() {
+        // Granted up front, so this test never shows the system prompt; the prompt itself is manual acceptance.
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        if (android.os.Build.VERSION.SDK_INT >= 33) instrumentation.uiAutomation.grantRuntimePermission(
+            instrumentation.targetContext.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
+        show(direct = null)
+        compose.onNodeWithTag("push_turn_on").performClick()
+        compose.onNodeWithTag("push_explain").assertExists()
+        compose.onNodeWithText(text(R.string.push_explain_body)).assertExists()
+        assertEquals(0, phoneFake.starts)
+        compose.onNodeWithTag("push_explain_continue").performClick()
+        compose.waitUntil(5_000) { phone.state.value.step == TurnOnStep.NoDistributor }
+        compose.onNodeWithTag("push_none").assertExists()
+        compose.onNodeWithText(text(R.string.push_close)).performClick()
+        compose.onNodeWithText(text(R.string.push_status_no_distributor)).assertExists()
+        assertEquals(0, phoneFake.starts)
+        assertTrue("No channels without a delivery app", channels.isEmpty())
+    }
+
+    @Test fun aRefusalShowsItsCopyAndOffersTurnOnAgainAndTurnOff() {
+        phoneFake.status.value = PushPhoneStatus.Refused(PushSubscribeRefusal.CONFLICT)
+        show(direct = null)
+        compose.onNodeWithText(text(R.string.push_refused_conflict)).assertExists()
+        compose.onNodeWithText(text(R.string.push_turn_on_again)).assertExists()
+        compose.onNodeWithTag("push_phone_off").performClick()
+        compose.onNodeWithTag("push_phone_off_confirm").performClick()
+        compose.waitUntil(5_000) { phoneFake.turnOffs == 1 }
+        assertEquals("Nothing is retried", 0, phoneFake.starts)
     }
 
     @Test fun aChoiceIsSentOnceAndShownOnlyAfterTheServerConfirms() {
@@ -73,7 +108,8 @@ class NotificationSettingsScreenTest {
     private class Fake : PushOperations {
         override val session = MutableStateFlow(SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED,
             server = (ServerAddress.parse("https://fixture.example/") as AddressResult.Valid).address,
-            user = SessionUser(7, "Viewer", listOf("member"), 1, false)))
+            user = SessionUser(7, "Viewer", listOf("member"), 1, false),
+            webPush = WebPushDiscovery.Available(PushRecord.create("https://vapid.example", 1, 0).publicKey)))
         var direct: Boolean? = null
         val writes = AtomicInteger(); @Volatile var lastWrite: PushPreferences? = null
         @Volatile var revoked = emptyList<Long>()
@@ -84,5 +120,20 @@ class NotificationSettingsScreenTest {
             writes.incrementAndGet(); lastWrite = preferences; return preferences }
         override suspend fun revoke(expected: SessionState, deviceId: Long): List<PushDevice> {
             revoked = revoked + deviceId; devices = devices.filterNot { it.id == deviceId }; return devices }
+    }
+
+    private class FakePhone : PushPhone {
+        override val status = MutableStateFlow<PushPhoneStatus>(PushPhoneStatus.Off)
+        @Volatile var starts = 0
+        @Volatile var turnOffs = 0
+        override suspend fun start(expected: SessionState): Boolean { starts++; return true }
+        override suspend fun turnOff(expected: SessionState): Boolean { turnOffs++; status.value = PushPhoneStatus.Off; return true }
+        override suspend fun turnOffLocally() { status.value = PushPhoneStatus.Off }
+    }
+
+    private object NoDistributors : PushDistributors {
+        override fun installed() = emptyList<PushDistributor>()
+        override fun current(): String? = null
+        override fun choose(packageName: String) = Unit
     }
 }
