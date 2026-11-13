@@ -68,7 +68,8 @@ class PushRegistrarTest {
         repeat(2) { server.takeRequest(5, TimeUnit.SECONDS) }
     }
 
-    private fun TestScope.registrar(): PushRegistrar = PushRegistrar(local, connector, sessions, backgroundScope, Dispatchers.IO)
+    private val posted = java.util.concurrent.CopyOnWriteArrayList<PushAlert>()
+    private fun TestScope.registrar(): PushRegistrar = PushRegistrar(local, connector, sessions, backgroundScope, Dispatchers.IO) { posted += it }
 
     /** Waits in real time off the test thread, so the registrar's continuations can still run. */
     private suspend fun awaitReal(condition: () -> Boolean) = kotlinx.coroutines.withContext(Dispatchers.Default) {
@@ -293,6 +294,43 @@ class PushRegistrarTest {
         assertTrue(registrar.turnOff(sessions.state.value)) // Never registered with the server: no request.
         assertEquals(3, server.requestCount)
         assertEquals(listOf(record.instance, unsent.instance), connector.unregistered)
+    }
+
+    private fun push(binding: String?, event: String = "evt-1") = ("""{"title":"Rowan mentioned you","body":"Fixture",""" +
+        """"kind":"mentioned","event_id":"$event"""" + (binding?.let { ""","binding":"$it"""" } ?: "") + "}").encodeToByteArray()
+
+    @Test fun aColdProcessPushPostsFromTheSealedRecordAloneWithoutTouchingTheSession() = runTest {
+        val registrar = registrar()
+        val bound = "c3".repeat(32)
+        vault.record = PushRecord.create("https://chat.example.org", 7, 100).copy(registrationId = 12, binding = bound, confirmed = true)
+        val before = sessions.state.value
+        registrar.onMessage(vault.record!!.instance, push(bound), decrypted = true)
+        assertEquals(1, posted.size)
+        assertEquals(PushKind.MENTION, posted.single().kind)
+        assertSame("Receipt publishes nothing", before, sessions.state.value)
+        assertEquals("No network work on receipt", 0, server.requestCount)
+    }
+
+    @Test fun onlyDecryptedBoundFirstDeliveriesPostAndSignOutForgetsSeenEvents() = runTest {
+        login()
+        val registrar = registrar()
+        val bound = "d4".repeat(32)
+        val record = local.prepare(origin(), 7)!!
+        local.adopt(record.instance, PushRegistration(12, bound))
+        registrar.onMessage(record.instance, push(bound), decrypted = false)
+        registrar.onMessage(record.instance, push(null), decrypted = true)
+        registrar.onMessage(record.instance, push("e5".repeat(32)), decrypted = true)
+        registrar.onMessage("another-instance", push(bound), decrypted = true)
+        registrar.onMessage(record.instance, "{".encodeToByteArray(), decrypted = true)
+        assertTrue(posted.isEmpty())
+        registrar.onMessage(record.instance, push(bound), decrypted = true)
+        registrar.onMessage(record.instance, push(bound), decrypted = true) // An at-least-once repeat.
+        assertEquals(1, posted.size)
+        assertTrue(local.recent.firstTime("probe"))
+        local.retire(origin(), 7)
+        registrar.onMessage(record.instance, push(bound, "evt-2"), decrypted = true)
+        assertEquals("No record after sign-out: nothing posts", 1, posted.size)
+        assertTrue("Seen events are cleared with the record", local.recent.firstTime("probe"))
     }
 
     @Test fun distributorRegistrationFailureIsShownHonestlyAndDropsTheRecord() = runTest {

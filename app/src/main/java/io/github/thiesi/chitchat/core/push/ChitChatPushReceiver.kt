@@ -33,7 +33,7 @@ class ChitChatPushReceiver : MessagingReceiver() {
     override fun onUnregistered(context: Context, instance: String) = app(context).pushRegistrar.onUnregistered(instance)
 
     override fun onMessage(context: Context, message: PushMessage, instance: String) =
-        app(context).pushRegistrar.onMessage(instance, message.decrypted)
+        app(context).pushRegistrar.onMessage(instance, message.content, message.decrypted)
 
     private fun app(context: Context) = context.applicationContext as ChitChatApplication
 
