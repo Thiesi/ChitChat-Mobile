@@ -29,6 +29,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -140,7 +143,7 @@ internal fun StatusSlot(
     )
     val notice = resolveStatus(inputs)
     LaunchedEffect(notice, visible) { if (visible && notice.isDisconnection()) disconnected = true }
-    if (notice != null && session.phase == SessionPhase.AUTHENTICATED) key(notice) {
+    if (notice != null && session.phase == SessionPhase.AUTHENTICATED) key(notice.announcementKey()) {
         StatusNoticeView(notice, session, onRetry, onRefresh, onStorageAction, { clock }, modifier)
     }
 }
@@ -155,7 +158,12 @@ private fun StatusNoticeView(
     // Announced politely once per notice: the key above recreates this node only when the notice changes.
     val announce = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
     if (notice.level == StatusLevel.CAPTION) {
-        Text(captionText(notice), modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).then(announce)
+        // A seconds countdown changes its text every second; screen readers get one stable line instead.
+        val spoken = if (notice is StatusNotice.RateLimited && notice.wait is Wait.Seconds)
+            stringResource(R.string.status_rate_limited_under_minute) else null
+        val semantics = if (spoken != null) Modifier.clearAndSetSemantics { testTag = "status_slot"; contentDescription = spoken; liveRegion = LiveRegionMode.Polite }
+            else announce
+        Text(captionText(notice), modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).then(semantics)
             .testTag("status_slot"), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
         return
     }
@@ -192,6 +200,21 @@ private fun StatusNoticeView(
                 .testTag("status_action")) { Text(stringResource(label)) }
         }
     }
+}
+
+/**
+ * What makes a notice "new" for the polite announcement: its kind, and for a wait only a coarse bucket, so a
+ * countdown keeps one node and is announced once (PR221 review). Minute and hour buckets change rarely.
+ */
+private fun StatusNotice.announcementKey(): Any = when (this) {
+    is StatusNotice.RateLimited -> when (val w = wait) {
+        null -> "rate:unknown"
+        is Wait.Seconds -> "rate:seconds"
+        Wait.AboutAMinute -> "rate:minute"
+        is Wait.AboutMinutes -> "rate:minutes:${w.minutes}"
+        is Wait.AboutHours -> "rate:hours:${w.hours}"
+    }
+    else -> this
 }
 
 @Composable

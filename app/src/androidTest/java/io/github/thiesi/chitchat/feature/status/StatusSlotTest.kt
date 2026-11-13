@@ -87,7 +87,7 @@ class StatusSlotTest {
         compose.onNodeWithText(text(R.string.status_refresh_title), substring = true).assertExists()
         compose.onNodeWithTag("status_action").assertIsNotEnabled()
         session = session.copy(refreshRequired = false)
-        compose.onNodeWithText(text(R.string.status_rate_limited, text(R.string.wait_seconds, 12))).assertExists()
+        compose.onNodeWithContentDescription(text(R.string.status_rate_limited_under_minute)).assertExists() // Seconds are shown, not spoken.
         // The wait ends with no other recomposition: the gate itself wakes the slot (PR221 review).
         compose.mainClock.autoAdvance = false
         now = 12_000

@@ -154,6 +154,7 @@
     <string name="status_back_online">Back online</string>
     <string name="status_rate_limited">Try again in %1$s.</string>
     <string name="status_rate_limited_unknown">Try again in a little while.</string>
+    <string name="status_rate_limited_under_minute">Try again in less than a minute.</string>
     <string name="status_syncing">Updating…</string>
     <string name="status_stale">This may be out of date. Refresh to update it.</string>
     <string name="wait_seconds">%1$d s</string>

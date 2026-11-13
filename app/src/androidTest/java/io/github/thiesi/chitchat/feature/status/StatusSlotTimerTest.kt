@@ -24,6 +24,7 @@ import io.github.thiesi.chitchat.core.server.ServerAddress
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -140,12 +141,23 @@ class StatusSlotTimerTest {
         val rate = ApiFailure(FailureKind.HTTP, 429, "rate_limited", retryAfterSeconds = 12)
         show()
         session = signedIn.copy(retryAtMillis = 12_000, error = rate); advance(100)
-        compose.onNodeWithText(text(R.string.status_rate_limited, text(R.string.wait_seconds, 12))).assertExists()
+        compose.onNodeWithContentDescription(text(R.string.status_rate_limited_under_minute)).assertExists()
         now = 5_000; advance(1_000)
         session = session.copy(retryAtMillis = 30_000); advance(100)
-        compose.onNodeWithText(text(R.string.status_rate_limited, text(R.string.wait_seconds, 25))).assertExists()
         now = 12_000; advance(1_000); slot().assertExists()
         now = 30_000; advance(1_100); slot().assertDoesNotExist()
+    }
+
+    @Test fun aSecondsCountdownIsOneStableAnnouncementNotOnePerTick() {
+        show()
+        session = signedIn.copy(retryAtMillis = 12_000, error = ApiFailure(FailureKind.HTTP, 429, "rate_limited", retryAfterSeconds = 12))
+        advance(100)
+        val spoken = text(R.string.status_rate_limited_under_minute)
+        compose.onNodeWithContentDescription(spoken).assertExists()
+        val first = compose.onNodeWithTag("status_slot").fetchSemanticsNode().id
+        now = 5_000; advance(1_100)
+        compose.onNodeWithContentDescription(spoken).assertExists()
+        assertEquals("The same node, so no new announcement", first, compose.onNodeWithTag("status_slot").fetchSemanticsNode().id)
     }
 
     @Test fun aWaitThatEndsWhileAwayIsGoneOnReturn() {

@@ -41,6 +41,11 @@ limits and every write rule stay as they are.
   rounded up: "12 s", "about a minute", "about N minutes", "about N hours". Otherwise the copy reads "Try
   again in a little while". The session layer's 30 s fallback is never presented as the server's wait.
   The delay is display-only.
+- **Accessibility decision, for J review:** during the seconds countdown the screen-reader text
+  deliberately differs from the visible text. Sighted people see "Try again in 12 s" counting down, while
+  TalkBack hears "Try again in less than a minute." once. Announcing every tick would read a number aloud
+  each second for up to a minute. The announcement key is the notice kind plus a coarse wait bucket, so
+  minute and hour waits re-announce at most once a minute.
 - **`{host}`** is `application.name` from the session (ChitChat#149), read leniently (trimmed, 1–80
   characters, no control characters), else the host. A malformed `application` never fails the bootstrap.
 - **Announcements** are a separate steward-edged card below the slot (P-104), not status.
