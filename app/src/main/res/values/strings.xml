@@ -519,6 +519,14 @@
     <string name="push_channel_mentions">Mentions and pings</string>
     <string name="push_channel_account">Account and server notices</string>
     <string name="push_channel_direct">Direct messages</string>
+    <string name="push_public_mention">New mention</string>
+    <string name="push_public_ping">New ping</string>
+    <string name="push_public_direct">New direct message</string>
+    <string name="push_public_other">New notification</string>
+    <plurals name="push_summary">
+        <item quantity="one">%1$d new in %2$s</item>
+        <item quantity="other">%1$d new in %2$s</item>
+    </plurals>
     <string name="push_load_failed">Couldn’t load your notification settings.</string>
     <string name="push_try_again">Try again</string>
     <string name="push_refresh">Refresh</string>

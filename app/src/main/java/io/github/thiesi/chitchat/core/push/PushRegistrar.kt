@@ -66,6 +66,8 @@ class PushLocal(
     private val mutableStatus = MutableStateFlow<PushPhoneStatus>(PushPhoneStatus.Off)
     val status: StateFlow<PushPhoneStatus> = mutableStatus.asStateFlow()
     @Volatile private var loaded = false
+    /** Event IDs already shown or dropped as duplicates; cleared with the record. */
+    val recent = RecentPushEvents()
 
     @Synchronized fun record(): PushRecord? {
         val record = try { vault.read() } catch (_: IOException) { null }
@@ -146,6 +148,7 @@ class PushLocal(
     @Synchronized override fun retire(origin: String?, userId: Long?): Long? {
         val record = record()
         try { cancelNotifications() } catch (_: Exception) { /* Nothing shown, or the system refused; continue. */ }
+        recent.clear()
         clearQuietly()
         try { if (record != null) connector.unregister(record.instance) else connector.unregisterAll() }
         catch (_: Exception) { /* The keys are gone, so anything still delivered can't be decrypted. */ }
@@ -173,6 +176,7 @@ class PushRegistrar(
     private val sessions: SessionRepository,
     private val scope: CoroutineScope,
     private val io: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
+    private val poster: PushPoster = PushPoster { },
 ) : PushPhone {
     override val status: StateFlow<PushPhoneStatus> = local.status
     private val lock = Mutex()
@@ -281,9 +285,16 @@ class PushRegistrar(
         scope.launch { lock.withLock { withContext(io) { local.forget(instance, PushPhoneStatus.DistributorFailed(failure)) } } }
     }
 
-    /** Only messages the connector decrypted with this record's keys count; rendering arrives with P3. */
-    fun onMessage(instance: String, decrypted: Boolean) {
+    /**
+     * On the receiver's own thread. The sealed record is the only local proof needed: it exists only while
+     * its login session hasn't ended here, and only its keys open the payload. Nothing is published to the
+     * session, bootstrapped or fetched; every drop is silent.
+     */
+    fun onMessage(instance: String, content: ByteArray, decrypted: Boolean) {
         if (!decrypted) return // Plain text means our keys didn't open it: never trust or show it.
-        if (instance != local.record()?.instance) return
+        val alert = pushAlert(local.record(), instance, PushPayload.parse(content)) ?: return
+        // A repeat of a known event never stacks or comes back after the person dismissed it.
+        if (alert.tag != null && !local.recent.firstTime(alert.tag)) return
+        poster.post(alert)
     }
 }

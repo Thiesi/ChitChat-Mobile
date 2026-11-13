@@ -58,7 +58,8 @@ class ChitChatApplication : Application() {
     }
     private val sessionRepository by lazy { SessionRepository(KeystoreSessionVault(this), push = pushLocal) }
     internal val pushRegistrar by lazy {
-        io.github.thiesi.chitchat.core.push.PushRegistrar(pushLocal, pushConnector, sessionRepository, processScope)
+        io.github.thiesi.chitchat.core.push.PushRegistrar(pushLocal, pushConnector, sessionRepository, processScope,
+            poster = io.github.thiesi.chitchat.core.push.AndroidPushPoster(this) { foreground })
     }
     internal val pushDistributors by lazy { io.github.thiesi.chitchat.core.push.UnifiedPushDistributors(this) }
     val sessions: SessionController get() = sessionRepository
@@ -86,11 +87,14 @@ class ChitChatApplication : Application() {
         processScope) }
     val typing: TypingController get() = typingCoordinator
     private lateinit var realtimeRuntime: AndroidRealtimeRuntime
+    /** While the app is in the foreground, pushes post silently so nobody is interrupted twice. */
+    @Volatile private var foreground = false
 
     override fun onCreate() {
         super.onCreate()
         realtimeRuntime = AndroidRealtimeRuntime(this, ProcessLifecycleOwner.get().lifecycle,
-            { foreground -> realtimeCoordinator.setForeground(foreground); typingCoordinator.setForeground(foreground) },
+            { foreground -> this.foreground = foreground
+                realtimeCoordinator.setForeground(foreground); typingCoordinator.setForeground(foreground) },
             realtimeCoordinator::setNetworkAvailable)
     }
 }
