@@ -141,7 +141,7 @@
     <!-- The status slot (status-presentation.md). Titles are bold; bodies follow on the same line. -->
     <string name="status_offline_title">No connection.</string>
     <!-- Interim until Send when back online (S4) ships; the spec's line promises that behaviour. -->
-    <string name="status_offline_body">What’s here stays readable. Sending needs a connection.</string>
+    <string name="status_offline_body">You can still read what’s here. Sending needs a connection.</string>
     <string name="status_tls_title">Can’t connect securely to %1$s.</string>
     <string name="status_tls_body">The certificate couldn’t be verified; this can’t be bypassed.</string>
     <string name="status_incompatible_title">%1$s sent something ChitChat doesn’t understand.</string>
@@ -172,9 +172,6 @@
     <string name="realtime_view_notice">Read announcement</string>
     <string name="realtime_dismiss_notice">Dismiss announcement</string>
     <string name="realtime_notice_title">Announcement</string>
-    <string name="conversation_realtime">Updates while the app is active. Refresh reconciles with the server.</string>
-    <string name="conversation_syncing">Updating conversation…</string>
-    <string name="rooms_syncing">Updating rooms…</string>
     <string name="conversation_anchor_unavailable">Your previous position was removed from retained history. Showing the nearest available message.</string>
     <string name="conversation_empty_range">No messages remain in this range. Jump to latest to check for newer messages.</string>
     <string name="conversation_jump_new">New messages available — jump to latest</string>

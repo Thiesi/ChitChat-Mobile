@@ -79,10 +79,12 @@ internal fun StatusSlot(
     screen: StatusNotice.Screen? = null,
     syncing: Boolean = false,
     stale: Boolean = false,
+    /** False inside a dialog that only needs the session rows: the connection is shown by the slot behind it. */
+    connection: Boolean = true,
     nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     val visible = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.STARTED)
-    val phase = realtime?.phase ?: RealtimePhase.STOPPED
+    val phase = if (!connection) RealtimePhase.LIVE else realtime?.phase ?: RealtimePhase.STOPPED
     val reconnecting = phase == RealtimePhase.CONNECTING || phase == RealtimePhase.RECONNECTING
     // Saveable so a configuration change keeps the row-8 count (uptime is device-wide); the background still clears it.
     var reconnectingSince by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Long?>(null) }
@@ -128,7 +130,7 @@ internal fun StatusSlot(
 
     val inputs = StatusInputs(
         phase = phase,
-        errorKind = realtime?.error?.kind,
+        errorKind = realtime?.error?.kind.takeIf { connection },
         storageWarning = session.storageWarning,
         refreshRequired = session.refreshRequired,
         nowMillis = clock,

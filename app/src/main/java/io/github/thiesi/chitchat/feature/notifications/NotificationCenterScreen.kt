@@ -69,6 +69,9 @@ internal fun NotificationCenterScreen(model: NotificationCenterViewModel, expect
     val canRead = canGet && value.loaded && !value.stale && !value.unknownRead
     val list = rememberLazyListState()
     LaunchedEffect(value.scrollRequest) { if (value.scrollRequest > 0) list.scrollToItem(0) }
+    // Session and stale notices live in the status slot under the top bar (S1b).
+    io.github.thiesi.chitchat.feature.status.ReportScreenStatus(syncing = false,
+        stale = value.loaded && value.stale && !value.incompleteRange)
     LazyColumn(Modifier.fillMaxSize().testTag("notification_list"), state = list,
         contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item(key = "controls") {
@@ -79,16 +82,10 @@ internal fun NotificationCenterScreen(model: NotificationCenterViewModel, expect
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                     Text(stringResource(if (value.writing) R.string.notifications_writing else R.string.notifications_loading))
                 }
-                if (expected.busy) Text(stringResource(R.string.checking_session))
-                if (expected.refreshRequired || expected.storageWarning) TextButton(onClick = {
-                    if (isCurrentEntry()) refreshSession()
-                }, enabled = !expected.busy && now >= expected.retryAtMillis) { Text(stringResource(R.string.refresh_session)) }
-                if (now < expected.retryAtMillis) Text(stringResource(R.string.rate_limited))
                 value.error?.let { InlineError(notificationError(it)) }
                 if (value.unknownRead) Text(stringResource(R.string.notifications_unknown_read),
                     Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 if (value.incompleteRange) Text(stringResource(R.string.notifications_incomplete))
-                else if (value.loaded && value.stale) Text(stringResource(R.string.notifications_stale))
                 if (!value.latestWindow) Text(stringResource(R.string.notifications_historical))
                 LanternOutlinedButton(onClick = { if (isCurrentEntry()) model.refresh(expected) }, enabled = canGet,
                     modifier = Modifier.fillMaxWidth().testTag("notifications_refresh")) { Text(stringResource(R.string.notifications_refresh)) }

@@ -82,10 +82,9 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
             Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.rooms_title), style = MaterialTheme.typography.headlineMedium)
                 Text(stringResource(R.string.rooms_slice_disclosure), style = MaterialTheme.typography.bodySmall)
-                RoomSessionFeedback(session, now, onRefreshSession)
+                // Session, syncing and stale notices live in the status slot under the top bar (S1b).
+                io.github.thiesi.chitchat.feature.status.ReportScreenStatus(syncing = state.syncing, stale = state.stale && state.loaded)
                 if (!state.detailOpen && state.draft == null) RoomFeedback(state)
-                if (state.stale && state.loaded) Text(stringResource(R.string.rooms_stale))
-                if (state.syncing) Text(stringResource(R.string.rooms_syncing))
                 if (state.busy) {
                     CircularProgressIndicator()
                     TextButton(onClick = model::cancelRequest) { Text(stringResource(R.string.cancel)) }
@@ -145,14 +144,9 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
 
 @Composable
 private fun RoomSessionFeedback(session: SessionState, now: Long, onRefresh: () -> Unit) {
-    if (session.busy) Text(stringResource(R.string.checking_session))
-    if (session.refreshRequired || session.storageWarning) {
-        Text(stringResource(R.string.session_refresh_needed))
-        TextButton(onClick = onRefresh, enabled = !session.busy && now >= session.retryAtMillis) {
-            Text(stringResource(R.string.refresh_session))
-        }
-    }
-    if (now < session.retryAtMillis) Text(stringResource(R.string.rate_limited))
+    // Inside a dialog the slot behind it can't be reached: one session-only notice keeps Refresh session here.
+    io.github.thiesi.chitchat.feature.status.StatusSlot(session, null, {}, onRefresh, onRefresh,
+        syncing = session.busy, connection = false, nowMillis = { maxOf(now, System.currentTimeMillis()) })
 }
 
 @Composable

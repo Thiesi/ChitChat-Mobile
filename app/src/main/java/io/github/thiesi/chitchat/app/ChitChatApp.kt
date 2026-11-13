@@ -51,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -165,7 +166,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     val windowDark = LocalConfiguration.current.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
     val dark = effectiveDark(state.settings.theme, deviceIsDark(), state.hasLoadedSettings, windowDark)
     LaunchedEffect(dark) { onThemeChanged(dark) }
-    ChitChatTheme(dark = dark, pureBlack = state.settings.pureBlack) {
+    val screenStatus = remember { io.github.thiesi.chitchat.feature.status.ScreenStatusHolder() }
+    ChitChatTheme(dark = dark, pureBlack = state.settings.pureBlack) { androidx.compose.runtime.CompositionLocalProvider(
+        io.github.thiesi.chitchat.feature.status.LocalScreenStatus provides screenStatus) {
         val nav = rememberNavController()
         val activity = LocalActivity.current
         LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
@@ -366,9 +369,14 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (!compactConversation && session.phase == SessionPhase.AUTHENTICATED && realtime != null && connection?.generation == session.generation) {
-                    io.github.thiesi.chitchat.feature.status.StatusSlot(session, connection, realtime::retry, auth::refresh, auth::refresh)
+                    io.github.thiesi.chitchat.feature.status.StatusSlot(session, connection, realtime::retry, auth::refresh, auth::refresh,
+                        syncing = screenStatus.current.syncing || session.busy, stale = screenStatus.current.stale)
                     io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(connection, realtime::dismissBroadcast,
                         roomId = entry?.arguments?.getLong("roomId")?.takeIf { it > 0 })
+                } else if (!compactConversation && session.phase == SessionPhase.AUTHENTICATED) {
+                    // No current connection snapshot: the session rows still show, so Refresh session stays reachable (PR223 review).
+                    io.github.thiesi.chitchat.feature.status.StatusSlot(session, null, {}, auth::refresh, auth::refresh,
+                        syncing = screenStatus.current.syncing || session.busy, stale = screenStatus.current.stale, connection = false)
                 }
                 if (state.loading) {
                     CircularProgressIndicator()
@@ -666,7 +674,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                     directThread?.targetDenied(request, failure)
                 }, refreshSession = auth::refresh, entryId = entry?.id, actualEntryId = { nav.currentBackStackEntry?.id })
         }
-    }
+    } }
 }
 
 private const val LICENCES_ROUTE = "licences"
