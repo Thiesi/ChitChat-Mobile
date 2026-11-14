@@ -26,7 +26,6 @@ import io.github.thiesi.chitchat.core.push.isTimeZone
 import io.github.thiesi.chitchat.core.push.pushDeviceLabel
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
-import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
 import io.github.thiesi.chitchat.core.ui.InlineError
 import java.time.OffsetDateTime
@@ -109,17 +108,11 @@ fun NotificationSettingsScreen(model: NotificationSettingsViewModel, session: Se
         }
     }
     removing?.let { device ->
-        AlertDialog(onDismissRequest = { removing = null }, modifier = Modifier.testTag("push_remove_dialog").lanternDialogEdge(),
-            title = { Text(stringResource(if (device.currentSession) R.string.push_turn_off_title else R.string.push_remove_title)) },
-            text = { Text(stringResource(R.string.push_remove_body)) },
-            confirmButton = { TextButton(onClick = {
+        PushRemoveDialog(currentSession = device.currentSession, onConfirm = {
                 removing = null
                 // This phone's own row: the server revoke goes through the settings model, the local wipe here.
                 if (model.remove(displayedSession, device) && device.currentSession) phone?.turnOffLocally(displayedSession)
-            },
-                modifier = Modifier.testTag("push_remove_confirm")) {
-                Text(stringResource(if (device.currentSession) R.string.push_turn_off else R.string.push_remove)) } },
-            dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } })
+            }, onCancel = { removing = null })
     }
 }
 
