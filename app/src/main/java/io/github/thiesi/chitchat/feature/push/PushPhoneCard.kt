@@ -9,7 +9,6 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,7 +17,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -33,7 +31,6 @@ import io.github.thiesi.chitchat.core.push.PushSubscribeRefusal
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
-import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
 import io.github.thiesi.chitchat.core.ui.PrimaryButton
 import io.github.thiesi.chitchat.core.ui.installationName
@@ -101,76 +98,33 @@ internal fun PushPhoneCard(phone: PushPhoneViewModel, session: SessionState, dir
     }
 
     when (val step = state.step) {
-        TurnOnStep.Explain -> if (!asking) AlertDialog(onDismissRequest = phone::cancel,
-            modifier = Modifier.testTag("push_explain").lanternDialogEdge(),
-            title = { Text(stringResource(R.string.push_explain_title)) },
-            text = { Text(stringResource(R.string.push_explain_body)) },
-            confirmButton = { TextButton(onClick = {
+        TurnOnStep.Explain -> if (!asking) PushExplainDialog(busy = state.busy, onContinue = {
                 if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
                         Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                     asking = true
                     permission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 } else phone.proceed(session, direct)
-            }, enabled = !state.busy, modifier = Modifier.testTag("push_explain_continue")) { Text(stringResource(R.string.push_continue)) } },
-            dismissButton = { TextButton(onClick = phone::cancel) { Text(stringResource(R.string.cancel)) } })
+            }, onCancel = phone::cancel)
         is TurnOnStep.Choose -> {
             var picked by remember(step) { mutableStateOf(step.distributors.firstOrNull { it.packageName == step.current }) }
-            AlertDialog(onDismissRequest = phone::cancel, modifier = Modifier.testTag("push_choose").lanternDialogEdge(),
-                title = { Text(stringResource(R.string.push_choose_title)) },
-                text = { Column {
-                    step.distributors.forEach { distributor ->
-                        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(picked === distributor, role = Role.RadioButton,
-                            onClick = { picked = distributor }).testTag("push_distributor:${distributor.packageName}"),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = picked === distributor, onClick = null)
-                            Spacer(Modifier.width(12.dp))
-                            Text(distributor.label)
-                        }
-                    }
-                } },
-                confirmButton = { TextButton(onClick = { picked?.let { phone.choose(session, it, direct) } },
-                    enabled = picked != null && !state.busy, modifier = Modifier.testTag("push_choose_confirm")) {
-                    Text(stringResource(R.string.push_continue)) } },
-                dismissButton = { TextButton(onClick = phone::cancel) { Text(stringResource(R.string.cancel)) } })
+            PushChooseDialog(step.distributors, picked, busy = state.busy, onPick = { picked = it },
+                onConfirm = { picked?.let { phone.choose(session, it, direct) } }, onCancel = phone::cancel)
         }
         // No delivery app, but Play services: Google delivery, only on an explicit "Use Google".
-        is TurnOnStep.UseGoogle -> AlertDialog(onDismissRequest = phone::cancel,
-            modifier = Modifier.testTag("push_google").lanternDialogEdge(),
-            title = { Text(stringResource(R.string.push_none_title)) },
-            text = { Column {
-                Text(stringResource(R.string.push_google_body))
-                TextButton(onClick = {
-                    try { context.startActivity(Intent(Intent.ACTION_VIEW, DISTRIBUTOR_GUIDE.toUri())) }
-                    catch (_: ActivityNotFoundException) { /* No browser: the explanation above still stands. */ }
-                // The label lines up with the body and sits close to it; the 48dp target stays, and the
-                // dialog's own spacing comes before the buttons (PR219 J review).
-                }, contentPadding = PaddingValues(start = 0.dp, top = 0.dp, end = 12.dp, bottom = 0.dp),
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("push_google_guide")) { Text(stringResource(R.string.push_google_link)) }
-            } },
-            confirmButton = { TextButton(onClick = { phone.useGoogle(session, direct) }, enabled = !state.busy,
-                modifier = Modifier.testTag("push_use_google")) { Text(stringResource(R.string.push_use_google)) } },
-            dismissButton = { TextButton(onClick = phone::cancel) { Text(stringResource(R.string.cancel)) } })
+        is TurnOnStep.UseGoogle -> PushUseGoogleDialog(busy = state.busy, onGuide = {
+                try { context.startActivity(Intent(Intent.ACTION_VIEW, DISTRIBUTOR_GUIDE.toUri())) }
+                catch (_: ActivityNotFoundException) { /* No browser: the explanation above still stands. */ }
+            }, onUseGoogle = { phone.useGoogle(session, direct) }, onCancel = phone::cancel)
         // Neither a delivery app nor Play services (or a build without the embedded distributor).
-        TurnOnStep.NoDistributor -> AlertDialog(onDismissRequest = phone::cancel,
-            modifier = Modifier.testTag("push_none").lanternDialogEdge(),
-            title = { Text(stringResource(R.string.push_none_title)) },
-            text = { Text(stringResource(R.string.push_none_body)) },
-            confirmButton = { TextButton(onClick = {
+        TurnOnStep.NoDistributor -> PushNoDistributorDialog(onGuide = {
                 phone.cancel()
                 try { context.startActivity(Intent(Intent.ACTION_VIEW, DISTRIBUTOR_GUIDE.toUri())) }
                 catch (_: ActivityNotFoundException) { /* No browser: the explanation above still stands. */ }
-            }) { Text(stringResource(R.string.push_none_link)) } },
-            dismissButton = { TextButton(onClick = phone::cancel) { Text(stringResource(R.string.push_close)) } })
+            }, onClose = phone::cancel)
         TurnOnStep.None -> Unit
     }
 
-    if (confirmOff) AlertDialog(onDismissRequest = { confirmOff = false },
-        modifier = Modifier.testTag("push_phone_off_dialog").lanternDialogEdge(),
-        title = { Text(stringResource(R.string.push_turn_off_title)) },
-        text = { Text(stringResource(R.string.push_remove_body)) },
-        confirmButton = { TextButton(onClick = { confirmOff = false; phone.turnOff(session) },
-            modifier = Modifier.testTag("push_phone_off_confirm")) { Text(stringResource(R.string.push_turn_off)) } },
-        dismissButton = { TextButton(onClick = { confirmOff = false }) { Text(stringResource(R.string.cancel)) } })
+    if (confirmOff) PushPhoneOffDialog(onConfirm = { confirmOff = false; phone.turnOff(session) }, onCancel = { confirmOff = false })
 }
 
 /** States that need the person's attention carry the decorative warning glyph; the words say it already. */

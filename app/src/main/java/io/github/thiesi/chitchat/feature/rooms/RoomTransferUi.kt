@@ -41,7 +41,7 @@ import io.github.thiesi.chitchat.core.rooms.RoomTransferMember
 import io.github.thiesi.chitchat.core.theme.Lantern
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.core.ui.InlineError
-import io.github.thiesi.chitchat.core.ui.scrollEdgeDividers
+import io.github.thiesi.chitchat.core.ui.DialogScrollBody
 import io.github.thiesi.chitchat.feature.auth.StepUpDialog
 
 /** Bold the first occurrence of [bold] inside [text] (P-217's "**{name}** …" lines). */
@@ -164,9 +164,7 @@ internal fun RoomTransferConfirm(transfer: RoomTransferUi, onConfirm: () -> Unit
             Modifier.testTag("rooms_transfer_confirm_title")) },
         // Scrolls like RoomDetailDialog: at large font the whole consequence ("You can't undo this yourself") must stay
         // readable instead of being clipped by the dialog window.
-        text = { val scroll = rememberScrollState()
-            Column(Modifier.scrollEdgeDividers(scroll, MaterialTheme.colorScheme.outline).verticalScroll(scroll)
-                .testTag("rooms_transfer_confirm_scroll")) {
+        text = { DialogScrollBody(Modifier.testTag("rooms_transfer_confirm_scroll")) {
             Text(if (transfer.ownerActing) stringResource(R.string.rooms_transfer_confirm_owner, target.username)
                 else stringResource(R.string.rooms_transfer_confirm_admin, target.username,
                     transfer.owner?.username ?: stringResource(R.string.rooms_transfer_current_owner)),
