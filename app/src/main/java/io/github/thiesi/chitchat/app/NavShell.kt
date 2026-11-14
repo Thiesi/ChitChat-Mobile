@@ -34,8 +34,8 @@ import io.github.thiesi.chitchat.feature.auth.AuthViewModel
 
 /*
  * Navigation shell (docs/design/navigation-shell.md, N1). Onboarding is the root graph's `home`;
- * every signed-in destination lives in the nested SHELL_GRAPH. A tab root is the tab's route directly
- * above the shell graph entry; tab switches pop to that entry, saving the left tab's stack.
+ * every signed-in destination lives in the nested SHELL_GRAPH. A tab root is the tab's route with no visible
+ * entry below it; tab switches pop to the shell graph entry, saving the left tab's stack.
  */
 internal const val HOME_ROUTE = "home"
 internal const val SHELL_GRAPH = "shell"

@@ -245,15 +245,16 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         }
         // Navigation shell (navigation-shell.md). Departure rules stay in the root effect below: a tab switch
         // changes the current entry exactly like leaving a route did, so the same cancellations apply.
-        // Only public NavController API: a tab root is a tab route directly above the shell graph entry; the current
-        // tab is kept in saved state, set by every tab change and confirmed whenever a tab root is current.
+        // Only public NavController API: a tab root is a tab route with no visible entry below it (previousBackStackEntry
+        // skips graph entries; a pushed screen always has its tab root below it). The current tab is kept in saved
+        // state, set by every tab change and confirmed whenever a tab root is current.
         var currentTab by rememberSaveable { mutableStateOf(ShellTab.ROOMS.name) }
         // getBackStackEntry throws IllegalArgumentException when the graph isn't on the back stack (onboarding,
         // after leaving): that means "not in the shell". Nothing else is swallowed.
         fun inShell() = try { nav.getBackStackEntry(SHELL_GRAPH); true } catch (_: IllegalArgumentException) { false }
         fun liveTab(): ShellTab? = if (inShell()) ShellTab.valueOf(currentTab) else null
         val entryTab = tabOf(entry?.destination?.route)
-        val tabRoot = entryTab != null && nav.previousBackStackEntry?.destination?.route == SHELL_GRAPH
+        val tabRoot = entryTab != null && nav.previousBackStackEntry == null
         val tab = if (entry != null && inShell()) (if (tabRoot) entryTab else ShellTab.valueOf(currentTab)) else null
         SideEffect { if (tabRoot && entryTab != null && entryTab.name != currentTab) currentTab = entryTab.name }
         // "TAB=scope key" per saved tab stack (a read-only, bundle-safe list).

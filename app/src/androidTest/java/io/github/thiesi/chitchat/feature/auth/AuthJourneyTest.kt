@@ -265,6 +265,7 @@ class AuthJourneyTest {
         compose.onNodeWithText("The server confirmed that your account was restored.").assertDoesNotExist()
         compose.onNodeWithText("Recovery code").performScrollTo().performTextInput("UNUSED-FIXTURE-CODE")
         compose.onNodeWithText("Use recovery code").performScrollTo().performClick()
+        compose.openTab("you").performClick()
         compose.onNodeWithText("The server confirmed that your account was restored.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, sessions.restores); assertEquals(1, sessions.recoveries) }
     }

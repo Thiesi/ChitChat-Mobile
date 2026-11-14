@@ -12,7 +12,7 @@ profile header and the remaining captures.
   `shell` graph, whose start is the Rooms root. Every signed-in destination is in `shell`. Leaving `AUTHENTICATED` clears
   every saved tab stack and returns to `home`, with the same cleanups as before.
 - **Tabs** (`NavShell.kt`): Rooms (`rooms`), Direct (the scoped `direct?…` inbox), Activity (the scoped `notifications?…`
-  center) and You (`you`). A tab root is its route directly above the shell graph entry (public `NavController` API only).
+  center) and You (`you`). A tab root is its route with no visible entry below it (public `NavController` API only).
   The current tab is kept in saved state, so it survives recreation. Direct shows only when the DM models exist, and Activity only with a notice identity.
 - **Departures unchanged.** A tab switch changes the current entry, and the existing root effect applies today's
   departure rules: directory work cancelled, pane left, DM inbox and thread backgrounded, account work cancelled, search
@@ -69,7 +69,7 @@ proves no read happens before it.
   - the You controls by tag;
   - with the IME up on the Rooms and Direct roots, the bar is absent and the field's bounds are unchanged.
 - **`NavShellPresentationTest`:** at real Configuration font scales 1.0 and 2.0, light and dark, every label is
-  unclipped, not ellipsized and inside its item, and every item is at least 48dp. Captures go to `ccm-nav-presentation`
+  fully drawn and inside its item (no ellipsized line, no line wider than the drawn label, no wrapped line below it; `TextLayoutResult.hasVisualOverflow` proved unreliable here), with a negative control that the check rejects clipped, ellipsized and cut text, and every item is at least 48dp. Captures go to `ccm-nav-presentation`
   (4 files).
 - **Navigation-only migrations:** existing journeys reach Activity, Direct and Rooms through the `openTab` test helper,
   with each journey's original input routing (`performNativeTap` or `performClick`). The You rows replace the old

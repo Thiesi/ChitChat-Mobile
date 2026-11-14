@@ -80,6 +80,8 @@ class NavShellJourneyTest {
         override suspend fun saveTheme(theme: ThemePreference) = Unit
     })
     @Volatile private var ime = 0
+    private var taps: PendingPushTap? = null
+    private var targets: io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel? = null
 
     @After fun close() {
         Espresso.closeSoftKeyboard()
@@ -90,7 +92,7 @@ class NavShellJourneyTest {
         val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
         SideEffect { ime = bottom }
         Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, roomModel = directory, conversationModel = room,
-            directInbox = inbox, directThread = thread, notifications = notices) }
+            directInbox = inbox, directThread = thread, notifications = notices, messageTargets = targets, pushTaps = taps) }
     }
     private fun signedIn() {
         compose.runOnUiThread { install(compose.activity) }
@@ -173,16 +175,8 @@ class NavShellJourneyTest {
     }
 
     @Test fun aRestoredConversationIsAReentryAndReadsOnlyAfterAFreshHistory() {
-        val taps = PendingPushTap()
-        compose.runOnUiThread { compose.activity.setContent {
-            Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, roomModel = directory, conversationModel = room,
-                directInbox = inbox, directThread = thread, notifications = notices, pushTaps = taps) }
-        } }
-        compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.ANONYMOUS }
-        compose.runOnIdle { runBlocking { sessions.signIn("Viewer", "fixture-password") }
-            sessions.state.value = sessions.state.value.copy(chatPolicy = api.policy, privacy = api.privacy) }
-        compose.openTab("rooms").assertIsSelected()
-        compose.waitUntil(5_000) { directory.state.value.loaded && !directory.state.value.busy }
+        val taps = PendingPushTap().also { this.taps = it }
+        signedIn()
         openRoom()
         // A push tap lands on Activity from inside the conversation, saving the Rooms stack with it.
         compose.runOnIdle { taps.offer(PushTap(sessions.state.value.server!!.value, sessions.state.value.user!!.id, null)) }
@@ -198,6 +192,23 @@ class NavShellJourneyTest {
         compose.waitUntil(5_000) { "history" in log && room.state.value.loaded && !room.state.value.busy }
         compose.runOnIdle { val first = log.indexOf("read"); assertTrue(first == -1 || first > log.indexOf("history")) }
         compose.onNodeWithTag("conversation_composer").assertExists()
+    }
+
+    /** Why a tab root is "a tab route with nothing below it": an Activity notice can push the DM inbox route. */
+    @Test fun theBarIsAbsentOnTheInboxPushedFromActivityAndPresentOnEveryRoot() {
+        val taps = PendingPushTap().also { this.taps = it }
+        compose.runOnUiThread { targets = androidx.lifecycle.ViewModelProvider(compose.activity,
+            io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel.factory(api.lookups))[
+            io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel::class.java] }
+        signedIn()
+        for (tab in listOf("direct", "activity", "you", "rooms")) {
+            compose.openTab(tab).performClick(); compose.openTab(tab).assertIsSelected(); bar(true)
+        }
+        compose.openTab("activity").performClick(); compose.onNodeWithTag("notification_list").assertExists()
+        compose.runOnIdle { taps.offer(PushTap(sessions.state.value.server!!.value, sessions.state.value.user!!.id, "/messages.php")) }
+        compose.waitUntil(5_000) { taps.state.value == null && runCatching { compose.onNodeWithTag("dm_inbox").assertExists() }.isSuccess }
+        bar(false) // The inbox route, pushed on Activity, is not a tab root.
+        back(); compose.onNodeWithTag("notification_list").assertExists(); bar(true)
     }
 
     @Test fun theSelectedTabAndSavedStacksSurviveRecreation() {
