@@ -49,9 +49,22 @@ data: {"id":$id,"type":"rooms_changed","room_id":null,"actor_user_id":7,"payload
         assertEquals(listOf(41L, 99L), values.filterIsInstance<RealtimeSignal.Event>().map { it.value.id })
         val request = server.takeRequest(5, TimeUnit.SECONDS)!!
         assertEquals("GET", request.method); assertEquals("/api/v1/events/stream.php", request.url.encodedPath)
-        assertNull(request.url.encodedQuery); assertEquals("17", request.headers["Last-Event-ID"])
+        assertEquals("resume=settled", request.url.encodedQuery); assertEquals("17", request.headers["Last-Event-ID"])
         assertEquals("text/event-stream", request.headers["Accept"]); assertEquals("SITE=fixture", request.headers["Cookie"])
         assertNull(request.headers["X-CSRF-Token"]); assertEquals(1, server.requestCount)
+    }
+    /** A fresh runtime sends position 0 exactly as before; a received settled position is what goes back. */
+    @Test fun settledStreamSendsTheStoredPositionIncludingZeroAndDecodesALowerFrameId() = runTest {
+        server.enqueue(stream("id: 0\nevent: rooms_changed\n" + frame(41).substringAfter("event: rooms_changed\n")))
+        val values = api.events(0).toList()
+        val event = values.filterIsInstance<RealtimeSignal.Event>().single().value
+        assertEquals(41L, event.id); assertEquals(0L, event.position)
+        val fresh = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("resume=settled", fresh.url.encodedQuery); assertEquals("0", fresh.headers["Last-Event-ID"])
+        server.enqueue(stream(frame(42)))
+        api.events(event.position).toList()
+        val resumed = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("resume=settled", resumed.url.encodedQuery); assertEquals("0", resumed.headers["Last-Event-ID"])
     }
     @Test fun libraryFramingSupportsCrLfMultilineAndUnnumberedInvalidationAfterAnId() = runTest {
         val multiline = frame().replace("\"payload\":[],", "\"payload\":[],\ndata: ")

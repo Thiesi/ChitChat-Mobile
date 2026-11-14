@@ -66,13 +66,17 @@
 
 [M4c4c1](milestones/M4c4c1-notification-state.md) consumes the existing notification page/read contracts through scoped presentation state and bounded canonical GET reconciliation, now used by M4c4c2's native list/read/count controls. Counts remain independent of loaded rows; View message and Mark as read stay separate. Its bounds/coverage/confirmed-read overlay are local state, not server fields or timestamps. No new endpoint, SSE event, authorization mechanism or backend checkout change is introduced; general-link consumption remains pending.
 
-Documented minimum backend: **v3.9.0**, released at `8b790caca5686038adc3b12f3e4e09a02ffd03aa`, per the
+Documented minimum backend: **v3.10.0**, released at `b2791a0` (technical lead, 2026-11-14). The client always
+opens the event stream with settled resume (`?resume=settled`, ChitChat#286): in the default mode a lower event ID
+that commits after a higher one has been streamed is skipped, and there is no client-side fallback for that. The
+server advertises it as `capabilities.realtime_settled_resume`; the client doesn't gate on that key, because the
+minimum guarantees it. All three known instances (chitchat, talksquare, cctest) run v3.12.0 or later (deployed 2026-11-13, confirmed by the backend/web lead from session.php); no known installed base is below v3.10.0. Before that the minimum was **v3.9.0** (`8b790caca5686038adc3b12f3e4e09a02ffd03aa`), per the
 [technical lead's decision](https://github.com/Thiesi/ChitChat-Mobile/pull/206#issuecomment-6836338017): room ownership transfer ships in v1 and has no capability key, so
-it can't be detected on an older server. It was previously v3.7.0 (`eba61e9`), per the
+it can't be detected on an older server. Before that it was v3.7.0 (`eba61e9`), per the
 [maintainer's baseline decision](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6747953068)
 and [its activation](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6806140508).
 There are no older-server fallbacks. No code constant exists yet; the pending setup and server-update
-check will use 3.9.0.
+check will use 3.10.0.
 The source links below retain the original **v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf0d1`**
 audit; they are historical evidence, not a current minimum or tested-installation claim.
 Only merged backend contracts may be adopted; pending work appears in [backend issues](backend-dependencies.md).
@@ -177,7 +181,7 @@ M4c1 consumes top-level optional `session.php.share_typing` and existing `POST a
 
 ## SSE, presence, and state recovery
 
-`GET events/stream.php` authenticates via cookie and releases the PHP session lock before polling. Header `Last-Event-ID` wins over `after_id`. Stream duration is about 25 seconds, polling 500ms in batches of 100; comment heartbeat every ten seconds, `retry:1000`. [Stream source](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/api/v1/events/stream.php#L20).
+`GET events/stream.php` authenticates via cookie and releases the PHP session lock before polling. Header `Last-Event-ID` wins over `after_id`. Since v3.10.0 the client always adds `?resume=settled` ([realtime.md at v3.10.0](https://github.com/Thiesi/ChitChat/blob/b2791a0/docs/api/realtime.md)): the frame `id:` is then a non-decreasing resume position that may be below `data.id`; a reconnect may resend events above it, de-duplicated by `data.id`; control frames keep their shape with no `id:`; bare `id:` lines are optional and OkHttp doesn't surface them. Stream duration is about 25 seconds, polling 500ms in batches of 100; comment heartbeat every ten seconds, `retry:1000`. [Stream source](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/public/api/v1/events/stream.php#L20).
 
 Persistent frame:
 

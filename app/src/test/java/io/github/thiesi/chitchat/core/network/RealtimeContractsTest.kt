@@ -21,6 +21,14 @@ class RealtimeContractsTest {
         assertEquals("2026-07-17T08:00:00Z", value.createdAt.toString())
         assertEquals(999L, event(envelope(999), "999").id)
     }
+    /** Settled resume (v3.10.0): the frame id is a resume position, independent of data.id. */
+    @Test fun theFrameIdIsAPositionThatMayDifferFromTheEventIdAndMayBeZero() {
+        val lower = event(envelope(41), "17")
+        assertEquals(41L, lower.id); assertEquals(17L, lower.position)
+        assertEquals(0L, event(envelope(41), "0").position)
+        assertEquals(41L, event(envelope(41), "41").position)
+        assertEquals(9_223_372_036_854_775_807L, event(envelope(41), "9223372036854775807").position)
+    }
     @Test fun phpEmptyArrayRoomSignalAndDocumentedObjectBothWork() {
         assertTrue(event(envelope(payload = "[]")).payload.isEmpty())
         assertTrue(event().payload.isEmpty())
@@ -58,7 +66,7 @@ class RealtimeContractsTest {
         rejected("""{"code":"unknown"}""", type = "error")
     }
     @Test fun mismatchedIdsTypesRoomActorAndTimestampAreRejected() {
-        for (id in listOf(null, "", "0", "-1", "42", "1e1", "9223372036854775808")) rejected(envelope(), id)
+        for (id in listOf(null, "", "-1", "1e1", "4.2", " 41", "9223372036854775808")) rejected(envelope(), id)
         rejected(envelope(id = 0)); rejected(envelope(), type = "ping")
         rejected(envelope(room = "0")); rejected(envelope(actor = "0")); rejected(envelope(time = "no offset"))
         rejected(envelope(type = "room_message"), type = "room_message")

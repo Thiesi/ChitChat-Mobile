@@ -91,12 +91,75 @@ class RealtimeCoordinatorTest {
 
     @Test fun duplicateEventsDoNotReplayAndGapsAreLegal() = runTest {
         val h = Harness(this); h.start()
-        h.emit(event(10)); val revision = h.model.state.value.reconcileVersion
-        h.emit(event(10)); h.emit(event(9)); assertEquals(revision, h.model.state.value.reconcileVersion)
+        h.emit(event(10, position = 5)); val revision = h.model.state.value.reconcileVersion
+        h.emit(event(10, position = 5)); assertEquals(revision, h.model.state.value.reconcileVersion)
         h.emit(event(91)); assertEquals(91L, h.model.state.value.cursor)
         assertTrue(h.model.state.value.reconcileVersion > revision) // No subscriber: durable fallback.
         h.api.streams.last().signals.close(); runCurrent(); advanceTimeBy(1_000); runCurrent()
         assertEquals(91L, h.api.streams.last().after)
+    }
+
+    // Settled resume (v3.10.0) ------------------------------------------------------------------
+
+    private fun TestScope.delivered(h: Harness): MutableList<Long> {
+        val ids = mutableListOf<Long>()
+        backgroundScope.launch { h.model.events.collect { ids += it.id } }; runCurrent()
+        return ids
+    }
+
+    @Test fun aLateLowerEventIsDeliveredAndAResendAfterReconnectIsDroppedByEventId() = runTest {
+        val h = Harness(this); h.start(); val ids = delivered(h)
+        h.emit(event(10, "rooms_changed", position = 8)); assertEquals(8L, h.model.state.value.cursor)
+        h.emit(event(9, "rooms_changed", position = 10)) // Committed late: a lower id after a higher one is new, not a duplicate.
+        h.emit(event(11, "rooms_changed", position = 10))
+        assertEquals(listOf(10L, 9L, 11L), ids)
+        h.api.streams.last().signals.close(); runCurrent(); advanceTimeBy(1_000); runCurrent()
+        assertEquals("The stored frame position goes back, never data.id", 10L, h.api.streams.last().after)
+        h.emit(event(11, "rooms_changed", position = 11)) // Resent above the position.
+        h.emit(event(12, "rooms_changed", position = 12))
+        assertEquals(listOf(10L, 9L, 11L, 12L), ids)
+        assertEquals(12L, h.model.state.value.cursor)
+    }
+
+    @Test fun aFreshRuntimeResumesFromZeroAndAReceivedZeroPositionStaysZero() = runTest {
+        val h = Harness(this); h.start()
+        assertEquals("Unchanged first connection", 0L, h.api.streams.single().after)
+        h.emit(event(41, "rooms_changed", position = 0))
+        h.api.streams.last().signals.close(); runCurrent(); advanceTimeBy(1_000); runCurrent()
+        assertEquals(0L, h.api.streams.last().after)
+    }
+
+    @Test fun aPositionDecreaseWithinOneConnectionIsIncompatibleAndDoesNotReconnect() = runTest {
+        val h = Harness(this); h.start(); val ids = delivered(h)
+        h.emit(event(5, "rooms_changed", position = 5)); h.emit(event(6, "rooms_changed", position = 4))
+        assertEquals(RealtimePhase.ERROR, h.model.state.value.phase)
+        assertEquals(FailureKind.INCOMPATIBLE, h.model.state.value.error?.kind)
+        assertEquals(listOf(5L), ids); assertEquals(5L, h.model.state.value.cursor)
+        advanceTimeBy(60_000); runCurrent(); assertEquals("No automatic reconnect loop", 1, h.api.streams.size)
+    }
+
+    @Test fun aNewConnectionMayStartLowerButTheStoredPositionNeverMovesBack() = runTest {
+        val h = Harness(this); h.start(); val ids = delivered(h)
+        h.emit(event(10, "rooms_changed", position = 10))
+        h.api.streams.last().signals.close(); runCurrent(); advanceTimeBy(1_000); runCurrent()
+        h.emit(event(12, "rooms_changed", position = 3))
+        assertEquals(RealtimePhase.LIVE, h.model.state.value.phase)
+        assertEquals(listOf(10L, 12L), ids); assertEquals(10L, h.model.state.value.cursor)
+    }
+
+    @Test fun theSeenSetIsBoundedAndForgetsTheOldestFirst() = runTest {
+        val h = Harness(this); h.start(); val ids = delivered(h)
+        for (id in 2L..1_002L) h.emit(event(id, "rooms_changed", position = 1))
+        h.emit(event(1_002, "rooms_changed", position = 1)); assertEquals("Still remembered", 1_001, ids.size)
+        h.emit(event(2, "rooms_changed", position = 1)); assertEquals("Forgotten after 1,000; message ids stay idempotent downstream", 1_002, ids.size)
+    }
+
+    @Test fun aBroadcastResentAfterSeenSetOverflowIsListedOnce() = runTest {
+        val h = Harness(this); h.start()
+        h.emit(event(2, "global_broadcast", message = "Fixture notice", position = 1))
+        for (id in 3L..1_003L) h.emit(event(id, position = 1)) // Pushes id 2 out of the seen-set.
+        h.emit(event(2, "global_broadcast", message = "Fixture notice", position = 1))
+        assertEquals(1, h.model.state.value.broadcasts.count { it.id == 2L })
     }
 
     @Test fun malformedKnownPayloadStopsWithoutAdvancingAndRetryIsExplicit() = runTest {
@@ -295,10 +358,11 @@ class RealtimeCoordinatorTest {
         }
     }
     companion object {
-        private fun event(id: Long, type: String = "future_event", room: Long? = null, message: String? = null) =
+        private fun event(id: Long, type: String = "future_event", room: Long? = null, message: String? = null,
+            position: Long = id) =
             RealtimeEvent(id, type, room, null, JsonObject(buildMap {
                 if (message != null) put("message", JsonPrimitive(message))
                 if (type == "presence_changed") { put("room_id", JsonPrimitive(room)); put("user_id", JsonPrimitive(7)) }
-            }), Instant.EPOCH)
+            }), Instant.EPOCH, position = position)
     }
 }
