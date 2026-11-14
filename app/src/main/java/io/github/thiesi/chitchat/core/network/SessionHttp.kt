@@ -255,6 +255,20 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
             .also { requireValidRoom(it, roomId); if (!it.isMember) throw ApiFailure(FailureKind.INCOMPATIBLE) }
     }
 
+    /** Room ownership transfer facts (#302): one GET, subset decoded, never cached. */
+    suspend fun roomTransferSnapshot(roomId: Long): io.github.thiesi.chitchat.core.rooms.RoomTransferSnapshot {
+        require(roomId > 0)
+        return decode<TransferSnapshotReply>(request("admin/rooms/snapshot.php?room_id=$roomId").require200()).transferSnapshot(roomId)
+    }
+
+    /** One CSRF POST (#273), never replayed. `403 step_up_required` and every refusal stay typed ApiFailures. */
+    suspend fun transferRoomOwnership(roomId: Long, targetUserId: Long, csrf: String): RoomInfo {
+        require(roomId > 0 && targetUserId > 0)
+        return decode<RoomReply>(request("rooms/transfer-ownership.php",
+            apiJson.encodeToString(TransferOwnershipRequest(roomId, targetUserId)), csrf).require200()).room
+            .also { requireValidRoom(it, roomId) }
+    }
+
     suspend fun leaveRoom(roomId: Long, csrf: String) {
         require(roomId > 0)
         val reply = decode<RoomLeftReply>(request("rooms/leave.php", apiJson.encodeToString(RoomIdRequest(roomId)), csrf).require200())

@@ -43,6 +43,62 @@ class RoomHttpTest {
         assertEquals("/api/v1/rooms/list.php", server.takeRequest().url.encodedPath)
     }
 
+    // Ownership transfer (v3.10.0, #273/#302): protocol only.
+    private fun member(id: Long, role: String, flag: String? = "false") =
+        """{"id":$id,"username":"Fixture $id","role":"$role","joined_at":"2026-11-01T00:00:00+00:00","active_connections":0""" +
+            (if (flag == null) "" else ""","can_transfer_ownership":$flag""") + "}"
+    private fun snapshot(vararg members: String, roomId: Long = 42) =
+        """{"room":{"id":$roomId,"key":"general","can_take_ownership":false},"members":[${members.joinToString(",")}],"invitations":[{"id":99,"username":"Invited fixture","invited_by":7,"invited_by_username":"Owner","created_at":"2026-11-01T00:00:00+00:00"}]}"""
+
+    @Test fun transferSnapshotKeepsOnlyFlaggedCandidatesAndTheOwner() = runTest {
+        server.enqueue(json(snapshot(member(7, "owner"), member(8, "moderator", "true"), member(9, "member", "false"),
+            member(10, "member", null), member(11, "member", "true"), member(12, "member", "null"))))
+        val result = api.roomTransferSnapshot(42)
+        assertEquals(42L, result.roomId); assertEquals(7L, result.owner?.id)
+        assertEquals("Only flagged rows; false or missing are never offered", listOf(8L, 11L), result.candidates.map { it.id })
+        assertEquals("moderator", result.candidates.first().role)
+        val request = server.takeRequest()
+        assertEquals("GET", request.method)
+        assertEquals("/api/v1/admin/rooms/snapshot.php?room_id=42", request.url.encodedPath + "?" + request.url.encodedQuery)
+        assertNull(request.headers["X-CSRF-Token"])
+    }
+
+    @Test fun malformedTransferSnapshotsAreIncompatible() = runTest {
+        for (body in listOf(snapshot(member(7, "owner"), roomId = 43),                       // another room
+            snapshot(member(7, "owner"), member(7, "member")),                               // duplicate id
+            snapshot(member(7, "owner"), member(8, "owner")),                                // two owners
+            snapshot(member(7, "owner", "true")),                                            // the owner offered
+            snapshot(member(8, "guest")),                                                    // unknown role
+            snapshot(member(8, "member", "\"true\"")),                                     // quoted Boolean
+            snapshot(member(0, "member")))) {                                                // non-positive id
+            server.enqueue(json(body))
+            assertEquals(body, FailureKind.INCOMPATIBLE, failure { api.roomTransferSnapshot(42) }.kind)
+        }
+    }
+
+    @Test fun transferPostsOnceWithCsrfAndReturnsTheRoomAsTheActorSeesIt() = runTest {
+        server.enqueue(json("""{"room":${room("\"moderator\"")}}"""))
+        assertEquals("moderator", api.transferRoomOwnership(42, 17, csrf).memberRole)
+        val request = server.takeRequest()
+        assertEquals("POST", request.method); assertEquals("/api/v1/rooms/transfer-ownership.php", request.url.encodedPath)
+        assertEquals(csrf, request.headers["X-CSRF-Token"])
+        assertEquals("""{"room_id":42,"target_user_id":17}""", request.body!!.utf8())
+        server.enqueue(json("""{"room":${room(id = 43)}}"""))
+        assertEquals(FailureKind.INCOMPATIBLE, failure { api.transferRoomOwnership(42, 17, csrf) }.kind)
+    }
+
+    @Test fun everyTransferRefusalStaysTypedAndIsNeverResent() = runTest {
+        val outcomes = listOf(403 to "step_up_required", 403 to "forbidden", 404 to "room_not_found",
+            404 to "membership_not_found", 409 to "already_owner", 409 to "transfer_target_not_eligible", 409 to "ownership_changed")
+        for ((status, code) in outcomes) {
+            server.enqueue(json("""{"error":{"code":"$code","message":"Private fixture"}}""", status))
+            val refused = failure { api.transferRoomOwnership(42, 17, csrf) }
+            assertEquals(status, refused.status); assertEquals(code, refused.code)
+            assertFalse(refused.toString().contains("Private fixture"))
+        }
+        assertEquals("One request per attempt, no replay", outcomes.size, server.requestCount)
+    }
+
     @Test fun detailUsesExactNumericIdAndAllowsNullMemberRole() = runTest {
         server.enqueue(json("""{"room":${room()}}"""))
         assertFalse(api.room(42).isMember)
