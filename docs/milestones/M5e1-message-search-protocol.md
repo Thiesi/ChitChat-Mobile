@@ -25,3 +25,32 @@ The new contract/TLS tests cover literal Unicode/quoted queries in POST bodies, 
 Local verification passed22 new search tests, then the fresh full900-JVM suite with0 failures/errors/skips, lint0, debug/release, app test and opt-in standalone APK builds. All160 tasks executed in345s; signed APK certificates were verified. The complete command was :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest -PfocusDiagnostic=true :focus-diagnostic:assembleDebug --rerun-tasks, using the checked-in wrapper and configured JDK17/SDK36. The first focused run's two fixture mistakes and the initial missing-opt-in task-selection failure remain archived; neither required a production change. Credential/device-free CI-wrapper tests21/21 and208 local documentation links passed. Hosted full native CI and written current-head initial/fresh review remain required.
 
 No native input helper, test deadline, production composer, dependency or ordinary CI filter is changed. Existing186 native regressions remain enabled. No local native/physical-device/live-account/API26/accessibility/release acceptance is claimed. PR76's explicit one-head development exception does not apply to this or future heads; issue69's failures/consumed diagnostic and PR71's hold remain preserved.
+
+## Match ranges and room filter (v3.10.0, #283)
+
+From the [v3.10.0 contract](https://github.com/Thiesi/ChitChat/blob/b2791a0/docs/api/message-search.md):
+
+- **Excerpt.** A message longer than 320 characters now comes back as a window around its first match, with
+  `… ` and ` …` where it was cut. It is still plain text, at most 320 code points, and the client renders it as
+  given, ellipses included.
+- **`excerpt_matches`.** A list of `{start, length}` in UTF-16 code units, relative to the excerpt as sent.
+  `ExcerptMatch` carries each range on `MessageSearchHit.excerptMatches`.
+  - **All or nothing per row.** The ranges are kept only if every one is a pair of JSON integers, has length ≥ 1,
+    lies inside the excerpt, comes in order, doesn't overlap the previous one and doesn't split a surrogate pair.
+    Otherwise that row keeps none of them and shows plain text.
+  - **The drop is silent on purpose.** The ranges are a presentation hint, so a malformed, mistyped, non-array or
+    absent field never fails the search or the row. The rest of the response is validated strictly as before.
+    Ranges are never repaired or clipped.
+- **Highlighting** (presentation lead, 2026-11-14). Each match gets a `presenceWash` background plus SemiBold:
+  two cues, never colour alone, and no underline, because underline means "link". The row's text keeps 4.5:1 on
+  `presenceWash` in light, dark and pure black (`LanternTest`). TalkBack reads the excerpt as plain text with no
+  added speech.
+- **`room_id`** (protocol only, no native entry point yet). `MessageSearchRequest.roomId` is sent as `room_id` only
+  when set.
+  - Locally, a non-positive ID, or Direct scope with a room, is a `400 validation_error` that never reaches the
+    server.
+  - A room the caller can't search answers `404 room_not_found`, which is kept as that typed `ApiFailure`.
+  - A filtered response must contain only that room's messages; anything else is `INCOMPATIBLE`.
+  - A "Search in this room" entry from the room details sheet needs its own small design (presentation lead) and
+    follows separately.
+

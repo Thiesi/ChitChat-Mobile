@@ -180,7 +180,7 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
                                 is MessageSearchHit.Room -> stringResource(R.string.message_search_room, row.room.name)
                                 is MessageSearchHit.Direct -> stringResource(R.string.message_search_direct, row.peer.username)
                             }, style = MaterialTheme.typography.titleMedium)
-                            Text(row.excerpt, Modifier.testTag("message_search_excerpt"))
+                            Text(highlightedExcerpt(row.excerpt, row.excerptMatches), Modifier.testTag("message_search_excerpt"))
                             Text(row.sender?.username ?: stringResource(R.string.message_search_sender_unknown), style = MaterialTheme.typography.bodySmall)
                             Text(messageTime(row.createdAt, expected.chatPolicy?.display) +
                                 if (row.editedAt != null) stringResource(R.string.message_search_edited) else "", style = MaterialTheme.typography.bodySmall)

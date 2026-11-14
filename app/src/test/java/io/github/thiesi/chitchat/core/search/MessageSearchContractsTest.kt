@@ -30,6 +30,58 @@ class MessageSearchContractsTest {
         assertTrue(dm.outgoing); assertEquals(7L, dm.sender.id); assertEquals(12L, dm.peer.id)
         assertFalse(result.hasMore); assertFalse(result.canLoadMore)
     }
+    // excerpt_matches (v3.10.0, #283): validated all or nothing per row, never failing the response.
+    private fun withMatches(excerpt: String, matches: String) = room.replace(""""excerpt":"<b>Private fixture</b> @Alice"""",
+        """"excerpt":"$excerpt","excerpt_matches":$matches""")
+    private fun ranges(excerpt: String, matches: String) =
+        decode(page(withMatches(excerpt, matches))).results.single().excerptMatches.map { it.start to it.length }
+
+    @Test fun validMatchRangesAreKeptInUtf16UnitsAsTheDocumentationExample() {
+        // The contract's own example: "Party " is 6 units, the emoji 2, the space 1, so "deployment" starts at 9.
+        val hit = decode(page(withMatches("Party 🎉 deployment done", """[{"start":9,"length":10}]"""))).results.single()
+        assertEquals(listOf(9 to 10), hit.excerptMatches.map { it.start to it.length })
+        assertEquals("deployment", hit.excerpt.substring(9, 19))
+        assertEquals(listOf(0 to 5, 9 to 10), ranges("Party 🎉 deployment done", """[{"start":0,"length":5},{"start":9,"length":10}]"""))
+        assertEquals("Absent means no highlight", emptyList<Pair<Int, Int>>(), decode(page()).results.single().excerptMatches.map { it.start to it.length })
+        assertEquals(emptyList<Pair<Int, Int>>(), ranges("Party", "[]"))
+    }
+
+    @Test fun anyInvalidRangeDropsEveryRangeOfThatRowButNeverTheResult() {
+        val excerpt = "Party 🎉 deployment done"
+        for (bad in listOf(
+            """[{"start":9,"length":0}]""",                              // empty
+            """[{"start":-1,"length":3}]""",                             // negative
+            """[{"start":20,"length":10}]""",                            // past the end
+            """[{"start":9,"length":10},{"start":0,"length":5}]""",      // out of order
+            """[{"start":9,"length":10},{"start":12,"length":2}]""",     // overlapping
+            """[{"start":7,"length":3}]""",                              // starts inside the emoji's surrogate pair
+            """[{"start":0,"length":7}]""",                              // ends inside it
+            """[{"start":"9","length":10}]""",                           // quoted number
+            """[{"start":9.5,"length":10}]""",                           // not an integer
+            """[{"start":9}]""",                                         // missing length
+            """[[9,10]]""",                                              // wrong item shape
+            """{"start":9,"length":10}""",                               // not an array
+            "\"9-19\"",                                                // wrong type
+            "null")) {
+            val result = decode(page(withMatches(excerpt, bad)))
+            val hit = result.results.single()
+            assertEquals(bad, emptyList<Pair<Int, Int>>(), hit.excerptMatches.map { it.start to it.length })
+            assertEquals("The row and its excerpt survive", excerpt, hit.excerpt)
+        }
+        // One bad row doesn't touch another row's valid ranges.
+        val good = withMatches("Party deployment", """[{"start":6,"length":10}]""")
+        val mixed = decode(page("$good,${withMatches("Party", """[{"start":3,"length":9}]""").replace("148", "149")}"))
+        assertEquals(listOf(6 to 10), mixed.results[0].excerptMatches.map { it.start to it.length })
+        assertTrue(mixed.results[1].excerptMatches.isEmpty())
+    }
+
+    @Test fun aRoomFilteredSearchAcceptsOnlyThatRoomsMessages() {
+        val filtered = MessageSearchRequest("fixture", MessageSearchScope.ROOMS, roomId = 4)
+        assertEquals(4L, (decode(page(room), filtered).results.single() as MessageSearchHit.Room).room.id)
+        incompatible(page(room.replace(""""id":4,"key"""", """"id":5,"key"""")), filtered)
+        incompatible(page(direct), MessageSearchRequest("fixture", MessageSearchScope.ALL, roomId = 4))
+    }
+
     @Test fun incomingDirectRequiresThePeerAsSender() {
         val incoming = direct.replace(""""id":7,"username":"Viewer"""", """"id":12,"username":"Peer"""").replace(""""outgoing":true""", """"outgoing":false""")
         assertFalse((decode(page(incoming)).results.single() as MessageSearchHit.Direct).outgoing)

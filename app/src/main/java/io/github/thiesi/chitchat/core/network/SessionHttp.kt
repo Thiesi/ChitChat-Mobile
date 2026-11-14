@@ -16,6 +16,7 @@ import io.github.thiesi.chitchat.core.notifications.NotificationPage
 import io.github.thiesi.chitchat.core.notifications.NotificationReadResult
 import io.github.thiesi.chitchat.core.search.MessageSearchPage
 import io.github.thiesi.chitchat.core.search.MessageSearchRequest
+import io.github.thiesi.chitchat.core.search.MessageSearchScope
 import io.github.thiesi.chitchat.core.profile.ProfileSnapshot
 import io.github.thiesi.chitchat.core.profile.validateProfileTarget
 import io.github.thiesi.chitchat.core.mentions.ROOM_MENTION_LIMIT
@@ -146,9 +147,11 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
     }
 
     suspend fun searchMessages(search: MessageSearchRequest, viewer: Long, csrf: String): MessageSearchPage {
-        if (search.limit !in 1..50 || search.offset !in 0..5000)
+        if (search.limit !in 1..50 || search.offset !in 0..5000 ||
+            (search.roomId != null && (search.roomId <= 0 || search.scope == MessageSearchScope.DIRECT)))
             throw ApiFailure(FailureKind.HTTP, 400, "validation_error")
-        val body = MessageSearchBody(search.query, search.scope.wireValue, search.limit, search.offset)
+        // A room the caller can't search answers 404 room_not_found, kept as that ApiFailure (#283).
+        val body = MessageSearchBody(search.query, search.scope.wireValue, search.limit, search.offset, search.roomId)
         return decode<MessageSearchReply>(request("search/messages.php", apiJson.encodeToString(body), csrf)
             .require200()).page(search, viewer)
     }

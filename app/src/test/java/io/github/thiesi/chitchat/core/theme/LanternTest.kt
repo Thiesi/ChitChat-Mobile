@@ -19,6 +19,11 @@ class LanternTest {
     }
     @Test fun lightCompletionTextAndControlBoundariesMeetContrastFloors()=palette(Lantern.light)
     @Test fun darkCompletionTextAndControlBoundariesMeetContrastFloors()=palette(Lantern.dark)
+    /** Search match highlighting (#283): the row's text on presenceWash keeps the 4.5:1 floor in every palette. */
+    @Test fun searchMatchTextOnPresenceWashMeetsTheTextFloor() {
+        for (p in listOf(Lantern.light, Lantern.dark, Lantern.amoledBlack))
+            assertTrue("Text on presenceWash", contrast(p.text, p.presenceWash) >= 4.5f)
+    }
     @Test fun everyIdentityHueRetainsReadableInkForItsDecorativeInitial() {
         for (id in 1L..32L) assertTrue(contrast(Lantern.ink,Lantern.identity(id))>=4.5f)
     }
