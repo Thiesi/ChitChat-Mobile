@@ -155,6 +155,26 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def search_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-search-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_search_captures_are_copied_and_keep_the_original_status(self):
+        self.results(7)
+        files = [Path("search-light-default-results.png"), Path("search-dark-font200-results.png")]
+        self.search_files(files)
+        self.assertEqual(7, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.SEARCH_DESTINATION / path.name)
+        self.assertEqual(3, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_search_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"search-light-default-results-{n}.png") for n in range(5)],
+            [Path("a/search-dark-default-results.png"), Path("b/search-dark-default-results.png")], [Path("other-app.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.search_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def status_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-status-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))

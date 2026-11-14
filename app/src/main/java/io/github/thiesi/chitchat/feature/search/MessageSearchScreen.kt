@@ -176,14 +176,7 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
                         (if (row is MessageSearchHit.Room) "room:" else "direct:") + row.messageId
                     }) { row ->
                         Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, border = lanternSurfaceBorder()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(when (row) {
-                                is MessageSearchHit.Room -> stringResource(R.string.message_search_room, row.room.name)
-                                is MessageSearchHit.Direct -> stringResource(R.string.message_search_direct, row.peer.username)
-                            }, style = MaterialTheme.typography.titleMedium)
-                            Text(row.excerpt, Modifier.testTag("message_search_excerpt"))
-                            Text(row.sender?.username ?: stringResource(R.string.message_search_sender_unknown), style = MaterialTheme.typography.bodySmall)
-                            Text(messageTime(row.createdAt, expected.chatPolicy?.display) +
-                                if (row.editedAt != null) stringResource(R.string.message_search_edited) else "", style = MaterialTheme.typography.bodySmall)
+                            SearchResultText(row, messageTime(row.createdAt, expected.chatPolicy?.display))
                             if (onOpen != null) TextButton(onClick = {
                                 if (permitted(visible.attempt.request.scope)) onOpen(entry, visible, row)
                             }, enabled = ready && !value.busy && value.targetBinding == null,

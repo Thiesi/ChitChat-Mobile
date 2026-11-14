@@ -88,6 +88,23 @@ class MessageSearchProtocolTest {
         }
         assertEquals(6, server.requestCount) // Explicit privacy GET, then exactly three search POSTs; no chat read/send.
     }
+    @Test fun roomIdIsSentOnlyWhenSetAndAnUnsearchableRoomIsATypedRefusal() = runTest {
+        val original = login(); refreshPrivacy() // Valid DM privacy, so the direct case reaches the room_id rule itself.
+        server.enqueue(json(empty))
+        repository.search(original, MessageSearchRequest("fixture", MessageSearchScope.ROOMS))
+        assertFalse("No room_id without a filter", "room_id" in apiJson.parseToJsonElement(take().body!!.utf8()).jsonObject)
+        server.enqueue(json(empty))
+        repository.search(original, MessageSearchRequest("fixture", MessageSearchScope.ROOMS, roomId = 4))
+        assertEquals(4L, apiJson.parseToJsonElement(take().body!!.utf8()).jsonObject.getValue("room_id").jsonPrimitive.long)
+        server.enqueue(errorResponse("room_not_found", 404))
+        val refused = failure { repository.search(original, MessageSearchRequest("fixture", MessageSearchScope.ROOMS, roomId = 4)) }; take()
+        assertEquals(404, refused.status); assertEquals("room_not_found", refused.code)
+        val count = server.requestCount
+        for (request in listOf(MessageSearchRequest("fixture", MessageSearchScope.DIRECT, roomId = 4),
+            MessageSearchRequest("fixture", MessageSearchScope.ROOMS, roomId = 0)))
+            assertEquals(400, failure { repository.search(original, request) }.status)
+        assertEquals("Invalid filters never reach the server", count, server.requestCount)
+    }
     @Test fun invalidLocalPageBoundsNeverReachTheServer() = runTest {
         val original = login(); val count = server.requestCount
         for (request in listOf(MessageSearchRequest("fixture", MessageSearchScope.ROOMS, limit = 0), MessageSearchRequest("fixture", MessageSearchScope.ROOMS, limit = 51),
