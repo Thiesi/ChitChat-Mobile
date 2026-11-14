@@ -20,11 +20,15 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.core.ui.scrollEdgeDividers
+import androidx.compose.material3.MaterialTheme
 import io.github.thiesi.chitchat.core.rooms.RoomTransferMember
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
@@ -81,7 +85,11 @@ class RoomTransferPresentationTest {
                     if (fontScale == 1f) heights[each] = height
                     else assertTrue("$label/$name/$each: the 2.0 font scale reached the captured window " +
                         "(default ${heights.getValue(each)}dp, now ${height}dp)", height > heights.getValue(each))
-                    capture("transfer-$label-$name-$each")
+                    capture("transfer-$label-$name-$each") // The capture shows the top, with the "more below" cue.
+                    // After the capture: what sits below the fold stays reachable by scrolling.
+                    val below = mapOf("failed" to "rooms_transfer_retry", "confirm" to "rooms_transfer_confirm_end")[each]
+                    if (below != null) try { compose.onNodeWithTag(below).performScrollTo().assertIsDisplayed() }
+                        catch (failure: AssertionError) { throw AssertionError("$label/$name/$each: $below not reachable by scrolling", failure) }
                 }
             }
         }
@@ -112,7 +120,9 @@ class RoomTransferPresentationTest {
                 // Mirrors RoomDetailDialog's text slot exactly (RoomsScreen.kt): a scrolling Column, so at large font
                 // the content scrolls instead of squeezing the trailing 48dp row.
                 AlertDialog(onDismissRequest = {}, title = { Text("Lounge") }, text = {
-                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    val scroll = rememberScrollState()
+                    Column(Modifier.scrollEdgeDividers(scroll, MaterialTheme.colorScheme.outline).verticalScroll(scroll),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(stringResource(R.string.rooms_presence_disclosure))
                         RoomTransferSection(transfer, owner, enabled = true, onOpen = {}, onRetry = {})
                         if (!owner) TextButton(onClick = {}) { Text(stringResource(R.string.rooms_leave)) }

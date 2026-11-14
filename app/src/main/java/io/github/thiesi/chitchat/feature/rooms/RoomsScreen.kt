@@ -55,6 +55,7 @@ import io.github.thiesi.chitchat.core.rooms.canCreateRooms
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.ui.InlineError
+import io.github.thiesi.chitchat.core.ui.scrollEdgeDividers
 import kotlinx.coroutines.delay
 
 @Composable
@@ -165,7 +166,9 @@ private fun RoomDetailDialog(state: RoomsUiState, model: RoomsViewModel, canMuta
     val room = state.selected
     AlertDialog(onDismissRequest = model::closeDetail,
         title = { Text(room?.name ?: stringResource(R.string.rooms_details)) },
-        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        text = { val scroll = rememberScrollState()
+            Column(Modifier.scrollEdgeDividers(scroll, MaterialTheme.colorScheme.outline).verticalScroll(scroll),
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
             sessionFeedback()
             RoomFeedback(state)
             if (state.busy) {
