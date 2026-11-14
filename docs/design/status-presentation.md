@@ -44,7 +44,7 @@ Highest first. Only the highest applicable notice shows.
 | # | Condition | Level | Copy | Action |
 |---|---|---|---|---|
 | 1 | Session storage warning (`storageWarning`) | 2 | Existing session-storage copy, unchanged in meaning | Existing retry or sign-out action |
-| 2 | Device offline (`RealtimePhase.OFFLINE`) | 2 | **No connection.** You can read and write. Messages you send will go out when you're back, while ChitChat is open. | none |
+| 2 | Device offline (`RealtimePhase.OFFLINE`) | 2 | **No connection.** You can read and write. Messages you send will go out when you're back, if you stay in the conversation. | none |
 | 3 | Stream error, TLS (`ERROR` + TLS) | 2 | **Can't connect securely to {host}.** The certificate couldn't be verified; this can't be bypassed. | Retry (existing `retry`) |
 | 4 | Stream error, incompatible or redirect | 2 | **{host} sent something ChitChat doesn't understand.** Live updates are off; use Refresh to update. | Retry |
 | 5 | Stream error, other | 2 | **Live updates stopped.** Use Refresh to update, or try again. | Retry |
@@ -57,13 +57,12 @@ Highest first. Only the highest applicable notice shows.
 
 - `{host}` is the installation's display name, `application.name` from the session
   (ChitChat#149, merged), else the host.
-- **Row 2 interim copy.** Until S4a: "**No connection.** You can still read what's here.
-  Sending needs a connection." (presentation lead, S1a J review, 2026-11-13). **From S4a**
-  (rooms only): "**No connection.** You can read and write. In a room, messages you send go
-  out when you're back, if you stay in the room." **From S4b** (rooms and direct messages):
-  "**No connection.** You can read and write. Messages you send will go out when you're back,
-  if you stay in the conversation." The table's line ("…while ChitChat is open") returns only if app-wide waiting (a possible
-  S4c) ships (presentation lead, 2026-11-13).
+- **Row 2 copy** matches the shipped on-screen scope (S4b, PR #230: rooms and direct
+  messages). If app-wide waiting (a possible S4c) ships, the line becomes "…Messages you send
+  will go out when you're back, while ChitChat is open." Until then that wording is never
+  shown (presentation lead, 2026-11-13). History: before S4a the line read "You can still
+  read what's here. Sending needs a connection.", and S4a (rooms only) said "In a room,
+  messages you send go out when you're back, if you stay in the room."
 - `LIVE` alone shows **nothing**. The old "Session events connected" line is removed.
   Per-screen syncing and stale lines (row 11) carry the "history may still be synchronizing"
   honesty where it matters.
@@ -154,17 +153,17 @@ At most one card shows, chosen as today (the first matching broadcast).
 
 ### Send when back online (approved behavior, own slice)
 
-> **Interim scope, S4a/S4b (technical lead, 2026-11-13):** S4a covers rooms, S4b adds direct
-> messages. Only clean text or reply drafts wait; attachments never do. A draft waits only
+> **Shipped scope, on screen only (technical lead, 2026-11-13; S4a PR #228 rooms, S4b PR #230
+> direct messages).** Only clean text or reply drafts wait; attachments never do. A draft waits only
 > while its conversation is on screen. Leaving the conversation, backgrounding, signing out or switching
 > account drops the waiting flag, and the text stays an ordinary draft. Sending while the
 > person is elsewhere in the app, and the list and drafts-manager "Waiting to send" labels,
-> wait for a possible S4c. Interim copy: the composer notice reads "**Will send when you're
+> wait for a possible S4c. Copy: the composer notice reads "**Will send when you're
 > back online, if you stay in this room.**" (in a direct message: "…if you stay in this
 > conversation.") with **Cancel**; the Send button's clock
 > and "Waiting to send" label are unchanged. Returning to a conversation whose flag was
 > dropped shows the editable draft with nothing extra. The rest of this section is the full
-> behavior; where it says "on any screen", S4a means "in that conversation".
+> behavior; where it says "on any screen", the shipped scope means "in that conversation".
 
 Pressing Send while `RealtimePhase.OFFLINE` doesn't start a request. It marks the
 conversation's current draft **waiting to send**:
@@ -252,8 +251,8 @@ conversation's current draft **waiting to send**:
 
 Other offline composer rules:
 - Composer text, drafts and replies stay editable until Send is pressed.
-- The offline notice (row 2) copy becomes **"No connection.** You can read and write.
-  Messages you send will go out when you're back, while ChitChat is open." 
+- The offline notice (row 2) copy is in the table: "…if you stay in the conversation." It
+  says "…while ChitChat is open." only if app-wide waiting (S4c) ships.
 - Loaded content stays visible. No spinner covers readable content.
 - At the transcript's live edge, a quiet caption: "Newer messages appear when you
   reconnect." Add a time ("Loaded at 17:58") only if the screen's state already records when
