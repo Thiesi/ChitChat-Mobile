@@ -162,8 +162,18 @@ taller than the window. Then:
   10. Leave room confirmation (`rooms_leave_warning`), feature/rooms/RoomsScreen.kt.
 
   The create-room dialog and the room detail dialog already scroll, and administration.md
-  P-217's confirm adopts the slot first. The grep is a heuristic: the slice also checks
-  dialogs built without AlertDialog's `text` slot, and adds any it finds to this list.
+  P-217's confirm adopts the slot first. Items 1–10 shipped in PR #244 (5–9, push) and PR
+  #246 (1–4 and 10).
+
+  **Dialogs without AlertDialog's `text` slot** (the engineer's check in PR #246). None leaves
+  text unreachable:
+  - `AuthorChangeDialog` delete: a decision dialog whose text already scrolls. It adopts the
+    shared slot for the cue in a later slice;
+  - the DM details dialog: already scrolls, and adopts the cue in a later slice;
+  - `AuthorChangeDialog` edit and the create-room form: form dialogs that already scroll with
+    pinned actions. They keep their M5b2 geometry and get no dividers;
+  - the registration date picker: a platform component, out of scope;
+  - the P-217 transfer picker: a full-screen list that already scrolls.
 
 ## Form dialogs (restyle only)
 
