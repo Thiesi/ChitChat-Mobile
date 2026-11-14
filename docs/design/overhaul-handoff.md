@@ -103,7 +103,7 @@ Grouped by area. Each needs a fixture state, not a live server.
 
 - **Onboarding:** Welcome (with the preview disclosure sheet); Where do you chat? (empty,
   invalid address, checking); Server found (with and without guest visits, and with the
-  accessibility link once ChitChat#219 ships); Sign in (Forgot password button versus the
+  accessibility link, ChitChat#219, released in v3.14.0); Sign in (Forgot password button versus the
   static line, throttled); Create account (anti-bot progress, optional birth date); recovery
   key display; rules acceptance; server update notice.
 - **Transcript:** room and DM with long, short, edited, deleted, reply, mention, reactions,

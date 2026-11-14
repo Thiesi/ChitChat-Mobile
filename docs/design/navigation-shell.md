@@ -96,7 +96,7 @@ any control does:
   - "How notifications are delivered" (push-presentation.md);
   - the app's privacy policy (once its URL is a maintainer decision);
   - when present, the server's privacy policy, rules and legal notice (play-readiness.md §1);
-  - Accessibility feedback (P-221, Dependency: ChitChat#219).
+  - Accessibility feedback (P-221, ChitChat#219, released in v3.14.0).
 - The privacy line ("Your server hosts your conversations. Messages are not end-to-end
   encrypted.") and the feature-preview disclosure link while it exists.
 - **Guests** (Dependency: M7) see guests.md's You layout instead: the guest card, then
