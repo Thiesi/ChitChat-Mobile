@@ -1,9 +1,12 @@
 # Navigation shell: implementation specification
 
 Status: implementation-ready spec for approved decision D3, the bottom bar **Rooms · Direct
-· Activity · You**. It follows the [theme foundation](theme-foundation.md) slice and comes
-before the transcript and list restyles. The coordinator schedules it. Mockups: the bottom
-bar on `Home`, `DirectInbox`, `Activity` and `AdminHome`.
+· Activity · You**. It follows the [theme foundation](theme-foundation.md) slice. On the
+2026-11-14 roadmap it is the next feature slice after the P-220 dialog sweep. Pure restyle
+work is deferred to the owner-authorized visual overhaul ([overhaul-handoff.md](overhaul-handoff.md)),
+so build the structure with the existing tokens and components, and don't add polish the
+overhaul would redo. Mockups: the bottom bar on `Home`, `DirectInbox`, `Activity` and
+`AdminHome`.
 
 **This slice changes structure, not contracts.** The navigation guards in `ChitChatApp.kt`
 encode many milestone rules: actual-entry identity, STARTED checks, owner- and
@@ -29,6 +32,9 @@ contract disagree, the contract wins. Report the conflict so it gets fixed here.
   - leaving account routes cancels account and typing-preference work;
   - search closes when its entry is not current;
   - routes whose scope no longer matches the session pop to `home`.
+- **Added since** (as of 2026-11-14): `licences` and `licences/{index}` (opened from
+  `account`), `notification_settings` (push), and the status slot (`StatusSlot`, chosen by
+  `resolveStatus`), which replaced `RealtimeStatus` above the content.
 - Activity-level `ON_STOP` treats a genuine background (not a configuration change) as
   background for conversations (except while a conversation route is showing), profiles and
   the notification lifecycle.
@@ -57,7 +63,8 @@ exactly as the existing "pop to home" guards do.
 
 Search (`message-search?…scope`) is opened from the Rooms and Direct top bars. It is not
 a tab. Pushed destinations (`conversation/…`, `direct/{peerId}…`, `notification-room/…`,
-`notification-account…`, search, server) stack on top of the current tab.
+`notification-account…`, search, server, `notification_settings`, `licences…`) stack on top
+of the current tab.
 
 ### The You hub (new)
 
@@ -69,7 +76,7 @@ any control does:
   until those features exist.
 - **Invite someone**, once [invite codes](invite-codes.md) ship. Omit until then.
 - Rows that open today's screens unchanged in behavior:
-  - Notifications and push (settings);
+  - Notifications and push (`notification_settings`, push-presentation.md);
   - Appearance (settings: Theme radios and the Pure black switch);
   - Privacy and security (account: sign-in, devices, typing preference, ignores, export and
     delete account, laid out in [account-security.md](account-security.md));
@@ -82,8 +89,18 @@ any control does:
   - recovery-codes-remaining text when present;
   - Refresh session;
   - **Sign out** (outlined, at the bottom, never persimmon-filled).
+- **About and privacy** group (play-readiness.md §4). Each row shows only when its source
+  exists, and a missing source leaves the row out rather than disabled:
+  - app version;
+  - open-source licences (today's `licences` route, moved here from `account`);
+  - "How notifications are delivered" (push-presentation.md);
+  - the app's privacy policy (once its URL is a maintainer decision);
+  - when present, the server's privacy policy, rules and legal notice (play-readiness.md §1);
+  - Accessibility feedback (P-221, Dependency: ChitChat#219).
 - The privacy line ("Your server hosts your conversations. Messages are not end-to-end
   encrypted.") and the feature-preview disclosure link while it exists.
+- **Guests** (Dependency: M7) see guests.md's You layout instead: the guest card, then
+  Appearance and About and privacy only.
 
 Existing `account` and `settings` content may stay as pushed sub-screens reached from these
 rows in this slice. Merging them visually is optional and must not change their logic.
@@ -160,8 +177,9 @@ summary requests.
   description **"Back"**, so existing instrumented tests that find "Back" by text are
   updated to find it by content description in the same PR.
 - Actions: Search on Rooms and Direct. Account and Settings actions disappear (now under You).
-- The realtime status notice (`RealtimeStatus`) stays directly under the top bar on every
-  signed-in destination, with today's conditions (communication.md level 2).
+- The status slot (`StatusSlot`, status-presentation.md) stays directly under the top bar
+  on every signed-in destination, with at most one notice chosen by `resolveStatus` and its
+  existing timers. The shell must not add a second notice area or move it below the bar.
 
 ## Tests
 
@@ -195,3 +213,4 @@ Extends P-30:
 | P-74 | The Activity badge uses only the existing summary count and modes. Rooms and Direct show no badge (decided; revisit with ChitChat#153/#154). No new polling or background requests. | C, R |
 | P-75 | You contains every control from the old hub, `account` and `settings`, with unchanged behavior. Sign out is not persimmon-filled. | C, R |
 | P-76 | Pushed destinations use an icon back button described "Back". Tab roots have none. | C |
+| P-77 | You's About and privacy group shows only rows whose source exists (licences and app version today), never disabled placeholders. Licences move there from `account` with unchanged behaviour. The status slot stays the single notice area under the top bar on every tab. | C |
