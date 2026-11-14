@@ -7,12 +7,20 @@ as specs land, and the technical lead asks for a final completeness pass at the 
 check. Until the start, new work is specified and reviewed in Lantern
 ([README.md](README.md)), without polish the overhaul would redo.
 
+**First read:** `docs/design/lantern-next.md` in the ChitChat (web) repository. It records
+every brand-level change CC's own Fable overhaul makes to Lantern (tokens, type, mark,
+icons, motion), with old and new values and the reason for each. This overhaul starts from
+that document, not from the Lantern values in this repository.
+
 ## What the overhaul may and may not change
 
 - **Open:** everything presentational, including tokens, type, shape, layout, iconography,
-  motion and copy tone. Lantern itself may change. Its shared tokens move through paired PRs
-  with ChitChat web, whose own Fable overhaul runs first. Read the CC agent's findings before
-  starting, once the CC technical lead says where they live.
+  motion and copy tone. Lantern itself may change. CC's own Fable overhaul runs first
+  and leads Lantern: for that run the owner suspended the paired-PR rule for shared brand
+  changes ([vision.md](vision.md), [visual-vocabulary.md](visual-vocabulary.md)), and
+  every brand-level change lands in CC's `lantern-next.md` (see **First read**). Until this
+  overhaul starts, web and app differ on purpose, and CCM doesn't follow web changes piecemeal.
+  Brand questions go through the CC technical lead.
 - **Still binding:** every behaviour, privacy, security and protocol contract in `AGENTS.md`,
   plus the accessibility floors (A-*). Maintainer-approved text is applied verbatim: the
   privacy policy, data-safety facts, contract strings such as duplicate-risk consent, the
