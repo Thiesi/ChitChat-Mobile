@@ -128,6 +128,27 @@ with its existing re-fencing.
 - Accessibility focus moves to the title on open (A-07). Back and the scrim dismiss through
   the existing dismiss callback.
 
+## Overflowing dialog text
+
+At 200% font scale, in landscape or in a short split-screen window, a dialog's text can be
+taller than the window. Then:
+
+- The title and the button row stay in place. Only the text slot between them scrolls,
+  including any text actions inside it (Try again, Transfer ownership…, Leave room).
+- **Scroll cue:** while the slot can scroll further down, a 1dp `outline` divider sits at
+  its bottom edge, above the buttons. Once it has scrolled, a matching divider sits at its
+  top edge, below the title. Without scrolling there are no dividers. A clean cut between
+  two lines never stands in for the cue, because it reads like a finished sentence.
+- Nothing in the slot is unreachable. Every line and action can be reached by scrolling, and
+  TalkBack traversal scrolls it into view.
+- One shared modifier provides the slot and its dividers (first used by administration.md
+  P-217's room detail and confirm dialogs), not per-dialog code.
+- **Scope:** decision dialogs, the room detail dialog and other read-only dialogs. Form
+  dialogs keep their window type, sizing and IME geometry (below). One of them adopts the
+  slot only if its non-field text can overflow, and only after the M5b2 geometry tests pass.
+- **Sweep:** the remaining dialogs are inventoried and converted in one A-floor slice. The
+  list is added here before that slice starts.
+
 ## Form dialogs (restyle only)
 
 - Same tokens as decision dialogs. Fields use the 16dp form-field shape and `fieldLine`
@@ -150,7 +171,9 @@ with its existing re-fencing.
   - sheets stay open across recreation;
   - no partially expanded state exists;
   - a decision dialog's destructive confirm uses `error`, and nothing in a dialog is
-    persimmon-filled.
+    persimmon-filled;
+  - at fontScale 2 in a short window, each converted dialog's last line and every text
+    action are reachable, and the dividers show only while the slot can scroll that way.
 - **Native input:** form dialogs keep every native tap, focus, IME and geometry test. Choice
   sheets with no text input need no IME test. Any sheet containing a text field, which none
   does in this slice, would have to join the native input suite first.
@@ -165,3 +188,4 @@ with its existing re-fencing.
 | P-113 | Decision dialogs use the specified button rules (`error` for destructive confirms, never persimmon-filled) and move accessibility focus to the title. | C |
 | P-114 | The profile card shows only existing facts and actions (Refresh, Close, and Report per reporting.md P-165), with guest dates as visit start. | C |
 | P-115 | The message actions sheet orders sections as specified, and every row uses the existing guarded callback. | C |
+| P-220 | When a dialog's text is taller than the window (200% font, landscape, split screen), only the text slot scrolls, while the title and buttons stay. A 1dp `outline` divider shows above the buttons while there is more below, and below the title once scrolled; there are no dividers otherwise. Every line and text action is reachable by scrolling and by TalkBack. One shared modifier serves all dialogs; form dialogs keep their geometry. Captures: each converted dialog at default and 200% in a short window, in light and dark, with the divider visible. | C, S |
