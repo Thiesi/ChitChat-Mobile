@@ -6,5 +6,8 @@
         <activity android:name="androidx.activity.ComponentActivity"
             android:theme="@style/Theme.ChitChat" android:windowSoftInputMode="adjustResize"
             tools:replace="android:theme" />
+        <!-- Presentation captures at a real Configuration font scale (dialog windows inherit it). Debug only. -->
+        <activity android:name="io.github.thiesi.chitchat.testing.FontScaleTestActivity"
+            android:theme="@style/Theme.ChitChat" android:windowSoftInputMode="adjustResize" android:exported="false" />
     </application>
 </manifest>

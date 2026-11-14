@@ -18,6 +18,8 @@ PUSH_NAME = re.compile(r"push-(light|dark)-(off|waiting|on|refused|needs-setup|e
 STATUS_DESTINATION = ROOT / "app/build/reports/androidTests/status-presentation"
 STATUS_NAME = re.compile(r"status-(light|dark)-(?:(?:default|font200)-"
     r"(?:storage|offline|tls|incompatible|stopped|refresh|rate|rate-unknown|offline-edge|waiting-room|waiting-dm)|default-details)\.png")
+TRANSFER_DESTINATION = ROOT / "app/build/reports/androidTests/transfer-presentation"
+TRANSFER_NAME = re.compile(r"transfer-(light|dark)-(default|font200)-(row|none|failed|picker|confirm|success)\.png")
 SEARCH_DESTINATION = ROOT / "app/build/reports/androidTests/search-presentation"
 SEARCH_NAME = re.compile(r"search-(light|dark)-(default|font200)-results\.png")
 LICENCES_DESTINATION = ROOT / "app/build/reports/androidTests/licences-presentation"
@@ -87,6 +89,18 @@ def collect_search():
     print(f"Search presentation captures collected: {len(files)} of 4.")
 
 
+def collect_transfer():
+    # Two presentation cases (light, dark): six P-217 states at default and 2.0 font each.
+    files = list(islice(SOURCE.rglob("ccm-transfer-presentation/*"), 25))
+    if (not files or len(files) > 24 or len({p.name for p in files}) != len(files)
+        or any(TRANSFER_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous transfer presentation output")
+    TRANSFER_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, TRANSFER_DESTINATION / path.name)
+    print(f"Transfer presentation captures collected: {len(files)} of 24.")
+
+
 def main() -> int:
     try:
         status = subprocess.run(NATIVE, cwd=ROOT, check=False).returncode
@@ -126,6 +140,10 @@ def main() -> int:
         collect_search()
     except Exception:
         print("Search presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_transfer()
+    except Exception:
+        print("Transfer presentation captures unavailable; original native status retained.", file=sys.stderr)
     return 128 - status if status < 0 else status
 
 

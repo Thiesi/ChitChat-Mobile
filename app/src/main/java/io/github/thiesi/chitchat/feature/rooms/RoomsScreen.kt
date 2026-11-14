@@ -55,6 +55,7 @@ import io.github.thiesi.chitchat.core.rooms.canCreateRooms
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.ui.InlineError
+import io.github.thiesi.chitchat.core.ui.scrollEdgeDividers
 import kotlinx.coroutines.delay
 
 @Composable
@@ -135,10 +136,20 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
         text = { Text(stringResource(R.string.rooms_leave_warning)) },
         confirmButton = { TextButton(onClick = model::leave, enabled = canMutate) { Text(stringResource(R.string.rooms_leave)) } },
         dismissButton = { TextButton(onClick = { model.confirmLeave(false) }) { Text(stringResource(R.string.cancel)) } }, modifier = Modifier.lanternDialogEdge())
-    else if (state.detailOpen) RoomDetailDialog(state, model, canMutate,
-        session.user?.roles?.any { it in setOf("super_admin", "admin", "chat_admin", "global_moderator") } == true,
-        onOpenRoom) {
-        RoomSessionFeedback(session, now, onRefreshSession)
+    else if (state.detailOpen) {
+        val transfer by model.transfer.collectAsStateWithLifecycle()
+        val active = transfer?.takeIf { it.roomId == state.selected?.id }
+        // The picker replaces the dialog rather than stacking over it; confirm and step-up sit over the picker only.
+        if (active?.pickerOpen == true) {
+            RoomTransferPicker(active, enabled = canMutate, onFilter = model::filterTransfer, onChoose = model::chooseTransferTarget,
+                onClose = model::closeTransferPicker, onCheckRoom = model::checkTransferRoom) { roomError(it) }
+            if (active.confirming) RoomTransferConfirm(active, model::confirmTransfer, model::cancelTransferConfirm)
+            RoomTransferStepUp(active, model::verifyTransfer, model::cancelTransferVerification) { roomError(it) }
+        } else RoomDetailDialog(state, model, canMutate,
+            session.user?.roles?.any { it in setOf("super_admin", "admin", "chat_admin", "global_moderator") } == true,
+            onOpenRoom) {
+            RoomSessionFeedback(session, now, onRefreshSession)
+        }
     }
 }
 
@@ -155,7 +166,9 @@ private fun RoomDetailDialog(state: RoomsUiState, model: RoomsViewModel, canMuta
     val room = state.selected
     AlertDialog(onDismissRequest = model::closeDetail,
         title = { Text(room?.name ?: stringResource(R.string.rooms_details)) },
-        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        text = { val scroll = rememberScrollState()
+            Column(Modifier.scrollEdgeDividers(scroll, MaterialTheme.colorScheme.outline).verticalScroll(scroll),
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
             sessionFeedback()
             RoomFeedback(state)
             if (state.busy) {
@@ -170,11 +183,17 @@ private fun RoomDetailDialog(state: RoomsUiState, model: RoomsViewModel, canMuta
                 }
                 Text(stringResource(R.string.rooms_presence_disclosure))
                 if (room.visibility == "private" && !room.isMember) Text(stringResource(R.string.rooms_private_invitation))
-                if (room.memberRole == "owner") Text(stringResource(R.string.rooms_owner_immutable))
-                else if (room.isMember) LanternOutlinedButton(onClick = { model.confirmLeave(true) }, enabled = canMutate) {
-                    Text(stringResource(R.string.rooms_leave))
+                val transfer by model.transfer.collectAsStateWithLifecycle()
+                val owner = room.memberRole == "owner"
+                if (owner || transfer != null) RoomTransferSection(transfer?.takeIf { it.roomId == room.id }, owner,
+                    enabled = canMutate, onOpen = model::openTransferPicker, onRetry = model::retryTransferCheck,
+                    onCheckRoom = model::checkTransferRoom)
+                if (!owner) {
+                    if (room.isMember) LanternOutlinedButton(onClick = { model.confirmLeave(true) }, enabled = canMutate) {
+                        Text(stringResource(R.string.rooms_leave))
+                    }
+                    else LanternOutlinedButton(onClick = model::join, enabled = canMutate) { Text(stringResource(R.string.rooms_join)) }
                 }
-                else LanternOutlinedButton(onClick = model::join, enabled = canMutate) { Text(stringResource(R.string.rooms_join)) }
             }
             if (state.stale) Text(stringResource(R.string.rooms_stale))
             if (state.stale || state.mutationUncertain) TextButton(onClick = model::refresh, enabled = !state.busy) {
@@ -274,7 +293,7 @@ private fun guestLabel(value: String) = when (value) { "read" -> R.string.rooms_
     "write" -> R.string.rooms_guest_write; else -> R.string.rooms_guest_none }
 
 @Composable
-private fun roomError(failure: ApiFailure): String = when {
+internal fun roomError(failure: ApiFailure): String = when {
     failure.kind == FailureKind.TLS -> stringResource(R.string.tls_error)
     failure.kind == FailureKind.REDIRECT -> stringResource(R.string.redirect_error)
     failure.kind == FailureKind.INCOMPATIBLE || failure.kind == FailureKind.TOO_LARGE -> stringResource(R.string.incompatible_server)
@@ -283,6 +302,8 @@ private fun roomError(failure: ApiFailure): String = when {
     failure.status == 429 -> stringResource(R.string.rate_limited)
     failure.status == 503 -> stringResource(R.string.server_unavailable)
     failure.code == "csrf_failed" || failure.kind == FailureKind.STORAGE -> stringResource(R.string.session_refresh_needed)
+    failure.code == "step_up_invalid_credentials" -> stringResource(R.string.step_up_wrong_password)
+    failure.code == "invalid_recovery_code" -> stringResource(R.string.invalid_recovery_code)
     else -> roomErrorCode(failure.code)
 }
 
@@ -293,7 +314,7 @@ private fun roomErrorCode(code: String?) = stringResource(when (code) {
     "invitation_required" -> R.string.rooms_invitation_required
     "birth_date_required" -> R.string.rooms_birth_date_required
     "minimum_age_not_met" -> R.string.rooms_minimum_age_not_met
-    "owner_cannot_leave", "owner_role_immutable" -> R.string.rooms_owner_immutable
+    "owner_cannot_leave", "owner_role_immutable" -> R.string.rooms_owner_explanation
     "not_a_member" -> R.string.rooms_not_a_member
     "forbidden", "guest_not_allowed" -> R.string.rooms_forbidden
     "room_key_taken" -> R.string.rooms_key_taken

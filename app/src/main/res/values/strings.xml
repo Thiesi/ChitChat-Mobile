@@ -381,7 +381,7 @@
     <string name="message_search_room">Room: %1$s</string>
     <string name="message_search_direct">Conversation with %1$s</string>
     <string name="message_search_sender_unknown">Sender unavailable</string>
-    <string name="message_search_edited"> · edited</string>
+    <string name="message_search_edited">" · edited"</string>
     <string name="message_search_offset">Page %1$d</string>
     <string name="message_search_previous">Previous</string>
     <string name="message_search_next">Next</string>

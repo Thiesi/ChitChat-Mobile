@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import io.github.thiesi.chitchat.core.account.AccountOperations
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
@@ -12,6 +13,7 @@ import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.core.rooms.CreateRoom
 import io.github.thiesi.chitchat.core.rooms.RoomInfo
 import io.github.thiesi.chitchat.core.rooms.RoomOperations
+import io.github.thiesi.chitchat.core.rooms.RoomOwnershipOperations
 import io.github.thiesi.chitchat.core.rooms.canCreateRooms
 import io.github.thiesi.chitchat.core.rooms.validateRoomCreation
 import io.github.thiesi.chitchat.core.session.SessionPhase
@@ -19,6 +21,7 @@ import io.github.thiesi.chitchat.core.session.SessionState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -49,10 +52,30 @@ data class RoomsUiState(
     val syncError: ApiFailure? = null,
 )
 
-class RoomsViewModel(private val operations: RoomOperations, private val realtime: RealtimeController? = null) : ViewModel() {
+class RoomsViewModel(private val operations: RoomOperations, private val realtime: RealtimeController? = null,
+    ownership: RoomOwnershipOperations? = null, account: AccountOperations? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(RoomsUiState())
     val state = mutable.asStateFlow()
+
+    /** Ownership transfer for the open detail (P-217); absent without its capabilities. */
+    private val transferFlow = if (ownership != null && account != null) RoomTransferFlow(viewModelScope, ownership, account,
+        identity = { session.value.identity() }, reread = ::rereadRoom, unavailable = ::roomUnavailable,
+        adopt = { room -> if (mutable.value.selected?.id == room.id) mutable.value = mutable.value.copy(selected = room) }) else null
+    val transfer: StateFlow<RoomTransferUi?> = transferFlow?.state ?: MutableStateFlow(null)
+    fun retryTransferCheck() { transferFlow?.retry() }
+    fun openTransferPicker() { transferFlow?.openPicker() }
+    fun closeTransferPicker() { transferFlow?.closePicker() }
+    fun filterTransfer(text: String) { transferFlow?.filter(text) }
+    fun chooseTransferTarget(member: io.github.thiesi.chitchat.core.rooms.RoomTransferMember) { transferFlow?.choose(member) }
+    fun cancelTransferConfirm() { transferFlow?.cancelConfirm() }
+    fun confirmTransfer() { if (canMutate()) transferFlow?.confirm() }
+    fun verifyTransfer(secret: String, recovery: Boolean) { transferFlow?.verify(secret, recovery) }
+    fun cancelTransferVerification() { transferFlow?.cancelVerification() }
+    fun checkTransferRoom() { transferFlow?.checkRoom() }
+    private fun openTransfer(room: RoomInfo?) {
+        if (room != null && mutable.value.detailOpen) transferFlow?.open(room, session.value.user?.roles.orEmpty())
+    }
     private var identity = session.value.identity()
     private var sequence = 0L
     private var job: Job? = null
@@ -65,6 +88,7 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
         viewModelScope.launch {
             session.collect { current ->
                 if (current.identity() != identity) {
+                    transferFlow?.retire()
                     retire()
                     identity = current.identity()
                     mutable.value = RoomsUiState()
@@ -93,6 +117,7 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
 
     fun background() {
         foreground = false
+        transferFlow?.retire() // Private transfer facts never outlive the foreground.
         cancelRequest()
     }
 
@@ -133,11 +158,13 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
             }
             current()
             mutable.value = mutable.value.copy(selected = room)
+            openTransfer(room)
         }
     }
 
     fun closeDetail() {
         if (mutable.value.busy) return
+        transferFlow?.retire()
         mutable.value = mutable.value.copy(selected = null, detailOpen = false, leaveConfirmation = false, error = null)
     }
 
@@ -153,6 +180,7 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
             val joined = operations.join(room.id)
             current()
             mutable.value = mutable.value.copy(selected = joined, notice = "joined")
+            openTransfer(joined)
             mutationInFlight = false
             reconcile(current)
         }
@@ -225,6 +253,35 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
             detailOpen = mutable.value.detailOpen && selected != null,
             mutationUncertain = automatic && mutable.value.mutationUncertain, syncError = null)
         attemptedSync = maxOf(attemptedSync, revision)
+        if (mutable.value.detailOpen) openTransfer(selected) else transferFlow?.retire()
+    }
+
+    /**
+     * The transfer flow's explicit re-read of the room and the directory. It never throws a request failure into the
+     * flow. A failed GET is reported as unconfirmed (the current room stays, the directory is marked stale); a 403/404
+     * is a confirmed answer that the room is gone.
+     */
+    private suspend fun rereadRoom(id: Long): RoomReread {
+        val expected = session.value.identity()
+        return try {
+            val room = operations.detail(id)
+            val rooms = operations.list()
+            if (session.value.identity() != expected) throw CancellationException("Session changed")
+            mutable.value = mutable.value.copy(rooms = rooms, loaded = true, stale = false,
+                selected = if (mutable.value.selected?.id == id) room else mutable.value.selected)
+            RoomReread(room, confirmed = true)
+        } catch (failure: ApiFailure) {
+            if (session.value.identity() != expected) throw CancellationException("Session changed")
+            if (failure.status in setOf(403, 404)) { roomUnavailable(id, failure); RoomReread(null, confirmed = true) }
+            else { mutable.value = mutable.value.copy(stale = true); RoomReread(mutable.value.selected?.takeIf { it.id == id }, confirmed = false) }
+        }
+    }
+
+    /** The existing room-unavailable path, as for a failed detail GET. */
+    private fun roomUnavailable(id: Long, failure: ApiFailure) {
+        transferFlow?.retire()
+        mutable.value = mutable.value.copy(rooms = mutable.value.rooms.filterNot { it.id == id },
+            selected = if (mutable.value.selected?.id == id) null else mutable.value.selected, error = failure)
     }
 
     private fun start(mutation: Boolean, automatic: Boolean = false, action: suspend (() -> Unit) -> Unit) {
@@ -283,8 +340,9 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
         FailureKind.TLS, FailureKind.REDIRECT, FailureKind.INCOMPATIBLE, FailureKind.TOO_LARGE) || (status ?: 0) >= 500
 
     companion object {
-        fun factory(operations: RoomOperations, realtime: RealtimeController? = null): ViewModelProvider.Factory = viewModelFactory {
-            initializer { RoomsViewModel(operations, realtime) }
+        fun factory(operations: RoomOperations, realtime: RealtimeController? = null,
+            ownership: RoomOwnershipOperations? = null, account: AccountOperations? = null): ViewModelProvider.Factory = viewModelFactory {
+            initializer { RoomsViewModel(operations, realtime, ownership, account) }
         }
     }
 }

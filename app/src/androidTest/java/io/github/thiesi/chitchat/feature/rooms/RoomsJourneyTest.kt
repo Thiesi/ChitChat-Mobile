@@ -84,7 +84,9 @@ class RoomsJourneyTest {
         content()
         compose.onNodeWithText("Create room").assertDoesNotExist()
         detail()
-        compose.onNodeWithText("Room ownership cannot be transferred here", substring = true).performScrollTo().assertIsDisplayed()
+        // P-217: the owner explanation replaces Leave (no ownership capability here, so no transfer row).
+        compose.onNodeWithTag("rooms_owner_explanation").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Owners can’t leave their room. Hand it to someone else first.").assertIsDisplayed()
         compose.onNodeWithText("Leave room").assertDoesNotExist()
         compose.runOnIdle { assertEquals(0, fake.leaves); assertEquals(0, fake.creates) }
     }

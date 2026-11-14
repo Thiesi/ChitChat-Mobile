@@ -34,21 +34,55 @@ don't change.
 - **Privacy:** no logs and no saved state. The model classes are plain classes without generated string
   representations.
 
-## B2: native entry (follows; agreed, not built here)
+## B2: native entry
 
-Recorded here so B2 starts from the decisions (technical lead and presentation lead, 2026-11-14):
+Built against [P-217](../design/administration.md) as merged (PR #234, #236). The decisions came from the technical
+lead and presentation lead, 2026-11-14.
+
 - **Where:** the Rooms directory's room detail dialog for v1. The room-presence header sheet adopts it when it ships.
-  `rooms_owner_immutable` becomes "Owners can't leave their room. Hand it to someone else first."
-- **When the snapshot loads:** one GET when the dialog opens. Only for a viewer who is the room's owner or whose
-  current bootstrap role is a global room manager; it's never inferred, and missing means no fetch. Ordinary members
-  never trigger it. The result lives in VM memory only, cleared on close, navigation or owner retirement under the
-  original-session and entry guards.
+  For an owner, "Owners can't leave their room. Hand it to someone else first." replaces the old
+  `rooms_owner_immutable` line and Leave.
+- **`RoomTransferFlow`:** owned by `RoomsViewModel`, memory only, with no saved state and no logs (its UI state has no
+  generated string representation).
+  - **When the snapshot loads:** one GET when the detail opens. Only for a viewer whose room role is owner, or whose
+    current bootstrap `roles` contain a global room-management role (`super_admin`, `admin`, `chat_admin`). It's
+    never inferred, missing means no fetch, and global moderators and ordinary members never trigger it.
+  - **Retired by:** closing the dialog, background, navigation or an identity change. Every await is fenced by
+    attempt and identity, so a late result never reaches a successor.
 - **Load states:**
   - loading: the explanation alone;
-  - network or server failure: "Couldn't check who can take over." with Try again, one explicit GET;
-  - `403`: hides the row and re-reads the room;
+  - network or server failure: "Couldn't check who can take over." with Try again, one explicit GET, never automatic;
+  - `403`: hides the row with no Try again, and re-reads the room once;
   - `404 room_not_found`: the existing room-unavailable path;
-  - loaded: Transfer ownership… if any row is flagged, otherwise "No one in this room can take it over right now."
-- **Picker and outcomes:** a full-screen picker of flagged members, replacing the dialog rather than stacking; the
-  P-217 confirm dialog; `withStepUp`; P-217's outcome lines. On success, explicit room and directory re-reads.
-- **Captures:** 24 for J review.
+  - loaded: Transfer ownership… if any row is flagged; otherwise, for an owner, "No one in this room can take it over
+    right now." An administrator also sees "Owner: {name}".
+- **Picker:** a full-screen list of the flagged members only, with pebble, name and room role, and a filter above 10.
+  It replaces the dialog rather than stacking; the confirm dialog and step-up sit over the picker only.
+- **Confirm:** P-217's actor-specific text. Make owner is in `signatureText`, never error-coloured.
+- **Transfer:** one POST through `withStepUp`, so a definite `403 step_up_required` leads to the shared
+  `StepUpDialog`, then exactly one more POST. Cancelling step-up sends nothing more and keeps the choice.
+- **Outcomes:** P-217's lines, and nothing is ever resent.
+  - `already_owner` and `forbidden` re-read the room. `membership_not_found` re-reads the list.
+    `ownership_changed` offers Check room (one room GET, then the picker on the fresh list).
+  - `transfer_target_not_eligible` gives no reason and keeps the person listed, because for an owner the flags ignore
+    bans and must not reveal one.
+- **Commit before response** (technical lead):
+  - The transfer commits server-side before the reply. A POST without a definite answer (network, timeout, 5xx, or
+    an unusable reply such as a room mismatch) is UNKNOWN: "Not sure the transfer went through." with Check room.
+  - Check room re-reads the room and closes to the dialog's actual state. The picker is locked until then, and there's
+    no blind "Try again" on the POST.
+  - A definite refusal (step-up, verification, rate limit or an unlisted code) committed nothing, keeps the choice and
+    shows its error.
+- **Success:** the returned room is adopted, then the room and directory are re-read explicitly and the outcome is
+  never assumed.
+  - An owner returns to the dialog with "**{name}** now owns {room}. You're a moderator now." and Leave room.
+  - An administrator sees the new owner after the snapshot reloads.
+- **Not covered:** a cancellation mid-POST (leaving the dialog) can't undo a committed transfer. The next open re-reads
+  the room.
+- **Scrolling parent required:** `RoomTransferSection` must sit in a scrolling container. At 200 % font the room
+  detail dialog's content overflows the window, and a non-scrolling parent squeezes the trailing Transfer row below
+  its 48dp floor (measured 36dp in a non-scrolling capture fixture). The Rooms directory dialog already scrolls
+  (`RoomDetailDialog`). **The header room-details sheet (room-presence.md) must scroll too when it adopts this
+  section.**
+- **Captures:** 24 for J review: row, none, load failure, picker, confirm and success, at default and 200% font,
+  light and dark (`RoomTransferPresentationTest`, `ccm-transfer-presentation`).
