@@ -196,6 +196,24 @@ class RoomTransferTest {
         assertEquals(1, ownership.transfers.size)
     }
 
+    @Test fun aFailedCheckRoomKeepsTheUnknownAndTheLock() = runTest(dispatcher) {
+        open(); pick()
+        ownership.transferFailure = ApiFailure(FailureKind.TIMEOUT)
+        model.confirmTransfer(); runCurrent()
+        assertEquals(TransferOutcome.UNKNOWN, transfer?.outcome)
+        rooms.detailFailure = ApiFailure(FailureKind.NETWORK)
+        model.checkTransferRoom(); runCurrent()
+        assertEquals("Nothing was learned: still unknown", TransferOutcome.UNKNOWN, transfer?.outcome)
+        assertFalse(transfer!!.checking); assertTrue("Still locked", transfer!!.pickerOpen)
+        model.closeTransferPicker(); runCurrent(); assertTrue(transfer!!.pickerOpen)
+        rooms.detailFailure = null // Reopening needs a readable room; the marker must still be there.
+        model.closeDetail(); runCurrent(); model.select(42); runCurrent()
+        assertEquals("The marker survives a failed check", TransferOutcome.UNKNOWN, transfer?.outcome)
+        model.checkTransferRoom(); runCurrent()
+        assertNull(transfer?.outcome)
+        assertEquals("Never resent", 1, ownership.transfers.size)
+    }
+
     @Test fun aRetiredFlowsLateResultNeverReachesASuccessor() = runTest(dispatcher) {
         val gate = CompletableDeferred<Unit>(); ownership.snapshotGate = gate
         open()
@@ -208,9 +226,9 @@ class RoomTransferTest {
     private class Rooms : RoomOperations {
         override val session = MutableStateFlow(SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED, user = user()))
         var room = room("owner"); var lists = 0; var details = 0
-        var detailGate: CompletableDeferred<Unit>? = null
+        var detailGate: CompletableDeferred<Unit>? = null; var detailFailure: ApiFailure? = null
         override suspend fun list(): List<RoomInfo> { lists++; return listOf(room) }
-        override suspend fun detail(roomId: Long): RoomInfo { details++; detailGate?.await(); return room }
+        override suspend fun detail(roomId: Long): RoomInfo { details++; detailGate?.await(); detailFailure?.let { throw it }; return room }
         override suspend fun join(roomId: Long) = room
         override suspend fun leave(roomId: Long) = Unit
         override suspend fun create(input: CreateRoom) = room

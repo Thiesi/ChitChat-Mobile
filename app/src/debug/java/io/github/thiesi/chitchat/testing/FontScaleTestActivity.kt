@@ -11,7 +11,9 @@ import androidx.activity.ComponentActivity
 class FontScaleTestActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(newBase)
-        applyOverrideConfiguration(Configuration().apply { fontScale = requestedFontScale })
+        // Copy the real configuration and change only the font scale: a bare Configuration() also carries default
+        // fields that changed the density (48dp measured as 36dp on CI).
+        applyOverrideConfiguration(Configuration(newBase.resources.configuration).apply { fontScale = requestedFontScale })
     }
 
     companion object {

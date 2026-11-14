@@ -61,6 +61,10 @@ class RoomTransferPresentationTest {
                 var scene by mutableStateOf(scenes.first())
                 scenario.onActivity { activity ->
                     assertEquals("A real Configuration font scale", fontScale, activity.resources.configuration.fontScale)
+                    // Only the font scale may change: a disturbed density would silently shrink every dp measurement.
+                    assertEquals("The platform density is untouched",
+                        InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.densityDpi,
+                        activity.resources.configuration.densityDpi)
                     activity.setContent { ChitChatTheme(dark = dark) { Scene(scene) } }
                 }
                 for (each in scenes) {

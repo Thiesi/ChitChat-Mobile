@@ -39,6 +39,12 @@ data class RoomTransferUi(
     val outcome: TransferOutcome? = null, val outcomeName: String? = null, val checking: Boolean = false,
 ) { override fun toString() = "RoomTransferUi" }
 
+/**
+ * The result of an explicit room re-read. [confirmed] is false when the GET itself failed (network, timeout, 5xx):
+ * nothing was learned, so a possible commit stays unknown. A confirmed null [room] means the room is gone.
+ */
+internal class RoomReread(val room: RoomInfo?, val confirmed: Boolean)
+
 /** Global room-management roles (P-217): they and the room's owner may load the snapshot. Never inferred. */
 internal val ROOM_MANAGER_ROLES = setOf("super_admin", "admin", "chat_admin")
 
@@ -53,7 +59,7 @@ internal class RoomTransferFlow(
     private val account: AccountOperations,
     private val identity: () -> Any?,
     /** Re-read the room detail and the directory; returns the fresh room, or null when it's gone. */
-    private val reread: suspend (Long) -> RoomInfo?,
+    private val reread: suspend (Long) -> RoomReread,
     /** The room answered 404 room_not_found: the existing room-unavailable path. */
     private val unavailable: (Long, ApiFailure) -> Unit,
     /** Show the room the transfer returned. */
@@ -175,7 +181,10 @@ internal class RoomTransferFlow(
                 // Never assume the result: re-read the room and directory, then who can take over now.
                 val fresh = reread(value.roomId)
                 if (!current(attempt, expected)) return@launch
-                if (fresh != null && (fresh.memberRole == "owner" || !acted.ownerActing)) load()
+                // An unconfirmed re-read falls back to the room the transfer itself returned.
+                val gone = fresh.confirmed && fresh.room == null
+                val role = if (fresh.confirmed) fresh.room?.memberRole else room.memberRole
+                if (!gone && (role == "owner" || !acted.ownerActing)) load()
                 else mutable.value = mutable.value?.copy(load = TransferLoad.HIDDEN)
             } catch (cancelled: CancellationException) {
                 // Leaving mid-POST can't undo a committed transfer: remember it, so the next open asks for Check room.
@@ -224,12 +233,14 @@ internal class RoomTransferFlow(
             try {
                 val fresh = reread(value.roomId)
                 if (!current(attempt, expected)) return@launch
+                // A failed check learned nothing: keep the outcome, the lock and Check room.
+                if (!fresh.confirmed) { mutable.value = mutable.value?.copy(checking = false); return@launch }
                 if (unknown && expected != null) unknownRooms -= expected to value.roomId
                 // After an unknown, the dialog shows the room's actual owner state; after a change, the picker reopens.
                 mutable.value = mutable.value?.copy(checking = false, outcome = null, outcomeName = null, chosen = null,
                     pickerOpen = !unknown)
-                if (fresh == null) return@launch
-                if (fresh.memberRole == "owner" || !value.ownerActing) load(keepPicker = !unknown)
+                val room = fresh.room ?: return@launch
+                if (room.memberRole == "owner" || !value.ownerActing) load(keepPicker = !unknown)
                 else mutable.value = mutable.value?.copy(load = TransferLoad.HIDDEN, pickerOpen = false)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: ApiFailure) {

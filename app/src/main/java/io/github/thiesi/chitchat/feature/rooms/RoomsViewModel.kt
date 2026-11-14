@@ -258,9 +258,10 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
 
     /**
      * The transfer flow's explicit re-read of the room and the directory. It never throws a request failure into the
-     * flow: a failure keeps the current room and marks the directory stale. Returns null when the room is gone.
+     * flow. A failed GET is reported as unconfirmed (the current room stays, the directory is marked stale); a 403/404
+     * is a confirmed answer that the room is gone.
      */
-    private suspend fun rereadRoom(id: Long): RoomInfo? {
+    private suspend fun rereadRoom(id: Long): RoomReread {
         val expected = session.value.identity()
         return try {
             val room = operations.detail(id)
@@ -268,11 +269,11 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
             if (session.value.identity() != expected) throw CancellationException("Session changed")
             mutable.value = mutable.value.copy(rooms = rooms, loaded = true, stale = false,
                 selected = if (mutable.value.selected?.id == id) room else mutable.value.selected)
-            room
+            RoomReread(room, confirmed = true)
         } catch (failure: ApiFailure) {
             if (session.value.identity() != expected) throw CancellationException("Session changed")
-            if (failure.status in setOf(403, 404)) { roomUnavailable(id, failure); null }
-            else { mutable.value = mutable.value.copy(stale = true); mutable.value.selected?.takeIf { it.id == id } }
+            if (failure.status in setOf(403, 404)) { roomUnavailable(id, failure); RoomReread(null, confirmed = true) }
+            else { mutable.value = mutable.value.copy(stale = true); RoomReread(mutable.value.selected?.takeIf { it.id == id }, confirmed = false) }
         }
     }
 
