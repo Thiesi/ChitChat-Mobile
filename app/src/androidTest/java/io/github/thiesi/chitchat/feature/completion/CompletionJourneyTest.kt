@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.completion
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
@@ -116,7 +117,7 @@ class CompletionJourneyTest {
             runBlocking { api.directs.send(8,"Completion fixture",null) }
         }
         compose.onNodeWithText(text(R.string.app_name)).performNativeTap()
-        compose.onNodeWithTag("notifications_open").performScrollTo().performNativeTap()
+        compose.openTab("activity").performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
         val notice=if (roomTarget) 60 else 55
         compose.onNodeWithTag("notification_list").performScrollToNode(hasTestTag("notification_view:$notice"))

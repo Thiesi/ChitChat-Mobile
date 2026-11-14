@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.SideEffect
@@ -88,7 +89,7 @@ class RoomDraftJourneyTest {
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.AUTHENTICATED }
         compose.runOnIdle { sessions.state.value = sessions.state.value.copy(shareTyping = true,
             chatPolicy = ChatPolicy(emptySet(), null, DisplayPreferences())) }
-        compose.onNodeWithText("Rooms").performScrollTo().assertIsDisplayed().performClick()
+        compose.openTab("rooms").assertIsDisplayed().performClick()
         compose.waitUntil(5_000) { directory.state.value.loaded && !directory.state.value.busy }
     }
     private fun dismissIme() {

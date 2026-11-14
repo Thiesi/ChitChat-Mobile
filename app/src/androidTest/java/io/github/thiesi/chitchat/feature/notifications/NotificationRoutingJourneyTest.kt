@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.notifications
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -99,7 +100,7 @@ class NotificationRoutingJourneyTest {
             runBlocking { sessions.signIn("Viewer", "fixture-password") }
             sessions.state.value = sessions.state.value.copy(chatPolicy = api.policy, privacy = api.privacy, shareTyping = true)
         }
-        compose.onNodeWithTag("notifications_open").performScrollTo().assertIsDisplayed().performClick(); fresh()
+        compose.openTab("activity").assertIsDisplayed().performClick(); fresh()
     }
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
     private fun fresh() { compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy && !notices.state.value.stale } }
@@ -110,7 +111,7 @@ class NotificationRoutingJourneyTest {
     private fun view(id: Long) { at("notification_view:$id").assertIsEnabled().performClick() }
     private fun back(toCenter: Boolean = true) {
         compose.onNodeWithText(text(R.string.back)).assertIsDisplayed().performClick()
-        if (toCenter) fresh() else compose.onNodeWithTag("notifications_open").performScrollTo().assertIsDisplayed()
+        if (toCenter) fresh() else compose.openTab("activity").assertIsDisplayed()
     }
     private fun roomTarget(id: Long) {
         compose.waitUntil(5_000) { room.state.value.highlightedMessageId == id && !room.state.value.busy && targets.state.value.request == null }
@@ -195,7 +196,7 @@ class NotificationRoutingJourneyTest {
         compose.waitUntil(5_000) { targets.state.value.request?.target == b }
         compose.runOnIdle { api.lookups.gates.getValue(b).complete(Unit) }; directTarget(20); back()
         // Return Home and create a DIFFERENT center entry with the same account and same row instances.
-        back(toCenter = false); compose.onNodeWithTag("notifications_open").performScrollTo().performClick(); fresh()
+        back(toCenter = false); compose.openTab("activity").performClick(); fresh()
         val count = api.lookups.calls.size
         compose.runOnIdle { oldView() }; compose.waitForIdle()
         compose.runOnIdle { assertNull(targets.state.value.request); assertEquals(count, api.lookups.calls.size) }

@@ -96,7 +96,7 @@ class SearchResultJourneyTest {
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.ANONYMOUS }
         compose.runOnIdle { sessions.state.value = sessions.state.value.copy(phase = SessionPhase.AUTHENTICATED,
             user = SessionUser(7, "Viewer", listOf("member"), 1, false), chatPolicy = api.policy, privacy = api.privacy, shareTyping = true) }
-        compose.onNodeWithTag("message_search_open").performScrollTo().performNativeTap()
+        compose.onNodeWithTag("message_search_open").performNativeTap()
         compose.onNodeWithTag("message_search_query").assertIsDisplayed()
     }
     private fun type(tag: String, text: String) {
@@ -299,7 +299,7 @@ class SearchResultJourneyTest {
         val oldOpen = compose.onNodeWithTag("message_search_open:room:20").fetchSemanticsNode().config[SemanticsActions.OnClick].action!!
         compose.runOnIdle { sessions.state.value = sessions.state.value.copy(generation = sessions.state.value.generation + 1,
             user = checkNotNull(sessions.state.value.user).copy(id = 10)) }
-        compose.onNodeWithTag("message_search_open").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("message_search_open").assertIsDisplayed()
         compose.runOnIdle {
             oldOpen(); assertEquals(1, api.lookups.calls.size); assertEquals(2, searchApi.calls.size)
             assertEquals("", search.state.value.query); assertNull(search.state.value.results); assertNull(targets.state.value.request)

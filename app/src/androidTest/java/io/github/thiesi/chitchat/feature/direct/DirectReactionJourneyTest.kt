@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.direct
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
@@ -88,7 +89,7 @@ class DirectReactionJourneyTest {
             if (deleted) api.directs.deleted += 8L to 101L
         }
         compose.onNodeWithText(text(R.string.app_name)).assertIsDisplayed().performNativeTap()
-        compose.onNodeWithTag("notifications_open").performScrollTo().performNativeTap()
+        compose.openTab("activity").performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
         compose.onNodeWithTag("notification_list").performScrollToNode(hasTestTag("notification_view:55"))
         compose.onNodeWithTag("notification_view:55").performNativeTap()

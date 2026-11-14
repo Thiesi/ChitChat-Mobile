@@ -18,6 +18,8 @@ PUSH_NAME = re.compile(r"push-(light|dark)-(off|waiting|on|refused|needs-setup|e
 STATUS_DESTINATION = ROOT / "app/build/reports/androidTests/status-presentation"
 STATUS_NAME = re.compile(r"status-(light|dark)-(?:(?:default|font200)-"
     r"(?:storage|offline|tls|incompatible|stopped|refresh|rate|rate-unknown|offline-edge|waiting-room|waiting-dm)|default-details)\.png")
+NAV_DESTINATION = ROOT / "app/build/reports/androidTests/nav-presentation"
+NAV_NAME = re.compile(r"nav-(light|dark)-(default|font200)\.png")
 DIALOG_DESTINATION = ROOT / "app/build/reports/androidTests/dialog-presentation"
 DIALOG_NAME = re.compile(r"dialog-(light|dark)-(default|font200)-"
     r"(push-explain|push-choose|push-google|push-none|push-phone-off|push-remove|"
@@ -93,6 +95,18 @@ def collect_search():
     print(f"Search presentation captures collected: {len(files)} of 4.")
 
 
+def collect_nav():
+    # Navigation shell bottom bar at default and 2.0 font, light and dark.
+    files = list(islice(SOURCE.rglob("ccm-nav-presentation/*"), 5))
+    if (not files or len(files) > 4 or len({p.name for p in files}) != len(files)
+        or any(NAV_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous navigation presentation output")
+    NAV_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, NAV_DESTINATION / path.name)
+    print(f"Navigation presentation captures collected: {len(files)} of 4.")
+
+
 def collect_dialogs():
     # P-220 sweep: each converted dialog at default and 2.0 font, light and dark.
     files = list(islice(SOURCE.rglob("ccm-dialog-presentation/*"), 41))
@@ -164,6 +178,10 @@ def main() -> int:
         collect_dialogs()
     except Exception:
         print("Dialog presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_nav()
+    except Exception:
+        print("Navigation presentation captures unavailable; original native status retained.", file=sys.stderr)
     return 128 - status if status < 0 else status
 
 

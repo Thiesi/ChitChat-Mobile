@@ -1,0 +1,122 @@
+package io.github.thiesi.chitchat.app
+
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import io.github.thiesi.chitchat.BuildConfig
+import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.core.session.SessionState
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
+import io.github.thiesi.chitchat.core.ui.CountBadge
+import io.github.thiesi.chitchat.feature.auth.AuthScreen
+import io.github.thiesi.chitchat.feature.auth.AuthViewModel
+
+/*
+ * Navigation shell (docs/design/navigation-shell.md, N1). Onboarding is the root graph's `home`;
+ * every signed-in destination lives in the nested SHELL_GRAPH. A tab root is the tab's route directly
+ * above the shell graph entry; tab switches pop to that entry, saving the left tab's stack.
+ */
+internal const val HOME_ROUTE = "home"
+internal const val SHELL_GRAPH = "shell"
+internal const val ROOMS_ROUTE = "rooms"
+internal const val YOU_ROUTE = "you"
+
+internal enum class ShellTab(val pattern: String, val tag: String, @StringRes val label: Int, @DrawableRes val icon: Int) {
+    ROOMS(ROOMS_ROUTE, "nav_tab_rooms", R.string.rooms_title, R.drawable.ic_nav_rooms),
+    DIRECT(DIRECT_INBOX_ROUTE, "nav_tab_direct", R.string.nav_direct, R.drawable.ic_nav_direct),
+    ACTIVITY(NOTIFICATIONS_ROUTE, "nav_tab_activity", R.string.nav_activity, R.drawable.ic_nav_activity),
+    YOU(YOU_ROUTE, "nav_tab_you", R.string.nav_you, R.drawable.ic_nav_you);
+
+    /** The tab root built from the current session; scoped tabs carry its owner arguments. */
+    fun route(session: SessionState): String? = when (this) {
+        ROOMS -> ROOMS_ROUTE
+        DIRECT -> directRoute(session)
+        ACTIVITY -> notificationRoute(session)
+        YOU -> YOU_ROUTE
+    }
+}
+
+/** The tab whose root has this route pattern, if any. */
+internal fun tabOf(route: String?): ShellTab? = ShellTab.entries.firstOrNull { it.pattern == route }
+
+/** A saved tab stack is restored only under the scope it was saved in; anything else starts again at its root. */
+internal fun scopeKey(session: SessionState): String =
+    listOf(session.server?.value, session.generation, session.user?.id, session.user?.sessionVersion).joinToString("|")
+
+/** Bottom bar: icon and always-visible label per tab; the Activity badge uses the existing summary count only. */
+@Composable
+internal fun ShellBar(tabs: List<ShellTab>, current: ShellTab, unread: Int?, countStale: Boolean, countText: String?,
+    onSelect: (ShellTab) -> Unit) {
+    NavigationBar {
+        tabs.forEach { tab ->
+            val selected = tab == current
+            NavigationBarItem(selected = selected, onClick = { onSelect(tab) },
+                icon = {
+                    val icon = @Composable { Icon(painterResource(tab.icon), contentDescription = null) }
+                    val count = unread?.takeIf { tab == ShellTab.ACTIVITY && it > 0 }
+                    if (count != null) BadgedBox(badge = {
+                        if (countStale) CountBadge() else CountBadge { Text(if (count > 99) "99+" else count.toString()) }
+                    }) { icon() } else icon()
+                },
+                label = { Text(stringResource(tab.label), textAlign = TextAlign.Center,
+                    fontWeight = if (selected) FontWeight.Bold else null) },
+                alwaysShowLabel = true,
+                colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
+                modifier = Modifier.testTag(tab.tag).then(
+                    if (tab == ShellTab.ACTIVITY && countText != null) Modifier.semantics { stateDescription = countText } else Modifier))
+        }
+    }
+}
+
+/**
+ * The You hub: the signed-in parts of the old home, `account` and `settings`. Rows open today's
+ * screens unchanged; the session section is AuthScreen's authenticated state as before.
+ */
+@Composable
+internal fun YouScreen(session: SessionState, auth: AuthViewModel, server: String?, pushAvailable: Boolean,
+    onNotifications: () -> Unit, onAppearance: () -> Unit, onAccount: () -> Unit, onChangeServer: () -> Unit,
+    onLicences: () -> Unit) {
+    @Composable fun Row(text: Int, tag: String, onClick: () -> Unit) =
+        TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag)) { Text(stringResource(text)) }
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Column {
+            if (pushAvailable) Row(R.string.notification_settings_open, "notification_settings_open", onNotifications)
+            Row(R.string.appearance, "you_appearance", onAppearance)
+            Row(R.string.you_privacy_security, "you_account", onAccount)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.titleMedium)
+            server?.let { Text(it) }
+            LanternOutlinedButton(onClick = onChangeServer, enabled = session.canChangeServer) { Text(stringResource(R.string.change_server)) }
+            if (!session.canChangeServer) Text(stringResource(R.string.sign_out_to_change_server))
+        }
+        Column(Modifier.testTag("you_session")) { AuthScreen(session, auth) }
+        Column(Modifier.testTag("you_about"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.you_about), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.you_app_version, BuildConfig.VERSION_NAME))
+            Row(R.string.oss_licences_open, "licences_open", onLicences)
+        }
+        PrivacyCard()
+    }
+}

@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.theme
 
 import android.content.res.Configuration
+import io.github.thiesi.chitchat.testing.openTab
 import android.os.Build
 import android.view.ContextThemeWrapper
 import androidx.activity.ComponentActivity
@@ -95,7 +96,6 @@ class ThemePresentationJourneyTest {
         }
         return assertIsDisplayed()
     }
-    private fun action(id: Int) { compose.onNodeWithText(text(id)).reveal().performNativeTap() }
 
     private fun install(mode: Int,large: Boolean) {
         if(Build.VERSION.SDK_INT>=34) compose.enableAccessibilityChecks() // THEME_ONLY
@@ -177,10 +177,12 @@ class ThemePresentationJourneyTest {
             runBlocking { sessions.signIn("Viewer","fixture-password") }
             sessions.state.value=sessions.state.value.copy(chatPolicy=api.policy,privacy=api.privacy)
         }
-        compose.onNodeWithTag("notifications_open").assertExists()
-        capture(label,"home")
-        action(R.string.settings);compose.onNodeWithText(text(R.string.appearance)).assertExists();capture(label,"settings");back()
-        action(R.string.rooms_title)
+        compose.openTab("activity").assertExists()
+        // The signed-in hub is the You tab (navigation shell); its capture keeps the "home" name.
+        compose.openTab("you").performNativeTap();capture(label,"home")
+        compose.onNodeWithTag("you_appearance").reveal().performNativeTap()
+        compose.onNodeWithText(text(R.string.appearance)).assertExists();capture(label,"settings");back()
+        compose.openTab("rooms").performNativeTap()
         compose.waitUntil(5_000) { directory.state.value.loaded && !directory.state.value.busy }
         capture(label,"rooms")
         compose.onNodeWithText("Room 43").assertIsDisplayed().performNativeTap()
@@ -190,8 +192,8 @@ class ThemePresentationJourneyTest {
         capture(label,"room")
         attachCaptures(label)
         markerCaptures(label)
-        back();back()
-        action(R.string.dm_title)
+        back()
+        compose.openTab("direct").performNativeTap()
         compose.waitUntil(5_000) { inbox.state.value.let { it.inbox!=null && !it.busy } }
         compose.onNodeWithTag("dm_inbox").performScrollToNode(hasTestTag("dm_conversation:8"))
         capture(label,"direct")
@@ -199,11 +201,12 @@ class ThemePresentationJourneyTest {
         compose.waitUntil(5_000) { thread.state.value.let { it.loaded && !it.busy && it.peerId==8L } }
         compose.onNodeWithTag("dm_composer").assertHeightIsAtLeast(48.dp).assertIsDisplayed()
         capture(label,"thread");back();back()
-        compose.onNodeWithTag("notifications_open").reveal().performNativeTap()
+        compose.openTab("activity").performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
         capture(label,"activity");back()
-        action(R.string.account);capture(label,"account");back()
-        compose.onNodeWithTag("message_search_open").reveal().performNativeTap()
+        compose.openTab("you").performNativeTap();compose.onNodeWithTag("you_account").reveal().performNativeTap()
+        capture(label,"account");back()
+        compose.openTab("rooms").performNativeTap();compose.onNodeWithTag("message_search_open").performNativeTap()
         compose.waitUntil(5_000) { search.state.value.entry!=null }
         capture(label,"search")
         compose.runOnIdle { assertEquals(1,api.rooms.sends);assertEquals(0,api.notices.posts) }

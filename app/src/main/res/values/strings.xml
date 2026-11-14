@@ -549,6 +549,12 @@
     <string name="push_google_link">How to choose a delivery app</string>
     <string name="oss_licences_open">Open-source licences</string>
     <string name="oss_licences_title">Open-source licences</string>
+    <string name="nav_direct">Direct</string>
+    <string name="nav_activity">Activity</string>
+    <string name="nav_you">You</string>
+    <string name="you_privacy_security">Privacy and security</string>
+    <string name="you_about">About and privacy</string>
+    <string name="you_app_version">App version %1$s</string>
     <string name="oss_licences_intro">ChitChat is built with these open-source projects. Tap one to see its licence.</string>
     <string name="oss_licence_source">Source code</string>
     <string name="push_google_app_installed">A delivery app is installed now. Turn on again to use it instead of Google.</string>

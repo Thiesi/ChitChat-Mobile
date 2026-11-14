@@ -102,7 +102,7 @@ class MessageSearchJourneyTest {
                 user = SessionUser(7, "Viewer", listOf("member"), 1, false), chatPolicy = fixtures.policy,
                 privacy = fixtures.privacy.takeIf { privacy })
         }
-        compose.onNodeWithTag("message_search_open").performScrollTo().performNativeTap()
+        compose.onNodeWithTag("message_search_open").performNativeTap()
         compose.onNodeWithTag("message_search_query").assertIsDisplayed()
     }
     private fun input(text: String) {
@@ -202,7 +202,7 @@ class MessageSearchJourneyTest {
             sessions.state.value = sessions.state.value.copy(generation = sessions.state.value.generation + 1,
                 user = checkNotNull(sessions.state.value.user).copy(id = 9))
         }
-        compose.onNodeWithTag("message_search_open").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("message_search_open").assertIsDisplayed()
         compose.onNodeWithTag("message_search_query").assertDoesNotExist()
         compose.runOnIdle { assertEquals("", model.state.value.query); assertNull(model.state.value.results); assertEquals(2, api.calls.size) }
     }

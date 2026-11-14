@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.notifications
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -78,7 +79,7 @@ class PushTapJourneyTest {
             runBlocking { sessions.signIn("Viewer", "fixture-password") }
             sessions.state.value = sessions.state.value.copy(chatPolicy = api.policy, privacy = api.privacy, shareTyping = true)
         }
-        compose.onNodeWithTag("notifications_open").performScrollTo().assertIsDisplayed()
+        compose.openTab("activity").assertIsDisplayed()
     }
 
     private fun tap(link: String?, user: Long = sessions.state.value.user!!.id): PushTap {
@@ -120,13 +121,13 @@ class PushTapJourneyTest {
             runBlocking { sessions.signIn("Viewer", "fixture-password") }
             sessions.state.value = sessions.state.value.copy(chatPolicy = api.policy, privacy = api.privacy, shareTyping = true)
         }
-        compose.onNodeWithTag("notifications_open").performScrollTo().assertIsDisplayed()
+        compose.openTab("activity").assertIsDisplayed()
         compose.onNodeWithTag("notification_list").assertDoesNotExist()
         // Another account on this server, then another server: both dropped where they stand.
         tap("/messages.php?with=9", user = sessions.state.value.user!!.id + 1); consumed()
         compose.runOnIdle { taps.offer(PushTap("https://other.example.test/", sessions.state.value.user!!.id, "/messages.php?with=9")) }
         consumed()
-        compose.onNodeWithTag("notifications_open").performScrollTo().assertIsDisplayed()
+        compose.openTab("activity").assertIsDisplayed()
         compose.onNodeWithTag("notification_list").assertDoesNotExist()
         compose.runOnIdle { assertNull(direct.state.value.peerId); assertEquals(0, api.notices.posts) }
     }

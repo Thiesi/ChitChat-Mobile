@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.direct
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -81,7 +82,7 @@ class DirectAttachmentJourneyTest {
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.ANONYMOUS }
         compose.runOnIdle { sessions.state.value = sessions.state.value.copy(phase = SessionPhase.AUTHENTICATED,
             user = SessionUser(7, "Viewer", listOf("member"), 1, false), privacy = api.privacy) }
-        compose.onNodeWithText("Direct messages").performScrollTo().assertIsEnabled().performNativeTap()
+        compose.openTab("direct").assertIsEnabled().performNativeTap()
         compose.waitUntil(5_000) { inbox.state.value.inbox != null && !inbox.state.value.busy }
         compose.onNodeWithTag("dm_inbox").performScrollToNode(hasTestTag("dm_conversation:8"))
         compose.onNodeWithTag("dm_conversation:8").performNativeTap()

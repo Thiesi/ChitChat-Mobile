@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.direct
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.imePadding
@@ -326,7 +327,7 @@ class DirectJourneyTest {
         if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
             compose.waitUntil(5_000) { imeBottom == 0 }
         val beforeInbox = compose.runOnIdle { keyboardHides.get() }
-        compose.onNodeWithText("Direct messages").performScrollTo().performClick()
+        compose.openTab("direct").performClick()
         compose.waitUntil(5_000) { inbox.state.value.inbox != null && !inbox.state.value.busy }
         compose.runOnIdle { assertEquals("Unfocused inbox navigation must not enqueue a keyboard hide", beforeInbox, keyboardHides.get()) }
         compose.onNodeWithTag("dm_inbox").performScrollToNode(hasText("3 unread"))

@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
 import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
+import io.github.thiesi.chitchat.testing.openTab
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -85,7 +86,7 @@ class RoomAuthorJourneyTest {
             runBlocking { api.rooms.send(43, "Authored fixture", null) }
         }
         compose.onNodeWithText(text(R.string.app_name)).assertIsDisplayed().performNativeTap()
-        compose.onNodeWithTag("notifications_open").performScrollTo().performNativeTap()
+        compose.openTab("activity").performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
         compose.onNodeWithTag("notification_list").performScrollToNode(hasTestTag("notification_view:60"))
         compose.onNodeWithTag("notification_view:60").performNativeTap()
