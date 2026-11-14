@@ -183,6 +183,19 @@ class RoomTransferTest {
         hold.complete(Unit)
     }
 
+    @Test fun leavingDuringThePostSuccessRereadIsNotAnUnknown() = runTest(dispatcher) {
+        open(); pick()
+        rooms.room = room("moderator")
+        val hold = CompletableDeferred<Unit>(); rooms.detailGate = hold
+        model.confirmTransfer(); runCurrent()
+        assertEquals("Confirmed", TransferOutcome.SUCCESS, transfer?.outcome)
+        model.background(); runCurrent() // Leaves while the success re-read is still running.
+        hold.complete(Unit); rooms.detailGate = null
+        model.foreground(); runCurrent(); rooms.room = room("owner"); model.select(42); runCurrent()
+        assertNotEquals("A confirmed transfer is never recorded as unknown", TransferOutcome.UNKNOWN, transfer?.outcome)
+        assertEquals(1, ownership.transfers.size)
+    }
+
     @Test fun aRetiredFlowsLateResultNeverReachesASuccessor() = runTest(dispatcher) {
         val gate = CompletableDeferred<Unit>(); ownership.snapshotGate = gate
         open()
@@ -195,8 +208,9 @@ class RoomTransferTest {
     private class Rooms : RoomOperations {
         override val session = MutableStateFlow(SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED, user = user()))
         var room = room("owner"); var lists = 0; var details = 0
+        var detailGate: CompletableDeferred<Unit>? = null
         override suspend fun list(): List<RoomInfo> { lists++; return listOf(room) }
-        override suspend fun detail(roomId: Long): RoomInfo { details++; return room }
+        override suspend fun detail(roomId: Long): RoomInfo { details++; detailGate?.await(); return room }
         override suspend fun join(roomId: Long) = room
         override suspend fun leave(roomId: Long) = Unit
         override suspend fun create(input: CreateRoom) = room

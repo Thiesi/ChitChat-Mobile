@@ -166,6 +166,7 @@ internal class RoomTransferFlow(
                     try { ownership.transferOwnership(value.roomId, target.id) }
                     catch (failure: ApiFailure) { if (!ambiguous(failure)) uncertain = false; throw failure }
                 }, { awaitVerification(attempt, expected) })
+                uncertain = false // A confirmed answer: leaving during the re-reads below is not an unknown.
                 if (!current(attempt, expected)) return@launch
                 val acted = mutable.value ?: return@launch
                 mutable.value = acted.copy(posting = false, pickerOpen = false, chosen = null, methods = null,

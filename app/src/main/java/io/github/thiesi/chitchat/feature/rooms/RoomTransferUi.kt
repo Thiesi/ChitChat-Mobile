@@ -95,11 +95,15 @@ internal fun RoomTransferPicker(transfer: RoomTransferUi, enabled: Boolean, onFi
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false)) {
         Surface(Modifier.fillMaxSize().testTag("rooms_transfer_picker")) {
             Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.rooms_transfer_title), style = MaterialTheme.typography.headlineSmall)
-                TransferOutcomeLine(transfer, onCheckRoom, errorText)
-                if (transfer.candidates.size > 10) OutlinedTextField(transfer.filter, onFilter,
-                    label = { Text(stringResource(R.string.rooms_transfer_filter)) }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("rooms_transfer_filter"), shape = MaterialTheme.shapes.medium)
+                // One column: the title and notices share the rows' 24dp content edge (16dp + 8dp row inset).
+                Column(Modifier.padding(horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.rooms_transfer_title), style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.testTag("rooms_transfer_title"))
+                    TransferOutcomeLine(transfer, onCheckRoom, errorText)
+                    if (transfer.candidates.size > 10) OutlinedTextField(transfer.filter, onFilter,
+                        label = { Text(stringResource(R.string.rooms_transfer_filter)) }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("rooms_transfer_filter"), shape = MaterialTheme.shapes.medium)
+                }
                 val shown = transfer.candidates.filter { transfer.filter.isBlank() || it.username.contains(transfer.filter.trim(), ignoreCase = true) }
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(shown, key = { it.id }) { member ->
@@ -153,7 +157,8 @@ internal fun TransferOutcomeLine(transfer: RoomTransferUi, onCheckRoom: () -> Un
 internal fun RoomTransferConfirm(transfer: RoomTransferUi, onConfirm: () -> Unit, onCancel: () -> Unit) {
     val target = transfer.chosen ?: return
     AlertDialog(onDismissRequest = onCancel,
-        title = { Text(stringResource(R.string.rooms_transfer_confirm_title, target.username, transfer.roomName)) },
+        title = { Text(stringResource(R.string.rooms_transfer_confirm_title, target.username, transfer.roomName),
+            Modifier.testTag("rooms_transfer_confirm_title")) },
         text = { Text(if (transfer.ownerActing) stringResource(R.string.rooms_transfer_confirm_owner, target.username)
             else stringResource(R.string.rooms_transfer_confirm_admin, target.username,
                 transfer.owner?.username ?: stringResource(R.string.rooms_transfer_current_owner))) },
