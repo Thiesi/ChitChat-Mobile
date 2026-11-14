@@ -46,6 +46,7 @@ a substitute.
 | [acceptance.md](acceptance.md) | Accessibility and readability floors, plus numbered, testable presentation requirements |
 | [accessibility-verification.md](accessibility-verification.md) | How each A-* floor is proven: test layers, shared assertions, configuration matrix, TalkBack scripts |
 | [app-mark.md](app-mark.md) and [assets/](assets/) | Final mark geometry and ready-to-copy launcher, themed and notification icons |
+| [overhaul-handoff.md](overhaul-handoff.md) | Living prep for the owner-authorized Fable 5.2 visual overhaul: what it may change, the capture inventory, ranked design debts |
 | [mockups/](mockups/) | Source of the mockup canvas: 21 phone screens (onboarding, everyday use, situations, AMOLED black, invite codes) and a vocabulary sheet |
 
 The mockups are also published as a private design canvas for the maintainer. The files
