@@ -37,10 +37,29 @@ measures against.
 - every choice row is at least 48dp;
 - the last choice and the Use Google guide link are reachable by scrolling.
 
-## Sweep B (follows)
+## Sweep B: the remaining decision dialogs
 
-Inventory items 1, 2, 3 and 10: forget server, discard DM draft, block help and Leave room. It also covers the check
-of dialogs built without AlertDialog's `text` slot:
-- `AuthorChangeDialog`: a form dialog. Per P-220 it keeps its geometry; it gets a report only, no conversion here.
-- `RegistrationForm`'s date picker: a platform component.
-- The transfer picker: already a full-screen list.
+These are inventory items 1, 2, 3 and 10:
+- forget server (`app/ForgetServerDialog.kt`);
+- discard DM draft and block help (`feature/direct/DirectDialogs.kt`);
+- Leave room (`feature/rooms/RoomLeaveDialog.kt`).
+
+It's the same no-behaviour-change move as sweep A: the same composition, tags (`dm_confirm_block` included),
+enablement, state and callbacks, and only the text slot is wrapped in `DialogScrollBody`.
+`RestDialogPresentationTest` adds 16 captures and the same labelled reachability checks, in the same
+`ccm-dialog-presentation` folder (40 in all).
+
+**Dialogs without AlertDialog's `text` slot (the check P-220 asks for), reported and not converted here:**
+- **`AuthorChangeDialog` (core/ui), edit variant:** a full-window form dialog. It deliberately owns its window for
+  IME and geometry (M5b2). Its body already scrolls, with the action row pinned below, so nothing is unreachable. It
+  only lacks the P-220 dividers, and P-220 keeps form dialogs' geometry.
+- **`AuthorChangeDialog`, delete variant:** an AlertDialog whose text slot already scrolls. It's a decision dialog
+  and lacks only the scroll-edge cue, so it can adopt `DialogScrollBody` in a later slice.
+- **`RegistrationForm`'s date picker:** the platform Material `DatePickerDialog`. Out of scope.
+- **The transfer picker:** a full-screen list, already scrolling.
+
+**Already scrolling but without the cue,** for a later pass:
+- the DM details dialog (`DirectScreens`);
+- the create-room form (`RoomsScreen`; a form dialog).
+
+With this, the P-220 inventory is converted.

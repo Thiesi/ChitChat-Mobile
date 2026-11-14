@@ -178,13 +178,10 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
             }
         }
         val originalDiscard = discard
-        if (originalDiscard != null) AlertDialog(onDismissRequest = { if (discard === originalDiscard) discard = null },
-            title = { Text(stringResource(R.string.dm_discard_draft)) }, text = { Text(stringResource(R.string.dm_discard_warning)) },
-            confirmButton = { TextButton(onClick = {
+        if (originalDiscard != null) DirectDiscardDraftDialog(onDiscard = {
                 thread.discardSavedDraft(originalDiscard, isCurrentEntry)
                 if (discard === originalDiscard) discard = null
-            }) { Text(stringResource(R.string.dm_discard_draft)) } },
-            dismissButton = { TextButton(onClick = { if (discard === originalDiscard) discard = null }) { Text(stringResource(R.string.cancel)) } }, modifier = Modifier.lanternDialogEdge())
+            }, onCancel = { if (discard === originalDiscard) discard = null })
     }
 }
 
@@ -628,10 +625,8 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             }
             if (blockConfirm && state.context != null) {
                 val blocked = state.context!!.relationship.blockedByMe
-                AlertDialog(onDismissRequest = { blockConfirm = false }, title = { Text(stringResource(if (blocked) R.string.dm_unblock else R.string.dm_block)) },
-                    text = { Text(stringResource(R.string.dm_block_help)) },
-                    confirmButton = { TextButton(onClick = { blockConfirm = false; model.setBlocked(displayedSession, peer, !blocked) }, Modifier.testTag("dm_confirm_block")) { Text(stringResource(if (blocked) R.string.dm_unblock else R.string.dm_block)) } },
-                    dismissButton = { TextButton(onClick = { blockConfirm = false }) { Text(stringResource(R.string.cancel)) } }, modifier = Modifier.lanternDialogEdge())
+                DirectBlockDialog(blocked, onConfirm = { blockConfirm = false; model.setBlocked(displayedSession, peer, !blocked) },
+                    onCancel = { blockConfirm = false })
             }
         }
     }

@@ -20,7 +20,8 @@ STATUS_NAME = re.compile(r"status-(light|dark)-(?:(?:default|font200)-"
     r"(?:storage|offline|tls|incompatible|stopped|refresh|rate|rate-unknown|offline-edge|waiting-room|waiting-dm)|default-details)\.png")
 DIALOG_DESTINATION = ROOT / "app/build/reports/androidTests/dialog-presentation"
 DIALOG_NAME = re.compile(r"dialog-(light|dark)-(default|font200)-"
-    r"(push-explain|push-choose|push-google|push-none|push-phone-off|push-remove)\.png")
+    r"(push-explain|push-choose|push-google|push-none|push-phone-off|push-remove|"
+    r"forget-server|dm-discard|dm-block|rooms-leave)\.png")
 TRANSFER_DESTINATION = ROOT / "app/build/reports/androidTests/transfer-presentation"
 TRANSFER_NAME = re.compile(r"transfer-(light|dark)-(default|font200)-(row|none|failed|picker|confirm|success)\.png")
 SEARCH_DESTINATION = ROOT / "app/build/reports/androidTests/search-presentation"
@@ -94,14 +95,14 @@ def collect_search():
 
 def collect_dialogs():
     # P-220 sweep: each converted dialog at default and 2.0 font, light and dark.
-    files = list(islice(SOURCE.rglob("ccm-dialog-presentation/*"), 25))
-    if (not files or len(files) > 24 or len({p.name for p in files}) != len(files)
+    files = list(islice(SOURCE.rglob("ccm-dialog-presentation/*"), 41))
+    if (not files or len(files) > 40 or len({p.name for p in files}) != len(files)
         or any(DIALOG_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous dialog presentation output")
     DIALOG_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, DIALOG_DESTINATION / path.name)
-    print(f"Dialog presentation captures collected: {len(files)} of 24.")
+    print(f"Dialog presentation captures collected: {len(files)} of 40.")
 
 
 def collect_transfer():
