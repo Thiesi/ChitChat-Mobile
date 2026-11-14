@@ -66,7 +66,9 @@ class ChitChatApplication : Application() {
     val accounts: AccountOperations by lazy { SessionAccountRepository(sessionRepository) }
     val typingPreferences: TypingPreferenceOperations by lazy { SessionTypingPreferences(sessionRepository) }
     val ignores: IgnoreOperations by lazy { SessionIgnoreRepository(sessionRepository) }
-    val rooms: RoomOperations by lazy { SessionRoomRepository(sessionRepository) }
+    private val roomRepository by lazy { SessionRoomRepository(sessionRepository) }
+    val rooms: RoomOperations get() = roomRepository
+    val roomOwnership: io.github.thiesi.chitchat.core.rooms.RoomOwnershipOperations get() = roomRepository
     val conversations: ConversationOperations by lazy { SessionConversationRepository(sessionRepository) }
     internal val attachmentUploads by lazy { io.github.thiesi.chitchat.core.media.SessionAttachmentRepository(sessionRepository) }
     internal val messageMutations by lazy { SessionMessageMutationRepository(sessionRepository) }

@@ -51,7 +51,8 @@ class MainActivity : ComponentActivity() {
             val ignores: IgnorePersonViewModel = viewModel(factory = IgnorePersonViewModel.factory(
                 (application as ChitChatApplication).ignores))
             val rooms: RoomsViewModel = viewModel(factory = RoomsViewModel.factory((application as ChitChatApplication).rooms,
-                (application as ChitChatApplication).realtime))
+                (application as ChitChatApplication).realtime, (application as ChitChatApplication).roomOwnership,
+                (application as ChitChatApplication).accounts))
             val conversations: ConversationViewModel = viewModel(factory = ConversationViewModel.factory((application as ChitChatApplication).conversations,
                 (application as ChitChatApplication).realtime, (application as ChitChatApplication).typing,
                 (application as ChitChatApplication).messageMutations, (application as ChitChatApplication).messageReactions,

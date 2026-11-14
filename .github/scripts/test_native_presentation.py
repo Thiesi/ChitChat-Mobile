@@ -155,6 +155,26 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def transfer_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-transfer-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_transfer_captures_are_copied_and_keep_the_original_status(self):
+        self.results(7)
+        files = [Path("transfer-light-default-row.png"), Path("transfer-dark-font200-success.png")]
+        self.transfer_files(files)
+        self.assertEqual(7, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.TRANSFER_DESTINATION / path.name)
+        self.assertEqual(3, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_transfer_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"transfer-light-default-row-{n}.png") for n in range(25)],
+            [Path("a/transfer-dark-default-row.png"), Path("b/transfer-dark-default-row.png")], [Path("other-app.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.transfer_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def search_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-search-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
