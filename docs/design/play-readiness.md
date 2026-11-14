@@ -192,6 +192,19 @@ row "**{installation}'s legal notice**" with the `open-external` icon. It opens 
 same explicit "Open in browser" handling (`https` only, as above). There is no document screen
 for it.
 
+**Accessibility feedback** (Dependency: ChitChat#219, in the backend release after v3.12.0;
+activate when it ships). `session.php` gains a public `accessibility_feedback` field: `{"url": …}` or `null`.
+It is present signed out and for guests too, and defaults to the ChitChat project's
+accessibility form; it's `null` only when the operator turned it off.
+- When `url` is present, About and privacy gets a row "**Accessibility feedback**" with the
+  `open-external` icon. Guests see it in the same group (guests.md), and nothing else gains
+  it.
+- An `https` URL opens with the same explicit "Open in browser" handling as above. A `mailto`
+  URL hands off to the person's mail app as an explicit choice. The app never adds session
+  cookies, account details or diagnostics to either.
+- Missing field, `null`, or any other scheme: no row, and no explanation. This is presence
+  gating, not a version check, so no fallback address is invented.
+
 **Privacy-policy updates in Activity:** the server adds a `privacy_policy_updated`
 notification kind. It's timeline-only and never pushed. CCM tolerates it as it does
 `direct_message_received`: the row shows the server's rendered text with the `document` icon in a
@@ -463,7 +476,7 @@ Where privacy information appears, so the app and the data safety form say the s
 | Community guidelines screen | The app's privacy policy; when present, the server's rules and privacy policy (§1) | New |
 | Create account form | When present, the server's rules and privacy policy in the agreement line (§1) | #160 merged |
 | DM inbox header | "Not end-to-end encrypted. What this means" → the existing DM privacy and retention details (`dm_privacy_short`, inspection and retained-edit strings) | Existing |
-| You → **About and privacy** (new row group) | App version, the app's privacy policy, and when present the server's privacy policy, rules and legal notice (§1), open-source licenses (including Bricolage Grotesque OFL), and "How notifications are delivered" (distributor explanation from the push spec) | New |
+| You → **About and privacy** (new row group) | App version, the app's privacy policy, and when present the server's privacy policy, rules and legal notice (§1), open-source licenses (including Bricolage Grotesque OFL), "How notifications are delivered" (distributor explanation from the push spec), and when present Accessibility feedback (§1) | New |
 | Delete account | Section 2 disclosures | New |
 | Export | The existing unencrypted-file and partial-file disclosures | Existing |
 
@@ -503,3 +516,4 @@ re-verify them at release. How they map to the form's answers is the maintainer'
 | P-172 | Delete account is reachable from You → Privacy and security. It discloses the per-server scope, the 14-day restoration, finalization and what is kept, shows the destructive decision dialog before the request, uses step-up only on 403 step_up_required, checks unknown results with a session GET, and never resends automatically. | C |
 | P-173 | Privacy links and disclosures appear at every surface in the table, with wording consistent with the existing DM disclosures. | R, S |
 | P-174 | The guidelines text, deletion page and data safety facts are used as approved (2026-11-07). The privacy policy is published only after its own approval. Factual lines are re-verified against the shipped app before release. | R |
+| P-221 | (Dependency: ChitChat#219, the backend release after v3.12.0.) About and privacy shows "Accessibility feedback" only when `session.php`'s `accessibility_feedback.url` is present, for members and guests. An `https` URL opens through the explicit Open in browser choice and a `mailto` URL through the mail app; nothing from the session is added. A missing or null field, or any other scheme, shows no row. | U, C |
