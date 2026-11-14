@@ -34,7 +34,7 @@ presentation rules:
 | State | Detection | What the person sees |
 |---|---|---|
 | Online | Normal | Nothing. No "connected" badge. |
-| Device offline | `ConnectivityManager` network callback (event-driven, no polling) | Notice: **"No connection.** You can read and write. Messages you send will go out when you're back, while ChitChat is open." Pressing Send marks the draft "Will send when you're back online" (one per conversation, cancellable); it is sent once on reconnect while the app is open, never retried. See [status-presentation.md](status-presentation.md). |
+| Device offline | `ConnectivityManager` network callback (event-driven, no polling) | Notice: **"No connection.** You can read and write. Messages you send will go out when you're back, if you stay in the conversation." Pressing Send marks the draft "Will send when you're back online, if you stay in this room/conversation" (one per conversation, cancellable); it is sent once on reconnect while that conversation stays on screen, never retried. See [status-presentation.md](status-presentation.md). |
 | Server unreachable while the device is online | Failed requests or stream errors | Notice: **"Can't reach Schmidt Family Chat.** We'll keep trying." (installation name, else host). No technical codes in the strip; details live behind "Details". |
 | Reconnecting | Stream reconnect in progress after a drop | Header subtitle: "Reconnecting…" (level 1). Escalate to the notice only if it lasts longer than about 5 s. |
 | Back | First successful reconciliation after a drop | The notice turns into "Back online" for about 2 s, then disappears. Content updates in place without jumping the scroll position. |
