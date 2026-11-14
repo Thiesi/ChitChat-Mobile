@@ -23,6 +23,7 @@ import io.github.thiesi.chitchat.core.realtime.RealtimeController
 import io.github.thiesi.chitchat.core.typing.TypingController
 import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
+import io.github.thiesi.chitchat.core.realtime.awaitSendWhenBackOnline
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.targets.MessageTarget
 import io.github.thiesi.chitchat.core.targets.TargetSnapshot
@@ -33,6 +34,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 data class DirectAnchor(val id: Long, val offset: Int, val revision: Long = 0)
@@ -56,7 +58,9 @@ data class DirectThreadState(val peerId: Long? = null, val context: DirectContex
     val reactionDialog: DirectReactionDialog? = null, val reactionWriting: Boolean = false,
     val reactionUnknown: DirectReactionUnknown? = null, val reactionLimit: Boolean = false,
     val reactionNotice: String? = null,
-    val attachmentReview: DirectAttachmentReview? = null) { override fun toString() = "DirectThreadState" }
+    val attachmentReview: DirectAttachmentReview? = null,
+    /** Send when back online (S4b): this conversation's draft waits for the connection; it is not an attempt. */
+    val waitingToSend: Boolean = false) { override fun toString() = "DirectThreadState" }
 
 /** One serialized operation per thread: hints queue behind writes, never cancel/replay a POST. */
 class DirectThreadViewModel internal constructor(private val operations: DirectOperations,
@@ -65,7 +69,9 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     private val mutations: MessageMutationOperations? = null,
     private val reactions: MessageReactionOperations? = null,
     private val attachmentBudget: AttachmentMemoryBudget? = null,
-    private val uploads: AttachmentUploadOperations? = null) : ViewModel() {
+    private val uploads: AttachmentUploadOperations? = null,
+    /** The existing session refresh; Send when back online asks for one revalidation per reconnect. */
+    private val revalidate: (suspend () -> Unit)? = null) : ViewModel() {
     val session = operations.session
     private val mutable = MutableStateFlow(DirectThreadState())
     val state = mutable.asStateFlow()
@@ -100,6 +106,11 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     private val attachments = mutableMapOf<Long, AttachmentWork>()
     private var uploadPosting: DirectAttachmentUpload? = null
 
+    /** A clean draft frozen at Send while offline: exactly this text and reply target go out, once. Memory only. */
+    private class WaitingSend(val peer: Long, val body: String, val reply: ComposerReply?)
+    private var waiting: WaitingSend? = null
+    private var waitJob: Job? = null
+
     init { viewModelScope.launch { session.collect {
         if (it.directIdentity() != identity) {
             retireOwnerWork(); identity = it.directIdentity(); mutable.value = DirectThreadState()
@@ -115,6 +126,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             savedDrafts.value = emptyMap(); localAttention.value = emptyMap(); unknownAuthors.clear(); unknownReactions.clear(); seen = emptySet()
         }
         if (mutable.value.peerId != peer) {
+            dropWaiting()
             val foreground = active
             if (uploadPosting != null) retire(keepUpload = true) else background()
             active = foreground; seen = emptySet(); attemptedRead = 0
@@ -133,6 +145,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     }
     fun background() {
         active = false
+        dropWaiting() // Waiting never outlives the foreground or the conversation on screen.
         authorPosting?.let(::rememberUnknownAuthor)
         reactionPosting?.let(::rememberUnknownReaction)
         val current = mutable.value
@@ -146,6 +159,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
 
     /** Preserve an explicitly authorized upload through navigation. App background still cancels. */
     fun leavePane() {
+        dropWaiting()
         if (uploadPosting == null || !currentIdentity()) { background(); return }
         active = false; visibleNewest = null; viewport = null
         mutable.value = mutable.value.copy(atLatest = false, authorDialog = null, reactionDialog = null)
@@ -683,7 +697,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         updateDraft(session.value, mutable.value.peerId, value)
     }
     fun updateDraft(expected: SessionState, peer: Long?, value: String): Boolean {
-        if (!selected(expected, peer) || mutable.value.sending || mutable.value.authorDialog != null || mutable.value.reactionDialog != null || mutable.value.attachmentReview != null) return false
+        if (!selected(expected, peer) || mutable.value.sending || waiting != null || mutable.value.authorDialog != null || mutable.value.reactionDialog != null || mutable.value.attachmentReview != null) return false
         if (!canEditDraft() && value.isNotEmpty()) { mutable.value = mutable.value.copy(draftLimit = true); return false }
         mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false)
         rememberDraft(); return true
@@ -696,14 +710,14 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     fun canReplyTo(expected: SessionState, peer: Long?, message: DirectMessage) =
         canUseMessage(expected, peer, message) && composerCanSend() && canEditDraft() && !mutable.value.sending
     fun replyTo(expected: SessionState, peer: Long?, message: DirectMessage): Boolean {
-        if (!canReplyTo(expected, peer, message)) return false
+        if (waiting != null || !canReplyTo(expected, peer, message)) return false
         mutable.value = mutable.value.copy(composerReply = ComposerReply(message.id), validation = null,
             error = mutable.value.error?.takeUnless { it.code == "invalid_reply_target" })
         rememberDraft(); return true
     }
     fun cancelReply(expected: SessionState, peer: Long?, original: ComposerReply) {
         val value = mutable.value
-        if (!active || !selected(expected, peer) || value.sending || value.authorDialog != null || value.reactionDialog != null || value.attachmentReview != null || value.composerReply !== original) return
+        if (!active || !selected(expected, peer) || waiting != null || value.sending || value.authorDialog != null || value.reactionDialog != null || value.attachmentReview != null || value.composerReply !== original) return
         mutable.value = value.copy(composerReply = null, draftLimit = false,
             error = value.error?.takeUnless { it.code == "invalid_reply_target" })
         rememberDraft()
@@ -737,9 +751,10 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
                 previous?.slot ?: attachment?.selection?.slot ?: Any(),
                 previous?.takeIf { it.body == value.draft && it.composerReply === value.composerReply }?.content ?: Any()))
     }
-    fun canSend() = attachments[mutable.value.peerId] == null && composerCanSend()
+    /** Never while a draft waits: the waiting job owns that draft's one attempt (no manual second POST). */
+    fun canSend() = waiting == null && attachments[mutable.value.peerId] == null && composerCanSend()
     /** Paperclip/admission readiness only. selectAttachment still rechecks every original fact. */
-    internal fun canBeginAttachment() = active && attachmentBudget != null && !mutable.value.sending && composerCanSend()
+    internal fun canBeginAttachment() = active && waiting == null && attachmentBudget != null && !mutable.value.sending && composerCanSend()
     private fun composerCanSend() = uploadPosting == null && attachments[mutable.value.peerId]?.view?.phase !in
         setOf(DirectAttachmentPhase.UNKNOWN, DirectAttachmentPhase.CONFIRMED, DirectAttachmentPhase.CANCELLING) &&
         active && ready() && mutable.value.let { !it.busy && it.authorDialog == null && it.reactionDialog == null && it.attachmentReview == null && !it.stale && it.loaded &&
@@ -747,11 +762,15 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         it.context.mutedEverywhere == null }
     fun send(expected: SessionState, peer: Long?) { if (selected(expected, peer)) send() }
     fun send() {
+        if (canWaitToSend()) { startWaiting(); return }
         if (!canSend()) return
         val body = mutable.value.draft
-        val reply = mutable.value.composerReply
-        val typingSession = session.value
         validateDirectBody(body)?.let { mutable.value = mutable.value.copy(validation = it); return }
+        performSend(body, mutable.value.composerReply)
+    }
+
+    private fun performSend(body: String, reply: ComposerReply?) {
+        val typingSession = session.value
         mutable.value = mutable.value.copy(sending = true, confirmedSendId = null)
         start { peer ->
             write = Write.SEND
@@ -764,6 +783,60 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             reload(peer, latest = true)
         }
     }
+    /**
+     * Send when back online (S4b): only a clean text or reply draft in the conversation on screen can wait,
+     * and only while offline. Attachments, sends in progress, unknown delivery or blocks and pending
+     * choices keep today's flow. Messaging availability and mutes are the last known facts; they are
+     * re-read after the reconcile, before the one attempt.
+     */
+    fun canWaitToSend(): Boolean {
+        val value = mutable.value
+        val controller = realtime ?: return false
+        val context = value.context ?: return false
+        val connection = controller.state.value
+        return active && waiting == null && revalidate != null && connection.phase == RealtimePhase.OFFLINE &&
+            connection.generation == session.value.generation && currentIdentity() && value.peerId != null &&
+            attachments[value.peerId] == null && uploadPosting == null && write == null && !value.busy && !value.sending &&
+            value.authorDialog == null && value.reactionDialog == null && value.attachmentReview == null && value.loaded &&
+            canEditDraft() && !value.uncertainSend && !value.uncertainBlock &&
+            context.relationship.messagingAvailable && context.mutedEverywhere == null &&
+            value.draft.isNotBlank() && validateDirectBody(value.draft) == null
+    }
+
+    /** Cancel returns the text to an editable draft; it never touches delivery state or consent. */
+    fun cancelWaiting() { dropWaiting() }
+
+    private fun startWaiting() {
+        val value = mutable.value
+        val peer = value.peerId ?: return
+        val expected = identity ?: return
+        val entry = WaitingSend(peer, value.draft, value.composerReply)
+        waiting = entry
+        mutable.value = value.copy(waitingToSend = true, validation = null)
+        waitJob = viewModelScope.launch { awaitThenSendOnce(entry, expected) }
+    }
+
+    private fun dropWaiting() {
+        waitJob?.cancel(); waitJob = null
+        if (waiting == null) return
+        waiting = null
+        mutable.value = mutable.value.copy(waitingToSend = false)
+    }
+
+    private fun stillWaiting(entry: WaitingSend, expected: DirectIdentity): Boolean = waiting === entry && active &&
+        identity == expected && currentIdentity() && mutable.value.peerId == entry.peer
+
+    /** The one automatic attempt; see [awaitSendWhenBackOnline]. Policy and target are re-read through canSend(). */
+    private suspend fun awaitThenSendOnce(entry: WaitingSend, expected: DirectIdentity) {
+        val controller = realtime ?: return
+        val refresh = revalidate ?: return
+        if (!awaitSendWhenBackOnline(session, controller, refresh, { it.directIdentity() }, expected,
+                { stillWaiting(entry, expected) }, mutable.map { it.loaded && !it.stale && !it.busy })) return
+        waiting = null; waitJob = null
+        mutable.value = mutable.value.copy(waitingToSend = false)
+        if (canSend()) performSend(entry.body, entry.reply)
+    }
+
     fun allowDuplicateRisk() {
         if (mutable.value.uncertainSend && mutable.value.checkedUnknown && !mutable.value.busy && mutable.value.authorDialog == null && mutable.value.reactionDialog == null && mutable.value.attachmentReview == null) {
             mutable.value = mutable.value.copy(uncertainSend = false, checkedUnknown = false)
@@ -932,6 +1005,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     }
     private fun retireAttachments() { attachments.keys.toList().forEach { removeAttachmentWork(it) } }
     private fun retireOwnerWork() {
+        dropWaiting()
         retireAttachments(); retire()
         // Old transport remains charged through actual stop, without owning successor serialization.
         uploadPosting?.entryProbe = null
@@ -945,6 +1019,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     internal fun sendAttachment(expected: SessionState, peer: Long, entryId: String, original: DirectAttachmentDraft,
         isCurrentEntry: () -> Boolean): Boolean {
         val sender = uploads ?: return false
+        if (waiting != null) return false
         val work = attachments[peer] ?: return false
         val memo = savedDrafts.value[peer] ?: return false
         val value = mutable.value
@@ -1184,8 +1259,9 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         internal fun factory(operations: DirectOperations, realtime: RealtimeController? = null,
             typing: TypingController? = null, mutations: MessageMutationOperations? = null,
             reactions: MessageReactionOperations? = null,
-            attachmentBudget: AttachmentMemoryBudget? = null, uploads: AttachmentUploadOperations? = null): ViewModelProvider.Factory = viewModelFactory {
-            initializer { DirectThreadViewModel(operations, realtime, typing, mutations, reactions, attachmentBudget, uploads) }
+            attachmentBudget: AttachmentMemoryBudget? = null, uploads: AttachmentUploadOperations? = null,
+            revalidate: (suspend () -> Unit)? = null): ViewModelProvider.Factory = viewModelFactory {
+            initializer { DirectThreadViewModel(operations, realtime, typing, mutations, reactions, attachmentBudget, uploads, revalidate) }
         }
     }
 }

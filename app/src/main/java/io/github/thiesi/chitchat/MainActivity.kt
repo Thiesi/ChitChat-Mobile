@@ -63,7 +63,8 @@ class MainActivity : ComponentActivity() {
                 (application as ChitChatApplication).directMessages, (application as ChitChatApplication).realtime,
                 (application as ChitChatApplication).typing, (application as ChitChatApplication).messageMutations,
                 (application as ChitChatApplication).messageReactions, (application as ChitChatApplication).attachmentMemory,
-                (application as ChitChatApplication).attachmentUploads))
+                (application as ChitChatApplication).attachmentUploads,
+                revalidate = { (application as ChitChatApplication).sessions.refresh() }))
             val targets: MessageTargetViewModel = viewModel(factory = MessageTargetViewModel.factory(
                 (application as ChitChatApplication).messageTargets))
             val notifications: NotificationCenterViewModel = viewModel(factory = NotificationCenterViewModel.factory(

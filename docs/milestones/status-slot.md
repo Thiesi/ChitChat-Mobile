@@ -71,19 +71,24 @@ live edge reads "Newer messages appear when you reconnect." There's no "Loaded a
 when it last loaded, and nothing is tracked just for this. The presence subtitle for offline belongs to the
 P-86 header and comes with that slice. Online, the caption renders nothing, so journey layouts are unchanged.
 
-## Send when back online (S4a, rooms on screen)
+## Send when back online (S4a rooms, S4b direct messages; on screen)
 
-**What can wait:** pressing Send in the room on screen while realtime is `OFFLINE` marks the draft
+S4a covers the room on screen and S4b the direct message on screen. Both use one shared coordinator,
+`awaitSendWhenBackOnline` in `core/realtime`, so the two flows can't drift apart.
+
+**What can wait:** pressing Send in the conversation on screen while realtime is `OFFLINE` marks the draft
 waiting, but only a clean text or reply draft:
 - no send in progress;
-- no unknown delivery;
+- no unknown delivery (in a DM, no unknown block either);
 - no pending choice, review or dialog;
-- the person may post.
+- the person may post (a room: member, guest write, not muted; a DM: messaging available, not muted).
 
 **What can't:** an attachment draft keeps today's behaviour and never waits. Waiting is not an attempt.
 Cancel, or dropping the flag, returns the text to an editable draft and never touches delivery-unknown
-state or consent. The waiting text and reply target are frozen at Send: the field and the reply are
-read-only, and exactly that content is sent.
+state or consent. The waiting text and reply target are frozen at Send: the field is read-only (selectable,
+in ordinary ink, not a disabled field), the reply can't change, and exactly that content is sent. While a
+draft waits, a manual send, the attachment paperclip and attachment send all refuse, so a second POST can't
+sit beside the waiting attempt.
 
 **The automatic attempt.** The view model runs one attempt per waiting draft, only after all of these, in
 order:
@@ -92,11 +97,11 @@ order:
    - `SessionState.bootstrapSequence` counts successful bootstraps in the generation. The view model
      snapshots it whenever the connection leaves `LIVE` and needs a newer value.
    - A reconnect alone never revalidates the session, so this adds **one new session GET per reconnect**.
-     It is made only while a draft waits and the room is on screen. It goes through the existing session
+     It is made only while a draft waits and its conversation is on screen. It goes through the existing session
      refresh, so an in-flight bootstrap (for example a foreground one) is reused rather than duplicated,
      with no retry and no polling.
-3. **Room reconcile:** the room's own post-reconnect sync has finished, so the room is loaded, not stale
-   and not syncing.
+3. **Conversation reconcile:** the conversation's own post-reconnect sync has finished, so it is loaded,
+   not stale and not busy (a room also not syncing).
 4. **Policy re-read:** policy and target are re-read after the last await through `canSend()`.
 
 Then it sends the frozen content once through the ordinary send path, with all its guards. A guard refusal
@@ -112,20 +117,25 @@ returns the draft to normal with that guard's message.
   once more. Without a known deadline, the draft waits for the next reconnect.
 - **429 on the send itself:** a definite refusal with the wait shown. Nothing is resent.
 - **Timers:** only that known 429 deadline, and only while on screen.
-- **Dropping the flag:** leaving the room, background, sign-out, a generation change or process death
-  drops it. The text stays an ordinary draft, and nothing is saved.
+- **Dropping the flag:** leaving the conversation, opening another one, background, sign-out, a generation
+  change or process death drops it. The text stays an ordinary draft, and nothing is saved.
 
-**Scope:** S4b brings the same flow to DMs. Sending for a conversation that isn't on screen (S4c) is in the
-backlog. Until then the copy says so:
-- the composer: "Will send when you're back online, if you stay in this room.";
-- the offline slot: "No connection. You can read and write. In a room, messages you send go out when you're
-  back, if you stay in the room." (presentation lead, PR227, interim).
+**Notice layout (P-108):** Cancel stays beside the notice only while the notice fits in two lines at the
+width left beside it, measured with the current font; otherwise the notice takes the full width and Cancel
+gets its own end-aligned 48dp row below. The choice is the measured line count, never a font-scale
+threshold, so a narrow phone at 100 % gets the same fallback. Reading order is always notice, then Cancel.
+
+**Scope:** sending for a conversation that isn't on screen (a possible S4c) is in the backlog. Until then the
+copy says so (presentation lead, PR227, interim):
+- the room composer: "Will send when you're back online, if you stay in this room.";
+- the DM composer: "Will send when you're back online, if you stay in this conversation.";
+- the offline slot: "No connection. You can read and write. Messages you send will go out when you're back,
+  if you stay in the conversation."
 
 ## Interim copy
 
-The spec's row-2 text promises that messages go out when you're back. That is Send when back online (S4),
-which doesn't exist yet. The slot reads "No connection. You can still read what's here. Sending needs a
-connection." (presentation lead, PR221 J review) until S4 ships.
+The spec's full row-2 text ("…while ChitChat is open") promises sending from anywhere in the app. That is
+the possible S4c, which doesn't exist. The slot uses the on-screen interim copy above instead.
 
 ## Verification
 
