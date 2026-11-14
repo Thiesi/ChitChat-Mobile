@@ -5,7 +5,7 @@ implements UnifiedPush/Web Push (see [push-architecture.md](../push-architecture
 decides presentation only. Transport, registration, key handling, instance and generation
 validation, and logout cleanup are M6 engineering under the existing architecture decision.
 Mockups: `PushShade` and `NotificationSettings` on the canvas. `NotificationSettings` shows the
-batch 3 target, which ships with the minimum server version (3.9.0, which includes batch 3).
+batch 3 target, which ships with the minimum server version (3.10.0, which includes batch 3).
 
 ## What a push contains today
 
@@ -34,7 +34,7 @@ is complete.
 **One rule: the minimum server version.** #148 has no client check. All batch 3 push
 behavior, including the two settings lines below (honesty and quiet hours), **requires CCM's
 minimum server version**, which includes batch 3 (#148, #147 and #150, shipped in 3.5.0). The
-minimum is 3.9.0 since 2026-11-12, and the push slice ships against it (server-update.md).
+minimum is 3.10.0 since 2026-11-14, and the push slice ships against it (server-update.md).
 There are no per-line or per-feature version checks.
 
 - **Delivery lifetime (#148):** mentions, pings and DM alerts live **30 minutes** from

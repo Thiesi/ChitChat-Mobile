@@ -10,7 +10,7 @@ moderation.md.
 
 **Minimum server version.** The #191 fields (directory `counts`, `next_cursor`, `active_ban`,
 `active_mute`, `closing`, and the subject case counts) shipped in v3.5.0 and are inside CCM's
-minimum server version (3.9.0 since 2026-11-12). The staff screens rely on them. There's no fallback
+minimum server version (3.10.0 since 2026-11-14). The staff screens rely on them. There's no fallback
 for older servers and no per-field version check (one rule: the minimum version).
 
 ## What belongs on a phone
@@ -97,8 +97,8 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
   excluded), then confirms "Invite {name} to {room}?".
 - **Transfer ownership** (ChitChat#273, v3.9.0; **in v1**, presentation lead with the
   technical lead, 2026-11-12, because "owners can't leave" would otherwise trap an owner):
-  - **Gating:** guaranteed by the minimum server version (3.9.0, raised for this by the
-    technical lead on 2026-11-12; one rule, server-update.md). No session or room field
+  - **Gating:** guaranteed by the minimum server version (3.10.0; first raised to 3.9.0 for
+    this by the technical lead on 2026-11-12; one rule, server-update.md). No session or room field
     announces transfer, and CCM never probes the endpoint or falls back on a 404.
   - **Who sees it:** the room's owner, and Super-Administrators, Administrators and Chat
     Admins for rooms in their list. Room moderators and Global Moderators never see it.
@@ -196,8 +196,8 @@ An emergency switch, so it's on the phone, behind step-up.
 | ID | Requirement | Verify |
 |---|---|---|
 | P-205 | Stewarding shows only the rows the viewer's role allows. Web-only tasks show "Do this on {installation}'s website." with an explicit Open website, never an automatic browser. | U, C |
-| P-206 | People uses search, the Everyone/Staff/Banned/Muted/Closing chips with server counts, the two sorts and cursor paging, and relies on the minimum server version (3.9.0), which includes #191 (no older-server fallback). Rows show the most important restriction or sign-in fact. | U, C |
+| P-206 | People uses search, the Everyone/Staff/Banned/Muted/Closing chips with server counts, the two sorts and cursor paging, and relies on the minimum server version (3.10.0), which includes #191 (no older-server fallback). Rows show the most important restriction or sign-in fact. | U, C |
 | P-207 | A person's staff view shows roles, dates, active ban and mute, closing date and report counts, with only the server-allowed everywhere actions. Roles, password reset and audit stay web-only. | U, C |
 | P-208 | Room settings send the full editable state, warn before removing guests, and never resend. Members and invitations follow the ranks. Delete and restore stay web-only. | U, C |
-| P-217 | (Guaranteed by the 3.9.0 minimum; no endpoint probe or fallback.) Transfer ownership is shown only to the owner and to Super-Administrators, Administrators and Chat Admins for their listed rooms. It picks a non-guest member other than the owner, confirms with the actor-specific dialog, goes through `withStepUp`, and is never resent. already_owner, transfer_target_not_eligible, membership_not_found, ownership_changed, forbidden and unknown each show their own line, and the re-reads are explicit. A former owner returns to the room details sheet as a moderator. Self-takeover stays web-only. | U, C |
+| P-217 | (Guaranteed by the 3.10.0 minimum; no endpoint probe or fallback.) Transfer ownership is shown only to the owner and to Super-Administrators, Administrators and Chat Admins for their listed rooms. It picks a non-guest member other than the owner, confirms with the actor-specific dialog, goes through `withStepUp`, and is never resent. already_owner, transfer_target_not_eligible, membership_not_found, ownership_changed, forbidden and unknown each show their own line, and the re-reads are explicit. A former owner returns to the room details sheet as a moderator. Self-takeover stays web-only. | U, C |
 | P-209 | Server status is read-only and shows no personal data. Lockdown is Super-Administrator-only, explains its effects, needs step-up, and reports the sign-out count. | U, C |

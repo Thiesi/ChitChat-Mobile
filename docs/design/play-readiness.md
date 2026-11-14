@@ -202,7 +202,7 @@ unknown kind is never an error.
 ### Required username change (ChitChat#164, merged)
 
 **Status: active, required for the first Play release** (technical lead, 2026-11-12).
-ChitChat#164 shipped in v3.8.0 (`ec31655`). It's inside CCM's 3.9.0 minimum, and the screens are
+ChitChat#164 shipped in v3.8.0 (`ec31655`). It's inside CCM's 3.10.0 minimum, and the screens are
 still driven by what the server sends, never by a version check: without it, `user.username_change` is
 missing and treated as `null`, and no `403 username_change_required`, `user_renamed` or
 `username_change_required` notification ever arrives, so nothing here shows. A missing field
