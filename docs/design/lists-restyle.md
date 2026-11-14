@@ -91,7 +91,7 @@ One `LazyColumn` (`rooms_directory`):
     capped like `unread_count`, counting unread room-mention notifications after the viewer's
     read position (deleted messages and ignored senders excluded). Reading past the mention
     clears it; non-joined rooms get 0. Contract: `docs/api/rooms.md` at `v3.9.0`. It's
-    inside CCM's 3.9.0 minimum; the app still reads the field's presence, never a version.
+    inside CCM's 3.10.0 minimum; the app still reads the field's presence, never a version.
     - `unread_mention_count ≥ 1`: the honey **`MentionBadge`** with "@" (theme-foundation.md)
       in the trailing column, on the badge line, to the start of the unread `CountBadge`
       with a 4dp gap. It's a marker, not a count: the number is never shown, because the

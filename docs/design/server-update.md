@@ -15,7 +15,7 @@ installation icon (#211); 3.5.0's batch 3 push (#147, #148, #150) and staff data
 3.4.0's batch 2 (#160, #159, #155, #158). It was raised from 3.9.0 on 2026-11-14 (technical
 lead: settled SSE resume, [ChitChat#286](https://github.com/Thiesi/ChitChat/issues/286); the default
 stream can skip a late-committing message and there's no client fallback; see
-[M3c1](../milestones/M3c1-realtime-protocol.md#settled-resume-v3100). All three known instances (chitchat, talksquare, cctest) run v3.12.0 or later (deployed 2026-11-13, confirmed by the backend/web lead from session.php); no known installed base is below v3.10.0.); earlier from 3.7.0 on 2026-11-12 (technical
+[M3c1](../milestones/M3c1-realtime-protocol.md#settled-resume-v3100). All three known instances (chitchat, talksquare, cctest) run v3.12.0 or later (deployed 2026-11-13, confirmed by the backend/web lead from session.php); no known installed base is below v3.10.0); earlier from 3.7.0 on 2026-11-12 (technical
 lead, on PR #206: all known instances run 3.9.0, there's no installed base, and it carries
 the #276 privacy fix); earlier from 3.5.0 on 2026-11-11, and from 3.4.0 on 2026-11-09
 (issue #1, comment 6737288486). AGENTS.md and
