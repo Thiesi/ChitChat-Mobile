@@ -4,6 +4,8 @@
 
 - [Settled SSE resume](docs/milestones/M3c1-realtime-protocol.md#settled-resume-v3100): the stream always uses `?resume=settled`. Store and send only the frame `id:` (a position, never `data.id`, never moving back), drop resent events by `data.id` (a bounded 1,000-id seen-set above the position), and deliver a lower `data.id` that arrives after a higher one. A position decrease within one connection takes the terminal incompatible path. The first connection is unchanged (`Last-Event-ID: 0`); the cursor is in memory only.
 
+- [Room ownership transfer](docs/milestones/room-ownership-transfer.md) B1 is protocol only: `RoomOwnershipOperations` decodes only the snapshot's room ID and member id/username/role/`can_transfer_ownership` (never invitations; missing or null flags are not offered; flags are stale-able, ban-blind hints) and makes one CSRF transfer POST whose every refusal stays typed for `withStepUp`, never replayed. `can_take_ownership` stays unused. The native entry (B2) follows.
+
 - [Status slot](docs/milestones/status-slot.md): a signed-in screen shows at most one connection/session notice, chosen by `resolveStatus`. Its only timers are the existing P-25 wait gate, the row-8 one-shot and Back online, all composition-bound and never running in the background; waits show only the server's positive 429 `retry_after_seconds`, rounded up, and never trigger a send. Never claim behaviour that isn't shipped (offline copy waits for S4).
 
 - [Open-source licences](docs/third-party-licenses.md): every shipped artifact must be covered by `assets/licenses/oss_licenses.json` (`:app:checkLicenceCoverage` in CI; `OssLicencesTest` for catalog entries and versions). Add an entry with its licence text when a dependency changes; never silence the check.

@@ -3,7 +3,7 @@ package io.github.thiesi.chitchat.core.rooms
 import io.github.thiesi.chitchat.core.session.SessionRepository
 
 /** The existing origin-bound transport and generation fence own authorization. No separate jar. */
-internal class SessionRoomRepository(private val sessions: SessionRepository) : RoomOperations {
+internal class SessionRoomRepository(private val sessions: SessionRepository) : RoomOperations, RoomOwnershipOperations {
     override val session = sessions.state
     override suspend fun list(): List<RoomInfo> {
         val access = sessions.openAccess()
@@ -20,6 +20,14 @@ internal class SessionRoomRepository(private val sessions: SessionRepository) : 
     override suspend fun leave(roomId: Long) {
         val access = sessions.openAccess()
         sessions.authorized(access) { leaveRoom(roomId, access.csrf) }
+    }
+    override suspend fun transferSnapshot(roomId: Long): RoomTransferSnapshot {
+        val access = sessions.openAccess()
+        return sessions.authorized(access) { roomTransferSnapshot(roomId) }
+    }
+    override suspend fun transferOwnership(roomId: Long, targetUserId: Long): RoomInfo {
+        val access = sessions.openAccess()
+        return sessions.authorized(access) { transferRoomOwnership(roomId, targetUserId, access.csrf) }
     }
     override suspend fun create(input: CreateRoom): RoomInfo {
         val access = sessions.openAccess()
