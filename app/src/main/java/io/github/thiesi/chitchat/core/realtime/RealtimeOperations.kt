@@ -22,6 +22,11 @@ class RealtimeEvent internal constructor(
     val createdAt: Instant,
     internal val invalidBeforeSessionVersion: Int? = null,
     internal val receivedAtMillis: Long = System.nanoTime() / 1_000_000, // Local receipt metadata, not a server field.
+    /**
+     * Settled resume (v3.10.0): the frame's SSE `id:`, a resume position, not this event's identity. It can be
+     * below [id]. Only this value is stored and sent back; [id] is for de-duplication only.
+     */
+    internal val position: Long = id,
 ) {
     val known: Boolean get() = type in KNOWN_TYPES
 

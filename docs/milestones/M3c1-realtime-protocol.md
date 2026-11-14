@@ -10,7 +10,7 @@ Source baseline remains ChitChat v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf
 - Pinned `okhttp-sse:5.4.0` supplies standard framing, not a custom SSE parser. Its [implementation](https://github.com/square/okhttp/blob/parent-5.4.0/okhttp-sse/src/main/kotlin/okhttp3/sse/internal/RealEventSource.kt) does not reconnect or expose retry changes and disables full-call timeout for open streams. A later foreground coordinator must own reconnection/lifetime;1000ms is the verified current-server hint, not an assumed event field. Read timeout and cancellation remain effective.
 - A decompressed response budget of8MiB, individual event JSON budget of1MiB and bounded16-signal queue prevent unbounded frame/buffer growth. Overflow fails explicitly and cancels the source; it never silently acknowledges a dropped event. HTTP status/code/Retry-After and TLS/timeout failures remain safe metadata without bodies or low-level exception strings. No transport-owned cursor is advanced.
 - The [pinned reader](https://github.com/square/okhttp/blob/parent-5.4.0/okhttp-sse/src/main/kotlin/okhttp3/sse/internal/ServerSentEventReader.kt) carries the preceding event ID into unnumbered frames. Decode the direct `forced_logout` control shape before persistent-envelope ID matching. An unterminated data line at EOF can raise `IllegalArgumentException` in that reader; classify that incomplete transport as reconnectable, not a delivered frame.
-- Persistent envelopes require matching numeric IDs/types, valid nullable room/actor IDs and an offset-aware timestamp. Known room/global event scopes are checked; additive unknown types remain explicit events for safe consumer invalidation. Payload-specific application/reduction and cursor acknowledgment remain the consumer's responsibility.
+- Persistent envelopes require a numeric frame position (see below), a positive envelope ID, matching types, valid nullable room/actor IDs and an offset-aware timestamp. Known room/global event scopes are checked; additive unknown types remain explicit events for safe consumer invalidation. Payload-specific application/reduction and cursor acknowledgment remain the consumer's responsibility.
 - Actual [RoomListSignal](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/Room/RoomListSignal.php) supplies PHP `[]`, serialized as an empty JSON array, despite the conceptual object in documentation. Both empty representations are accepted for `rooms_changed`; nonempty arrays are not arbitrary payload objects.
 - Current persistent forced-logout publishers include the newly assigned `session_version` (for example [AdminService](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/Admin/AdminService.php#L228)). It invalidates older versions; replay must not sign out a freshly authenticated version equal to or newer than it. Missing version remains fail-safe invalidation. The stream's unnumbered invalidation is always immediate. Both use the existing generation/vault/runtime clearing path; HTTP401 still uses the ordinary global invalidation path.
 - Presence uses existing CSRF `POST presence/heartbeat.php` and `GET rooms/presence.php?room_id=...`, not a guessed presence-list route. Required typed status/user fields include the actual `guest` flag. UUID normalization/versions/variant, room/expiry/idle/warning consistency, configured lease bounds and unique aggregate users are validated. No arbitrary100-user cap is invented. [PresenceService](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/Presence/PresenceService.php), [configuration](https://github.com/Thiesi/ChitChat/blob/4f53ff497f5572072fddad42d8ac3979e9cdf0d1/src/Config.php#L72).
@@ -30,3 +30,37 @@ An early debug/unit command compiled successfully but passed224/225 units: the n
 The complete frozen-source command `:app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest --console=plain --max-workers=2` then passed in5m12s (129 tasks:76 executed,11 cached,42 up-to-date). All225 fixture units passed, zero failures/errors/skips; lint reported no issues. Debug, test and shrunk unsigned-release APKs built. Native libraries were packaged unchanged when symbol stripping was unavailable; SDK metadata-version warning did not fail the build. No tool/security suppression was added.
 
 Coverage includes real local TLS HTTP/SSE fixtures, framing/comments/CRLF/multiline, cookie/cursor/CSRF separation, truncation, bounded bodies, status/rate/redirect/MIME errors, cancellation and shared-client reuse, both logout shapes/old versions and vault clearing, failed consumer/replay, presence UUID/status/list validation and policy errors without POST replay. All three new Android TLS/SSE fixture tests then actually passed on the owned API36 emulator at320×640dp/font100% in37s, zero failures/errors/skips. Full current-head hosted/native regression suites and completed Claude review/re-review remain required before merge, not inferred from the focused pass. No live SSE connection, room heartbeat, message, read cursor or membership was changed for this prerequisite.
+
+## Settled resume (v3.10.0)
+
+The minimum backend is v3.10.0, so the stream is always opened as `GET events/stream.php?resume=settled`
+([contract](https://github.com/Thiesi/ChitChat/blob/b2791a0/docs/api/realtime.md), ChitChat#286). In the default
+mode a lower event ID that commits after a higher one was streamed is skipped; this mode never skips it.
+
+- **Position, not identity.** The decoder reads the frame `id:` as a non-negative position (`[0-9]{1,19}`) and
+  never compares it with `data.id`, which stays the event's identity (still positive and strictly checked).
+  `RealtimeEvent.position` carries it. Control frames (`forced_logout`, `error`) keep their unnumbered shapes.
+- **What is stored.** The coordinator stores only the last frame position, as `max(cursor, position)`, so it never
+  moves back, even when a new connection's first frames carry a lower position. It is sent back as
+  `Last-Event-ID`. The first connection is unchanged: a fresh runtime sends `Last-Event-ID: 0`, exactly as before.
+  A received position of 0 is stored and sent like any other. The cursor lives only in memory per runtime, so an
+  app update starts fresh and the default-to-settled switch-over (realtime.md:56) never applies.
+- **No duplicates, no losses.** A reconnect may resend events above the position. They are dropped by `data.id`
+  through a seen-set of the IDs processed above the stored position: at most 1,000, oldest first (like the web
+  client's `realtime-seen.js`), pruned once the position passes them. The old "ID at or below the cursor" drop is
+  gone, because it discarded exactly the late commits this mode delivers.
+- **Overflow is harmless.** If more than 1,000 unsettled IDs pile up, the oldest is forgotten and a resend of it
+  could pass. Message events only invalidate (a coalesced canonical GET, idempotent by message ID), typing and
+  presence duplicates only refresh state that expires or is re-read, and broadcasts are listed once per event ID.
+- **Protocol break.** A position lower than the previous frame within one connection is a server contract
+  violation. It throws `INCOMPATIBLE` through the existing incompatible-frame path: the connection stops in
+  `RealtimePhase.ERROR`, the status slot shows its existing incompatible row, and nothing reconnects until the
+  person chooses Retry. There is no fast reconnect loop.
+- **Bare `id:` lines** are optional per the contract; OkHttp doesn't surface them, and the next event's `id:`
+  carries the position.
+- **Known, unchanged: backlog replay on a fresh runtime.** `Last-Event-ID: 0` means "after 0", so a fresh session
+  receives the retained events (`realtime_event_retention_hours`), bounded by current membership (#276); typing
+  expires. They only invalidate canonical reads. Whether a fresh runtime should omit the header is a separate
+  decision.
+- **Not adopted:** the room list's `unread_settled_message_id` and `unread_counted_ids`. The client doesn't count
+  live unread messages; it reconciles by GET.

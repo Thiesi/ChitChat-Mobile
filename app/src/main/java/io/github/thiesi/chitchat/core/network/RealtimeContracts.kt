@@ -35,8 +35,10 @@ internal fun decodeRealtimeSignal(id: String?, type: String?, data: String): Rea
             throw ApiFailure(FailureKind.NETWORK, code = code!!.content)
         }
         val envelope = apiJson.decodeFromJsonElement<EventEnvelope>(root)
-        incompatibleUnless(id != null && id.matches(Regex("[1-9][0-9]{0,18}")) &&
-            id.toLongOrNull() == envelope.id && envelope.id > 0 && type == envelope.type &&
+        // Settled resume (v3.10.0): the frame id is a non-negative resume position. It may be lower than
+        // data.id and is never compared with it; data.id stays the event's identity.
+        val position = id?.takeIf { it.matches(Regex("[0-9]{1,19}")) }?.toLongOrNull()
+        incompatibleUnless(position != null && position >= 0 && envelope.id > 0 && type == envelope.type &&
             envelope.type.isNotEmpty() && envelope.type.length <= 100 &&
             (envelope.roomId == null || envelope.roomId > 0) &&
             (envelope.actorUserId == null || envelope.actorUserId > 0))
@@ -58,7 +60,7 @@ internal fun decodeRealtimeSignal(id: String?, type: String?, data: String): Rea
             value!!.intOrNull
         } else null
         return RealtimeSignal.Event(RealtimeEvent(envelope.id, envelope.type, envelope.roomId,
-            envelope.actorUserId, payload, created, version))
+            envelope.actorUserId, payload, created, version, position = position!!))
     } catch (_: SerializationException) {
         throw ApiFailure(FailureKind.INCOMPATIBLE)
     }

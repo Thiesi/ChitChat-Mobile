@@ -394,7 +394,9 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
 
     fun events(afterId: Long): kotlinx.coroutines.flow.Flow<io.github.thiesi.chitchat.core.realtime.RealtimeSignal> {
         require(afterId >= 0)
-        val request = buildRequest("events/stream.php").newBuilder()
+        // Settled resume (v3.10.0 minimum, no fallback): afterId is the last frame position, unchanged on a
+        // fresh runtime (0, as before).
+        val request = buildRequest("events/stream.php?resume=settled").newBuilder()
             .header("Accept", "text/event-stream").header("Last-Event-ID", afterId.toString()).build()
         return sessionEventStream(client, request, { jar.invalid }) { cause, response ->
             if (response != null && !response.isSuccessful) {

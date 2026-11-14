@@ -62,6 +62,10 @@ class RealtimeCoordinator(
     private var usersSequence = 0L
     private var pendingWrite: Write? = null
     private var activeWrite: Write? = null
+    /** Settled resume: event ids processed above the stored position (oldest first, at most [SEEN_LIMIT]). */
+    private val seen = LinkedHashSet<Long>()
+    /** The last frame position on the current connection; it must never decrease within one. */
+    private var connectionPosition = -1L
 
     private val actor = scope.launch { for (action in mailbox) if (!closed) action() }
     private val observer = scope.launch { sessions.state.collect { execute { sessionChanged(sessions.state.value) } } }
@@ -172,7 +176,7 @@ class RealtimeCoordinator(
     fun close() = submit {
         retirePresence(); closed = true; epoch++; streamJob?.cancel(); usersJob?.cancel()
         observer.cancel(); timer.cancel(); writer.cancel(); writes.close()
-        mutable.value = RealtimeState(); mailbox.close()
+        mutable.value = RealtimeState(); seen.clear(); mailbox.close()
     }
 
     private fun sessionChanged(value: SessionState) {
@@ -182,7 +186,7 @@ class RealtimeCoordinator(
             identity = next; connection = uuid(); acquiredConnection = null; eligible = false; terminal = false
             expiredRoom = null
             inactive = false
-            mutable.value = RealtimeState(generation = value.generation)
+            mutable.value = RealtimeState(generation = value.generation); seen.clear()
         }
         transport()
     }
@@ -209,8 +213,8 @@ class RealtimeCoordinator(
             while (isActive) {
                 var wait = 1_000L
                 try {
-                    execute { if (token == epoch && actualIdentity(expected)) mutable.value = mutable.value.copy(
-                        phase = if (mutable.value.cursor == 0L && failures == 0) RealtimePhase.CONNECTING else RealtimePhase.RECONNECTING) }
+                    execute { if (token == epoch && actualIdentity(expected)) { connectionPosition = -1L; mutable.value = mutable.value.copy(
+                        phase = if (mutable.value.cursor == 0L && failures == 0) RealtimePhase.CONNECTING else RealtimePhase.RECONNECTING) } }
                     awaitReady(expected)
                     withTimeout(40_000) {
                         operations.stream(mutable.value.cursor) { signal -> execute {
@@ -239,16 +243,31 @@ class RealtimeCoordinator(
     }
 
     private fun accept(event: RealtimeEvent, viewer: Long) {
-        if (event.id <= mutable.value.cursor) return
+        // Settled resume: the position never decreases within a connection; a decrease is a protocol break and
+        // takes the existing terminal incompatible path (no automatic reconnect).
+        if (event.position < connectionPosition) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        connectionPosition = event.position
+        // A reconnect may resend events above the stored position: drop by data.id. A lower id arriving after a
+        // higher one is a late commit, not a duplicate, and is delivered (the old "id <= cursor" drop lost it).
+        if (event.id in seen) return
         requireValidRealtimePayload(event, viewer) // Malformed known payloads never advance the cursor.
         if (!event.known || delivered.subscriptionCount.value == 0 || !delivered.tryEmit(event)) reconcile()
         if (event.type == "presence_changed" && event.roomId == mutable.value.selectedRoomId) fetchUsers()
         if (event.type in setOf("room_broadcast", "global_broadcast")) {
             val text = (event.payload["message"] as JsonPrimitive).content
-            mutable.value = mutable.value.copy(broadcasts = (mutable.value.broadcasts +
-                BroadcastNotice(event.id, event.roomId, text, event.createdAt)).takeLast(20))
+            if (mutable.value.broadcasts.none { it.id == event.id })
+                mutable.value = mutable.value.copy(broadcasts = (mutable.value.broadcasts +
+                    BroadcastNotice(event.id, event.roomId, text, event.createdAt)).takeLast(20))
         }
-        mutable.value = mutable.value.copy(cursor = event.id) // Delivery/fallback is recorded first.
+        // Delivery/fallback is recorded first. Only the frame position is stored, and it never moves back.
+        val cursor = maxOf(mutable.value.cursor, event.position)
+        seen.removeAll { it <= cursor }
+        if (event.id > cursor) {
+            seen += event.id
+            // Overflow forgets the oldest; message events stay idempotent by message id downstream.
+            while (seen.size > SEEN_LIMIT) seen.remove(seen.first())
+        }
+        mutable.value = mutable.value.copy(cursor = cursor)
     }
 
     private fun queueWrite(interacted: Boolean) {
@@ -330,3 +349,6 @@ class RealtimeCoordinator(
         ?.let { Identity(server?.value, generation, it.id, it.sessionVersion) }
     private class Write(val identity: Identity, val connection: String, val ticket: Long, val room: Long?, val interacted: Boolean, val cleanup: Boolean = false)
 }
+
+/** Settled resume: event ids remembered above the stored position, as the web client does (realtime-seen.js). */
+private const val SEEN_LIMIT = 1_000
