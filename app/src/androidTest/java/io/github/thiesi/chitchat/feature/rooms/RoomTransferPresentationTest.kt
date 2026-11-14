@@ -1,6 +1,9 @@
 package io.github.thiesi.chitchat.feature.rooms
 
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.AlertDialog
@@ -12,7 +15,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.isDialog
@@ -70,18 +72,25 @@ class RoomTransferPresentationTest {
                 for (each in scenes) {
                     scene = each; compose.waitForIdle()
                     when (each) {
-                        "row" -> compose.onNodeWithTag("rooms_transfer_open").assertHeightIsAtLeast(48.dp)
-                        "failed" -> compose.onNodeWithTag("rooms_transfer_retry").assertHeightIsAtLeast(48.dp)
+                        "row" -> assertTarget("$label/$name/$each", "rooms_transfer_open")
+                        "failed" -> assertTarget("$label/$name/$each", "rooms_transfer_retry")
                         "picker" -> compose.onNodeWithTag("rooms_transfer_picker").assertExists()
                         "confirm" -> compose.onNodeWithTag("rooms_transfer_make_owner").assertExists()
                     }
                     val height = compose.onNodeWithTag(probe.getValue(each)).getUnclippedBoundsInRoot().height.value
                     if (fontScale == 1f) heights[each] = height
-                    else assertTrue("$each: the 2.0 font scale reached the captured window", height > heights.getValue(each))
+                    else assertTrue("$label/$name/$each: the 2.0 font scale reached the captured window " +
+                        "(default ${heights.getValue(each)}dp, now ${height}dp)", height > heights.getValue(each))
                     capture("transfer-$label-$name-$each")
                 }
             }
         }
+    }
+
+    /** A 48dp touch target, the same strict floor (and 0.5dp tolerance) as assertHeightIsAtLeast, labelled. */
+    private fun assertTarget(where: String, tag: String) {
+        val height = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot().height.value
+        assertTrue("$where: $tag is ${height}dp, expected at least 48dp", height >= 48f - 0.5f)
     }
 
     @Composable
@@ -100,8 +109,10 @@ class RoomTransferPresentationTest {
                 }
                 // The success state is a moderator now: no owner explanation, Leave room instead.
                 val owner = scene != "success"
+                // Mirrors RoomDetailDialog's text slot exactly (RoomsScreen.kt): a scrolling Column, so at large font
+                // the content scrolls instead of squeezing the trailing 48dp row.
                 AlertDialog(onDismissRequest = {}, title = { Text("Lounge") }, text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(stringResource(R.string.rooms_presence_disclosure))
                         RoomTransferSection(transfer, owner, enabled = true, onOpen = {}, onRetry = {})
                         if (!owner) TextButton(onClick = {}) { Text(stringResource(R.string.rooms_leave)) }

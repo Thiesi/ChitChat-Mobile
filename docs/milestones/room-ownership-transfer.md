@@ -79,5 +79,10 @@ lead and presentation lead, 2026-11-14.
   - An administrator sees the new owner after the snapshot reloads.
 - **Not covered:** a cancellation mid-POST (leaving the dialog) can't undo a committed transfer. The next open re-reads
   the room.
+- **Scrolling parent required:** `RoomTransferSection` must sit in a scrolling container. At 200 % font the room
+  detail dialog's content overflows the window, and a non-scrolling parent squeezes the trailing Transfer row below
+  its 48dp floor (measured 36dp in a non-scrolling capture fixture). The Rooms directory dialog already scrolls
+  (`RoomDetailDialog`). **The header room-details sheet (room-presence.md) must scroll too when it adopts this
+  section.**
 - **Captures:** 24 for J review: row, none, load failure, picker, confirm and success, at default and 200% font,
   light and dark (`RoomTransferPresentationTest`, `ccm-transfer-presentation`).
