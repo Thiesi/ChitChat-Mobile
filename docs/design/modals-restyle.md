@@ -146,8 +146,24 @@ taller than the window. Then:
 - **Scope:** decision dialogs, the room detail dialog and other read-only dialogs. Form
   dialogs keep their window type, sizing and IME geometry (below). One of them adopts the
   slot only if its non-field text can overflow, and only after the M5b2 geometry tests pass.
-- **Sweep:** the remaining dialogs are inventoried and converted in one A-floor slice. The
-  list is added here before that slice starts.
+- **Sweep:** the remaining dialogs are converted in one A-floor slice. The inventory (the
+  engineer's grep of AlertDialog `text` slots without a scrolling container, at 6ea3e52) is:
+  1. Forget server confirmation (`forget_body`), app/ChitChatApp.kt;
+  2. Discard DM draft (`dm_discard_warning`), feature/direct/DirectScreens.kt;
+  3. Block help (`dm_block_help`), feature/direct/DirectScreens.kt;
+  4. Remove push in Notification settings (`push_remove_body`),
+     feature/push/NotificationSettingsScreen.kt;
+  5. Push explanation (`push_explain_body`), feature/push/PushPhoneCard.kt;
+  6. Delivery app choice list, feature/push/PushPhoneCard.kt. The choices scroll in the slot
+     like text, each keeping its 48dp row;
+  7. Use Google (`push_google_body` and the lines under it), feature/push/PushPhoneCard.kt;
+  8. No delivery app found (`push_none_body`), feature/push/PushPhoneCard.kt;
+  9. Remove push on the phone card (`push_remove_body`), feature/push/PushPhoneCard.kt;
+  10. Leave room confirmation (`rooms_leave_warning`), feature/rooms/RoomsScreen.kt.
+
+  The create-room dialog and the room detail dialog already scroll, and administration.md
+  P-217's confirm adopts the slot first. The grep is a heuristic: the slice also checks
+  dialogs built without AlertDialog's `text` slot, and adds any it finds to this list.
 
 ## Form dialogs (restyle only)
 
