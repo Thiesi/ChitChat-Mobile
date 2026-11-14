@@ -70,7 +70,7 @@ Documented minimum backend: **v3.10.0**, released at `b2791a0` (technical lead, 
 opens the event stream with settled resume (`?resume=settled`, ChitChat#286): in the default mode a lower event ID
 that commits after a higher one has been streamed is skipped, and there is no client-side fallback for that. The
 server advertises it as `capabilities.realtime_settled_resume`; the client doesn't gate on that key, because the
-minimum guarantees it. Before that the minimum was **v3.9.0** (`8b790caca5686038adc3b12f3e4e09a02ffd03aa`), per the
+minimum guarantees it. All three known instances (chitchat, talksquare, cctest) run v3.12.0 or later (deployed 2026-11-13, confirmed by the backend/web lead from session.php); no known installed base is below v3.10.0. Before that the minimum was **v3.9.0** (`8b790caca5686038adc3b12f3e4e09a02ffd03aa`), per the
 [technical lead's decision](https://github.com/Thiesi/ChitChat-Mobile/pull/206#issuecomment-6836338017): room ownership transfer ships in v1 and has no capability key, so
 it can't be detected on an older server. Before that it was v3.7.0 (`eba61e9`), per the
 [maintainer's baseline decision](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6747953068)

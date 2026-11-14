@@ -9,13 +9,13 @@ session.php` (anonymous, member and guest) carries `application: {name, version}
 `capabilities: {schema_version, …}`. **The minimum is ChitChat 3.10.0** (`{minimum}`; tag
 `v3.10.0`, commit `b2791a0`), the release with settled SSE resume (ChitChat#286). It includes
 3.9.0's room ownership transfer (#273), the per-room mention count and DM row relationship
-states (#274), and the event-replay privacy fix (#276), 3.8.0's required username change (#164) and icon presets (#241), 3.7.0's
-signed-in sessions (#205) and authenticator codes (#204), 3.6.0's native passkeys (#145), browser sign-in handoff (#146) and
-installation icon (#211), 3.5.0's batch 3 push (#147, #148, #150) and staff data (#191), and
+states (#274) and the event-replay privacy fix (#276); 3.8.0's required username change (#164) and icon presets (#241); 3.7.0's
+signed-in sessions (#205) and authenticator codes (#204); 3.6.0's native passkeys (#145), browser sign-in handoff (#146) and
+installation icon (#211); 3.5.0's batch 3 push (#147, #148, #150) and staff data (#191); and
 3.4.0's batch 2 (#160, #159, #155, #158). It was raised from 3.9.0 on 2026-11-14 (technical
 lead: settled SSE resume, [ChitChat#286](https://github.com/Thiesi/ChitChat/issues/286); the default
 stream can skip a late-committing message and there's no client fallback; see
-[M3c1](../milestones/M3c1-realtime-protocol.md#settled-resume-v3100)); earlier from 3.7.0 on 2026-11-12 (technical
+[M3c1](../milestones/M3c1-realtime-protocol.md#settled-resume-v3100). All three known instances (chitchat, talksquare, cctest) run v3.12.0 or later (deployed 2026-11-13, confirmed by the backend/web lead from session.php); no known installed base is below v3.10.0.); earlier from 3.7.0 on 2026-11-12 (technical
 lead, on PR #206: all known instances run 3.9.0, there's no installed base, and it carries
 the #276 privacy fix); earlier from 3.5.0 on 2026-11-11, and from 3.4.0 on 2026-11-09
 (issue #1, comment 6737288486). AGENTS.md and
@@ -27,7 +27,7 @@ The state shows only for a parsed session response that is **definitely older th
    Show the state.
 2. **Otherwise, compare `application.version`** (reliable since 3.3.0). Parse its leading
    `major.minor.patch` as three non-negative integers and compare them numerically (3.10.0 is
-   newer than 3.9.0). Anything that doesn't start with that pattern is **unknown**.
+   newer than 3.9.0; a text comparison would get this backwards). Anything that doesn't start with that pattern is **unknown**.
    - Definitely below 3.10.0: show the state.
    - 3.10.0 or newer: don't.
 3. **Unknown version:** show the state only when the session-level feature keys are **also all
