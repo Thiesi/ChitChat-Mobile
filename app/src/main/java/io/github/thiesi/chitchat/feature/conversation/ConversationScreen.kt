@@ -574,9 +574,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (replyInline) replyControl(true)
             }, field = {
             MessageInput(completionComposer.value, completionComposer::input,
-                !state.sending && !state.waitingToSend && model.canEditDraft() && !composerDialog && !obscured,
+                !state.sending && model.canEditDraft() && !composerDialog && !obscured,
                 stringResource(if (attachment != null) R.string.attach_caption else R.string.conversation_message), compact,
-                Modifier.onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("conversation_composer"))
+                Modifier.onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("conversation_composer"),
+                // Waiting text is read-only (selectable, normal ink), not a disabled field.
+                readOnly = state.waitingToSend)
             }, trailing = {
             if (attachVisible) AttachButton(attachAvailable, enabled = !obscured && !composerDialog && !state.sending &&
                 (attachAvailable != AttachAvailability.AVAILABLE || (ready && model.canBeginAttachment() &&

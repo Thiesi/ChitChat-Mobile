@@ -3,9 +3,11 @@ package io.github.thiesi.chitchat.feature.direct
 import io.github.thiesi.chitchat.core.conversation.*
 import io.github.thiesi.chitchat.core.direct.*
 import io.github.thiesi.chitchat.core.network.*
+import io.github.thiesi.chitchat.core.realtime.*
 import io.github.thiesi.chitchat.core.session.*
 import io.github.thiesi.chitchat.core.targets.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.*
 import org.junit.After
@@ -404,6 +406,150 @@ class DirectStateTest {
         assertEquals("Keep answer", thread.state.value.draft); thread.send(); runCurrent(); assertEquals(1, api.sends)
         thread.refresh(); runCurrent(); assertTrue(thread.canSend()); assertNull(thread.state.value.composerReply)
     }
+    // Send when back online (S4b) -----------------------------------------------------------------
+
+    private val connection = Connection()
+    private var revalidations = 0
+    /** Null succeeds and moves the bootstrap sequence, as SessionRepository does; otherwise this failure stays. */
+    private var revalidationError: (() -> ApiFailure?)? = null
+    private var revalidationGate: CompletableDeferred<Unit>? = null
+    private fun waitingThread() {
+        thread.background()
+        thread = DirectThreadViewModel(api, connection, revalidate = {
+            revalidations++
+            revalidationGate?.await()
+            val error = revalidationError?.invoke()
+            api.session.value = if (error == null) api.session.value.copy(error = null, retryAtMillis = 0,
+                bootstrapSequence = api.session.value.bootstrapSequence + 1)
+            else api.session.value.copy(error = error, retryAtMillis =
+                if (error.status == 429 && (error.retryAfterSeconds ?: 0) > 0) System.currentTimeMillis() + error.retryAfterSeconds!! * 1000 else 0)
+        })
+    }
+    private fun TestScope.offline() {
+        connection.state.value = connection.state.value.copy(phase = RealtimePhase.OFFLINE); thread.connectionLost(); runCurrent()
+    }
+    private fun TestScope.backOnline() {
+        connection.state.value = connection.state.value.copy(phase = RealtimePhase.LIVE, reconcileVersion = connection.state.value.reconcileVersion + 1)
+        thread.invalidate(); advanceUntilIdle()
+    }
+    private fun TestScope.waitWith(text: String) {
+        waitingThread(); open(); advanceUntilIdle()
+        thread.updateDraft(text); offline()
+        assertFalse("Offline, an ordinary send isn't possible", thread.canSend())
+        assertTrue(thread.canWaitToSend())
+        thread.send(); runCurrent()
+        assertTrue(thread.state.value.waitingToSend)
+    }
+
+    @Test fun anOfflineDirectDraftWaitsThenSendsExactlyTheFrozenTextOnce() = runTest(dispatcher) {
+        waitWith("Frozen direct fixture")
+        assertEquals("Waiting is not an attempt", 0, api.sends)
+        assertFalse("The waiting text is read-only", thread.updateDraft(api.session.value, 8, "Changed"))
+        backOnline()
+        assertEquals(1, revalidations)
+        assertEquals(listOf("Frozen direct fixture"), api.sentBodies)
+        assertFalse(thread.state.value.waitingToSend)
+        assertEquals("", thread.state.value.draft)
+    }
+
+    @Test fun aDirectWaitNeverSendsOnBareLiveAndWaitsForTheNextReconnect() = runTest(dispatcher) {
+        revalidationError = { ApiFailure(FailureKind.HTTP, 503, "unavailable") }
+        waitWith("Patient direct fixture")
+        backOnline()
+        assertEquals("No re-request on its own", 1, revalidations)
+        assertEquals("No send on bare LIVE", 0, api.sends)
+        assertTrue(thread.state.value.waitingToSend)
+        revalidationError = null
+        offline(); backOnline()
+        assertEquals(2, revalidations)
+        assertEquals(listOf("Patient direct fixture"), api.sentBodies)
+    }
+
+    @Test fun aKnown429OnDirectRevalidationIsWaitedOutThenRevalidatedOnce() = runTest(dispatcher) {
+        var failures = 1
+        revalidationError = { if (failures-- > 0) ApiFailure(FailureKind.HTTP, 429, "rate_limited", retryAfterSeconds = 5) else null }
+        waitWith("Later direct fixture")
+        backOnline()
+        assertEquals(2, revalidations)
+        assertEquals(listOf("Later direct fixture"), api.sentBodies)
+    }
+
+    @Test fun cancelLeavingAndAnotherConversationAreNeutral() = runTest(dispatcher) {
+        waitWith("Kept direct fixture")
+        thread.cancelWaiting()
+        assertFalse(thread.state.value.waitingToSend)
+        assertEquals("Kept direct fixture", thread.state.value.draft)
+        assertFalse(thread.state.value.uncertainSend)
+        thread.send(); runCurrent(); assertTrue(thread.state.value.waitingToSend)
+        thread.leavePane(); runCurrent()
+        assertFalse("Leaving the conversation drops the flag", thread.state.value.waitingToSend)
+        thread.open(8); thread.foreground(); runCurrent()
+        thread.send(); runCurrent(); assertTrue(thread.state.value.waitingToSend)
+        thread.open(9); runCurrent()
+        assertFalse("Another conversation drops it too", thread.state.value.waitingToSend)
+        backOnline()
+        assertEquals("Nothing sends without a new Send press", 0, api.sends)
+        thread.open(8); runCurrent()
+        assertEquals("The text stays an ordinary draft", "Kept direct fixture", thread.state.value.draft)
+    }
+
+    @Test fun anAmbiguousDirectResultIsUncertainWithNoSecondAttempt() = runTest(dispatcher) {
+        waitWith("Once direct fixture")
+        api.sendFailure = ApiFailure(FailureKind.TIMEOUT)
+        backOnline()
+        assertEquals(1, api.sends)
+        assertTrue(thread.state.value.uncertainSend)
+        assertFalse(thread.state.value.waitingToSend)
+        offline(); assertFalse("An uncertain draft can't wait", thread.canWaitToSend())
+        backOnline()
+        assertEquals("Never a second automatic attempt", 1, api.sends)
+    }
+
+    @Test fun theDirectReplyTargetIsFrozen() = runTest(dispatcher) {
+        waitingThread(); open(); advanceUntilIdle()
+        val original = thread.state.value.messages.first()
+        assertTrue(thread.replyTo(api.session.value, 8, original))
+        thread.updateDraft("Reply direct fixture"); offline(); thread.send(); runCurrent()
+        val reply = checkNotNull(thread.state.value.composerReply)
+        thread.cancelReply(api.session.value, 8, reply)
+        assertSame(reply, thread.state.value.composerReply)
+        backOnline()
+        assertEquals(original.id, api.sentReply)
+    }
+
+    @Test fun messagingBecomingUnavailableWhileOfflineMeansNoSend() = runTest(dispatcher) {
+        waitWith("Refused direct fixture")
+        api.relationship = DirectRelationship(false, false)
+        backOnline()
+        assertEquals("The re-read relationship refuses: no send", 0, api.sends)
+        assertFalse(thread.state.value.waitingToSend)
+        assertEquals("Refused direct fixture", thread.state.value.draft)
+        assertEquals(false, thread.state.value.context?.relationship?.messagingAvailable)
+    }
+
+    @Test fun aManualDirectSendWhileLiveButNotYetRevalidatedCannotPostASecondCopy() = runTest(dispatcher) {
+        revalidationGate = CompletableDeferred()
+        waitWith("Single direct fixture")
+        connection.state.value = connection.state.value.copy(phase = RealtimePhase.LIVE, reconcileVersion = 1)
+        thread.invalidate(); runCurrent()
+        assertEquals(1, revalidations)
+        assertFalse(thread.canSend())
+        thread.send(); advanceUntilIdle()
+        assertEquals(0, api.sends)
+        revalidationGate?.complete(Unit); advanceUntilIdle()
+        assertEquals(listOf("Single direct fixture"), api.sentBodies)
+    }
+
+    private class Connection : RealtimeController {
+        override val state = MutableStateFlow(RealtimeState(phase = RealtimePhase.LIVE, generation = 1))
+        override val events = MutableSharedFlow<RealtimeEvent>()
+        override fun selectRoom(roomId: Long?, eligible: Boolean, interacted: Boolean) = Unit
+        override fun activity(roomId: Long) = Unit
+        override fun reenter(roomId: Long) = Unit
+        override fun retry() = Unit
+        override fun dismissBroadcast(id: Long) = Unit
+    }
+
     private class Directs : DirectOperations {
         override val session = MutableStateFlow(SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED,
             user = SessionUser(7, "Viewer", listOf("member"), 1, false)))
@@ -411,6 +557,7 @@ class DirectStateTest {
             RevisionPrivacy(false, "super_admin", true, true, false))
         var rows = listOf(row(18)); var relationship = DirectRelationship(false, true)
         var contexts = 0; var inboxes = 0; var sends = 0; var reads = 0; var blocks = 0; var sentReply: Long? = null
+        val sentBodies = mutableListOf<String>()
         var gate: CompletableDeferred<Unit>? = null; var searchGate: CompletableDeferred<Unit>? = null
         var gated = ""; var ignoreCancellation = false; var sendFailure: ApiFailure? = null
         var failAfterSend = false; var historyFailure: ApiFailure? = null; var onRead: (() -> Unit)? = null
@@ -435,7 +582,7 @@ class DirectStateTest {
             return DirectPage(page, page.firstOrNull()?.id, page.size == limit)
         }
         override suspend fun send(peerId: Long, body: String, replyId: Long?): Long {
-            sends++; sentReply = replyId; await("send"); sendFailure?.let { throw it }
+            sends++; sentBodies += body; sentReply = replyId; await("send"); sendFailure?.let { throw it }
             rows += row(99, peerId, outgoing = true)
             if (failAfterSend) historyFailure = ApiFailure(FailureKind.HTTP, 500)
             return 99

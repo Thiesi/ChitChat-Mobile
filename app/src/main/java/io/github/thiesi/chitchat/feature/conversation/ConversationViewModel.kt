@@ -43,6 +43,7 @@ import io.github.thiesi.chitchat.core.realtime.RealtimeController
 import io.github.thiesi.chitchat.core.typing.TypingController
 import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
+import io.github.thiesi.chitchat.core.realtime.awaitSendWhenBackOnline
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.targets.MessageTarget
@@ -51,12 +52,11 @@ import io.github.thiesi.chitchat.core.targets.TargetRequest
 import io.github.thiesi.chitchat.core.targets.withCurrentPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withTimeout
@@ -1267,38 +1267,13 @@ class ConversationViewModel internal constructor(private val operations: Convers
      */
     private suspend fun awaitThenSendOnce(entry: WaitingSend, expected: Any) {
         val controller = realtime ?: return
-        var snapshot = session.value.bootstrapSequence
-        while (true) {
-            controller.state.first { it.phase == RealtimePhase.LIVE }
-            if (!stillWaiting(entry, expected)) return
-            if (session.value.bootstrapSequence <= snapshot) revalidate?.invoke()
-            val settled = combine(session, controller.state) { s, c -> s to c }.first { (s, c) ->
-                c.phase != RealtimePhase.LIVE || s.identity() != expected || (!s.busy && !s.refreshRequired && s.bootstrapSequence > snapshot) ||
-                    (!s.busy && s.bootstrapSequence <= snapshot)
-            }
-            val (state, connection) = settled
-            if (!stillWaiting(entry, expected)) return
-            if (connection.phase != RealtimePhase.LIVE) { snapshot = state.bootstrapSequence; continue }
-            if (state.bootstrapSequence <= snapshot || state.refreshRequired) {
-                // Revalidation failed. A known 429 deadline is waited out while on screen, then revalidated once more;
-                // otherwise this reconnect is spent and only the next one tries again.
-                val wait = state.retryAtMillis - System.currentTimeMillis()
-                if (state.error?.status == 429 && (state.error?.retryAfterSeconds ?: 0L) > 0L && wait > 0) { delay(wait); continue }
-                controller.state.first { it.phase != RealtimePhase.LIVE }
-                snapshot = session.value.bootstrapSequence
-                continue
-            }
-            val reconciled = combine(mutable, controller.state) { v, c -> v to c }.first { (v, c) ->
-                c.phase != RealtimePhase.LIVE || (v.loaded && !v.stale && !v.syncing && !v.busy)
-            }
-            if (!stillWaiting(entry, expected)) return
-            if (reconciled.second.phase != RealtimePhase.LIVE) { snapshot = session.value.bootstrapSequence; continue }
-            waiting = null; waitJob = null
-            mutable.value = mutable.value.copy(waitingToSend = false)
-            // Policy and target are re-read here, after the last await; the server stays the final check.
-            if (canSend() && !mutable.value.busy) performSend(entry.body, entry.replyId)
-            return
-        }
+        val refresh = revalidate ?: return
+        if (!awaitSendWhenBackOnline(session, controller, refresh, { it.identity() }, expected, { stillWaiting(entry, expected) },
+                mutable.map { it.loaded && !it.stale && !it.syncing && !it.busy })) return
+        waiting = null; waitJob = null
+        mutable.value = mutable.value.copy(waitingToSend = false)
+        // Policy and target are re-read here, after the last await; the server stays the final check.
+        if (canSend() && !mutable.value.busy) performSend(entry.body, entry.replyId)
     }
 
     /** Never while a draft waits: the waiting job owns that draft's one attempt (no manual second POST). */

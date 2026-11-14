@@ -11,6 +11,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
@@ -156,17 +160,57 @@ class StatusSlotTest {
         compose.onNodeWithText(text(R.string.status_offline_live_edge)).assertExists()
     }
 
-    @Test fun theWaitingComposerShowsItsNoticeCancelAndAClockSend() {
-        var cancels = 0
-        compose.setContent { ChitChatTheme(dark = false) { Surface { Column {
-            io.github.thiesi.chitchat.core.ui.WaitingToSendNotice(text(R.string.room_waiting_to_send)) { cancels++ }
+    /** The composer while a draft waits: notice, read-only field with the frozen text, clock Send (P-108 captures). */
+    @Composable
+    private fun WaitingComposer(notice: Int, onCancel: () -> Unit = {}) = Column {
+        io.github.thiesi.chitchat.core.ui.WaitingToSendNotice(text(notice), onCancel)
+        androidx.compose.foundation.layout.Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            io.github.thiesi.chitchat.core.ui.MessageInput("See you at eight", {}, enabled = true, label = text(R.string.conversation_message),
+                compact = false, modifier = Modifier.weight(1f).testTag("waiting_field"), readOnly = true)
             io.github.thiesi.chitchat.core.ui.MessageSendButton(text(R.string.send_waiting_label), enabled = true, sending = true,
                 onClick = {}, modifier = Modifier.testTag("waiting_send"), progress = false)
+        }
+    }
+
+    @Test fun theWaitingComposerShowsItsNoticeCancelAReadOnlyFieldAndAClockSend() {
+        var cancels = 0
+        compose.setContent { ChitChatTheme(dark = false) { Surface { Column(Modifier.width(360.dp)) {
+            WaitingComposer(R.string.dm_waiting_to_send) { cancels++ }
         } } } }
-        compose.onNodeWithText(text(R.string.room_waiting_to_send)).assertExists()
+        compose.onNodeWithText(text(R.string.dm_waiting_to_send)).assertExists()
         compose.onNodeWithTag("waiting_cancel").assertHeightIsAtLeast(48.dp).performClick()
         assertEquals(1, cancels)
         compose.onNodeWithContentDescription(text(R.string.send_waiting_label)).assertIsNotEnabled()
+        // Read-only, not disabled: the text stays in ordinary ink and can be selected.
+        compose.onNodeWithTag("waiting_field").assertIsEnabled()
+    }
+
+    /** P-108: Cancel is inline only while the notice fits in two measured lines; the width matters, not the font scale. */
+    @Test fun cancelMovesBelowTheNoticeOnlyWhenTheNoticeNeedsMoreThanTwoLines() {
+        var width by mutableStateOf(360.dp)
+        var scale by mutableStateOf(1f)
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
+                ChitChatTheme(dark = false) { Surface { Column(Modifier.width(width)) {
+                    io.github.thiesi.chitchat.core.ui.WaitingToSendNotice(text(R.string.dm_waiting_to_send)) {}
+                } } }
+            }
+        }
+        compose.onNodeWithTag("waiting_inline").assertExists()
+        scale = 2f; compose.waitForIdle()
+        compose.onNodeWithTag("waiting_stacked").assertExists()
+        val notice = compose.onNodeWithText(text(R.string.dm_waiting_to_send)).getUnclippedBoundsInRoot()
+        val cancel = compose.onNodeWithTag("waiting_cancel").assertHeightIsAtLeast(48.dp).getUnclippedBoundsInRoot()
+        // The notice's own bounds, not an assumed width: a narrow screen clamps the requested width.
+        val block = compose.onNodeWithTag("waiting_notice").getUnclippedBoundsInRoot()
+        assertTrue("Reading order stays notice, then Cancel", cancel.top >= notice.bottom)
+        // Exact, in whole pixels: Cancel's right edge is the notice's right inner edge (bounds minus 16dp padding).
+        with(compose.density) { assertEquals("Cancel is end-aligned", (block.right - 16.dp).roundToPx(), cancel.right.roundToPx()) }
+        // A narrow phone at 100 % gets the same fallback.
+        scale = 1f; width = 200.dp; compose.waitForIdle()
+        compose.onNodeWithTag("waiting_stacked").assertExists()
     }
 
     @Test fun anAnnouncementIsACardReadAndDismissedSeparatelyFromStatus() {
@@ -191,7 +235,7 @@ class StatusSlotTest {
         var scale by mutableStateOf(1f)
         var details by mutableStateOf(false)
         var edge by mutableStateOf(false)
-        var waitingComposer by mutableStateOf(false)
+        var waitingNotice by mutableStateOf(0)
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
@@ -199,11 +243,7 @@ class StatusSlotTest {
                     if (details) AlertDialog(onDismissRequest = {}, title = { Text(text(R.string.conversation_details)) },
                         text = { Column { StatusSlot(session, realtime, {}, {}, {}, nowMillis = { now }) } },
                         confirmButton = { TextButton(onClick = {}) { Text(text(R.string.rooms_close)) } })
-                    else if (waitingComposer) Column {
-                        io.github.thiesi.chitchat.core.ui.WaitingToSendNotice(text(R.string.room_waiting_to_send)) {}
-                        io.github.thiesi.chitchat.core.ui.MessageSendButton(text(R.string.send_waiting_label), enabled = true, sending = true,
-                            onClick = {}, progress = false)
-                    }
+                    else if (waitingNotice != 0) WaitingComposer(waitingNotice)
                     else if (edge) OfflineLiveEdgeCaption(true)
                     else StatusSlot(session, realtime, {}, {}, {}, nowMillis = { now })
                 } } }
@@ -235,12 +275,14 @@ class StatusSlotTest {
             capture("status-$label-$name-offline-edge")
         }
         edge = false
-        for ((name, fontScale) in listOf("default" to 1f, "font200" to 2f)) {
-            scale = fontScale; waitingComposer = true; compose.waitForIdle()
-            compose.onNodeWithTag("waiting_notice").assertExists()
-            capture("status-$label-$name-waiting")
+        for ((kind, notice) in listOf("room" to R.string.room_waiting_to_send, "dm" to R.string.dm_waiting_to_send)) {
+            for ((name, fontScale) in listOf("default" to 1f, "font200" to 2f)) {
+                scale = fontScale; waitingNotice = notice; compose.waitForIdle()
+                compose.onNodeWithTag("waiting_field").assertExists()
+                capture("status-$label-$name-waiting-$kind")
+            }
         }
-        waitingComposer = false; scale = 1f; details = true
+        waitingNotice = 0; scale = 1f; details = true
         compose.waitForIdle()
         compose.onNode(hasTestTag("status_slot") and hasAnyAncestor(isDialog())).assertExists()
         capture("status-$label-default-details", dialog = true)
