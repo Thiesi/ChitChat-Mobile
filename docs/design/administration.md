@@ -161,7 +161,9 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
     - `403 birth_date_required` / `minimum_age_not_met` can't occur here, because CCM never
       offers an administrator's self-takeover;
     - unknown (no response): "**Not sure the transfer went through.**" with **Check room**,
-      which re-reads the room once and shows its owner. Nothing is resent.
+      which re-reads the room once and shows its owner. Nothing is resent. If the person
+      leaves the picker before checking, the room detail dialog shows the same line and
+      **Check room** in place of Transfer ownership… until the room has been checked.
   - **Later (not in v1):** an administrator taking over a room they aren't in (naming
     themselves, ChitChat#273). That stays on the website.
 
