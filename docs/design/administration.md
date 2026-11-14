@@ -107,11 +107,24 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
     Admins. The flags are hints: they can be stale, and for an owner they ignore bans. The
     outcome lines below decide, and the app never re-checks a flag before submitting. There's
     no role-based fallback. `can_take_ownership` (self-takeover) stays unused.
-  - **Where (v1):** the room details sheet's owner explanation (room-presence.md). A
+  - **Where (v1):** the owner explanation "Owners can't leave their room. Hand it to someone
+    else first.", shown in place of Leave. Until the header room details sheet
+    (room-presence.md) is built, it lives in the Rooms directory's room detail dialog, where it
+    replaces the old "Room ownership cannot be transferred here…" line; the header sheet
+    inherits it when it ships (technical lead and presentation lead, 2026-11-14). A
     **Transfer ownership…** row shows there only when at least one member row has
     `can_transfer_ownership` true. When none do, the owner sees "No one in this room can take
-    it over right now." in place of the row. Administrators reach it the same way from the
-    details sheet of a room they open. An **Ownership** section in Room settings ("Owner:
+    it over right now." in place of the row. Administrators reach it the same way.
+    - **Loading the flags:** one `admin/rooms/snapshot.php` GET when the dialog or sheet opens,
+      and only for the room's owner or a viewer with a global room-management role (never for
+      ordinary members). While it loads, the explanation shows alone, with no spinner or
+      placeholder row. A network or server failure shows "Couldn't check who can take
+      over." with **Try again** (one explicit GET, never automatic), and no row. A `403`
+      means the viewer no longer manages the room (for example, it was handed on meanwhile):
+      no row and no Try again, and the room is re-read once so the dialog shows its current
+      state. A `404 room_not_found` takes the existing room-unavailable path.
+    - **Stacking:** Transfer ownership… opens the picker in place of the dialog, never over
+      it. Back or Cancel returns to the dialog or sheet. An **Ownership** section in Room settings ("Owner:
     **{name}**" and the same row) comes with Room settings later; it isn't a v1 prerequisite.
   - **Choose:** a full-screen picker listing only the members whose row has
     `can_transfer_ownership` true, with pebble, name and room role, and a local filter field
@@ -129,7 +142,7 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
   - **Outcomes** (never resent; every refusal keeps the picker's choice so the person can
     pick again):
     - success: the room is re-rendered from the returned `room`, and the picker closes back
-      to the room details sheet. An owner who handed the room on sees "**{name}** now owns
+      to the dialog or sheet it came from. An owner who handed the room on sees "**{name}** now owns
       {room}. You're a moderator now." (level 1) and now has Leave room. An administrator
       sees the sheet with the new owner;
     - `409 already_owner`: "{name} already owns this room." and the room is re-read;
@@ -207,5 +220,5 @@ An emergency switch, so it's on the phone, behind step-up.
 | P-206 | People uses search, the Everyone/Staff/Banned/Muted/Closing chips with server counts, the two sorts and cursor paging, and relies on the minimum server version (3.10.0), which includes #191 (no older-server fallback). Rows show the most important restriction or sign-in fact. | U, C |
 | P-207 | A person's staff view shows roles, dates, active ban and mute, closing date and report counts, with only the server-allowed everywhere actions. Roles, password reset and audit stay web-only. | U, C |
 | P-208 | Room settings send the full editable state, warn before removing guests, and never resend. Members and invitations follow the ranks. Delete and restore stay web-only. | U, C |
-| P-217 | (Endpoint guaranteed by the 3.10.0 minimum; no probe or fallback.) Transfer ownership is reached in v1 from the room details sheet's owner explanation. The row shows only when at least one `admin/rooms/snapshot.php` member row has `can_transfer_ownership` true, and otherwise reads "No one in this room can take it over right now." The picker lists only those flagged members (no disabled rows, no role fallback); flags are hints and are never re-checked before submitting. It confirms with the actor-specific dialog, goes through `withStepUp`, and is never resent. already_owner, transfer_target_not_eligible (no reason given, the person stays listed), membership_not_found, ownership_changed, forbidden and unknown each show their own line, and the re-reads are explicit. A former owner returns to the room details sheet as a moderator. Self-takeover stays web-only. | U, C |
+| P-217 | (Endpoint guaranteed by the 3.10.0 minimum; no probe or fallback.) Transfer ownership is reached in v1 from the owner explanation in the Rooms directory's room detail dialog (the header room details sheet inherits it). The flags come from one snapshot GET for owners and room-management roles only; while loading only the explanation shows, a network or server failure shows "Couldn't check who can take over." with an explicit Try again; a 403 hides the row and re-reads the room; a 404 takes the room-unavailable path. The row shows only when at least one `admin/rooms/snapshot.php` member row has `can_transfer_ownership` true, and otherwise reads "No one in this room can take it over right now." The picker lists only those flagged members (no disabled rows, no role fallback); flags are hints and are never re-checked before submitting. It confirms with the actor-specific dialog, goes through `withStepUp`, and is never resent. already_owner, transfer_target_not_eligible (no reason given, the person stays listed), membership_not_found, ownership_changed, forbidden and unknown each show their own line, and the re-reads are explicit. A former owner returns to the room details sheet as a moderator. Self-takeover stays web-only. | U, C |
 | P-209 | Server status is read-only and shows no personal data. Lockdown is Super-Administrator-only, explains its effects, needs step-up, and reports the sign-out count. | U, C |
