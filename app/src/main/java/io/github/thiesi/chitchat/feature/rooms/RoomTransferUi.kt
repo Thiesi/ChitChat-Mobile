@@ -54,7 +54,7 @@ private fun boldName(text: String, bold: String): AnnotatedString = buildAnnotat
  */
 @Composable
 internal fun RoomTransferSection(transfer: RoomTransferUi?, ownerViewer: Boolean, enabled: Boolean,
-    onOpen: () -> Unit, onRetry: () -> Unit) {
+    onOpen: () -> Unit, onRetry: () -> Unit, onCheckRoom: () -> Unit = {}) {
     if (ownerViewer) Text(stringResource(R.string.rooms_owner_explanation), Modifier.testTag("rooms_owner_explanation"))
     if (transfer == null) return
     if (!transfer.ownerActing) transfer.owner?.let { owner ->
@@ -63,6 +63,11 @@ internal fun RoomTransferSection(transfer: RoomTransferUi?, ownerViewer: Boolean
     if (transfer.outcome == TransferOutcome.SUCCESS && transfer.ownerActing) transfer.outcomeName?.let { name ->
         Text(boldName(stringResource(R.string.rooms_transfer_success, name, transfer.roomName), name),
             Modifier.testTag("rooms_transfer_success"))
+    }
+    // A transfer that may have committed (left mid-POST): Check room first, never a new choice.
+    if (transfer.outcome == TransferOutcome.UNKNOWN && !transfer.pickerOpen) {
+        TransferOutcomeLine(transfer, onCheckRoom) { "" }
+        return
     }
     when (transfer.load) {
         TransferLoad.LOADING, TransferLoad.HIDDEN -> Unit
@@ -123,7 +128,7 @@ internal fun RoomTransferPicker(transfer: RoomTransferUi, enabled: Boolean, onFi
 }
 
 @Composable
-private fun TransferOutcomeLine(transfer: RoomTransferUi, onCheckRoom: () -> Unit, errorText: @Composable (ApiFailure) -> String) {
+internal fun TransferOutcomeLine(transfer: RoomTransferUi, onCheckRoom: () -> Unit, errorText: @Composable (ApiFailure) -> String) {
     val name = transfer.outcomeName.orEmpty()
     transfer.error?.let { InlineError(errorText(it)) }
     val line = when (transfer.outcome) {

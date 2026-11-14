@@ -166,6 +166,23 @@ class RoomTransferTest {
         assertEquals("moderator", model.state.value.selected?.memberRole)
     }
 
+    @Test fun leavingMidPostForcesCheckRoomOnTheNextOpenBeforeAnyNewChoice() = runTest(dispatcher) {
+        open(); pick()
+        val hold = CompletableDeferred<Unit>(); ownership.transferGate = hold
+        model.confirmTransfer(); runCurrent()
+        model.background(); runCurrent() // Genuine background retires the flow while the POST's result is open.
+        model.foreground(); model.select(42); runCurrent()
+        assertEquals("The possible commit is remembered", TransferOutcome.UNKNOWN, transfer?.outcome)
+        model.openTransferPicker(); runCurrent()
+        assertFalse("No new choice before Check room", transfer!!.pickerOpen)
+        model.checkTransferRoom(); runCurrent()
+        assertNull(transfer?.outcome)
+        model.closeDetail(); runCurrent(); model.select(42); runCurrent()
+        assertNull("Checked: the marker is gone", transfer?.outcome)
+        assertEquals("Never resent", 1, ownership.transfers.size)
+        hold.complete(Unit)
+    }
+
     @Test fun aRetiredFlowsLateResultNeverReachesASuccessor() = runTest(dispatcher) {
         val gate = CompletableDeferred<Unit>(); ownership.snapshotGate = gate
         open()
@@ -190,7 +207,7 @@ class RoomTransferTest {
         var snapshots = 0; val transfers = mutableListOf<Long>()
         var candidates = listOf(member(8, "moderator"), member(9, "member"))
         var snapshotFailure: ApiFailure? = null; var transferFailure: ApiFailure? = null
-        var snapshotGate: CompletableDeferred<Unit>? = null
+        var snapshotGate: CompletableDeferred<Unit>? = null; var transferGate: CompletableDeferred<Unit>? = null
         var stepUpFirst = false
         override suspend fun transferSnapshot(roomId: Long): RoomTransferSnapshot {
             snapshots++; snapshotGate?.await(); snapshotFailure?.let { throw it }
@@ -198,6 +215,7 @@ class RoomTransferTest {
         }
         override suspend fun transferOwnership(roomId: Long, targetUserId: Long): RoomInfo {
             transfers += targetUserId
+            transferGate?.await()
             if (stepUpFirst) { stepUpFirst = false; throw ApiFailure(FailureKind.HTTP, 403, "step_up_required") }
             transferFailure?.let { throw it }
             return rooms.room

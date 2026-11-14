@@ -66,6 +66,11 @@ internal class RoomTransferFlow(
     private var gate: CompletableDeferred<Unit>? = null
     private var access: AccountAccess? = null
     private var verification: Job? = null
+    /**
+     * Rooms whose transfer may have committed without an answer, for this identity. It outlives [retire] (leaving
+     * mid-POST, background), so the next open forces Check room before any new choice.
+     */
+    private val unknownRooms = mutableSetOf<Pair<Any, Long>>()
 
     /** Opens the flow for a room whose viewer may manage it; ordinary members never trigger the snapshot GET. */
     fun open(room: RoomInfo, roles: List<String>) {
@@ -73,7 +78,11 @@ internal class RoomTransferFlow(
         if (current != null && current.roomId == room.id) return
         retire()
         if (room.memberRole != "owner" && roles.none { it in ROOM_MANAGER_ROLES }) return
-        mutable.value = RoomTransferUi(room.id, room.name, ownerActing = room.memberRole == "owner")
+        val who = identity()
+        unknownRooms.removeAll { it.first != who } // Another account's markers never apply.
+        val unknown = who != null && (who to room.id) in unknownRooms
+        mutable.value = RoomTransferUi(room.id, room.name, ownerActing = room.memberRole == "owner",
+            outcome = if (unknown) TransferOutcome.UNKNOWN else null)
         load()
     }
 
@@ -117,7 +126,9 @@ internal class RoomTransferFlow(
 
     fun openPicker() {
         val value = mutable.value ?: return
-        if (value.load == TransferLoad.LOADED && value.candidates.isNotEmpty() && !value.posting)
+        // A possible commit must be checked first: no new choice while the outcome is unknown.
+        if (value.load == TransferLoad.LOADED && value.candidates.isNotEmpty() && !value.posting &&
+            value.outcome != TransferOutcome.UNKNOWN)
             mutable.value = value.copy(pickerOpen = true, filter = "", outcome = null, outcomeName = null)
     }
 
@@ -166,7 +177,8 @@ internal class RoomTransferFlow(
                 if (fresh != null && (fresh.memberRole == "owner" || !acted.ownerActing)) load()
                 else mutable.value = mutable.value?.copy(load = TransferLoad.HIDDEN)
             } catch (cancelled: CancellationException) {
-                // Leaving mid-flight can't undo a committed transfer; the next open re-reads the room.
+                // Leaving mid-POST can't undo a committed transfer: remember it, so the next open asks for Check room.
+                if (uncertain && expected != null) unknownRooms += expected to value.roomId
                 throw cancelled
             } catch (failure: ApiFailure) {
                 if (!current(attempt, expected)) return@launch
@@ -191,6 +203,7 @@ internal class RoomTransferFlow(
         }
         mutable.value = value.copy(posting = false, methods = null, verificationBusy = false,
             error = if (outcome == null) failure else null, outcome = outcome, outcomeName = target.username)
+        if (outcome == TransferOutcome.UNKNOWN) identity()?.let { unknownRooms += it to value.roomId }
         when (outcome) {
             TransferOutcome.ALREADY_OWNER, TransferOutcome.FORBIDDEN -> { reread(value.roomId); load(keepPicker = true) }
             TransferOutcome.NOT_MEMBER -> load(keepPicker = true)
@@ -210,6 +223,7 @@ internal class RoomTransferFlow(
             try {
                 val fresh = reread(value.roomId)
                 if (!current(attempt, expected)) return@launch
+                if (unknown && expected != null) unknownRooms -= expected to value.roomId
                 // After an unknown, the dialog shows the room's actual owner state; after a change, the picker reopens.
                 mutable.value = mutable.value?.copy(checking = false, outcome = null, outcomeName = null, chosen = null,
                     pickerOpen = !unknown)

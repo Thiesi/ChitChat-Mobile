@@ -50,7 +50,7 @@
     <string name="rooms_transfer_confirm_admin">%1$s gets full control of the room. %2$s stays in the room as a moderator.</string>
     <string name="rooms_transfer_current_owner">The current owner</string>
     <string name="rooms_transfer_make_owner">Make owner</string>
-    <string name="rooms_transfer_step_up_title">Confirm the transfer</string>
+    <string name="rooms_transfer_step_up_title">Confirm ownership transfer</string>
     <string name="rooms_transfer_success">%1$s now owns %2$s. You’re a moderator now.</string>
     <string name="rooms_transfer_already_owner">%1$s already owns this room.</string>
     <string name="rooms_transfer_not_eligible">%1$s can’t own this room. Choose someone else.</string>

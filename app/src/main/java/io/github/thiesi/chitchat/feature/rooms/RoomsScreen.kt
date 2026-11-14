@@ -183,7 +183,8 @@ private fun RoomDetailDialog(state: RoomsUiState, model: RoomsViewModel, canMuta
                 val transfer by model.transfer.collectAsStateWithLifecycle()
                 val owner = room.memberRole == "owner"
                 if (owner || transfer != null) RoomTransferSection(transfer?.takeIf { it.roomId == room.id }, owner,
-                    enabled = canMutate, onOpen = model::openTransferPicker, onRetry = model::retryTransferCheck)
+                    enabled = canMutate, onOpen = model::openTransferPicker, onRetry = model::retryTransferCheck,
+                    onCheckRoom = model::checkTransferRoom)
                 if (!owner) {
                     if (room.isMember) LanternOutlinedButton(onClick = { model.confirmLeave(true) }, enabled = canMutate) {
                         Text(stringResource(R.string.rooms_leave))
