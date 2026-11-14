@@ -192,8 +192,8 @@ row "**{installation}'s legal notice**" with the `open-external` icon. It opens 
 same explicit "Open in browser" handling (`https` only, as above). There is no document screen
 for it.
 
-**Accessibility feedback** (Dependency: the backend release after v3.12.0; activate when it
-ships). `session.php` gains a public `accessibility_feedback` field: `{"url": …}` or `null`.
+**Accessibility feedback** (Dependency: ChitChat#219, in the backend release after v3.12.0;
+activate when it ships). `session.php` gains a public `accessibility_feedback` field: `{"url": …}` or `null`.
 It is present signed out and for guests too, and defaults to the ChitChat project's
 accessibility form; it's `null` only when the operator turned it off.
 - When `url` is present, About and privacy gets a row "**Accessibility feedback**" with the
@@ -516,4 +516,4 @@ re-verify them at release. How they map to the form's answers is the maintainer'
 | P-172 | Delete account is reachable from You → Privacy and security. It discloses the per-server scope, the 14-day restoration, finalization and what is kept, shows the destructive decision dialog before the request, uses step-up only on 403 step_up_required, checks unknown results with a session GET, and never resends automatically. | C |
 | P-173 | Privacy links and disclosures appear at every surface in the table, with wording consistent with the existing DM disclosures. | R, S |
 | P-174 | The guidelines text, deletion page and data safety facts are used as approved (2026-11-07). The privacy policy is published only after its own approval. Factual lines are re-verified against the shipped app before release. | R |
-| P-221 | (Dependency: the backend release after v3.12.0.) About and privacy shows "Accessibility feedback" only when `session.php`'s `accessibility_feedback.url` is present, for members and guests. An `https` URL opens through the explicit Open in browser choice and a `mailto` URL through the mail app; nothing from the session is added. A missing or null field, or any other scheme, shows no row. | U, C |
+| P-221 | (Dependency: ChitChat#219, the backend release after v3.12.0.) About and privacy shows "Accessibility feedback" only when `session.php`'s `accessibility_feedback.url` is present, for members and guests. An `https` URL opens through the explicit Open in browser choice and a `mailto` URL through the mail app; nothing from the session is added. A missing or null field, or any other scheme, shows no row. | U, C |
