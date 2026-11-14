@@ -97,20 +97,26 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
   excluded), then confirms "Invite {name} to {room}?".
 - **Transfer ownership** (ChitChat#273, v3.9.0; **in v1**, presentation lead with the
   technical lead, 2026-11-12, because "owners can't leave" would otherwise trap an owner):
-  - **Gating:** guaranteed by the minimum server version (3.10.0; first raised to 3.9.0 for
-    this by the technical lead on 2026-11-12; one rule, server-update.md). No session or room field
-    announces transfer, and CCM never probes the endpoint or falls back on a 404.
-  - **Who sees it:** the room's owner, and Super-Administrators, Administrators and Chat
-    Admins for rooms in their list. Room moderators and Global Moderators never see it.
-    It's gated on the session role and the room snapshot; the server stays the authority
-    (`403 forbidden`).
-  - **Where:** an **Ownership** section at the end of Room settings: "Owner: **{name}**"
-    and a **Transfer ownership…** row. It's also reached from the room details sheet's
-    owner explanation (room-presence.md).
-  - **Choose:** a full-screen picker of the room's members from the existing room snapshot,
-    with pebble, name and room role, and a local filter field when there are more than 10.
-    The current owner and guests aren't listed. The app doesn't guess other eligibility
-    (closing, closed or banned accounts); the server answers that.
+  - **Gating:** the endpoint is guaranteed by the minimum server version (3.10.0; first
+    raised to 3.9.0 for this by the technical lead on 2026-11-12; one rule, server-update.md),
+    and CCM never probes it or falls back on a 404. Who may hand the room to whom comes from
+    the v3.10.0 viewer flags (ChitChat#302; presentation lead with the technical lead,
+    2026-11-14): each member row of `admin/rooms/snapshot.php` carries
+    `can_transfer_ownership`, meaning "allowed now, after step-up". A room's owner can load
+    that snapshot for their own room, as can Super-Administrators, Administrators and Chat
+    Admins. The flags are hints: they can be stale, and for an owner they ignore bans. The
+    outcome lines below decide, and the app never re-checks a flag before submitting. There's
+    no role-based fallback. `can_take_ownership` (self-takeover) stays unused.
+  - **Where (v1):** the room details sheet's owner explanation (room-presence.md). A
+    **Transfer ownership…** row shows there only when at least one member row has
+    `can_transfer_ownership` true. When none do, the owner sees "No one in this room can take
+    it over right now." in place of the row. Administrators reach it the same way from the
+    details sheet of a room they open. An **Ownership** section in Room settings ("Owner:
+    **{name}**" and the same row) comes with Room settings later; it isn't a v1 prerequisite.
+  - **Choose:** a full-screen picker listing only the members whose row has
+    `can_transfer_ownership` true, with pebble, name and room role, and a local filter field
+    when there are more than 10. Rows that are false or missing aren't listed, never shown
+    disabled, and the app never explains eligibility it can't know.
   - **Confirm:** a level-3 decision dialog, "**Make {name} the owner of {room}?**"
     - owner acting: "{name} gets full control of the room: its settings, moderators and
       members. You'll stay in the room as a moderator and can leave afterwards. You can't
@@ -122,13 +128,15 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
     retry after confirmation), never another retry.
   - **Outcomes** (never resent; every refusal keeps the picker's choice so the person can
     pick again):
-    - success: the room is re-rendered from the returned `room`. An owner who handed the
-      room on can no longer manage it, so Room settings closes back to the room details
-      sheet with "**{name}** now owns {room}. You're a moderator now." (level 1). An
-      administrator stays in Room settings with the new owner shown;
+    - success: the room is re-rendered from the returned `room`, and the picker closes back
+      to the room details sheet. An owner who handed the room on sees "**{name}** now owns
+      {room}. You're a moderator now." (level 1) and now has Leave room. An administrator
+      sees the sheet with the new owner;
     - `409 already_owner`: "{name} already owns this room." and the room is re-read;
     - `409 transfer_target_not_eligible`: "**{name} can't own this room.** Choose someone
-      else.";
+      else." It never gives a reason: for an owner the flags ignore bans, so this covers a
+      banned member without revealing the ban (rooms.md "Bans"). The person stays listed
+      after this refusal, because hiding them would hint at the cause;
     - `404 membership_not_found`: "{name} isn't in this room any more." and the member list
       is re-read;
     - `409 ownership_changed`: "**The room's owner or members changed.** Check the room and
@@ -199,5 +207,5 @@ An emergency switch, so it's on the phone, behind step-up.
 | P-206 | People uses search, the Everyone/Staff/Banned/Muted/Closing chips with server counts, the two sorts and cursor paging, and relies on the minimum server version (3.10.0), which includes #191 (no older-server fallback). Rows show the most important restriction or sign-in fact. | U, C |
 | P-207 | A person's staff view shows roles, dates, active ban and mute, closing date and report counts, with only the server-allowed everywhere actions. Roles, password reset and audit stay web-only. | U, C |
 | P-208 | Room settings send the full editable state, warn before removing guests, and never resend. Members and invitations follow the ranks. Delete and restore stay web-only. | U, C |
-| P-217 | (Guaranteed by the 3.10.0 minimum; no endpoint probe or fallback.) Transfer ownership is shown only to the owner and to Super-Administrators, Administrators and Chat Admins for their listed rooms. It picks a non-guest member other than the owner, confirms with the actor-specific dialog, goes through `withStepUp`, and is never resent. already_owner, transfer_target_not_eligible, membership_not_found, ownership_changed, forbidden and unknown each show their own line, and the re-reads are explicit. A former owner returns to the room details sheet as a moderator. Self-takeover stays web-only. | U, C |
+| P-217 | (Endpoint guaranteed by the 3.10.0 minimum; no probe or fallback.) Transfer ownership is reached in v1 from the room details sheet's owner explanation. The row shows only when at least one `admin/rooms/snapshot.php` member row has `can_transfer_ownership` true, and otherwise reads "No one in this room can take it over right now." The picker lists only those flagged members (no disabled rows, no role fallback); flags are hints and are never re-checked before submitting. It confirms with the actor-specific dialog, goes through `withStepUp`, and is never resent. already_owner, transfer_target_not_eligible (no reason given, the person stays listed), membership_not_found, ownership_changed, forbidden and unknown each show their own line, and the re-reads are explicit. A former owner returns to the room details sheet as a moderator. Self-takeover stays web-only. | U, C |
 | P-209 | Server status is read-only and shows no personal data. Lockdown is Super-Administrator-only, explains its effects, needs step-up, and reports the sign-out count. | U, C |
