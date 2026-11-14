@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -171,9 +169,8 @@ internal fun RoomTransferConfirm(transfer: RoomTransferUi, onConfirm: () -> Unit
                 .testTag("rooms_transfer_confirm_scroll")) {
             Text(if (transfer.ownerActing) stringResource(R.string.rooms_transfer_confirm_owner, target.username)
                 else stringResource(R.string.rooms_transfer_confirm_admin, target.username,
-                    transfer.owner?.username ?: stringResource(R.string.rooms_transfer_current_owner)))
-            // The end of the body, so tests can prove it is reachable by scrolling.
-            Spacer(Modifier.height(1.dp).testTag("rooms_transfer_confirm_end"))
+                    transfer.owner?.username ?: stringResource(R.string.rooms_transfer_current_owner)),
+                Modifier.testTag("rooms_transfer_confirm_body"))
         } },
         confirmButton = { TextButton(onClick = onConfirm, modifier = Modifier.testTag("rooms_transfer_make_owner")) {
             Text(stringResource(R.string.rooms_transfer_make_owner), color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.signatureText)

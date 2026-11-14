@@ -20,6 +20,10 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
@@ -87,12 +91,33 @@ class RoomTransferPresentationTest {
                         "(default ${heights.getValue(each)}dp, now ${height}dp)", height > heights.getValue(each))
                     capture("transfer-$label-$name-$each") // The capture shows the top, with the "more below" cue.
                     // After the capture: what sits below the fold stays reachable by scrolling.
-                    val below = mapOf("failed" to "rooms_transfer_retry", "confirm" to "rooms_transfer_confirm_end")[each]
-                    if (below != null) try { compose.onNodeWithTag(below).performScrollTo().assertIsDisplayed() }
-                        catch (failure: AssertionError) { throw AssertionError("$label/$name/$each: $below not reachable by scrolling", failure) }
+                    if (each == "failed") try { compose.onNodeWithTag("rooms_transfer_retry").performScrollTo().assertIsDisplayed() }
+                        catch (failure: AssertionError) { throw AssertionError("$label/$name/$each: Try again not reachable by scrolling", failure) }
+                    if (each == "confirm") assertConfirmBodyReachable("$label/$name/$each")
                 }
             }
         }
+    }
+
+    /**
+     * The whole confirm body is reachable: with scroll range, scroll the container to its end and back through its
+     * own ScrollBy; with or without range, the body's bottom and top must each fit inside the container's viewport.
+     */
+    private fun assertConfirmBodyReachable(where: String) {
+        val box = compose.onNodeWithTag("rooms_transfer_confirm_scroll")
+        val config = box.fetchSemanticsNode().config
+        val range = config.getOrNull(SemanticsProperties.VerticalScrollAxisRange)?.maxValue?.invoke() ?: 0f
+        val scrolls = range > 0f && SemanticsActions.ScrollBy in config
+        if (scrolls) box.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 1_000_000f) }
+        compose.waitForIdle()
+        var viewport = box.getUnclippedBoundsInRoot(); var body = compose.onNodeWithTag("rooms_transfer_confirm_body").getUnclippedBoundsInRoot()
+        assertTrue("$where: confirm body end reachable (bottom ${body.bottom} vs viewport ${viewport.bottom}, range $range)",
+            body.bottom.value <= viewport.bottom.value + 0.5f)
+        if (scrolls) box.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, -1_000_000f) }
+        compose.waitForIdle()
+        viewport = box.getUnclippedBoundsInRoot(); body = compose.onNodeWithTag("rooms_transfer_confirm_body").getUnclippedBoundsInRoot()
+        assertTrue("$where: confirm body start reachable (top ${body.top} vs viewport ${viewport.top})",
+            body.top.value >= viewport.top.value - 0.5f)
     }
 
     /** A 48dp touch target, the same strict floor (and 0.5dp tolerance) as assertHeightIsAtLeast, labelled. */
