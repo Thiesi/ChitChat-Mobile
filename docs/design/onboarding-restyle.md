@@ -69,6 +69,10 @@ transcript, lists, status and modals → Send when back online.
 
 ### 3 Server found (new chooser; ANONYMOUS phase)
 
+(Steps 3, 4a and 4b also end with the "Accessibility feedback" footer text button, below
+every action, when the server's public session has `accessibility_feedback.url`:
+play-readiness.md §1, P-221, Dependency: ChitChat#219. Welcome has none.)
+
 - Shown when the anonymous bootstrap succeeds. A card with the installation lantern (initial
   from the name, identity hue from the host; the operator's icon when it has one (ChitChat#211), see
   [installation-icon.md](installation-icon.md)), the **installation name** from
