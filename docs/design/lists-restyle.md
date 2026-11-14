@@ -269,7 +269,15 @@ A `LazyColumn` (`notification_list`):
   privacy gating disables Direct and All with the existing explanation until privacy is valid.
 - **Result rows:**
   - room results get the lantern and room name; DM results get the pebble and peer name;
-  - secondary: the plain excerpt (M5e3a: no term highlighting is invented);
+  - secondary: the server's excerpt, with its matches highlighted from `excerpt_matches`
+    (v3.10.0, ChitChat#283; presentation lead, 2026-11-14). Each match gets a `presenceWash`
+    background plus SemiBold weight, two cues and never colour alone; ink on `presenceWash`
+    keeps 4.5:1 in light and dark. Ranges are UTF-16 offsets into the excerpt and apply
+    all-or-nothing per row: only if every range lies inside the excerpt, in order, without
+    overlap, with length ≥ 1 and without splitting a surrogate pair. Otherwise that row's
+    excerpt shows plain; a range is never repaired or clipped. The server's "… " and " …"
+    render as given. TalkBack reads the excerpt as plain text and announces nothing extra.
+    The app never finds matches itself;
   - trailing: the time;
   - tapping opens the original through the existing guarded flow (M5e3b).
 - **Paging:** "Previous 25 / Next 25" buttons at the end, using completed search context, as
@@ -277,6 +285,9 @@ A `LazyColumn` (`notification_list`):
 - **Empty:** "Nothing found for '…'." with the query echoed only in the visible text, never
   logged or saved.
 - Keep all existing `message_search_*` tags.
+- **Later:** "Search in this room" (the v3.10.0 `room_id` filter) from the room details sheet
+  needs its own small design (scope chips hidden, the room named in the field). Until then
+  `room_id` stays unused.
 
 ## Tests
 
@@ -306,4 +317,4 @@ A `LazyColumn` (`notification_list`):
 | P-92 | Membership writes, reconciliation and the uncertain state behave exactly as today. Check room list is explicit, and pull-to-refresh never reconciles. | C, existing tests |
 | P-93 | DM rows keep today's preview rules, draft precedence and local attention, and filters make no new requests. The privacy line stays visible. | C |
 | P-94 | Activity keeps explicit View, Mark read and Mark all with confirmation, unknown-read gating, explicit More and server order. | C, existing tests |
-| P-95 | Search stays explicit-submit with privacy-gated scopes, plain excerpts and guarded opening. | C, existing tests |
+| P-95 | Search stays explicit-submit with privacy-gated scopes and guarded opening. Excerpts highlight only server `excerpt_matches` ranges (`presenceWash` plus SemiBold, ink at 4.5:1), all-or-nothing per row with strict validation, plain otherwise, with nothing extra for TalkBack. | U, C, existing tests |
