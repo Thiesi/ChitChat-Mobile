@@ -76,6 +76,14 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      # Mitigation for #245 (system image install failures only): restore the exact pinned image, so the
+      # runner's sdkmanager install is a no-op. The runner's emulator download still runs every time.
+      - name: Restore the pinned API35 system image
+        id: image-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: emu-img-${{ runner.os }}-${{ runner.arch }}-api35-google_apis-r9-emu16740729
       - uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 35
@@ -88,6 +96,17 @@ jobs:
             adb shell settings put secure show_ime_with_hard_keyboard 1
             python3 -B .github/scripts/native_environment.py
             python3 -B .github/scripts/native_presentation.py
+      # Saved only when the installed image is verifiably the pinned revision at that path, even after test failures.
+      - name: Check the API35 image for the cache
+        id: image-check
+        if: always() && steps.image-cache.outputs.cache-hit != 'true'
+        run: python3 -B .github/scripts/pinned_image_cache.py
+      - name: Save the pinned API35 system image
+        if: always() && steps.image-check.outputs.pinned == 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+          key: emu-img-${{ runner.os }}-${{ runner.arch }}-api35-google_apis-r9-emu16740729
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -115,6 +134,14 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      # Mitigation for #245 (system image install failures only): restore the exact pinned image, so the
+      # runner's sdkmanager install is a no-op. The runner's emulator download still runs every time.
+      - name: Restore the pinned API36 system image
+        id: image-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-36/google_apis/x86_64
+          key: emu-img-${{ runner.os }}-${{ runner.arch }}-api36-google_apis-r7-emu16740729
       - name: Run the original full API36 observation once
         id: native
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
@@ -129,6 +156,17 @@ jobs:
             adb shell settings put secure show_ime_with_hard_keyboard 1
             python3 -B .github/scripts/native_environment.py
             python3 -B .github/scripts/native_presentation.py
+      # Saved only when the installed image is verifiably the pinned revision at that path, even after test failures.
+      - name: Check the API36 image for the cache
+        id: image-check
+        if: always() && steps.image-cache.outputs.cache-hit != 'true'
+        run: python3 -B .github/scripts/pinned_image_cache.py
+      - name: Save the pinned API36 system image
+        if: always() && steps.image-check.outputs.pinned == 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-36/google_apis/x86_64
+          key: emu-img-${{ runner.os }}-${{ runner.arch }}-api36-google_apis-r7-emu16740729
       - name: Classify and retain the original observation
         id: classify
         if: always()
