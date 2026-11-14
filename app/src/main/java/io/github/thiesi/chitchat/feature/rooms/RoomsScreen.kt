@@ -131,11 +131,7 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
     if (state.draft != null) CreateRoomDialog(state, model, canMutate && canCreateRooms(session.user), canCreateRooms(session.user)) {
         RoomSessionFeedback(session, now, onRefreshSession)
     }
-    else if (state.leaveConfirmation) AlertDialog(onDismissRequest = { model.confirmLeave(false) },
-        title = { Text(stringResource(R.string.rooms_leave_title)) },
-        text = { Text(stringResource(R.string.rooms_leave_warning)) },
-        confirmButton = { TextButton(onClick = model::leave, enabled = canMutate) { Text(stringResource(R.string.rooms_leave)) } },
-        dismissButton = { TextButton(onClick = { model.confirmLeave(false) }) { Text(stringResource(R.string.cancel)) } }, modifier = Modifier.lanternDialogEdge())
+    else if (state.leaveConfirmation) RoomLeaveDialog(canLeave = canMutate, onLeave = model::leave, onCancel = { model.confirmLeave(false) })
     else if (state.detailOpen) {
         val transfer by model.transfer.collectAsStateWithLifecycle()
         val active = transfer?.takeIf { it.roomId == state.selected?.id }

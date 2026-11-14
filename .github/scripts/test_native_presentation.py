@@ -161,7 +161,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_dialog_captures_are_copied_and_keep_the_original_status(self):
         self.results(7)
-        files = [Path("dialog-light-default-push-explain.png"), Path("dialog-dark-font200-push-choose.png")]
+        files = [Path("dialog-light-default-push-explain.png"), Path("dialog-dark-font200-rooms-leave.png")]
         self.dialog_files(files)
         self.assertEqual(7, runner.main()); self.assert_once()
         for path in files: self.copy.assert_any_call(path, runner.DIALOG_DESTINATION / path.name)
@@ -169,7 +169,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_excess_ambiguous_or_foreign_dialog_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"dialog-light-default-push-explain-{n}.png") for n in range(25)],
+        for files in ([Path(f"dialog-light-default-push-explain-{n}.png") for n in range(41)],
             [Path("a/dialog-dark-default-push-none.png"), Path("b/dialog-dark-default-push-none.png")], [Path("other-app.png")]):
             self.copy.reset_mock(); self.mkdir.reset_mock(); self.dialog_files(files)
             self.assertEqual(0, runner.main())

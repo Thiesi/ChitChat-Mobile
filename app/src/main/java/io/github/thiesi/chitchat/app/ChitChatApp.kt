@@ -3,7 +3,6 @@ package io.github.thiesi.chitchat.app
 import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
 
 import android.content.res.Configuration
-import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
 
 import androidx.activity.compose.LocalActivity
@@ -31,7 +30,6 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import io.github.thiesi.chitchat.core.ui.PrimaryButton
 import io.github.thiesi.chitchat.core.ui.CountBadge
 import androidx.compose.material3.Card
@@ -797,15 +795,8 @@ private fun SettingsScreen(state: SettingsUiState, model: SettingsViewModel, can
             if (!canChangeServer) Text(stringResource(R.string.sign_out_to_change_server))
         }
     }
-    if (confirmForget && canChangeServer) AlertDialog(
-        onDismissRequest = { confirmForget = false },
-        title = { Text(stringResource(R.string.forget_title)) },
-        text = { Text(stringResource(R.string.forget_body)) },
-        confirmButton = {
-            TextButton(onClick = { confirmForget = false; model.forgetServer() }) { Text(stringResource(R.string.forget_server)) }
-        },
-        dismissButton = { TextButton(onClick = { confirmForget = false }) { Text(stringResource(R.string.cancel)) } },
-     modifier = Modifier.lanternDialogEdge())
+    if (confirmForget && canChangeServer) ForgetServerDialog(onForget = { confirmForget = false; model.forgetServer() },
+        onCancel = { confirmForget = false })
 }
 
 /** Top-bar titles never break mid-word (A-04). The wordmark is a logotype: one line at the
