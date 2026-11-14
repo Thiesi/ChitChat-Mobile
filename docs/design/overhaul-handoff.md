@@ -152,10 +152,17 @@ against current main before acting.
    (aligned link-style rows versus inset buttons) and apply it everywhere.
 6. **Metadata spacing.** The "10:00 · edited" spacing is an open follow-up. Separator rhythm
    in timestamps and meta lines generally deserves one rule.
-7. **Older gaps.** [gap-audit.md](gap-audit.md) gaps 1–10: development disclosure weight, the
+7. **Dialog details not yet in Lantern.** Destructive confirms (Leave room, Block, Forget
+   server, Discard draft) still use `primary`, not `error` as modals-restyle P-113 specifies,
+   because the modals restyle was deferred to the overhaul. The discard-draft body is still
+   development copy ("in-memory draft and its local resend warning"); the copy deck has the
+   replacement. The push guide link appears both as the in-body "How to choose a delivery app"
+   (Use Google) and as the button-row "How to choose one" (No delivery app found): pick one
+   form and one label. Evidence: PR #244 and #246 dialog captures.
+8. **Older gaps.** [gap-audit.md](gap-audit.md) gaps 1–10: development disclosure weight, the
    missing nav shell, transcript and list styling, onboarding depth, the account export wall.
    Several have shipped since; confirm each against current captures.
-8. **Lantern identity load.** Persimmon carries the brand, primary actions, links
+9. **Lantern identity load.** Persimmon carries the brand, primary actions, links
    (signatureText), focus and the send button at once. presenceWash and steward each carry
    one meaning. Whether the palette can keep "invites people to chat" while separating those
    roles is the core visual question for the agent. The web's S7–S8 J-reads (evidence below)
