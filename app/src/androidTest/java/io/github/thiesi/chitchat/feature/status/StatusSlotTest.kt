@@ -204,10 +204,11 @@ class StatusSlotTest {
         val notice = compose.onNodeWithText(text(R.string.dm_waiting_to_send)).getUnclippedBoundsInRoot()
         val cancel = compose.onNodeWithTag("waiting_cancel").assertHeightIsAtLeast(48.dp).getUnclippedBoundsInRoot()
         // The notice's own bounds, not an assumed width: a narrow screen clamps the requested width.
+        // Its tag follows the 16dp padding, so these bounds are already the inner edge.
         val block = compose.onNodeWithTag("waiting_notice").getUnclippedBoundsInRoot()
         assertTrue("Reading order stays notice, then Cancel", cancel.top >= notice.bottom)
-        // Exact, in whole pixels: Cancel's right edge is the notice's right inner edge (bounds minus 16dp padding).
-        with(compose.density) { assertEquals("Cancel is end-aligned", (block.right - 16.dp).roundToPx(), cancel.right.roundToPx()) }
+        // Exact, in whole pixels: Cancel's right edge is the notice's right inner edge.
+        with(compose.density) { assertEquals("Cancel is end-aligned", block.right.roundToPx(), cancel.right.roundToPx()) }
         // A narrow phone at 100 % gets the same fallback.
         scale = 1f; width = 200.dp; compose.waitForIdle()
         compose.onNodeWithTag("waiting_stacked").assertExists()
