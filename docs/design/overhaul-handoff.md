@@ -19,7 +19,56 @@ check. Until the start, new work is specified and reviewed in Lantern
   non-E2EE, retention and inspection disclosures, step-up and recovery. A presentation idea
   that conflicts with one of these goes to the owner. It is never settled by weakening the
   contract.
-- The overhaul lands as ordinary reviewed PRs with every gate, including J review.
+- **Authority** (owner clarification, 2026-11-14): during the overhaul, the Fable agent holds
+  authority over the presentation layer, including Lantern and the J-standards. It may also
+  propose rule changes. Where a proposal clashes with a hard rule (`AGENTS.md` contracts, the
+  A-* floors, verbatim approved text), it raises it for discussion with the technical lead and
+  the owner, and doesn't override it. The rule stays in force until it is changed.
+  Until the overhaul starts, the presentation lead remains the presentation authority.
+- The overhaul lands as ordinary reviewed PRs with every gate.
+
+## Firm positions and why
+
+This document is the agent's starting brief. Below are the positions the presentation lead
+holds firmly, with the reason for each, so a change is made knowingly. "Hard" items are rules
+or maintainer decisions that need discussion before they change. "Position" items are open to
+the agent's judgment, but the reason should be answered, not just dropped.
+
+**Hard**
+- **Reachable at 200% font, 48dp targets, never colour-only, TalkBack-complete** (A-* floors in
+  [acceptance.md](acceptance.md)). People rely on these, and J reviews keep finding where a
+  layout that looks fine at 1.0 fails at 2.0.
+- **Approved text stays verbatim:** the privacy policy, data-safety facts, consent and
+  disclosure strings (non-E2EE, retention, inspection, duplicate risk, step-up, recovery). The
+  maintainer approved the exact words, and the app and the store forms must say the same
+  thing.
+- **Never show what isn't real.** Leave out dependency-marked elements rather than faking
+  data, never claim unshipped behaviour (offline copy waits for what actually ships), and
+  never fill a gap with an invented fallback (a version check, a default URL, a role guess).
+  An honest app is part of what makes people trust it.
+- **Pure black is a required theme** (maintainer, 2026-11-07, needed before going live). Its
+  look can change; its existence can't.
+- **Captures are evidence.** No byte-identical default/200% pairs. The host applies a real
+  font scale. Every state in a J review comes from a real fixture state.
+
+**Position**
+- **Layout decisions use measured line count, never font scale** (status-presentation.md
+  P-108). Font scale is a poor proxy: the same scale wraps differently by width, language and
+  name length, while a measured line count is the actual condition. The web adopted the same
+  rule.
+- **Rose means destructive; warning colour always comes with its glyph.** Colour semantics
+  stay meaningful only if each colour has one job, and the glyph keeps the warning legible
+  without colour. Every state is carried by two of colour, shape or glyph, and text or weight.
+- **No persimmon fill inside dialogs** (modals-restyle.md). Fill marks a screen's single
+  primary action. A dialog confirming a consequence shouldn't push the person toward Yes.
+- **Say only what the app can know.** For example, P-217 never explains why someone can't own
+  a room, because for an owner that would reveal a ban. Lists omit what can't be chosen,
+  rather than showing disabled rows with an unknowable reason.
+- **One status notice at a time, on the status ladder** (status-presentation.md). Stacked
+  banners make every one of them easier to ignore.
+- **Lantern's intent is warmth that invites people back** (vision.md: "not to make CCM look
+  better"). The palette and shapes can change, but a premium look that loses the invitation
+  misses the brief.
 
 ## 1. Capture inventory
 
