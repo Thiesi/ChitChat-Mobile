@@ -126,9 +126,9 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
     - **Stacking:** Transfer ownership… opens the picker in place of the dialog, never over
       it. Back or Cancel returns to the dialog or sheet. An **Ownership** section in Room settings ("Owner:
     **{name}**" and the same row) comes with Room settings later; it isn't a v1 prerequisite.
-  - **Choose:** a full-screen picker listing only the members whose row has
+  - **Choose:** a full-screen picker titled "Transfer ownership", listing only the members whose row has
     `can_transfer_ownership` true, with pebble, name and room role, and a local filter field
-    when there are more than 10. Rows that are false or missing aren't listed, never shown
+    ("Filter members") when there are more than 10. Rows that are false or missing aren't listed, never shown
     disabled, and the app never explains eligibility it can't know.
   - **Confirm:** a level-3 decision dialog, "**Make {name} the owner of {room}?**"
     - owner acting: "{name} gets full control of the room: its settings, moderators and
@@ -138,7 +138,8 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
       room as a moderator.";
     - buttons **Cancel** and **Make owner** (`signature`, not `error`: nothing is deleted).
   - **Step-up:** the request goes through `withStepUp` (only `403 step_up_required`, one
-    retry after confirmation), never another retry.
+    retry after confirmation), never another retry. The step-up dialog is titled "Confirm
+    ownership transfer", following "Confirm personal-data export".
   - **Outcomes** (never resent; every refusal keeps the picker's choice so the person can
     pick again):
     - success: the room is re-rendered from the returned `room`, and the picker closes back
@@ -160,7 +161,9 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
     - `403 birth_date_required` / `minimum_age_not_met` can't occur here, because CCM never
       offers an administrator's self-takeover;
     - unknown (no response): "**Not sure the transfer went through.**" with **Check room**,
-      which re-reads the room once and shows its owner. Nothing is resent.
+      which re-reads the room once and shows its owner. Nothing is resent. If the person
+      leaves the picker before checking, the room detail dialog shows the same line and
+      **Check room** in place of Transfer ownership… until the room has been checked.
   - **Later (not in v1):** an administrator taking over a room they aren't in (naming
     themselves, ChitChat#273). That stays on the website.
 
