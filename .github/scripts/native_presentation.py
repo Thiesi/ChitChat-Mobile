@@ -18,6 +18,8 @@ PUSH_NAME = re.compile(r"push-(light|dark)-(off|waiting|on|refused|needs-setup|e
 STATUS_DESTINATION = ROOT / "app/build/reports/androidTests/status-presentation"
 STATUS_NAME = re.compile(r"status-(light|dark)-(?:(?:default|font200)-"
     r"(?:storage|offline|tls|incompatible|stopped|refresh|rate|rate-unknown|offline-edge|waiting-room|waiting-dm)|default-details)\.png")
+SEARCH_DESTINATION = ROOT / "app/build/reports/androidTests/search-presentation"
+SEARCH_NAME = re.compile(r"search-(light|dark)-(default|font200)-results\.png")
 LICENCES_DESTINATION = ROOT / "app/build/reports/androidTests/licences-presentation"
 LICENCES_NAME = re.compile(r"licences-(light|dark)-(default|font200)-(list|detail)\.png")
 THEME_NAME = re.compile(r"theme-(light|dark|black)-(default|font200)-(?:"
@@ -73,6 +75,18 @@ def collect_licences():
     print(f"Licences presentation captures collected: {len(files)} of 8.")
 
 
+def collect_search():
+    # Two presentation cases (light, dark): highlighted result rows at default and 2.0 font each.
+    files = list(islice(SOURCE.rglob("ccm-search-presentation/*"), 5))
+    if (not files or len(files) > 4 or len({p.name for p in files}) != len(files)
+        or any(SEARCH_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous search presentation output")
+    SEARCH_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, SEARCH_DESTINATION / path.name)
+    print(f"Search presentation captures collected: {len(files)} of 4.")
+
+
 def main() -> int:
     try:
         status = subprocess.run(NATIVE, cwd=ROOT, check=False).returncode
@@ -108,6 +122,10 @@ def main() -> int:
         collect_status()
     except Exception:
         print("Status presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_search()
+    except Exception:
+        print("Search presentation captures unavailable; original native status retained.", file=sys.stderr)
     return 128 - status if status < 0 else status
 
 
