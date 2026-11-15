@@ -46,6 +46,8 @@ internal class SessionReply(
     val application: kotlinx.serialization.json.JsonElement? = null,
     /** Read leniently (P-221, ChitChat v3.14.0); see [accessibilityFeedbackUrl]. */
     @SerialName("accessibility_feedback") val accessibilityFeedback: kotlinx.serialization.json.JsonElement? = null,
+    /** Read leniently (policies.md): missing means unknown; see [io.github.thiesi.chitchat.core.policies.policyDiscovery]. */
+    val policies: kotlinx.serialization.json.JsonElement? = null,
 ) {
     /** The server-update facts of this body (server-update.md), attached by [SessionHttp.bootstrap]; never decoded. */
     @kotlinx.serialization.Transient
