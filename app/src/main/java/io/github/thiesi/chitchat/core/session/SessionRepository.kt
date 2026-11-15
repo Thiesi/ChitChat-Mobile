@@ -117,10 +117,25 @@ class SessionRepository internal constructor(
     private val clock: Clock = Clock.systemUTC(),
     private val push: PushTeardown = PushTeardown.NONE,
     private val http: (ServerAddress) -> SessionHttp = { SessionHttp(it) },
-) : SessionController {
+) : SessionController, io.github.thiesi.chitchat.core.policies.PolicyReads {
     private val lock = Mutex()
     private val mutable = MutableStateFlow(SessionState())
     override val state = mutable.asStateFlow()
+
+    /** One public `policies/show.php` read for the rendered session's server and generation; never across a change. */
+    override suspend fun policyDocument(name: io.github.thiesi.chitchat.core.policies.PolicyDocumentName,
+        expected: SessionState): io.github.thiesi.chitchat.core.policies.PolicyDocument {
+        val api = lock.withLock {
+            val current = mutable.value
+            val active = runtime ?: throw CancellationException("No server")
+            if (active.server != expected.server || current.generation != expected.generation) throw CancellationException("Session changed")
+            if (current.updateRequired) throw ApiFailure(FailureKind.INCOMPATIBLE) // Nothing new starts (server-update.md).
+            active.api
+        }
+        val document = api.policyDocument(name)
+        if (mutable.value.generation != expected.generation || runtime?.api !== api) throw CancellationException("Session changed")
+        return document
+    }
     private var runtime: Runtime? = null
     private var initialized = false
     private var selected: ServerAddress? = null

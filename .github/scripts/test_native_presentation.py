@@ -235,6 +235,26 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def policy_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-policy-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_policy_captures_are_copied_and_keep_the_original_status(self):
+        self.results(3)
+        files = [Path("policy-light-default-hosted.png"), Path("policy-dark-font200-unpublished.png")]
+        self.policy_files(files)
+        self.assertEqual(3, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.POLICY_DESTINATION / path.name)
+        self.assertEqual(3, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_policy_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"policy-light-default-hosted-{n}.png") for n in range(19)],
+            [Path("a/policy-dark-default-hosted.png"), Path("b/policy-dark-default-hosted.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.policy_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def find_people_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-find-people-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))

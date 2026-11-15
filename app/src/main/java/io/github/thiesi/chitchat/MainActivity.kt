@@ -83,10 +83,12 @@ class MainActivity : ComponentActivity() {
                     (application as ChitChatApplication).pushDistributors) { direct ->
                     io.github.thiesi.chitchat.core.push.PushChannels.create(applicationContext, direct)
                 })
+            val policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel = viewModel(
+                factory = io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel.factory((application as ChitChatApplication).policyReads))
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
                 notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings, pushPhone = pushPhone,
-                pushTaps = pushTaps.taps,
+                pushTaps = pushTaps.taps, policies = policies,
                 onThemeChanged = { dark ->
                 enableEdgeToEdge(
                     statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
