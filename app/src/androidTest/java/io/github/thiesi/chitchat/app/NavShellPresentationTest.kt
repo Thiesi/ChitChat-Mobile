@@ -26,6 +26,9 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
+import io.github.thiesi.chitchat.core.theme.Lantern
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.graphics.toArgb
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -47,7 +50,8 @@ class NavShellPresentationTest {
 
     private fun presentation(dark: Boolean) {
         val label = if (dark) "dark" else "light"
-        for ((name, fontScale, width) in listOf(Triple("default", 1f, null), Triple("font200", 2f, null), Triple("narrow200", 2f, 264))) {
+        for ((name, fontScale, width) in listOf(Triple("default", 1f, null), Triple("font200", 2f, null),
+            Triple("p78edge", 2f, 264), Triple("narrow240", 2f, 240))) {
             FontScaleTestActivity.requestedFontScale = fontScale
             ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
                 scenario.onActivity { activity ->
@@ -62,7 +66,7 @@ class NavShellPresentationTest {
                 }
                 compose.waitForIdle()
                 if (width == null) capture("nav-$label-$name") // Before the assertions, so a failure still leaves the evidence.
-                val sizes = ShellTab.entries.map { assertTab("$label/$name/${it.name}", it, oneLine = width == null) }
+                val sizes = ShellTab.entries.map { assertTab("$label/$name/${it.name}", it, oneLine = width != 240) }
                 // J1: one shared size; at 200% on a bar narrower than the labels need, below 200% but at least 18sp.
                 assertEquals("$label/$name: one shared label size", 1, sizes.map { it.first }.distinct().size)
                 val effective = sizes.first().first * fontScale
@@ -96,6 +100,20 @@ class NavShellPresentationTest {
         labelShortfall(layout, text.boundsInRoot, item.boundsInRoot)?.let { throw AssertionError("$where: $it ($facts)") }
         if (oneLine) assertEquals("$where: one line ($facts)", 1, layout.lineCount)
         return layout.layoutInput.style.fontSize.value to layout.lineCount
+    }
+
+    /** AMOLED P-07 (J3): in Pure black the bar's top row is the 1dp `line` edge, not black or the bar surface. */
+    @Test fun pureBlackBarHasItsLineEdge() {
+        FontScaleTestActivity.requestedFontScale = 1f
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            scenario.onActivity { activity -> activity.setContent { ChitChatTheme(dark = true, pureBlack = true) {
+                Box(Modifier.fillMaxWidth().testTag("nav_bar_host")) {
+                    ShellBar(ShellTab.entries, ShellTab.ROOMS, unread = 2, countStale = false, countText = "2 unread notifications") {}
+                } } } }
+            capture("nav-black-default")
+            val pixels = compose.onNodeWithTag("nav_bar_host").captureToImage().toPixelMap()
+            assertEquals("the top row is the line edge", Lantern.amoledBlack.line.toArgb(), pixels[pixels.width / 2, 0].toArgb())
+        }
     }
 
     /** The predicate must fail on clipped, ellipsized and vertically cut text, or it proves nothing. */

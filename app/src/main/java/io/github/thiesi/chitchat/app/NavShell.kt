@@ -13,6 +13,10 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import io.github.thiesi.chitchat.core.theme.ChitChatTheme
+import io.github.thiesi.chitchat.core.theme.Lantern
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -92,7 +96,12 @@ internal fun ShellBar(tabs: List<ShellTab>, current: ShellTab, unread: Int?, cou
     val labels = tabs.map { stringResource(it.label) }
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    NavigationBar {
+    // AMOLED P-07: in Pure black the bar meets black content with a visible 1dp `line` edge.
+    val edge = if (ChitChatTheme.colors === Lantern.amoledBlack) ChitChatTheme.colors.line else null
+    NavigationBar(Modifier.drawWithContent {
+        drawContent()
+        if (edge != null) drawLine(edge, Offset(0f, 0.5.dp.toPx()), Offset(size.width, 0.5.dp.toPx()), 1.dp.toPx())
+    }) {
         BoxWithConstraints(Modifier.weight(1f)) {
             // Items take the full width (no M3 label padding); all labels share one size, measured in bold.
             val available = constraints.maxWidth.toFloat() / tabs.size
