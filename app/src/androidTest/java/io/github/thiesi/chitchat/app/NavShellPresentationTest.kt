@@ -17,6 +17,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -45,7 +47,7 @@ class NavShellPresentationTest {
 
     private fun presentation(dark: Boolean) {
         val label = if (dark) "dark" else "light"
-        for ((name, fontScale) in listOf("default" to 1f, "font200" to 2f)) {
+        for ((name, fontScale, width) in listOf(Triple("default", 1f, null), Triple("font200", 2f, null), Triple("narrow200", 2f, 264))) {
             FontScaleTestActivity.requestedFontScale = fontScale
             ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
                 scenario.onActivity { activity ->
@@ -53,22 +55,34 @@ class NavShellPresentationTest {
                     assertEquals("The platform density is untouched",
                         InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.densityDpi,
                         activity.resources.configuration.densityDpi)
-                    activity.setContent { ChitChatTheme(dark = dark) { Box(Modifier.fillMaxWidth().testTag("nav_bar_host")) {
+                    activity.setContent { ChitChatTheme(dark = dark) { Box((if (width == null) Modifier.fillMaxWidth()
+                        else Modifier.width(width.dp)).testTag("nav_bar_host")) {
                         ShellBar(ShellTab.entries, ShellTab.ROOMS, unread = 2, countStale = false, countText = "2 unread notifications") {}
                     } } }
                 }
                 compose.waitForIdle()
-                capture("nav-$label-$name") // Before the assertions, so a failure still leaves the evidence.
-                for (tab in ShellTab.entries) assertTab("$label/$name/${tab.name}", tab)
+                if (width == null) capture("nav-$label-$name") // Before the assertions, so a failure still leaves the evidence.
+                val sizes = ShellTab.entries.map { assertTab("$label/$name/${it.name}", it, oneLine = width == null) }
+                // J1: one shared size; at 200% on a bar narrower than the labels need, below 200% but at least 18sp.
+                assertEquals("$label/$name: one shared label size", 1, sizes.map { it.first }.distinct().size)
+                val effective = sizes.first().first * fontScale
+                val barDp = compose.onNodeWithTag("nav_bar_host").fetchSemanticsNode().boundsInRoot.width /
+                    InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+                if (fontScale == 2f) assertTrue("$label/$name: shared size $effective sp keeps the 18sp floor", effective >= 18f - 0.01f)
+                if (fontScale == 2f && barDp < 340f) assertTrue("$label/$name: $effective sp is below the full 200% size", effective < 24f)
             }
         }
     }
 
-    private fun assertTab(where: String, tab: ShellTab) {
+    /** Returns the label's font size (sp, before the font scale) and line count. */
+    private fun assertTab(where: String, tab: ShellTab, oneLine: Boolean): Pair<Float, Int> {
         val item = compose.onNodeWithTag(tab.tag).fetchSemanticsNode()
         val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
         assertTrue("$where: item at least 48dp tall", item.boundsInRoot.height / density >= 48f - 0.5f)
         assertTrue("$where: item at least 48dp wide", item.boundsInRoot.width / density >= 48f - 0.5f)
+        // Own items (J1) keep the tab semantics NavigationBarItem gave: Role.Tab and the selected state.
+        assertEquals("$where: tab role", Role.Tab, item.config.getOrNull(SemanticsProperties.Role))
+        assertEquals("$where: selected state", tab == ShellTab.ROOMS, item.config.getOrNull(SemanticsProperties.Selected))
         val text = labelNode(tab) ?: throw AssertionError("$where: no label text")
         val layouts = mutableListOf<TextLayoutResult>()
         text.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
@@ -80,6 +94,8 @@ class NavShellPresentationTest {
         // TextLayoutResult.hasVisualOverflow reported width overflow for a one-line 41px "Rooms" in a 74px constraint
         // (local diagnostics, PR251), so the check is made against what is actually drawn instead.
         labelShortfall(layout, text.boundsInRoot, item.boundsInRoot)?.let { throw AssertionError("$where: $it ($facts)") }
+        if (oneLine) assertEquals("$where: one line ($facts)", 1, layout.lineCount)
+        return layout.layoutInput.style.fontSize.value to layout.lineCount
     }
 
     /** The predicate must fail on clipped, ellipsized and vertically cut text, or it proves nothing. */
