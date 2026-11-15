@@ -165,6 +165,10 @@ while `user.rules.acceptance_required` is true (the last bullet covers the other
   - The subset is CommonMark core. Raw HTML is shown escaped as literal text.
   - Links become tappable only for `http`, `https` and `mailto`. Other schemes stay plain text.
     Tapping a link follows the existing M5d2 explicit link choice ("Open in browser").
+    `https` and `mailto` open a dialog titled "Open link" with the P-221 body lines and Open in
+    browser or Open mail app. An `http` link never opens: a dialog "Not a secure link", "This
+    link to {host} isn't secure, so the app won't open it.", with only Close (technical lead
+    ruling, 2026-11-15).
   - Images are dropped and never fetched. Their alt text is not shown.
   - Headings at level 2 and below. A level-1 heading renders as level 2, because the screen
     owns the title.
@@ -173,8 +177,9 @@ while `user.rules.acceptance_required` is true (the last bullet covers the other
     (the existing literal fallback), never a blank screen.
   - **Typography:** body copy uses Lantern UI text (system sans, Body style, `text`), never
     Bricolage. Headings use the type roles: level 2 is Title, level 3 and below is Label. Lists
-    use the body style with 8dp item spacing. The column is limited to the reading width on
-    large screens.
+    use the body style with 8dp item spacing. The column is limited to the reading width (640dp,
+    for long-form documents) on large screens. Links are `steward`, underlined, as in the
+    transcript (M5d2).
 - **External documents** (`source: external`, `html` and `markdown` null): a short screen
   "{installation} publishes this document on its website.", the host of the URL on its own
   line, and **Open in browser** (primary). Only `https` URLs get the button. Anything else
@@ -182,7 +187,8 @@ while `user.rules.acceptance_required` is true (the last bullet covers the other
   runs the server." and no button.
 - **`404 policy_document_not_found`:** "{installation} hasn't published this document yet."
   This isn't an error state.
-- Loading and failures use the existing status ladder, with **Retry** (a GET). Nothing is
+- Loading and failures use the existing status ladder: "Loading the document…", and "The
+  document couldn't be loaded." with **Try again** (a GET). Nothing is
   cached on disk. The document lives in memory while the screen is open.
 - The screen opens from the guidelines and re-acceptance screens, the Create account line,
   onboarding step 3 and About and privacy.

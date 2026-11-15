@@ -203,6 +203,11 @@ against current main before acting.
     label keeps its constraint width, so the open-external glyph sits at the row's end, not
     right after the last word (PR #258 `a11y` captures). Decide whether trailing glyphs follow
     the text or the row.
+13. **Pinned bottom actions over a scroller.** Find your people pins Start chatting below its
+    list (O2b, PR #264), and content scrolls under it with no edge: at 200% a line is cut
+    mid-way. Pinned actions over scrolling content want the same 1dp scroll-edge divider that
+    P-220 uses for dialogs, shown only while content is hidden beneath. Evidence: PR #264
+    `find-people-presentation` captures.
 
 ## Evidence
 
