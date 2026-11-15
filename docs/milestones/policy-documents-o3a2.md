@@ -21,7 +21,8 @@ or a session change drops the document; a configuration change keeps it. Nothing
 It's a pushed screen with Back. The title is "{installation}'s rules" or "{installation}'s privacy policy"; the
 installation is the application name, else the host with the display-only dot break.
 - **Hosted:** the caption "Version {n} · Updated {date}" (rules) or "Updated {date}" (privacy). The body is the
-  Markdown through `PolicyDocumentFormatting`: headings as Title (level 2) or Label (level 3 and below), body text,
+  Markdown through `PolicyDocumentFormatting`: headings in the Lantern Title role (level 2, Bricolage Bold) or the Label
+  role (level 3 and below, system sans SemiBold, sentence case) with 8dp more space above them, body text,
   lists with markers, nesting (16dp per level) and 8dp between items, code as plain text, and no server HTML or WebView.
   Links are underlined in `steward`, like message links. The column is limited to the 640dp reading width.
 - **External:** "{installation} publishes this document on its website.", the URL's host, and **Open in browser**,

@@ -82,7 +82,7 @@ class PolicyDocumentFormattingTest {
 
     @Test fun imagesAreDroppedWithTheirAltTextAndNeverBecomeLinks() {
         val content = (only("Before ![a secret alt](https://tracker.example/pixel.png) after") as Paragraph).content
-        assertEquals("Before  after", inlineText(content))
+        assertEquals("Before after", inlineText(content)) // No double space where the image was.
         assertTrue(links(content).isEmpty())
     }
 

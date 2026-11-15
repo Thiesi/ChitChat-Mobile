@@ -79,8 +79,11 @@ fun PolicyDocumentScreen(model: PolicyDocumentViewModel, name: PolicyDocumentNam
                 }
                 Column(Modifier.testTag("policy_body"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     // Consecutive list items form one list with 8dp between items (play-readiness.md §1).
-                    groupLists(status.formatted.blocks).forEach { group ->
-                        if (group.size == 1 && group[0] !is DocumentBlock.ListItem) DocumentBlockView(group[0]) { choice = it }
+                    groupLists(status.formatted.blocks).forEachIndexed { index, group ->
+                        // Headings get 8dp more above them than other blocks, except at the very top (J, PR #267).
+                        if (group.size == 1 && group[0] is DocumentBlock.Heading && index > 0)
+                            androidx.compose.foundation.layout.Box(Modifier.padding(top = 8.dp)) { DocumentBlockView(group[0]) { choice = it } }
+                        else if (group.size == 1 && group[0] !is DocumentBlock.ListItem) DocumentBlockView(group[0]) { choice = it }
                         else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             group.forEach { item -> DocumentBlockView(item) { choice = it } }
                         }
@@ -117,8 +120,10 @@ private fun caption(name: PolicyDocumentName, version: Int?, updatedAt: String?)
 private fun DocumentBlockView(block: DocumentBlock, onLink: (String) -> Unit) {
     val linkStyle = TextLinkStyles(SpanStyle(color = ChitChatTheme.colors.steward, textDecoration = TextDecoration.Underline))
     when (block) {
+        // Level 2 is the Lantern Title (Bricolage 700); level 3 and below system sans SemiBold, sentence case (J1, PR #267).
         is DocumentBlock.Heading -> Text(annotated(block.content, linkStyle, onLink), Modifier.semantics { heading() },
-            style = if (block.level <= 2) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge)
+            style = if (block.level <= 2) MaterialTheme.typography.titleLarge
+                else MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold))
         is DocumentBlock.Paragraph -> Text(annotated(block.content, linkStyle, onLink), style = MaterialTheme.typography.bodyLarge)
         is DocumentBlock.Plain -> Text(block.text, style = MaterialTheme.typography.bodyLarge)
         is DocumentBlock.ListItem -> Row(Modifier.padding(start = (block.indent * 16).dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
