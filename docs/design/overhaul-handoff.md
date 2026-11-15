@@ -193,8 +193,8 @@ against current main before acting.
 11. **Onboarding after O2a.** O2a (PR #260) shipped behaviour, copy and tags only. The
     lantern glyph and identity hue on the server card, the server chip on the forms,
     labels-above 56dp fields and the always-dark Welcome (onboarding-restyle.md) are the
-    overhaul's. Two smaller items: the outlined "I already have one, sign in" is 40dp next to
-    Create's 52dp, though a full-width secondary paired with a primary should match it. The step 2
+    overhaul's. The outlined "I already have one, sign in" was raised to 52dp to match Create
+    before merge; full-width secondaries paired with a primary keep that height. The step 2
     failure is the existing rose `InlineError` text above the field, not status-presentation's
     level-2 block (icon plus full-width block); see also debt 4. Hosts break only at their dots
     (display-only U+200B, PR #259 and #260); keep that rule. Evidence: PR #260
