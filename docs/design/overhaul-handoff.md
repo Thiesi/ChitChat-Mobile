@@ -103,6 +103,7 @@ dialogs and other windows.
 | `transfer` | row, none, failed, picker, confirm, success | light, dark × default, 200% | black; unknown-in-dialog |
 | `search` | results (with match highlighting) | light, dark × default, 200% | black; empty, no-results and failure states |
 | `licences` | list, detail | light, dark × default, 200% | black |
+| `nav` | bottom bar, Rooms selected, Activity badge (N1, PR #251) | light, dark × default, 200% | black; You tab |
 | `completion` | composer with and without the mention list | synthetic fixture pairs | 200%; black |
 
 ### Screens and states with no capture yet
@@ -175,6 +176,11 @@ against current main before acting.
    one meaning. Whether the palette can keep "invites people to chat" while separating those
    roles is the core visual question for the agent. The web's S7–S8 J-reads (evidence below)
    show where it's strained.
+10. **Bottom bar at 200%.** The Activity badge grows with the font and covers about half the
+    bell, and the selected pill sits flush with the bar's top edge (12dp at default). Labels
+    already share one measured size on narrow windows (navigation-shell.md P-78). Whether
+    the bar should hold its height or a badge should cap its growth is open. Evidence: PR #251
+    `nav-presentation` captures.
 
 ## Evidence
 
