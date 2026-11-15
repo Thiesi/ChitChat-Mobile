@@ -132,7 +132,8 @@ class NavShellPresentationTest {
 
 /**
  * Why a label is not fully shown, or null: an ellipsized line, a line whose glyphs are wider than the drawn label,
- * a last line whose bottom is below the drawn label (a wrapped line cut off), or a label outside its item.
+ * characters on no line (a single line truncated in place), a last line whose bottom is below the drawn label (a
+ * wrapped line cut off), or a label outside its item.
  */
 internal fun labelShortfall(layout: TextLayoutResult, label: Rect, item: Rect): String? {
     for (line in 0 until layout.lineCount) {
@@ -140,6 +141,7 @@ internal fun labelShortfall(layout: TextLayoutResult, label: Rect, item: Rect): 
         val width = layout.multiParagraph.getLineWidth(line) // Unclamped glyph width; line right/left clamp to the layout.
         if (width > label.width + 0.5f) return "line $line is ${width}px wide, drawn ${label.width}px"
     }
+    if (layout.getLineEnd(layout.lineCount - 1, visibleEnd = true) < layout.layoutInput.text.length) return "characters left off every line"
     val bottom = layout.getLineBottom(layout.lineCount - 1)
     if (bottom > label.height + 0.5f) return "text is ${bottom}px tall, drawn ${label.height}px"
     if (label.left < item.left - 0.5f || label.right > item.right + 0.5f || label.top < item.top - 0.5f ||
