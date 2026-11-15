@@ -9,5 +9,8 @@
         <!-- Presentation captures at a real Configuration font scale (dialog windows inherit it). Debug only. -->
         <activity android:name="io.github.thiesi.chitchat.testing.FontScaleTestActivity"
             android:theme="@style/Theme.ChitChat" android:windowSoftInputMode="adjustResize" android:exported="false" />
+        <!-- Sets its content in onCreate like MainActivity, so recreation uses the production restore path. Debug only. -->
+        <activity android:name="io.github.thiesi.chitchat.testing.OnCreateContentTestActivity"
+            android:theme="@style/Theme.ChitChat" android:windowSoftInputMode="adjustResize" android:exported="false" />
     </application>
 </manifest>
