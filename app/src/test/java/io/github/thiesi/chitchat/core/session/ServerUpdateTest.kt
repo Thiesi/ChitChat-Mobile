@@ -35,6 +35,9 @@ class ServerUpdateTest {
             // The technical lead's contradictory case: schema_version present, application (or its version) missing.
             Triple(facts(schema = true, version = null, policies = true), true, false) to "schema present, no application, keys present",
             Triple(facts(schema = true, version = null), false, true) to "schema present, no application, keys missing",
+            // An explicit "schema_version": null is present (key presence), so the version decides, not a technicality.
+            Triple(facts(schema = true, version = "3.12.0"), false, false) to "schema_version null but present, new version",
+            Triple(facts(schema = true, version = null, policies = true), false, false) to "schema_version null but present, unknown, keys present",
         )
         for ((row, why) in rows) assertEquals(why, row.third, needsServerUpdate(row.first, member = row.second))
     }
@@ -43,10 +46,11 @@ class ServerUpdateTest {
         val body = """{"csrf_token":"x","user":{"id":7,"recovery_key":null},"application":{"name":"Room","version":"3.10.2"},
             "capabilities":{"schema_version":1,"signed_in_sessions":true},"policies":{"rules":null,"privacy":null}}"""
         assertEquals(ServerDiscovery(schemaVersion = true, version = "3.10.2", policies = true, recoveryKey = true), serverDiscovery(body))
-        assertEquals("An explicit null schema_version is missing", false, serverDiscovery("""{"capabilities":{"schema_version":null}}""").schemaVersion)
-        assertEquals("A non-string version is unknown", null, serverDiscovery("""{"capabilities":{"schema_version":1},"application":{"version":3.10}}""").version)
+        assertEquals("An explicit null schema_version is present", true, serverDiscovery("""{"capabilities":{"schema_version":null}}""")!!.schemaVersion)
+        assertEquals("A non-string version is unknown", null, serverDiscovery("""{"capabilities":{"schema_version":1},"application":{"version":3.10}}""")!!.version)
         assertEquals(ServerDiscovery(false, null, false, false), serverDiscovery("""{"csrf_token":"x","user":null}"""))
-        assertEquals(ServerDiscovery(false, null, false, false), serverDiscovery("not json"))
+        assertNull("Not JSON: no facts, no verdict", serverDiscovery("not json"))
+        assertNull("Not an object: no facts, no verdict", serverDiscovery("[1]"))
     }
 
     @Test fun theDisplayedVersionIsBoundedAndPrintable() {

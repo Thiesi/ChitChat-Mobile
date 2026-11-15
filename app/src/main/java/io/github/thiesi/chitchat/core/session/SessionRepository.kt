@@ -332,7 +332,7 @@ class SessionRepository internal constructor(
                         else AttachmentPolicy.Unavailable,
                     webPush = if (reply.user != null && !reply.user.guest) reply.webPush else io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unavailable,
                     installationName = io.github.thiesi.chitchat.core.network.installationName(reply.application),
-                    updateRequired = reply.discovery?.let { needsServerUpdate(it, member = reply.user != null && !reply.user.guest) } ?: true,
+                    updateRequired = reply.discovery?.let { needsServerUpdate(it, member = reply.user != null && !reply.user.guest) } ?: false,
                     reportedVersion = displayedServerVersion(reply.discovery?.version),
                     bootstrapSequence = mutable.value.bootstrapSequence + 1,
                 )

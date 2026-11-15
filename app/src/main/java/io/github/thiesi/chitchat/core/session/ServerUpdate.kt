@@ -1,7 +1,6 @@
 package io.github.thiesi.chitchat.core.session
 
 import io.github.thiesi.chitchat.core.network.apiJson
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -20,13 +19,17 @@ internal data class ServerDiscovery(
     val recoveryKey: Boolean,
 )
 
-internal fun serverDiscovery(body: String): ServerDiscovery {
-    val root = try { apiJson.parseToJsonElement(body) as? JsonObject } catch (_: IllegalArgumentException) { null }
-        ?: return ServerDiscovery(schemaVersion = false, version = null, policies = false, recoveryKey = false)
+/**
+ * Runs only on a body that already passed the typed bootstrap decode. A body that isn't a JSON object gives no facts
+ * (null), which is no verdict: a garbled response stays an ordinary failure, never "update your server".
+ */
+internal fun serverDiscovery(body: String): ServerDiscovery? {
+    val root = try { apiJson.parseToJsonElement(body) as? JsonObject } catch (_: IllegalArgumentException) { null } ?: return null
     val capabilities = root["capabilities"] as? JsonObject
     val version = ((root["application"] as? JsonObject)?.get("version") as? JsonPrimitive)?.takeIf { it.isString }?.content
     return ServerDiscovery(
-        schemaVersion = capabilities?.get("schema_version").let { it != null && it !is JsonNull },
+        // Key presence, like every other fact: an explicit null is present, so only a missing key means pre-3.3.0.
+        schemaVersion = capabilities?.containsKey("schema_version") == true,
         version = version,
         policies = root.containsKey("policies"),
         recoveryKey = (root["user"] as? JsonObject)?.containsKey("recovery_key") == true,

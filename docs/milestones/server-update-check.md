@@ -13,7 +13,10 @@ Implements [server-update.md](../design/server-update.md) (P-180–P-183) agains
 
 ## Detection
 
-`serverDiscovery` reads key presence from the raw `session.php` body (facts only). `needsServerUpdate` decides
+`serverDiscovery` reads key presence from the raw `session.php` body (facts only). An explicit null counts as present
+everywhere, `"schema_version": null` included, so only a missing key means pre-3.3.0. It runs only on a body that
+already passed the typed bootstrap decode. A body that isn't a JSON object gives no facts, which is no verdict: a
+garbled response stays an ordinary failure, never "update your server". `needsServerUpdate` decides
 exactly as AGENTS.md says:
 1. No `capabilities.schema_version`: older than 3.3.0, so the state shows.
 2. Otherwise the leading `major.minor.patch` of `application.version` is compared numerically with 3.10.0.
