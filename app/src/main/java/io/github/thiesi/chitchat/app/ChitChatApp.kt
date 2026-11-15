@@ -264,6 +264,13 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         var welcomed by rememberSaveable { mutableStateOf(false) }
         var savedInOnboarding by rememberSaveable { mutableStateOf(false) }
         var chosen by rememberSaveable { mutableStateOf(false) }
+        // The onboarding attempt ends at sign-in (or restore) and when the server is forgotten: later failures and
+        // sign-outs use the ordinary screens and Server found's chooser, never step 2 or a remembered form.
+        LaunchedEffect(session.phase == SessionPhase.AUTHENTICATED, state.hasLoadedSettings && state.settings.server == null) {
+            if (session.phase == SessionPhase.AUTHENTICATED || state.hasLoadedSettings && state.settings.server == null) {
+                savedInOnboarding = false; chosen = false
+            }
+        }
         // Reselect at a tab root scrolls that root to the top (navigation-shell.md); one count per tab.
         var reselects by rememberSaveable { mutableStateOf(listOf(0, 0, 0, 0)) }
         fun savedScope(of: ShellTab) = tabScopes.firstOrNull { it.startsWith("${of.name}=") }?.substringAfter('=')

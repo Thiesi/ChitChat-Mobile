@@ -36,7 +36,8 @@ Welcome) is deferred to the Fable overhaul. Find your people is O2b.
 
 Other phases (pending MFA, guest, invalidated, signed out, a cold start's connecting) keep today's screens. The step
 state (Welcome passed, saved in this onboarding, flow chosen) is saved instance state, so recreation and process death
-return to the same step (P-50).
+return to the same step (P-50). The attempt ends at sign-in or restore (AUTHENTICATED) and when the server is forgotten:
+later failures and sign-outs use the ordinary screens and Server found's chooser.
 
 ## Verification
 

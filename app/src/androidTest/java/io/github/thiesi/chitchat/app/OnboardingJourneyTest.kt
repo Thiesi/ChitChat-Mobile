@@ -112,6 +112,23 @@ class OnboardingJourneyTest {
         emphasis("onboarding_sign_in", "primary")
     }
 
+    /** The onboarding attempt ends at sign-in: a later failed bootstrap shows the ordinary invalidated screen, not
+     *  step 2, and a sign-out returns to Server found's chooser, not the remembered form. */
+    @Test fun afterSignInFailuresAndSignOutUseTheOrdinaryScreens() {
+        toAddress(); submit("chat.example.test")
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick()
+        compose.runOnIdle { kotlinx.coroutines.runBlocking { sessions.signIn("Alice", "fixture-password", false) } }
+        compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.AUTHENTICATED }
+        compose.waitForIdle()
+        compose.runOnIdle { kotlinx.coroutines.runBlocking { sessions.signOut() } }
+        compose.onNodeWithText(text(R.string.back_to_sign_in)).performScrollTo().performClick()
+        compose.onNodeWithTag("onboarding_sign_in").assertExists(); compose.onNodeWithText("Username").assertDoesNotExist()
+        sessions.nextConnect = { it.copy(phase = SessionPhase.INVALIDATED, error = ApiFailure(FailureKind.TIMEOUT)) }
+        compose.runOnIdle { auth.reconnect() }
+        compose.onNodeWithText(text(R.string.session_not_available)).assertExists()
+        compose.onNodeWithTag("onboarding_server_input").assertDoesNotExist()
+    }
+
     /** J2: the card host breaks after dots for display only; semantics keep the raw host, with or without a name. */
     @Test fun theServerCardKeepsTheRawHostInSemantics() {
         toAddress(); submit("chat.example.test")
