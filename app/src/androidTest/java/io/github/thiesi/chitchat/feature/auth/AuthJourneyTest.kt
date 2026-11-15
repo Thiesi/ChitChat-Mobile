@@ -20,6 +20,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.testing.openTab
 import io.github.thiesi.chitchat.feature.account.TestChitChatApp as ChitChatApp
 import io.github.thiesi.chitchat.app.SettingsViewModel
 import io.github.thiesi.chitchat.core.server.AddressResult
@@ -58,17 +59,18 @@ class AuthJourneyTest {
 
     @Test fun authenticatedRoomsNavigationReturnsToTheExistingAccountHome() {
         content(); enterCredentials()
+        compose.openTab("you").performClick()
         compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.auth_preview_limit))
             .performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Rooms").performScrollTo().performClick()
+        compose.openTab("rooms").performClick()
         compose.onNodeWithText("No rooms are available to this account.").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Back").performClick()
+        compose.openTab("you").performClick()
         compose.onNodeWithText("Sign out").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun logoutWhileViewingRoomsRetiresTheProtectedDestination() {
         content(); enterCredentials()
-        compose.onNodeWithText("Rooms").performScrollTo().performClick()
+        compose.openTab("rooms").performClick()
         compose.onNodeWithText("No rooms are available to this account.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { auth.signOut() }
         compose.onNodeWithText("Back to sign-in").performScrollTo().assertIsDisplayed()
@@ -106,7 +108,7 @@ class AuthJourneyTest {
         compose.waitUntil(5_000) {
             sessions.state.value.phase == io.github.thiesi.chitchat.core.session.SessionPhase.AUTHENTICATED && !sessions.state.value.busy
         }
-        compose.onNodeWithText("Rooms").performScrollTo().performClick()
+        compose.openTab("rooms").performClick()
         compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Fixture Lounge").assertIsDisplayed() }.isSuccess }
         compose.onNodeWithText("Fixture Lounge").performClick()
         compose.onNodeWithText("Open conversation").performScrollTo().performClick()
@@ -140,13 +142,14 @@ class AuthJourneyTest {
             compose.onNodeWithText("Signed in as Alice").assertDoesNotExist()
             compose.onNodeWithText("Password").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
         } finally { completion.complete(Unit) }
+        compose.openTab("you").performClick()
         compose.waitUntil(5_000) { runCatching {
             compose.onNodeWithText("Signed in as Alice").assertExists()
         }.isSuccess }
         compose.onNodeWithText("Signed in as Alice").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(2, sessions.logins) }
         compose.onNodeWithText("Change server").performScrollTo().assertIsNotEnabled()
-        compose.onNodeWithText("Settings").performClick()
+        compose.onNodeWithTag("you_appearance").performScrollTo().performClick()
         compose.onNodeWithText("Forget server").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText("Back").performClick()
         compose.onNodeWithText("Sign out").performScrollTo().performClick()
@@ -163,6 +166,7 @@ class AuthJourneyTest {
         compose.onNodeWithText("Signed in as Alice").assertDoesNotExist()
         compose.onNodeWithText("Recovery code").performScrollTo().performTextInput("UNUSED-FIXTURE-CODE")
         compose.onNodeWithText("Use recovery code").performScrollTo().assertIsDisplayed().performClick()
+        compose.openTab("you").performClick()
         compose.onNodeWithText("Signed in as Alice").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, sessions.recoveries) }
     }
@@ -171,11 +175,12 @@ class AuthJourneyTest {
         content()
         compose.onNodeWithText("Account").assertDoesNotExist()
         enterCredentials()
-        compose.onNodeWithText("Account").performClick()
+        compose.openTab("you").performClick()
+        compose.onNodeWithTag("you_account").performScrollTo().performClick()
         compose.onNodeWithText("Your personal data").assertIsDisplayed()
         compose.onNodeWithText("Back").performClick()
         compose.onNodeWithText("Signed in as Alice").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Account").performClick()
+        compose.onNodeWithTag("you_account").performScrollTo().performClick()
         compose.runOnIdle { auth.signOut() }
         compose.onNodeWithText("Your personal data").assertDoesNotExist()
         compose.onNodeWithText("Back to sign-in").performScrollTo().assertIsDisplayed()
@@ -260,6 +265,7 @@ class AuthJourneyTest {
         compose.onNodeWithText("The server confirmed that your account was restored.").assertDoesNotExist()
         compose.onNodeWithText("Recovery code").performScrollTo().performTextInput("UNUSED-FIXTURE-CODE")
         compose.onNodeWithText("Use recovery code").performScrollTo().performClick()
+        compose.openTab("you").performClick()
         compose.onNodeWithText("The server confirmed that your account was restored.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, sessions.restores); assertEquals(1, sessions.recoveries) }
     }

@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
 import android.content.ClipboardManager
+import io.github.thiesi.chitchat.testing.openTab
 import android.content.Intent
 import android.app.Activity
 import android.app.Instrumentation
@@ -99,8 +100,8 @@ class ReplyComposerJourneyTest {
         }
         // Retire a previous fixture's system clipboard preview with an outside, inert app tap.
         // Do not clear exported text or let the preview intercept the notification-entry tap.
-        compose.onNodeWithText(text(R.string.app_name)).assertIsDisplayed().performNativeTap()
-        compose.onNodeWithTag("notifications_open").performScrollTo().assertIsDisplayed().performNativeTap(); fresh()
+        compose.onNodeWithTag("bar_title").assertIsDisplayed().performNativeTap()
+        compose.openTab("activity").assertIsDisplayed().performNativeTap(); fresh()
     }
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
     private fun fresh() { compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy && !notices.state.value.stale } }

@@ -120,7 +120,7 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
                 OutlinedTextField(value = state.lookup, onValueChange = model::updateLookup,
                     label = { Text(stringResource(R.string.rooms_lookup_id)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), enabled = !state.busy,
-                    modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium)
+                    modifier = Modifier.fillMaxWidth().testTag("rooms_lookup"), shape = MaterialTheme.shapes.medium)
                 Text(stringResource(R.string.rooms_lookup_hint), style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = model::lookup, enabled = ready && !state.busy && state.lookup.isNotBlank()) {
                     Text(stringResource(R.string.rooms_lookup))

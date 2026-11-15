@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -86,7 +87,7 @@ class RoomAttachmentJourneyTest {
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.AUTHENTICATED }
         compose.runOnIdle { sessions.state.value = sessions.state.value.copy(attachmentPolicy = policy,
             chatPolicy = ChatPolicy(emptySet(), null, DisplayPreferences())) }
-        compose.onNodeWithText("Rooms").performScrollTo().assertIsDisplayed().performClick()
+        compose.openTab("rooms").assertIsDisplayed().performClick()
         compose.waitUntil(5_000) { directory.state.value.loaded && !directory.state.value.busy }
         compose.onNodeWithTag("rooms_directory").performScrollToNode(hasText("Room 42"))
         compose.onNodeWithText("Room 42").assertIsDisplayed().performClick()

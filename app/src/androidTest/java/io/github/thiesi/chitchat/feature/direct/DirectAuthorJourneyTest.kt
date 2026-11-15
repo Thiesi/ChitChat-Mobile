@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.direct
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
@@ -81,8 +82,8 @@ class DirectAuthorJourneyTest {
             sessions.state.value = sessions.state.value.copy(chatPolicy = api.policy, privacy = api.privacy, shareTyping = true)
             runBlocking { api.directs.send(8, "Authored direct fixture", null) } // Seed, not another send journey.
         }
-        compose.onNodeWithText(text(R.string.app_name)).assertIsDisplayed().performNativeTap()
-        compose.onNodeWithTag("notifications_open").performScrollTo().performNativeTap()
+        compose.onNodeWithTag("bar_title").assertIsDisplayed().performNativeTap()
+        compose.openTab("activity").performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
         // Fixture55 is the plain peer8 conversation;57 is an exact-message link for peer9.
         compose.onNodeWithTag("notification_list").performScrollToNode(hasTestTag("notification_view:55"))

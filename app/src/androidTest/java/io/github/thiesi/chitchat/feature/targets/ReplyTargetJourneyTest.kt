@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.targets
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.SideEffect
@@ -92,13 +93,13 @@ class ReplyTargetJourneyTest {
         compose.runOnIdle { runBlocking { sessions.signIn("Viewer", "fixture-password") }
             sessions.state.value = sessions.state.value.copy(chatPolicy = policy, privacy = privacy) }
         if (direct) {
-            compose.onNodeWithText(text(R.string.dm_title)).performScrollTo().assertIsDisplayed().performClick()
+            compose.openTab("direct").assertIsDisplayed().performClick()
             compose.waitUntil(5_000) { inbox.state.value.inbox != null && !inbox.state.value.busy }
             compose.onNodeWithTag("dm_inbox").performScrollToNode(hasTestTag("dm_conversation:8"))
             compose.onNodeWithTag("dm_conversation:8").assertIsDisplayed().performClick()
             compose.waitUntil(5_000) { thread.state.value.loaded && !thread.state.value.busy }
         } else {
-            compose.onNodeWithText(text(R.string.rooms_title)).performScrollTo().assertIsDisplayed().performClick()
+            compose.openTab("rooms").assertIsDisplayed().performClick()
             compose.onNodeWithTag("rooms_directory").performScrollToNode(hasText("Fixture room"))
             compose.onNodeWithText("Fixture room").assertIsDisplayed().performClick()
             compose.onNode(hasText(text(R.string.rooms_open_conversation)) and hasAnyAncestor(isDialog()))

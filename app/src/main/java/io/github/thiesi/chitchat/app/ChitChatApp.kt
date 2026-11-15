@@ -31,7 +31,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import io.github.thiesi.chitchat.core.ui.PrimaryButton
-import io.github.thiesi.chitchat.core.ui.CountBadge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,6 +45,7 @@ import androidx.compose.material3.TopAppBar
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +77,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.compose.navigation
+import androidx.activity.compose.BackHandler
 import io.github.thiesi.chitchat.feature.profile.ProfileViewModel
 import io.github.thiesi.chitchat.feature.completion.CompletionViewModel
 import io.github.thiesi.chitchat.feature.profile.ProfileDialog
@@ -241,6 +243,53 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 nav.navigate("conversation/$id") { launchSingleTop = true }
             }
         }
+        // Navigation shell (navigation-shell.md). Departure rules stay in the root effect below: a tab switch
+        // changes the current entry exactly like leaving a route did, so the same cancellations apply.
+        // Only public NavController API: a tab root is a tab route with no visible entry below it (previousBackStackEntry
+        // skips graph entries; a pushed screen always has its tab root below it). The current tab is kept in saved
+        // state, set by every tab change and confirmed whenever a tab root is current.
+        var currentTab by rememberSaveable { mutableStateOf(ShellTab.ROOMS.name) }
+        // getBackStackEntry throws IllegalArgumentException when the graph isn't on the back stack (onboarding,
+        // after leaving): that means "not in the shell". Nothing else is swallowed.
+        fun inShell() = try { nav.getBackStackEntry(SHELL_GRAPH); true } catch (_: IllegalArgumentException) { false }
+        fun liveTab(): ShellTab? = if (inShell()) ShellTab.valueOf(currentTab) else null
+        val entryTab = tabOf(entry?.destination?.route)
+        val tabRoot = entryTab != null && nav.previousBackStackEntry == null
+        val tab = if (entry != null && inShell()) (if (tabRoot) entryTab else ShellTab.valueOf(currentTab)) else null
+        SideEffect { if (tabRoot && entryTab != null && entryTab.name != currentTab) currentTab = entryTab.name }
+        // "TAB=scope key" per saved tab stack (a read-only, bundle-safe list).
+        var tabScopes by rememberSaveable { mutableStateOf(listOf<String>()) }
+        fun savedScope(of: ShellTab) = tabScopes.firstOrNull { it.startsWith("${of.name}=") }?.substringAfter('=')
+        fun withScope(of: ShellTab, key: String?) = tabScopes.filterNot { it.startsWith("${of.name}=") } +
+            listOfNotNull(key?.let { "${of.name}=$it" })
+        fun clearTabs() { ShellTab.entries.forEach { nav.clearBackStack(it.pattern) }; tabScopes = emptyList() }
+        fun leaveShell() { clearTabs(); currentTab = ShellTab.ROOMS.name; nav.navigate(HOME_ROUTE) { popUpTo(SHELL_GRAPH) { inclusive = true } } }
+        fun roomsRoot() {
+            nav.clearBackStack(ROOMS_ROUTE); tabScopes = withScope(ShellTab.ROOMS, null)
+            currentTab = ShellTab.ROOMS.name
+            nav.navigate(ROOMS_ROUTE) { popUpTo(SHELL_GRAPH); launchSingleTop = true }
+        }
+        /** Replaces "pop to home": outside the shell, onboarding; signed out, leave it; a stale scope, the Rooms root. */
+        fun resetToRoot() {
+            val current = liveTab()
+            if (current == null) nav.popBackStack(HOME_ROUTE, false)
+            else if (auth.state.value.phase != SessionPhase.AUTHENTICATED) leaveShell()
+            else { clearTabs(); if (current == ShellTab.ROOMS) nav.popBackStack(ROOMS_ROUTE, false) else roomsRoot() }
+        }
+        fun selectTab(target: ShellTab, restore: Boolean = true) {
+            val actual = auth.state.value
+            val current = liveTab() ?: return
+            if (actual.phase != SessionPhase.AUTHENTICATED) return
+            focus.clearFocus()
+            if (current == target) { nav.popBackStack(target.pattern, false); return }
+            val route = target.route(actual) ?: return
+            val key = scopeKey(actual)
+            val keep = restore && savedScope(target) == key
+            if (!keep) nav.clearBackStack(target.pattern)
+            tabScopes = withScope(current, key); tabScopes = withScope(target, null)
+            currentTab = target.name
+            nav.navigate(route) { popUpTo(SHELL_GRAPH) { saveState = true }; launchSingleTop = true; restoreState = keep }
+        }
         /**
          * One router for a notice link, from a center row or a tapped push. The [source] entry must be the
          * current Activity entry: targets load against its ID and the guarded flow re-checks access.
@@ -275,41 +324,45 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         LaunchedEffect(pendingTap, session, state.hasLoadedSettings, state.settings.server, entry, entryStarted, inNotifications) {
             val tap = pendingTap ?: return@LaunchedEffect
             if (tap.matches(session)) {
-                if (!inNotifications && entryStarted && nav.currentBackStackEntry === entry)
-                    notificationRoute(session)?.let { focus.clearFocus(); nav.navigate(it) { launchSingleTop = true } }
+                if (!inNotifications && entryStarted && nav.currentBackStackEntry === entry) selectTab(ShellTab.ACTIVITY, restore = false)
             } else if (pushTapSettled(session, state.hasLoadedSettings, state.settings.server != null)) pushTaps.take(tap)
         }
-        val atHome = entry?.destination?.route.let { it == null || it == "home" }
+        val atHome = entry?.destination?.route.let { it == null || it == HOME_ROUTE }
         LaunchedEffect(entry, session.phase, session.server, session.generation,
             session.user?.id, session.user?.sessionVersion) {
             if (nav.currentBackStackEntry !== entry) return@LaunchedEffect
+            // Two graphs: signed in, the shell (Rooms root first); otherwise onboarding, with every cleanup below.
+            if (session.phase == SessionPhase.AUTHENTICATED && entry?.destination?.route == HOME_ROUTE) {
+                currentTab = ShellTab.ROOMS.name
+                nav.navigate(SHELL_GRAPH) { popUpTo(HOME_ROUTE) { inclusive = true } }; return@LaunchedEffect
+            }
             val searchArgs = entry?.arguments
             val atSearch = entry?.destination?.route == SEARCH_ROUTE
             if (atSearch && (search == null || searchArgs == null || !matchesSearchScope(session,
                 searchArgs.getLong("generation", -1), searchArgs.getLong("viewer", -1),
                 searchArgs.getInt("version", -1), searchArgs.getString("server"))))
-                nav.popBackStack("home", false)
+                resetToRoot()
             else if (entry?.destination?.route != null && !atSearch) search?.state?.value?.entry?.let(search::close)
             if (entry?.destination?.route in setOf(NOTIFICATIONS_ROUTE, NOTIFICATION_ROOM_ROUTE, NOTIFICATION_ACCOUNT_ROUTE) &&
                 (!noticeScope || notifications == null))
-                nav.popBackStack("home", false)
+                resetToRoot()
             val accountRoute = entry?.destination?.route in setOf("account", NOTIFICATION_ACCOUNT_ROUTE)
             if (accountRoute && session.phase != SessionPhase.AUTHENTICATED) {
-                nav.popBackStack("home", false)
+                resetToRoot()
                 account.cancel()
                 typingPreferences?.cancel()
             } else if (entry?.destination?.route != null && !accountRoute) {
                 account.cancel(); typingPreferences?.cancel()
             }
             if (entry?.destination?.route == "rooms" && session.phase != SessionPhase.AUTHENTICATED) {
-                nav.popBackStack("home", false)
+                resetToRoot()
                 rooms.cancel()
             } else if (entry?.destination?.route != null && entry?.destination?.route != "rooms") rooms.cancel()
             val conversation = entry?.destination?.route?.startsWith("conversation/") == true || entry?.destination?.route == NOTIFICATION_ROOM_ROUTE
             if (entry?.destination?.route != null && (!conversation || session.phase != SessionPhase.AUTHENTICATED))
                 ignores?.cancel()
             if (conversation && session.phase != SessionPhase.AUTHENTICATED) {
-                nav.popBackStack("home", false)
+                resetToRoot()
                 conversations.cancel()
             } else if (entry?.destination?.route != null && !conversation) conversations.leavePane()
             val direct = entry?.destination?.route?.startsWith("direct") == true
@@ -319,11 +372,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             val peer = args?.getLong("peerId", -1) ?: -1
             val validPeer = entry?.destination?.route?.startsWith("direct/") != true || peer > 0 && peer != session.user?.id
             if (direct && (!sameScope || !validPeer || directInbox == null || directThread == null)) {
-                nav.popBackStack("home", false)
+                resetToRoot()
                 directInbox?.background(); directThread?.leavePane()
             } else if (entry?.destination?.route != null && !direct) {
                 directInbox?.background(); directThread?.leavePane()
             }
+            if (session.phase != SessionPhase.AUTHENTICATED && inShell()) leaveShell()
         }
         val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
@@ -345,21 +399,45 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         "account", NOTIFICATION_ACCOUNT_ROUTE -> R.string.account
                         "notification_settings" -> R.string.notification_settings_title
                         LICENCES_ROUTE, LICENCE_ROUTE -> R.string.oss_licences_title
-                        "rooms" -> R.string.rooms_title
+                        ROOMS_ROUTE -> R.string.rooms_title
+                        YOU_ROUTE -> R.string.nav_you
                         else -> R.string.app_name
                     }) },
                     navigationIcon = {
-                        if (!atHome) TextButton(onClick = { nav.popBackStack() }) { Text(stringResource(R.string.back)) }
+                        // N1 keeps the text Back; at a Direct, Activity or You root it acts as system Back (the Rooms root).
+                        if (!atHome && !(tabRoot && tab == ShellTab.ROOMS)) TextButton(onClick = {
+                            if (tabRoot && tab != null) roomsRoot() else nav.popBackStack()
+                        }) { Text(stringResource(R.string.back)) }
                     },
                     actions = {
-                        if (atHome && session.phase == SessionPhase.AUTHENTICATED) TextButton(onClick = { nav.navigate("account") {
-                            launchSingleTop = true
-                        } }) { Text(stringResource(R.string.account)) }
+                        if (tabRoot && (tab == ShellTab.ROOMS || tab == ShellTab.DIRECT) && search != null &&
+                            searchRoute(displayedSession) != null) TextButton(onClick = {
+                            val source = entry
+                            if (source != null && nav.currentBackStackEntry === source && matchesSearchScope(auth.state.value,
+                                displayedSession.generation, displayedSession.user?.id ?: -1,
+                                displayedSession.user?.sessionVersion ?: -1, displayedSession.server?.value))
+                                searchRoute(displayedSession)?.let { route -> focus.clearFocus(); nav.navigate(route) { launchSingleTop = true } }
+                        }, modifier = Modifier.testTag("message_search_open")) { Text(stringResource(R.string.message_search_title)) }
                         if (atHome && state.hasLoadedSettings) TextButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
                             Text(stringResource(R.string.settings))
                         }
                     },
                 )
+            },
+            bottomBar = {
+                // Only on a tab root, and out of layout and semantics while the IME shows (navigation-shell.md).
+                if (session.phase == SessionPhase.AUTHENTICATED && tab != null && tabRoot && !imeVisible) {
+                    val tabs = ShellTab.entries.filter { when (it) {
+                        ShellTab.DIRECT -> directInbox != null && directThread != null && directRoute(displayedSession) != null
+                        ShellTab.ACTIVITY -> notifications != null && displayedSession.noticeIdentity() != null
+                        else -> true
+                    } }
+                    val countText = if (session.noticeIdentity() == null || notifications == null) null
+                        else notificationState.unreadCount?.let { count -> pluralStringResource(
+                            if (notificationState.countStale) R.plurals.notifications_last_count else R.plurals.notifications_count, count, count)
+                        } ?: stringResource(R.string.notifications_count_unknown)
+                    ShellBar(tabs, tab, notificationState.unreadCount, notificationState.countStale, countText, ::selectTab)
+                }
             },
         ) { insets ->
             Column(
@@ -391,7 +469,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                     if (state.settings.serverError != null) Text(stringResource(R.string.saved_server_invalid),
                         Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = MaterialTheme.colorScheme.error)
                     if (state.hasLoadedSettings) NavHost(navController = nav, startDestination = "home", modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        composable("home") { homeEntry ->
+                        composable(HOME_ROUTE) {
                             // A successful save/forget replaces the page, not just its body:
                             // never retain the editor's scrolled offset on the confirmation.
                             key(state.settings.server?.value, session.generation) {
@@ -399,44 +477,13 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                     if (state.settings.server == null) {
                                         if (session.error?.kind == FailureKind.STORAGE || session.storageWarning) AuthScreen(session, auth)
                                         else ServerEditor(state, model, onSaved = {})
+                                    } else if (session.phase == SessionPhase.AUTHENTICATED) {
+                                        // Entering the shell; the signed-in hub is the You tab.
                                     } else {
                                         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                                             Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.headlineLarge)
                                             Text(state.settings.server!!.value, style = MaterialTheme.typography.titleMedium)
                                             AuthScreen(session, auth)
-                                            if (session.phase == SessionPhase.AUTHENTICATED) PrimaryButton(onClick = {
-                                                nav.navigate("rooms") { launchSingleTop = true }
-                                            }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.rooms_title)) }
-                                            if (session.phase == SessionPhase.AUTHENTICATED && directInbox != null && directThread != null)
-                                                LanternOutlinedButton(onClick = { openDirect(null) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.dm_title)) }
-                                            if (search != null && searchRoute(displayedSession) != null)
-                                                LanternOutlinedButton(onClick = {
-                                                    if (nav.currentBackStackEntry === homeEntry && matchesSearchScope(auth.state.value,
-                                                        displayedSession.generation, displayedSession.user?.id ?: -1,
-                                                        displayedSession.user?.sessionVersion ?: -1, displayedSession.server?.value))
-                                                        searchRoute(displayedSession)?.let { route ->
-                                                            focus.clearFocus(); nav.navigate(route) { launchSingleTop = true }
-                                                        }
-                                                }, modifier = Modifier.fillMaxWidth().testTag("message_search_open")) {
-                                                    Text(stringResource(R.string.message_search_title))
-                                                }
-                                            if (session.noticeIdentity() != null && notifications != null) {
-                                                val countText = notificationState.unreadCount?.let { count -> pluralStringResource(
-                                                    if (notificationState.countStale) R.plurals.notifications_last_count else R.plurals.notifications_count, count, count)
-                                                } ?: stringResource(R.string.notifications_count_unknown)
-                                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                    PrimaryButton(onClick = {
-                                                        if (nav.currentBackStackEntry === homeEntry && displayedSession.noticeIdentity() == auth.state.value.noticeIdentity())
-                                                            notificationRoute(displayedSession)?.let { nav.navigate(it) { launchSingleTop = true } }
-                                                    }, modifier = Modifier.fillMaxWidth().testTag("notifications_open").semantics { stateDescription = countText }) {
-                                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                            Text(stringResource(R.string.notifications_title))
-                                                            notificationState.unreadCount?.takeIf { it > 0 }?.let { count -> CountBadge { Text(count.toString()) } }
-                                                        }
-                                                    }
-                                                    Text(countText, style = MaterialTheme.typography.bodySmall)
-                                                }
-                                            }
                                             LanternOutlinedButton(onClick = { nav.navigate("server") }, enabled = session.canChangeServer) {
                                                 Text(stringResource(R.string.change_server))
                                             }
@@ -456,19 +503,21 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         composable("settings") {
                             ScreenContent { SettingsScreen(state, model, session.canChangeServer) }
                         }
+                        navigation(route = SHELL_GRAPH, startDestination = ROOMS_ROUTE) {
+                        composable(YOU_ROUTE) {
+                            if (session.phase == SessionPhase.AUTHENTICATED) ScreenContent {
+                                YouScreen(session, auth, state.settings.server?.value, pushSettings != null,
+                                    onNotifications = { nav.navigate("notification_settings") { launchSingleTop = true } },
+                                    onAppearance = { nav.navigate("settings") { launchSingleTop = true } },
+                                    onAccount = { nav.navigate("account") { launchSingleTop = true } },
+                                    onChangeServer = { nav.navigate("server") },
+                                    onLicences = { nav.navigate(LICENCES_ROUTE) { launchSingleTop = true } })
+                            }
+                        }
                         composable("account") {
                             if (session.phase == SessionPhase.AUTHENTICATED) ScreenContent {
                                 AccountScreen(account, session, auth::refresh)
-                                if (pushSettings != null) TextButton(onClick = { nav.navigate("notification_settings") {
-                                    launchSingleTop = true } }, modifier = Modifier.heightIn(min = 48.dp).testTag("notification_settings_open")) {
-                                    Text(stringResource(R.string.notification_settings_open))
-                                }
                                 typingPreferences?.let { TypingPreferenceCard(it, session, auth::refresh) }
-                                // The nav shell may move this to About later.
-                                TextButton(onClick = { nav.navigate(LICENCES_ROUTE) { launchSingleTop = true } },
-                                    modifier = Modifier.heightIn(min = 48.dp).testTag("licences_open")) {
-                                    Text(stringResource(R.string.oss_licences_open))
-                                }
                             }
                         }
                         composable(LICENCES_ROUTE) {
@@ -594,11 +643,14 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                         else directThread.leavePane() }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
                         }
+                        }
                     }
                 }
             }
         }
         }
+        // Back at a Direct, Activity or You root goes to the Rooms root; at the Rooms root the system leaves the app.
+        BackHandler(enabled = session.phase == SessionPhase.AUTHENTICATED && tabRoot && tab != null && tab != ShellTab.ROOMS) { roomsRoot() }
         RoomDraftsDialog(conversations, session, openRoom)
         val profileChoice = profileState?.selection
         if (profiles != null && profileChoice != null && profileChoice.matches(displayedSession) &&
@@ -741,7 +793,7 @@ private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSav
 }
 
 @Composable
-private fun PrivacyCard() {
+internal fun PrivacyCard() {
     Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, border = lanternSurfaceBorder()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.privacy_title), style = MaterialTheme.typography.titleMedium)

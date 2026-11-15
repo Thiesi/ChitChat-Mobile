@@ -7,7 +7,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -64,10 +65,10 @@ class AccountRecreationTest {
         // Wait for the destination affordance, not a timing-dependent immediate query.
         try {
             compose.waitUntil(5_000) {
-                runCatching { compose.onNodeWithText("Account").assertIsDisplayed() }.isSuccess
+                runCatching { compose.onNodeWithTag("nav_tab_you").assertIsDisplayed() }.isSuccess
             }
         } catch (timeout: ComposeTimeoutException) {
-            val bounds = runCatching { compose.onAllNodesWithText("Account").fetchSemanticsNodes(false).map { it.boundsInRoot } }.getOrNull()
+            val bounds = runCatching { compose.onAllNodesWithTag("nav_tab_you").fetchSemanticsNodes(false).map { it.boundsInRoot } }.getOrNull()
             val context = compose.runOnIdle {
                 "Account start: logins=${sessions.logins}, phase=${sessions.state.value.phase}, " +
                     "generation=${sessions.state.value.generation}, busy=${sessions.state.value.busy}, " +
@@ -76,7 +77,8 @@ class AccountRecreationTest {
             }
             throw AssertionError(context, timeout) // No passwords, codes, bodies or full UI tree in diagnostics.
         }
-        compose.onNodeWithText("Account").performClick()
+        compose.onNodeWithTag("nav_tab_you").performClick()
+        compose.onNodeWithTag("you_account").performScrollTo().performClick()
         compose.runOnIdle {
             assertTrue(account.chooseDestination())
             account.destinationSelected(destination, sessions.state.value.generation)

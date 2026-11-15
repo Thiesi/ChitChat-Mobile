@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
@@ -86,8 +87,8 @@ class RoomReactionJourneyTest {
                 listOf(MessagePerson(if (deleted) 7 else 8, if (deleted) "Viewer" else "Peer")), !deleted))
             if (deleted) api.rooms.deleted += 43L to 101L
         }
-        compose.onNodeWithText(text(R.string.app_name)).assertIsDisplayed().performNativeTap()
-        compose.onNodeWithTag("notifications_open").performScrollTo().performNativeTap()
+        compose.onNodeWithTag("bar_title").assertIsDisplayed().performNativeTap()
+        compose.openTab("activity").performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
         compose.onNodeWithTag("notification_list").performScrollToNode(hasTestTag("notification_view:60"))
         compose.onNodeWithTag("notification_view:60").performNativeTap()

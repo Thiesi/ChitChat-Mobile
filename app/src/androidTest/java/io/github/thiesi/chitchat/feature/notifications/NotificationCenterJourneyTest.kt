@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.notifications
 
 import androidx.activity.ComponentActivity
+import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -79,7 +80,7 @@ class NotificationCenterJourneyTest {
         compose.waitUntil(5_000) { model.state.value.unreadCount == 999 && !model.state.value.busy }
     }
     private fun open() {
-        compose.onNodeWithTag("notifications_open").performScrollTo().assertIsDisplayed().performClick()
+        compose.openTab("activity").assertIsDisplayed().performClick()
         fresh()
     }
     private fun fresh() { compose.waitUntil(5_000) { model.state.value.loaded && !model.state.value.busy && !model.state.value.stale } }
@@ -94,7 +95,7 @@ class NotificationCenterJourneyTest {
 
     @Test fun homeCountListPlainTextExplicitReadAndBackStayIndependentFromChat() {
         root()
-        compose.onNodeWithTag("notifications_open").performScrollTo().assert(SemanticsMatcher.expectValue(
+        compose.openTab("activity").assert(SemanticsMatcher.expectValue(
             SemanticsProperties.StateDescription, "999 unread notifications"))
         compose.runOnIdle { assertFalse(model.state.value.loaded); assertTrue(model.state.value.notifications.isEmpty()) }
         open(); readState(55, false)
@@ -107,7 +108,7 @@ class NotificationCenterJourneyTest {
         capture("notification-read.png")
         back()
         compose.waitUntil(5_000) { !model.state.value.busy && !model.state.value.countStale }
-        compose.onNodeWithTag("notifications_open").performScrollTo().assert(SemanticsMatcher.expectValue(
+        compose.openTab("activity").assert(SemanticsMatcher.expectValue(
             SemanticsProperties.StateDescription, "7 unread notifications"))
         compose.onNodeWithTag("notification_list").assertDoesNotExist()
     }
@@ -190,7 +191,7 @@ class NotificationCenterJourneyTest {
                 user = SessionUser(9, "Second fixture", listOf("member"), 1, false))
             oldConfirm()
         }
-        compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("notifications_open").assertExists() }.isSuccess }
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("nav_tab_activity").assertExists() }.isSuccess }
         compose.onNodeWithTag("notification_list").assertDoesNotExist()
         compose.onNodeWithTag("notifications_all_confirm").assertDoesNotExist()
         compose.runOnIdle { assertTrue(model.state.value.notifications.isEmpty()); assertEquals(0, api.ones.get()); assertEquals(0, api.alls.get()) }
