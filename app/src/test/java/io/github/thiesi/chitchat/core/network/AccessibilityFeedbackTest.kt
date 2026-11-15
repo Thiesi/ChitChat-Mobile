@@ -34,7 +34,7 @@ class AccessibilityFeedbackTest {
 
     @Test fun otherSchemesAndUnsafeShapesAreAbsent() {
         for (bad in listOf("http://example.org/a11y", "javascript:alert(1)", "intent://x#Intent;end", "file:///sdcard/x",
-            "content://x", "tel:123", "HTTP://example.org", "https:///nohost", "https://user:secret@example.org/a11y",
+            "content://x", "tel:123", "HTTP://example.org", "https:///nohost", "https://:443/a11y", "https://?q=1", "https://user:secret@example.org/a11y",
             "mailto:", "//example.org/a11y", "example.org/a11y"))
             assertNull(bad, of(bad))
     }

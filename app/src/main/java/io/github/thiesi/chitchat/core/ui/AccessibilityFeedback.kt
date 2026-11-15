@@ -37,8 +37,9 @@ internal fun AccessibilityFeedbackLink(url: String?, modifier: Modifier = Modifi
     var choosing by rememberSaveable { mutableStateOf(false) }
     TextButton(onClick = { choosing = true }, modifier = modifier.heightIn(min = 48.dp).testTag("a11y_feedback")) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.a11y_feedback))
-            Icon(painterResource(R.drawable.ic_open_external), contentDescription = null)
+            // The label may wrap; the icon always keeps its 24dp (J1 on PR258: without weight it collapsed at 200%).
+            Text(stringResource(R.string.a11y_feedback), Modifier.weight(1f, fill = false))
+            Icon(painterResource(R.drawable.ic_open_external), contentDescription = null, Modifier.testTag("a11y_feedback_icon"))
         }
     }
     if (choosing) AccessibilityFeedbackChoice(url) { choosing = false }

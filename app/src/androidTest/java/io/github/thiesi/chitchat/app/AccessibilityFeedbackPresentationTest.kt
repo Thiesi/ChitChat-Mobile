@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -96,9 +97,11 @@ class AccessibilityFeedbackPresentationTest {
                     } }
                 }
                 compose.onNodeWithTag("a11y_feedback").performScrollTo()
+                assertIconWhole("$label/$name/signin")
                 capture("a11y-$label-$name-signin", compose.onNodeWithTag("a11y_host"))
                 state = member("https://chitchat.example/accessibility"); compose.waitForIdle()
                 compose.onNodeWithTag("a11y_feedback").performScrollTo()
+                assertIconWhole("$label/$name/you")
                 capture("a11y-$label-$name-you", compose.onNodeWithTag("you_about"))
                 compose.onNodeWithTag("a11y_feedback").performClick()
                 compose.onNode(hasText(text(R.string.a11y_feedback_web, "chitchat.example"))).assertExists()
@@ -106,6 +109,14 @@ class AccessibilityFeedbackPresentationTest {
                 capture("a11y-$label-$name-dialog", compose.onNode(isDialog()))
             }
         }
+    }
+
+    /** The open-external icon is drawn at its full 24dp, at every font scale (A-04). */
+    private fun assertIconWhole(where: String) {
+        val icon = compose.onNodeWithTag("a11y_feedback_icon", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode()
+        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        assertEquals("$where: icon width", 24f, icon.size.width / density, 0.5f)
+        assertEquals("$where: icon height", 24f, icon.size.height / density, 0.5f)
     }
 
     private fun capture(name: String, node: SemanticsNodeInteraction) {
