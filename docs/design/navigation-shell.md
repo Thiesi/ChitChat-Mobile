@@ -122,7 +122,8 @@ rows in this slice. Merging them visually is optional and must not change their 
   on one line, all four share the largest size at which every label fits. The size is the
   same selected or not, so a tab switch never changes it. The floor is 18sp (1.5× the 12sp
   label). Below it labels wrap, never clipped or ellipsized; at 200% that only happens on
-  windows narrower than about 264dp. In practice: about 182% on a 320dp window, the full
+  windows narrower than about 270dp (measured on PR #251: at 264dp "Activity" needs a hair
+  over its 66dp item at the floor). In practice: about 182% on a 320dp window, the full
   200% at 360dp and wider. This is measurement (P-108), never a fontScale cap. The tab's
   name repeats at full scale in its screen title, and TalkBack's item name is unchanged.
 - Colours: selected label and icon in `onSurface`, unselected in `onSurfaceVariant`. Never
@@ -225,4 +226,4 @@ Extends P-30:
 | P-75 | You contains every control from the old hub, `account` and `settings`, with unchanged behavior. Sign out is not persimmon-filled. | C, R |
 | P-76 | Pushed destinations use an icon back button described "Back". Tab roots have none. | C |
 | P-77 | You's About and privacy group shows only rows whose source exists (licences and app version today), never disabled placeholders. Licences move there from `account` with unchanged behaviour. The status slot stays the single notice area under the top bar on every tab. | C |
-| P-78 | Every bottom-bar label renders on one line at default and 200% on windows 264dp and wider, never broken mid-word. When needed, all four share one measured size (bold-measured, floor 18sp). Narrower windows may wrap but never clip. Selected colour is `onSurface`, never `steward`. | C |
+| P-78 | Every bottom-bar label renders on one line at default and 200% on windows 272dp and wider (the tested boundary), never broken mid-word. When needed, all four share one measured size (bold-measured, floor 18sp). Narrower windows may wrap but never clip. Selected colour is `onSurface`, never `steward`. | C |
