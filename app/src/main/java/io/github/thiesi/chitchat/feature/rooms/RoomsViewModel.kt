@@ -52,6 +52,8 @@ data class RoomsUiState(
     val syncError: ApiFailure? = null,
     /** Find your people (O2b): the listed room whose Join was chosen last; its row shows that attempt's outcome. */
     val joinTarget: Long? = null,
+    /** A definite refusal of [joinTarget]'s join, already reconciled by a list GET; Join stays a fresh explicit choice. */
+    val joinRefusal: ApiFailure? = null,
 )
 
 class RoomsViewModel(private val operations: RoomOperations, private val realtime: RealtimeController? = null,
@@ -190,15 +192,25 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
 
     /**
      * Find your people (onboarding.md step 5, P-54): one explicit, confirmed join of a listed public room. One POST,
-     * then the ordinary list reconcile; "Joined" comes only from that confirmed membership. A failure leaves the
-     * directory stale (and uncertain when ambiguous), so canMutate refuses another join until an explicit GET.
+     * then the ordinary list reconcile; "Joined" comes only from that confirmed membership.
+     * - A definite refusal has a known outcome: the list GET reconciles at once (M3a), the refusal shows on its row, and
+     *   other rooms stay joinable. Joining that room again is a fresh explicit choice, never a resend.
+     * - An ambiguous failure leaves the directory uncertain, so canMutate refuses any join until Check room (a GET).
      */
     fun joinListed(id: Long) {
         val room = mutable.value.rooms.firstOrNull { it.id == id } ?: return
         if (room.isMember || room.visibility != "public" || !canMutate()) return
-        mutable.value = mutable.value.copy(joinTarget = id)
+        mutable.value = mutable.value.copy(joinTarget = id, joinRefusal = null)
         start(true) { current ->
-            operations.join(id)
+            try { operations.join(id) }
+            catch (failure: ApiFailure) {
+                if (failure.isAmbiguous()) throw failure
+                current()
+                mutationInFlight = false
+                reconcile(current)
+                mutable.value = mutable.value.copy(joinRefusal = failure)
+                return@start
+            }
             current()
             mutationInFlight = false
             mutable.value = mutable.value.copy(notice = "joined")

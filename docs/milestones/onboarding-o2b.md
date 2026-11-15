@@ -7,15 +7,16 @@ Implements step 5 of [onboarding.md](../design/onboarding.md) and
 ## When it shows
 
 **New accounts only.**
-- A successful **Create** leaves one *pending new-account step*, held in saved instance state. It's consumed the first
-  time the shell is entered after sign-in, so it's shown once and never repeated.
+- Submitting **Create** marks a new account as pending (saved instance state). The shell entry reads and clears that
+  mark in one step, so the screen is shown once and never repeated. Any phase other than signed out-but-onboarding or
+  signed in (a sign-out, an ended session) clears it too, so a later sign-in never shows it.
 - Sign-in and restore never set it. A sign-up that ended "uncertain" and was followed by a sign-in doesn't either.
 - Registration and sign-in share the session's `authenticated()` path, so the session can't tell a new account apart.
   The UI remembers that the submitted flow was Create.
 
 **Ordering ahead:** after register the spec order is recovery key (O4a), then guidelines and rules (O3b), then Find
-your people. O4a and O3b insert their screens *before* this step through the same pending-step mechanism, without
-reworking it.
+your people. O4a and O3b insert their screens *before* this step through `firstNewAccountStep()`, without reworking
+the trigger.
 
 ## The screen
 
@@ -38,11 +39,15 @@ Joining reuses M3a's `RoomsViewModel`, single-flight `start()` and session gatin
 - **`joinListed(id)`:** one CSRF join POST for a listed, not-member, public room, then the ordinary list reconcile.
   "Joined" (in ink, weight 600, announced once through a polite live region) appears only from that confirmed
   membership. No pre-checked boxes, no "join all", no auto-join.
-- **One join at a time:** every other row's Join is disabled while a join is in flight.
-- **Definite failure:** the existing room error text, inline on that row.
-- **Ambiguous failure** (network, timeout, 5xx): the row reads "We couldn't confirm whether you joined." with **Check
-  room**. That's the ordinary list GET, never a resend. Until it runs, the directory is stale or uncertain, and
-  `canMutate` refuses any other join. After it, the row shows Joined, or Join again as a fresh explicit choice.
+- **One join at a time:** every other row's Join is disabled while a join is in flight or uncertain.
+- **Definite refusal** (a mapped 4xx): its outcome is known. The ordinary list GET reconciles at once (M3a), the
+  existing room error shows inline on that row, and nothing is blocked. Join on that room stays a fresh explicit choice
+  (a person's tap, never a resend), and other rooms stay joinable. There's no Check room.
+- **Ambiguous failure** (network, timeout, 5xx): the row reads "We couldn't confirm whether you joined." and "Check
+  this room before joining another." (textMuted, inside its live region), with **Check room**: the ordinary list GET,
+  never a resend. Until it runs, `canMutate` refuses any other join. After it, the row shows Joined, or Join again as a
+  fresh explicit choice.
+- **If the reconciling GET itself fails,** that row shows the error with Check room (a GET only).
 - **Navigation doesn't cancel a join:** the screen observes the Activity's lifecycle, not its back-stack entry's.
   Leaving for Rooms keeps the POST running, and its result reconciles through the Rooms list.
 - **A genuine app background still cancels it** (M3a) and marks it uncertain. The foreground list GET on return settles

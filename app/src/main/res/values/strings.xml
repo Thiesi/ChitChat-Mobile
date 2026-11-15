@@ -576,6 +576,7 @@
     <string name="find_people_joined">Joined</string>
     <string name="find_people_uncertain">We couldn\'t confirm whether you joined.</string>
     <string name="find_people_check">Check room</string>
+    <string name="find_people_check_first">Check this room before joining another.</string>
     <string name="find_people_empty">No open rooms yet. Invitations and new rooms will show up in Rooms.</string>
     <string name="find_people_start">Start chatting</string>
     <string name="server_update_title">This server needs an update</string>

@@ -265,15 +265,16 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         var welcomed by rememberSaveable { mutableStateOf(false) }
         var savedInOnboarding by rememberSaveable { mutableStateOf(false) }
         var chosen by rememberSaveable { mutableStateOf(false) }
-        // New-account steps (onboarding.md 5; O4a's recovery key and O3b's rules will insert before Find your people):
-        // a successful Create leaves one pending step, consumed when the shell is first entered. Never set by sign-in or
-        // restore. `creating` remembers that the submitted flow was Create; the session itself can't tell the two apart.
-        var creating by rememberSaveable { mutableStateOf(false) }
-        var pendingNewAccountStep by rememberSaveable { mutableStateOf<String?>(null) }
+        // New-account steps (onboarding.md 5): the submitted flow is Create, so the account that arrives is new (the
+        // session itself can't tell register from sign-in). The shell entry reads and clears this in one step; any phase
+        // other than ANONYMOUS or AUTHENTICATED (sign-out, an ended session) clears it, so a returning user never sees it.
+        var newAccountPending by rememberSaveable { mutableStateOf(false) }
         LaunchedEffect(session.phase, session.authFlow, chosen) {
-            if (session.phase == SessionPhase.ANONYMOUS) creating = chosen && session.authFlow == AuthFlow.REGISTER
-            else if (session.phase == SessionPhase.AUTHENTICATED && creating) { pendingNewAccountStep = FIND_PEOPLE_ROUTE; creating = false }
-            else if (session.phase != SessionPhase.AUTHENTICATED) creating = false
+            when (session.phase) {
+                SessionPhase.ANONYMOUS -> newAccountPending = chosen && session.authFlow == AuthFlow.REGISTER
+                SessionPhase.AUTHENTICATED -> Unit // Consumed at the shell entry below.
+                else -> newAccountPending = false
+            }
         }
         // The onboarding attempt ends at sign-in (or restore) and when the server is forgotten: later failures and
         // sign-outs use the ordinary screens and Server found's chooser, never step 2 or a remembered form.
@@ -364,8 +365,10 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             // Two graphs: signed in, the shell (Rooms root first); otherwise onboarding, with every cleanup below.
             if (session.phase == SessionPhase.AUTHENTICATED && entry?.destination?.route == HOME_ROUTE) {
                 currentTab = ShellTab.ROOMS.name
+                val step = if (newAccountPending) firstNewAccountStep() else null
+                newAccountPending = false
                 nav.navigate(SHELL_GRAPH) { popUpTo(HOME_ROUTE) { inclusive = true } }
-                pendingNewAccountStep?.let { step -> pendingNewAccountStep = null; nav.navigate(step) }
+                step?.let { nav.navigate(it) }
                 return@LaunchedEffect
             }
             val searchArgs = entry?.arguments
@@ -805,6 +808,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
 private const val LICENCES_ROUTE = "licences"
 private const val SERVER_NEW_ROUTE = "server_new"
 private const val FIND_PEOPLE_ROUTE = "find_people"
+
+/** The first screen a new account sees after the shell is entered. O4a (recovery key) and O3b (rules) insert before it. */
+private fun firstNewAccountStep(): String = FIND_PEOPLE_ROUTE
 private const val LICENCE_ROUTE = "licences/{index}"
 
 /** A tab root: its screen sees the tab's reselect count (scroll to top on reselection). */

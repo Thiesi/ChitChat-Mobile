@@ -89,21 +89,33 @@ private fun FindPeopleRow(room: RoomInfo, state: RoomsUiState, model: RoomsViewM
                 modifier = Modifier.defaultMinSize(minHeight = 52.dp).testTag("find_people_join_${room.id}")) {
                 Text(stringResource(R.string.find_people_joining))
             }
-            target && (state.error != null || state.mutationUncertain || state.stale) -> {
-                // The attempt didn't confirm. Only an explicit list GET (Check room) may settle it; never a resend.
+            target && (state.mutationUncertain || state.stale) -> {
+                // Unconfirmed, or the directory couldn't be re-read: only an explicit list GET (Check room) settles it,
+                // and every other Join waits meanwhile; never a resend.
                 Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("find_people_failure_${room.id}")) {
-                    if (state.mutationUncertain) Text(stringResource(R.string.find_people_uncertain))
-                    else state.error?.let { InlineError(roomError(it)) }
+                    if (state.mutationUncertain) {
+                        Text(stringResource(R.string.find_people_uncertain))
+                        // Why the other Joins are disabled (presentation lead J1; the uncertain case only).
+                        Text(stringResource(R.string.find_people_check_first), color = ChitChatTheme.colors.textMuted)
+                    } else state.error?.let { InlineError(roomError(it)) }
                 }
                 LanternOutlinedButton(onClick = model::refresh, enabled = !state.busy,
                     modifier = Modifier.defaultMinSize(minHeight = 52.dp).testTag("find_people_check_${room.id}")) {
                     Text(stringResource(R.string.find_people_check))
                 }
             }
-            else -> LanternOutlinedButton(onClick = { model.joinListed(room.id) },
-                enabled = !state.busy && !state.stale && !state.mutationUncertain,
-                modifier = Modifier.defaultMinSize(minHeight = 52.dp).testTag("find_people_join_${room.id}")) {
-                Text(stringResource(R.string.find_people_join))
+            else -> {
+                // A definite refusal (already reconciled) shows inline; Join stays a fresh explicit choice.
+                if (target) state.joinRefusal?.let { refusal ->
+                    Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("find_people_failure_${room.id}")) {
+                        InlineError(roomError(refusal))
+                    }
+                }
+                LanternOutlinedButton(onClick = { model.joinListed(room.id) },
+                    enabled = !state.busy && !state.stale && !state.mutationUncertain,
+                    modifier = Modifier.defaultMinSize(minHeight = 52.dp).testTag("find_people_join_${room.id}")) {
+                    Text(stringResource(R.string.find_people_join))
+                }
             }
         }
     }

@@ -66,6 +66,10 @@ class TestSessions : SessionController {
     override suspend fun register(username: String, password: String, birthDate: String?) {
         check(password == "fixture-password") { "The fixture must receive the captured registration password" }
         registrations++
+        // Like SessionRepository: the submission stays ANONYMOUS and busy until the reply (register never needs MFA).
+        state.value = state.value.copy(busy = true, error = null)
+        kotlinx.coroutines.delay(50)
+        state.value = state.value.copy(busy = false)
         if (failNextRegistration) {
             failNextRegistration = false
             state.value = state.value.copy(registration = RegistrationPreparation.FAILED,

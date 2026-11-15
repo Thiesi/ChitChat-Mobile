@@ -102,11 +102,45 @@ class FindPeopleJourneyTest {
         join(1).performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("find_people_check_1").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(text(R.string.find_people_uncertain)).assertExists()
-        join(2).assertIsNotEnabled() // No other write until the explicit check.
+        join(2).assertIsNotEnabled() // No other write until the explicit check, and the row says why.
+        compose.onNode(hasText(text(R.string.find_people_check_first)) and hasAnyAncestor(hasTestTag("find_people_row_1"))).assertExists()
         val lists = api.lists
         compose.onNodeWithTag("find_people_check_1").performScrollTo().performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("find_people_joined_1").fetchSemanticsNodes().isNotEmpty() }
         compose.runOnIdle { assertEquals(1, api.joins); assertTrue(api.lists > lists) }
+    }
+
+    /** Shown once, for the new account only: a sign-out and a later sign-in land on Rooms. */
+    @Test fun aLaterSignInAfterSignOutDoesNotShowItAgain() {
+        createAccount()
+        compose.onNodeWithTag("find_people_start").performClick()
+        compose.openTab("rooms").assertIsSelected()
+        compose.runOnIdle { auth.signOut() }
+        compose.onNodeWithText(text(R.string.back_to_sign_in)).performScrollTo().performClick()
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick()
+        compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
+        compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
+        Espresso.closeSoftKeyboard()
+        compose.onNodeWithText("Sign in").performScrollTo().performClick()
+        compose.openTab("rooms").assertIsSelected()
+        compose.onNodeWithTag("find_people").assertDoesNotExist()
+    }
+
+    /** A definite refusal has a known outcome: shown inline, reconciled by the list GET, and other rooms stay joinable. */
+    @Test fun aDefiniteRefusalShowsInlineAndBlocksNothing() {
+        createAccount()
+        api.failNext = ApiFailure(FailureKind.HTTP, 403, "minimum_age_not_met")
+        val lists = api.lists
+        join(1).performClick()
+        compose.waitUntil(5_000) { rooms.state.value.joinRefusal != null && !rooms.state.value.busy }
+        compose.onNodeWithText(text(R.string.rooms_minimum_age_not_met)).assertExists()
+        compose.onNodeWithTag("find_people_check_1").assertDoesNotExist()
+        compose.onNodeWithText(text(R.string.find_people_check_first)).assertDoesNotExist()
+        join(1).assertIsEnabled(); join(2).assertIsEnabled()
+        compose.runOnIdle { assertEquals(1, api.joins); assertTrue("Reconciled by a list GET", api.lists > lists) }
+        join(2).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("find_people_joined_2").fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { assertEquals(2, api.joins) }
     }
 
     @Test fun startChattingGoesToTheRoomsRoot() {

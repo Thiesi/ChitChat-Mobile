@@ -78,11 +78,9 @@ class FindPeoplePresentationTest {
                 // A definite refusal, inline on its row (presentation lead J request).
                 api.failNext = ApiFailure(FailureKind.HTTP, 403, "minimum_age_not_met")
                 compose.onNodeWithTag("find_people_join_2").performScrollTo().performClick()
-                compose.waitUntil(5_000) { !model.state.value.busy && model.state.value.error != null }
-                compose.onNodeWithTag("find_people_check_2").performScrollTo().assertIsDisplayed()
+                compose.waitUntil(5_000) { !model.state.value.busy && model.state.value.joinRefusal != null }
+                compose.onNodeWithTag("find_people_failure_2").performScrollTo().assertIsDisplayed()
                 capture("find-people-$label-$name-failed")
-                compose.onNodeWithTag("find_people_check_2").performClick()
-                compose.waitUntil(5_000) { !model.state.value.busy && !model.state.value.stale }
                 // An ambiguous one: "We couldn't confirm whether you joined." with Check room.
                 api.failNext = ApiFailure(FailureKind.TIMEOUT)
                 compose.onNodeWithTag("find_people_join_3").performScrollTo().performClick()
