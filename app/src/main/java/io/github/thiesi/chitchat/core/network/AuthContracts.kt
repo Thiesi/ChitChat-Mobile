@@ -50,7 +50,7 @@ internal class SessionReply(
 
 /**
  * The server's accessibility feedback address (`accessibility_feedback.url`, P-221), presence-gated: an `https` URL
- * with a host and no credentials, or a `mailto` address, at most 2,048 characters with no whitespace or control
+ * with a host and no credentials, or a `mailto` address (scheme compared case-insensitively), at most 2,048 characters with no whitespace or control
  * characters. A missing or null field, or anything else, is null: no row, no button, no fallback address.
  */
 internal fun accessibilityFeedbackUrl(field: kotlinx.serialization.json.JsonElement?): String? {
@@ -58,9 +58,13 @@ internal fun accessibilityFeedbackUrl(field: kotlinx.serialization.json.JsonElem
         ?.takeIf { it.isString }?.content ?: return null
     if (url.isEmpty() || url.length > 2048 || url.any { it.isWhitespace() || it.isISOControl() }) return null
     val uri = try { java.net.URI(url) } catch (_: java.net.URISyntaxException) { return null }
-    return when (uri.scheme) {
-        "https" -> url.takeIf { !uri.host.isNullOrEmpty() && uri.rawUserInfo == null }
-        "mailto" -> url.takeIf { !uri.rawSchemeSpecificPart.isNullOrEmpty() }
+    // Schemes are case-insensitive (RFC 3986); only the scheme's case is normalized, so intents resolve. Everything after
+    // it, a mailto's subject or body included, passes through exactly as the server sent it.
+    val scheme = uri.scheme?.lowercase() ?: return null
+    val normalized = scheme + url.substring(scheme.length)
+    return when (scheme) {
+        "https" -> normalized.takeIf { !uri.host.isNullOrEmpty() && uri.rawUserInfo == null }
+        "mailto" -> normalized.takeIf { !uri.rawSchemeSpecificPart.isNullOrEmpty() }
         else -> null
     }
 }

@@ -129,8 +129,9 @@ proves no read happens before it.
   - an `https` URL with a host and no credentials;
   - a `mailto` address;
   - at most 2,048 characters, with no whitespace or control characters.
-  Anything else (missing, `null`, another scheme including upper-case `HTTPS:`) is absent: no row, no button, no
-  explanation, no fallback address. It's stored on `PublicSession`, refreshed by every bootstrap, signed in or out.
+  The scheme is compared case-insensitively, and only its case is normalized; the rest, a mailto's subject or body
+  included, is passed on exactly as the server sent it, and the app adds nothing. Anything else (missing, `null`,
+  another scheme) is absent: no row, no button, no explanation, no fallback address. It's stored on `PublicSession`, refreshed by every bootstrap, signed in or out.
 - **Where it shows:**
   - You's About and privacy gets a row, below Open-source licences.
   - Signed out, Sign in and Create account get a footer text button below every action. Restore account doesn't, and

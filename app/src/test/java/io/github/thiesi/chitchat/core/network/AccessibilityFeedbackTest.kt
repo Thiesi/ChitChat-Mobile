@@ -16,6 +16,10 @@ class AccessibilityFeedbackTest {
         assertEquals("https://example.org/a11y?from=app#form", of("https://example.org/a11y?from=app#form"))
         assertEquals("mailto:access@example.org", of("mailto:access@example.org"))
         assertEquals("mailto:access@example.org?subject=Accessibility", of("mailto:access@example.org?subject=Accessibility"))
+        assertEquals("The server's subject and body pass through untouched", "mailto:a@example.org?subject=App%20feedback&body=Hi%2C",
+            of("mailto:a@example.org?subject=App%20feedback&body=Hi%2C"))
+        assertEquals("Only the scheme's case changes", "https://Example.org/A11y", of("HTTPS://Example.org/A11y"))
+        assertEquals("mailto:Access@Example.org", of("MailTo:Access@Example.org"))
     }
 
     @Test fun missingNullOrMalformedFieldsAreAbsent() {
@@ -30,7 +34,7 @@ class AccessibilityFeedbackTest {
 
     @Test fun otherSchemesAndUnsafeShapesAreAbsent() {
         for (bad in listOf("http://example.org/a11y", "javascript:alert(1)", "intent://x#Intent;end", "file:///sdcard/x",
-            "content://x", "tel:123", "HTTPS://example.org", "https:///nohost", "https://user:secret@example.org/a11y",
+            "content://x", "tel:123", "HTTP://example.org", "https:///nohost", "https://user:secret@example.org/a11y",
             "mailto:", "//example.org/a11y", "example.org/a11y"))
             assertNull(bad, of(bad))
     }
