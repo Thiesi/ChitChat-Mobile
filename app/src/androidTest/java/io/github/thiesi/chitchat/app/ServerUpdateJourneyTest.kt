@@ -91,6 +91,7 @@ class ServerUpdateJourneyTest {
         compose.runOnIdle { sessions.state.value = sessions.state.value.copy(updateRequired = true, reportedVersion = null,
             error = ApiFailure(FailureKind.NETWORK)) }
         compose.onNodeWithTag("server_update_screen").assertExists()
+        // The displayed title may break at the host's dots; TalkBack and tests get the raw host (no U+200B).
         compose.onNodeWithTag("server_update_title").assertTextEquals(text(R.string.server_update_session_title, "chat.example.test"))
         compose.onNodeWithText(text(R.string.server_update_details_unknown, "3.10.0")).assertExists()
         compose.onNodeWithTag("nav_tab_rooms").assertDoesNotExist(); compose.onNodeWithTag("conversation_composer").assertDoesNotExist()

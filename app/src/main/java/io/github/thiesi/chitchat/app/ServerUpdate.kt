@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,7 +25,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -59,10 +63,12 @@ internal fun ServerUpdateNotice(session: SessionState, server: String?, onDiffer
 @Composable
 internal fun ServerUpdateScreen(session: SessionState, server: String?, onCheckAgain: () -> Unit, onSignOut: () -> Unit) {
     val host = hostOf(server)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).testTag("server_update_screen"),
-        horizontalAlignment = Alignment.CenterHorizontally) {
+    // It replaces the Scaffold, so it paints the shell's own surface and content colour (J1 on PR259: dark mode).
+    Surface(Modifier.fillMaxSize().testTag("server_update_screen"), color = MaterialTheme.colorScheme.background) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Column(Modifier.widthIn(max = 600.dp).fillMaxWidth()) {
             UpdateContent(session, host, title = stringResource(R.string.server_update_session_title, session.installationName ?: host),
+                displayedTitle = stringResource(R.string.server_update_session_title, session.installationName ?: breakableHost(host)),
                 body = stringResource(R.string.server_update_session_body)) {
                 LanternOutlinedButton(onClick = onCheckAgain, enabled = !session.busy, modifier = Modifier.testTag("server_update_check")) {
                     Text(stringResource(R.string.server_update_check_again))
@@ -71,18 +77,27 @@ internal fun ServerUpdateScreen(session: SessionState, server: String?, onCheckA
             }
         }
     }
+    }
 }
 
+/**
+ * The host with a zero-width space after each dot, so a long host breaks at its dots in the displayed title (J2 on
+ * PR259). Display only: the title's semantics, the note and the clipboard carry the raw host.
+ */
+internal fun breakableHost(host: String): String = host.replace(".", ".\u200B")
+
 @Composable
-private fun UpdateContent(session: SessionState, host: String, title: String, body: String, actions: @Composable () -> Unit) {
+private fun UpdateContent(session: SessionState, host: String, title: String, body: String, displayedTitle: String = title,
+    actions: @Composable () -> Unit) {
     val context = LocalContext.current
     var copied by rememberSaveable { mutableStateOf(false) }
     val clipLabel = stringResource(R.string.app_name)
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // Announced once when it appears; a heading for navigation (server-update.md: focus moves to the title).
-        Text(title, Modifier.testTag("server_update_title").semantics { heading(); liveRegion = LiveRegionMode.Polite },
-            style = MaterialTheme.typography.headlineSmall)
-        Text(body)
+        Text(displayedTitle, Modifier.testTag("server_update_title").clearAndSetSemantics {
+            text = AnnotatedString(title); heading(); liveRegion = LiveRegionMode.Polite
+        }, style = MaterialTheme.typography.headlineSmall)
+        Text(body, Modifier.testTag("server_update_body"))
         Text(session.reportedVersion?.let { stringResource(R.string.server_update_details, it, MINIMUM_SERVER_VERSION) }
             ?: stringResource(R.string.server_update_details_unknown, MINIMUM_SERVER_VERSION),
             style = MaterialTheme.typography.bodySmall, color = ChitChatTheme.colors.textMuted)

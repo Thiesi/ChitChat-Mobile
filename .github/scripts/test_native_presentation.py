@@ -221,7 +221,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_update_captures_are_copied_and_keep_the_original_status(self):
         self.results(7)
-        files = [Path("update-light-default-setup.png"), Path("update-dark-font200-session.png")]
+        files = [Path("update-light-default-setup.png"), Path("update-dark-font200-session-actions.png")]
         self.update_files(files)
         self.assertEqual(7, runner.main()); self.assert_once()
         for path in files: self.copy.assert_any_call(path, runner.UPDATE_DESTINATION / path.name)
@@ -229,7 +229,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_excess_ambiguous_or_foreign_update_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"update-light-default-setup-{n}.png") for n in range(9)],
+        for files in ([Path(f"update-light-default-setup-{n}.png") for n in range(17)],
             [Path("a/update-dark-default-setup.png"), Path("b/update-dark-default-setup.png")], [Path("other-app.png")]):
             self.copy.reset_mock(); self.mkdir.reset_mock(); self.update_files(files)
             self.assertEqual(0, runner.main())

@@ -39,6 +39,10 @@ and `reportedVersion` (bounded and printable, for display only). Network and oth
   it as blocked. Nothing new starts. Work that already holds access finishes under its own rules: a POST is never
   cancelled, and drafts, attachments and unknown-send state stay as they are.
 - **The note (P-183):** the raw host, the minimum and the found version (or "unknown"), nothing else.
+- **Presentation (presentation lead's J on PR259):**
+  - The revalidation screen paints the shell's surface itself (the Lantern ground and text colour, Pure black included), because it replaces the Scaffold.
+  - When the title falls back to the host, the displayed host breaks at its dots (a zero-width space after each "."). The title's semantics, the note and the clipboard carry the raw host.
+  - Every action is reachable by scrolling at 200%.
 
 ## Verification
 

@@ -9,7 +9,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
@@ -27,7 +31,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
-/** "This server needs an update" at setup and on revalidation, at a real Configuration font scale. No network. */
+/** "This server needs an update" at setup and on revalidation, at a real Configuration font scale: captures, and every action reachable by scrolling. No network. */
 class ServerUpdatePresentationTest {
     @get:Rule val compose = createEmptyComposeRule()
     @After fun reset() { FontScaleTestActivity.requestedFontScale = 1f }
@@ -50,15 +54,43 @@ class ServerUpdatePresentationTest {
                     scenario.onActivity { activity ->
                         assertEquals("A real Configuration font scale", fontScale, activity.resources.configuration.fontScale)
                         activity.setContent { ChitChatTheme(dark = dark) {
-                            if (scene == "setup") Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).testTag("update_host")) {
-                                ServerUpdateNotice(setup, server.value) {}
+                            if (scene == "setup") androidx.compose.material3.Surface(Modifier.fillMaxSize(),
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
+                                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).testTag("update_host")) {
+                                    ServerUpdateNotice(setup, server.value) {}
+                                }
                             } else Column(Modifier.fillMaxSize().testTag("update_host")) {
                                 ServerUpdateScreen(signedIn, server.value, onCheckAgain = {}, onSignOut = {})
                             }
                         } }
                     }
                     capture("update-$label-$name-$scene")
+                    // A-floor: every action is reachable by scrolling at both scales, not only on a tall window.
+                    val actions = if (scene == "setup") listOf("server_update_copy", "server_update_other")
+                        else listOf("server_update_copy", "server_update_check", "server_update_sign_out")
+                    for (tag in actions) compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
+                    capture("update-$label-$name-$scene-actions") // Scrolled to the last action.
                 }
+            }
+        }
+    }
+
+    /** J1 on PR259: in dark and Pure black the screen paints the Lantern ground, and its body uses the theme's text colour. */
+    @Test fun theRevalidationScreenPaintsTheShellSurfaceInDarkAndPureBlack() {
+        for ((palette, pureBlack) in listOf(io.github.thiesi.chitchat.core.theme.Lantern.dark to false,
+            io.github.thiesi.chitchat.core.theme.Lantern.amoledBlack to true)) {
+            FontScaleTestActivity.requestedFontScale = 1f
+            ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+                scenario.onActivity { activity -> activity.setContent { ChitChatTheme(dark = true, pureBlack = pureBlack) {
+                    ServerUpdateScreen(signedIn, server.value, onCheckAgain = {}, onSignOut = {})
+                } } }
+                compose.waitForIdle()
+                val pixels = compose.onNodeWithTag("server_update_screen").captureToImage().toPixelMap()
+                assertEquals("pureBlack=$pureBlack: the ground", palette.ground.toArgb(), pixels[1, 1].toArgb())
+                val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                compose.onNodeWithTag("server_update_body").fetchSemanticsNode()
+                    .config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+                assertEquals("pureBlack=$pureBlack: the body's text colour", palette.text, layouts.single().layoutInput.style.color)
             }
         }
     }

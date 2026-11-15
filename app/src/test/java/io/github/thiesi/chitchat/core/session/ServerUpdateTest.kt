@@ -63,5 +63,11 @@ class ServerUpdateTest {
         assertEquals("Hi! The ChitChat Android app needs our server (chat.example.org) updated to ChitChat 3.10.0 or newer. It currently runs 3.9.0.",
             operatorNote("chat.example.org", "3.9.0"))
         assertTrue(operatorNote("chat.example.org", null).endsWith("It currently runs unknown."))
+        assertFalse("The note carries the raw host only", operatorNote("chat.example.org", "3.9.0").contains('\u200B'))
+    }
+
+    @Test fun theDisplayedHostBreaksAtItsDotsOnly() {
+        assertEquals("chat.\u200Bexample.\u200Btest", io.github.thiesi.chitchat.app.breakableHost("chat.example.test"))
+        assertEquals("localhost", io.github.thiesi.chitchat.app.breakableHost("localhost"))
     }
 }
