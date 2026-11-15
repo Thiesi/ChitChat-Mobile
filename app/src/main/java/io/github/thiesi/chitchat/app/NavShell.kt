@@ -176,6 +176,7 @@ internal fun YouScreen(session: SessionState, auth: AuthViewModel, server: Strin
             Text(stringResource(R.string.you_about), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.you_app_version, BuildConfig.VERSION_NAME))
             Row(R.string.oss_licences_open, "licences_open", onLicences)
+            io.github.thiesi.chitchat.core.ui.AccessibilityFeedbackLink(session.public?.accessibilityFeedback, Modifier.fillMaxWidth())
         }
         PrivacyCard()
     }

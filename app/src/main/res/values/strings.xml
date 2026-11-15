@@ -555,6 +555,12 @@
     <string name="you_privacy_security">Privacy and security</string>
     <string name="you_about">About and privacy</string>
     <string name="you_app_version">App version %1$s</string>
+    <string name="a11y_feedback">Accessibility feedback</string>
+    <string name="a11y_feedback_web">This opens %1$s in your browser. Nothing from your session is sent with it.</string>
+    <string name="a11y_feedback_mail">This opens your mail app to write to %1$s. Nothing from your session is added.</string>
+    <string name="a11y_feedback_open_web">Open in browser</string>
+    <string name="a11y_feedback_open_mail">Open mail app</string>
+    <string name="a11y_feedback_failed">No app on this phone can open it.</string>
     <string name="role_super_admin">Super-Administrator</string>
     <string name="role_admin">Administrator</string>
     <string name="role_chat_admin">Chat Administrator</string>

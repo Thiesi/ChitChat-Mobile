@@ -111,6 +111,9 @@ fun AuthScreen(state: SessionState, model: AuthViewModel) {
                         Text(stringResource(R.string.create_account))
                     }
                 }
+                // P-221: below every action on Sign in and Create account only (no other screen gains it).
+                if (state.authFlow != AuthFlow.RESTORE)
+                    io.github.thiesi.chitchat.core.ui.AccessibilityFeedbackLink(state.public?.accessibilityFeedback)
             }
             SessionPhase.PENDING_MFA -> {
                 Text(stringResource(if (state.authFlow == AuthFlow.RESTORE) R.string.finish_restoration else R.string.finish_sign_in), style = MaterialTheme.typography.titleLarge)

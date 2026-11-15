@@ -195,6 +195,26 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def a11y_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-a11y-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_a11y_captures_are_copied_and_keep_the_original_status(self):
+        self.results(7)
+        files = [Path("a11y-light-default-signin.png"), Path("a11y-dark-font200-dialog.png")]
+        self.a11y_files(files)
+        self.assertEqual(7, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.A11Y_DESTINATION / path.name)
+        self.assertEqual(3, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_a11y_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"a11y-light-default-you-{n}.png") for n in range(13)],
+            [Path("a/a11y-dark-default-you.png"), Path("b/a11y-dark-default-you.png")], [Path("other-app.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.a11y_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def nav_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-nav-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))

@@ -19,6 +19,8 @@ STATUS_DESTINATION = ROOT / "app/build/reports/androidTests/status-presentation"
 STATUS_NAME = re.compile(r"status-(light|dark)-(?:(?:default|font200)-"
     r"(?:storage|offline|tls|incompatible|stopped|refresh|rate|rate-unknown|offline-edge|waiting-room|waiting-dm)|default-details)\.png")
 NAV_DESTINATION = ROOT / "app/build/reports/androidTests/nav-presentation"
+A11Y_DESTINATION = ROOT / "app/build/reports/androidTests/a11y-presentation"
+A11Y_NAME = re.compile(r"a11y-(light|dark)-(default|font200)-(signin|you|dialog)[.]png")
 YOU_DESTINATION = ROOT / "app/build/reports/androidTests/you-presentation"
 YOU_NAME = re.compile(r"you-(light|dark)-(default|font200)-(session|about|header|rootbar|pushedbar)[.]png")
 NAV_NAME = re.compile(r"nav-((light|dark)-(default|font200)|black-default)\.png")
@@ -109,6 +111,18 @@ def collect_you():
     print(f"You presentation captures collected: {len(files)} of 20.")
 
 
+def collect_a11y():
+    # P-221: Sign in footer, the You row and the choice dialog, default and 2.0 font, light and dark.
+    files = list(islice(SOURCE.rglob("ccm-a11y-presentation/*"), 13))
+    if (not files or len(files) > 12 or len({p.name for p in files}) != len(files)
+        or any(A11Y_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous accessibility feedback presentation output")
+    A11Y_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, A11Y_DESTINATION / path.name)
+    print(f"Accessibility feedback presentation captures collected: {len(files)} of 12.")
+
+
 def collect_nav():
     # Navigation shell bottom bar at default and 2.0 font, light and dark.
     files = list(islice(SOURCE.rglob("ccm-nav-presentation/*"), 6))
@@ -196,6 +210,10 @@ def main() -> int:
         collect_you()
     except Exception:
         print("You presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_a11y()
+    except Exception:
+        print("Accessibility feedback presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_nav()
     except Exception:
