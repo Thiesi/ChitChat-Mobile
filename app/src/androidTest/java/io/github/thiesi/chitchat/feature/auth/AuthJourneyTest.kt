@@ -13,6 +13,8 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -179,7 +181,14 @@ class AuthJourneyTest {
         content()
         compose.onNodeWithText("Account").assertDoesNotExist()
         enterCredentials()
-        compose.openTab("you").performClick()
+        // Failure-only scalars for an unexplained API36 timeout here (PR #260): the same wait and deadline, no retry.
+        try { compose.openTab("you") } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            val count = { tag: String -> compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().size }
+            throw AssertionError("Shell after sign-in: phase=${sessions.state.value.phase}, logins=${sessions.logins}, " +
+                "tabs=${count("nav_tab_you")}, title=${count("bar_title")}, " +
+                "form=${compose.onAllNodesWithText("Username").fetchSemanticsNodes().size}, " +
+                "window=${io.github.thiesi.chitchat.testing.nativeInputWindow()}", e)
+        }.performClick()
         compose.onNodeWithTag("you_account").performScrollTo().performClick()
         compose.onNodeWithText("Your personal data").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()

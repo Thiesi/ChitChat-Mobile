@@ -514,7 +514,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                         ServerFound(session, state.settings.server?.value, onChoose = { flow -> auth.selectForm(flow); chosen = true },
                                             onOtherServer = { nav.navigate(SERVER_NEW_ROUTE) })
                                     } else if (session.phase == SessionPhase.ANONYMOUS) {
-                                        androidx.activity.compose.BackHandler { chosen = false }
+                                        // Like the visible Back: no leaving the form while its POST is in flight (its outcome shows there).
+                                        androidx.activity.compose.BackHandler(enabled = !session.busy) { chosen = false }
                                         AuthScreen(session, auth, onBack = { chosen = false })
                                     } else {
                                         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
