@@ -106,6 +106,9 @@ dialogs and other windows.
 | `nav` | bottom bar, Rooms selected, Activity badge (N1, PR #251); black default | light, dark × default, 200% | black at 200% |
 | `you` | header (steward badge), root bar, pushed bar, session, about (N2a, PR #256) | light, dark × default, 200% | black |
 | `completion` | composer with and without the mention list | synthetic fixture pairs | 200%; black |
+| `a11y` | Accessibility feedback link on sign-in, You and the confirm dialog (N2b, PR #258) | light, dark × default, 200% | black |
+| `update` | server needs an update: setup, session; scrolled `-actions` (O1, PR #259) | light, dark × default, 200% | black |
+| `onboarding` | welcome, address, found, found-top (host only); step 2 certificate failure at 200% (O2a, PR #260) | light, dark × default, 200% | black; failure at default; name-plus-host card |
 
 ### Screens and states with no capture yet
 
@@ -187,6 +190,19 @@ against current main before acting.
     already share one measured size on narrow windows (navigation-shell.md P-78). Whether
     the bar should hold its height or a badge should cap its growth is open. Evidence: PR #251
     `nav-presentation` captures.
+11. **Onboarding after O2a.** O2a (PR #260) shipped behaviour, copy and tags only. The
+    lantern glyph and identity hue on the server card, the server chip on the forms,
+    labels-above 56dp fields and the always-dark Welcome (onboarding-restyle.md) are the
+    overhaul's. Two smaller items: the outlined "I already have one, sign in" is 40dp next to
+    Create's 52dp, though a full-width secondary paired with a primary should match it. The step 2
+    failure is the existing rose `InlineError` text above the field, not status-presentation's
+    level-2 block (icon plus full-width block); see also debt 4. Hosts break only at their dots
+    (display-only U+200B, PR #259 and #260); keep that rule. Evidence: PR #260
+    `onboarding-presentation` captures.
+12. **Trailing glyph after wrapped labels.** At 200% the wrapped "Accessibility feedback"
+    label keeps its constraint width, so the open-external glyph sits at the row's end, not
+    right after the last word (PR #258 `a11y` captures). Decide whether trailing glyphs follow
+    the text or the row.
 
 ## Evidence
 
