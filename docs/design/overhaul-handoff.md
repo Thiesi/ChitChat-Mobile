@@ -103,7 +103,8 @@ dialogs and other windows.
 | `transfer` | row, none, failed, picker, confirm, success | light, dark × default, 200% | black; unknown-in-dialog |
 | `search` | results (with match highlighting) | light, dark × default, 200% | black; empty, no-results and failure states |
 | `licences` | list, detail | light, dark × default, 200% | black |
-| `nav` | bottom bar, Rooms selected, Activity badge (N1, PR #251) | light, dark × default, 200% | black; You tab |
+| `nav` | bottom bar, Rooms selected, Activity badge (N1, PR #251); black default | light, dark × default, 200% | black at 200% |
+| `you` | header (steward badge), root bar, pushed bar, session, about (N2a, PR #256) | light, dark × default, 200% | black |
 | `completion` | composer with and without the mention list | synthetic fixture pairs | 200%; black |
 
 ### Screens and states with no capture yet
@@ -158,7 +159,12 @@ against current main before acting.
 5. **Text-button alignment in dialogs.** Material's TextButton padding indents in-body
    actions ("Transfer ownership…", "Try again", "Leave room") about 12dp past the text
    column. This is accepted today. The overhaul should decide one rule for in-body actions
-   (aligned link-style rows versus inset buttons) and apply it everywhere.
+   (aligned link-style rows versus inset buttons) and apply it everywhere. The You hub's rows
+   (Appearance, Privacy and security, Open-source licences) are full-width TextButtons, so at
+   default their labels sit centred under left-aligned text (N2a, PR #256 `you-*-about`).
+   Long pushed-bar titles at 200% ellipsize ("Open-source li…") under gap-audit F1's
+   one-line rule, with the full text in semantics. Whether a pushed screen repeats a long title
+   as a wrapped in-content heading at large scales is open.
 6. **Metadata spacing.** The "10:00 · edited" spacing is an open follow-up. Separator rhythm
    in timestamps and meta lines generally deserves one rule.
 7. **Dialog details not yet in Lantern.** Destructive confirms (Leave room, Block, Forget
