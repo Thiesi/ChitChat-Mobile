@@ -121,8 +121,28 @@ proves no read happens before it.
 - **Affordance changed, text Back → system Back:** journeys that left a tab root by the old text Back now use
   `Espresso.pressBack()`, the same OS back as the P-73 test. None of them has the IME up at that point.
 
-## Carried to N2b
+## N2b: accessibility feedback (P-221)
 
-- The P-221 accessibility feedback row: ChitChat v3.14.0's public `accessibility_feedback`, https or mailto only (no
-  whitespace or control characters, at most 2,048 characters), shown in You's About and privacy and as an onboarding
-  footer link, opened only by an explicit external choice.
+- **Source:** ChitChat v3.14.0's public `session.php` field `accessibility_feedback: {"url": …} | null` (#219). It's
+  presence-gated, so the minimum stays v3.10.0. `SessionReply` reads it leniently (a malformed value never fails the
+  bootstrap), and `accessibilityFeedbackUrl` keeps only:
+  - an `https` URL with a host and no credentials;
+  - a `mailto` address;
+  - at most 2,048 characters, with no whitespace or control characters.
+  Anything else (missing, `null`, another scheme including upper-case `HTTPS:`) is absent: no row, no button, no
+  explanation, no fallback address. It's stored on `PublicSession`, refreshed by every bootstrap, signed in or out.
+- **Where it shows:**
+  - You's About and privacy gets a row, below Open-source licences.
+  - Signed out, Sign in and Create account get a footer text button below every action. Restore account doesn't, and
+    neither does the first-run screen without a server.
+  - The onboarding restyle's "Server found" step doesn't exist yet. It gains the same footer when it's built.
+  - The guests' You (M7) gets the row with that layout.
+- **Opening:** tapping opens an explicit choice that names the destination (the host, or the mail address) with
+  "Open in browser" (`ACTION_VIEW`, browsable) or "Open mail app" (`ACTION_SENDTO`), plus Cancel. Nothing from the
+  session is added, and a missing handler shows a short message.
+- **Tests:**
+  - `AccessibilityFeedbackTest` (JVM): valid https and mailto; missing, null and malformed fields; other schemes and
+    unsafe shapes; whitespace and control characters; the 2,048 limit; decoding through `SessionReply`.
+  - `AccessibilityFeedbackPresentationTest`: absent without an address (signed out and in You); the mail choice;
+    captures of the Sign in footer, the You row and the dialog at default and 200%, light and dark
+    (`ccm-a11y-presentation`, 12 files).

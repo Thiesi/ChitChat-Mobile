@@ -44,7 +44,26 @@ internal class SessionReply(
     val webPush: io.github.thiesi.chitchat.core.push.WebPushDiscovery = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
     /** Read leniently: a malformed `application` never fails the bootstrap; see [installationName]. */
     val application: kotlinx.serialization.json.JsonElement? = null,
+    /** Read leniently (P-221, ChitChat v3.14.0); see [accessibilityFeedbackUrl]. */
+    @SerialName("accessibility_feedback") val accessibilityFeedback: kotlinx.serialization.json.JsonElement? = null,
 )
+
+/**
+ * The server's accessibility feedback address (`accessibility_feedback.url`, P-221), presence-gated: an `https` URL
+ * with a host and no credentials, or a `mailto` address, at most 2,048 characters with no whitespace or control
+ * characters. A missing or null field, or anything else, is null: no row, no button, no fallback address.
+ */
+internal fun accessibilityFeedbackUrl(field: kotlinx.serialization.json.JsonElement?): String? {
+    val url = ((field as? kotlinx.serialization.json.JsonObject)?.get("url") as? kotlinx.serialization.json.JsonPrimitive)
+        ?.takeIf { it.isString }?.content ?: return null
+    if (url.isEmpty() || url.length > 2048 || url.any { it.isWhitespace() || it.isISOControl() }) return null
+    val uri = try { java.net.URI(url) } catch (_: java.net.URISyntaxException) { return null }
+    return when (uri.scheme) {
+        "https" -> url.takeIf { !uri.host.isNullOrEmpty() && uri.rawUserInfo == null }
+        "mailto" -> url.takeIf { !uri.rawSchemeSpecificPart.isNullOrEmpty() }
+        else -> null
+    }
+}
 
 /**
  * The installation's display name (`application.name`, ChitChat#149), for copy only: trimmed, 1–80
