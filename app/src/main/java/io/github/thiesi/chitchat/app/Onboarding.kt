@@ -3,6 +3,7 @@ package io.github.thiesi.chitchat.app
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -125,8 +126,10 @@ internal fun ServerFound(session: SessionState, server: String?, onChoose: (Auth
                     Text(stringResource(R.string.onboarding_create_account))
                 }
             else Text(stringResource(R.string.registration_disabled), Modifier.testTag("onboarding_signup_closed"))
+            // Material's outlined button lays out at 40dp; the secondary matches the primary's 52dp (A-floor 48dp target).
             if (canCreate) LanternOutlinedButton(onClick = { onChoose(AuthFlow.SIGN_IN) },
-                modifier = Modifier.fillMaxWidth().testTag("onboarding_sign_in").semantics { emphasis = "secondary" }) {
+                modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp).testTag("onboarding_sign_in")
+                    .semantics { emphasis = "secondary" }) {
                 Text(stringResource(R.string.onboarding_sign_in))
             }
             else PrimaryButton(onClick = { onChoose(AuthFlow.SIGN_IN) },

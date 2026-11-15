@@ -7,9 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -78,10 +76,9 @@ class OnboardingPresentationTest {
                 compose.onNodeWithTag("onboarding_continue").performClick()
                 compose.onNodeWithTag("onboarding_server_card").assertIsDisplayed()
                 capture("onboarding-$label-$name-foundtop") // Unscrolled: the server card (J3). Host-only fixture.
-                for (tag in listOf("onboarding_create", "onboarding_sign_in", "onboarding_restore", "onboarding_other_server", "a11y_feedback")) {
-                    compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
-                    atLeast48(tag) // A-floor: the outlined Sign in draws at 40dp, but its target must still be 48dp.
-                }
+                val small = listOf("onboarding_create", "onboarding_sign_in", "onboarding_restore", "onboarding_other_server", "a11y_feedback")
+                    .mapNotNull { tag -> compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed(); undersized(tag) }
+                assertTrue("A-floor: every Server found action has a 48dp target ($label, $name): $small", small.isEmpty())
                 compose.onNodeWithTag("onboarding_create").performScrollTo()
                 capture("onboarding-$label-$name-found")
                 if (fontScale == 2f) { // A step 2 failure notice at 200% (J3).
@@ -100,12 +97,16 @@ class OnboardingPresentationTest {
         }
     }
 
-    /** Both the node's layout bounds and its touch bounds are at least 48dp tall and wide. */
-    private fun atLeast48(tag: String) {
-        val node = compose.onNodeWithTag(tag).assertHeightIsAtLeast(48.dp).assertWidthIsAtLeast(48.dp).fetchSemanticsNode()
-        val min = with(node.layoutInfo.density) { 48.dp.toPx() }
-        assertTrue("$tag touch height ${node.touchBoundsInRoot.height} >= $min", node.touchBoundsInRoot.height >= min - 0.5f)
-        assertTrue("$tag touch width ${node.touchBoundsInRoot.width} >= $min", node.touchBoundsInRoot.width >= min - 0.5f)
+    /** Null when the touch target is at least 48dp each way (the A-floor); else both bounds, so layout and touch differ visibly. */
+    private fun undersized(tag: String): String? {
+        val node = compose.onNodeWithTag(tag).fetchSemanticsNode()
+        val density = node.layoutInfo.density
+        val min = with(density) { 48.dp.toPx() } - 0.5f
+        val layout = node.layoutInfo.let { it.width.toFloat() to it.height.toFloat() }
+        val touch = node.touchBoundsInRoot.let { it.width to it.height }
+        val dp = { px: Float -> with(density) { px.toDp().value } }
+        return if (touch.first >= min && touch.second >= min) null
+        else "$tag layout=${dp(layout.first)}x${dp(layout.second)}dp touch=${dp(touch.first)}x${dp(touch.second)}dp"
     }
 
     private fun capture(name: String) {
