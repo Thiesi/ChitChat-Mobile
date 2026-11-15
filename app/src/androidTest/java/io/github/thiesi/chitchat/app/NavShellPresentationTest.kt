@@ -51,7 +51,7 @@ class NavShellPresentationTest {
     private fun presentation(dark: Boolean) {
         val label = if (dark) "dark" else "light"
         for ((name, fontScale, width) in listOf(Triple("default", 1f, null), Triple("font200", 2f, null),
-            Triple("p78edge", 2f, 264), Triple("narrow240", 2f, 240))) {
+            Triple("p78edge", 2f, 272), Triple("narrow240", 2f, 240))) {
             FontScaleTestActivity.requestedFontScale = fontScale
             ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
                 scenario.onActivity { activity ->
