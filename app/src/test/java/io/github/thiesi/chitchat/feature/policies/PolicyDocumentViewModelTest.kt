@@ -56,6 +56,21 @@ class PolicyDocumentViewModelTest {
         assertNull(model.state.value)
     }
 
+    /** A leaving screen's late close (its exit transition) can't wipe the document a newer screen opened (review, PR #267). */
+    @Test fun aLateCloseFromALeavingScreenKeepsTheNewerScreensDocument() = runTest {
+        val rules = Any(); val privacy = Any(); val rulesAgain = Any()
+        model.open(PolicyDocumentName.RULES, session, rules); settled()
+        model.open(PolicyDocumentName.PRIVACY, session, privacy) // Back, then the other document, quickly.
+        model.close(rules) // The rules screen's dispose arrives after the transition.
+        assertEquals(PolicyDocumentName.PRIVACY, model.state.value?.name)
+        assertTrue(settled() is PolicyDocumentStatus.NotPublished)
+        model.open(PolicyDocumentName.PRIVACY, session, rulesAgain) // The same document reopened by a newer screen.
+        model.close(privacy)
+        assertNotNull("Still open for the newer screen", model.state.value)
+        model.close(rulesAgain)
+        assertNull(model.state.value)
+    }
+
     @Test fun retryIsAFreshReadAfterAFailure() = runTest {
         reads.fail = ApiFailure(FailureKind.TIMEOUT)
         model.open(PolicyDocumentName.PRIVACY, session)

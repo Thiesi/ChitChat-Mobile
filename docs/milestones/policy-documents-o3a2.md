@@ -14,7 +14,9 @@ and the Create-account consent line are O3b.
 - It's refused while the server-update state shows (nothing new starts, [server-update check](server-update-check.md)).
 
 `PolicyDocumentViewModel` holds one document in memory while its screen is open. Retry is a fresh GET. A real departure
-or a session change drops the document; a configuration change keeps it. Nothing is cached on disk.
+or a session change drops the document; a configuration change keeps it. Nothing is cached on disk. Each screen
+instance owns what it opened: a leaving screen's late close (during its exit transition) can't wipe the document a
+newer screen has just opened.
 
 ## The document screen
 
@@ -54,7 +56,8 @@ destinations under You (`you/policy/…`), so neither path crosses the other gra
 - `PolicyReadsTest` (JVM, a real `SessionRepository` over fixture TLS): the read signed out and signed in; EXPIRED
   for another server's or an earlier generation's session; refused (INCOMPATIBLE) while the update state shows.
 - `PolicyDocumentViewModelTest` (JVM): reopening the same document and scope keeps it; a newer scope reloads; close drops
-  it and drops a late result; Retry is a fresh read; a stray cancellation from the read becomes Failed with Try again,
+  it and drops a late result; a leaving screen's late close keeps the newer screen's document (also for the same
+  document reopened); Retry is a fresh read; a stray cancellation from the read becomes Failed with Try again,
   never a stuck Loading.
 
 - `PolicyDocumentJourneyTest`:

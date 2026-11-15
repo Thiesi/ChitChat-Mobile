@@ -41,8 +41,15 @@ class PolicyDocumentViewModel(private val reads: PolicyReads) : ViewModel() {
     private var job: Job? = null
     private var session: SessionState? = null
 
-    /** Opens [name] for the rendered [current] session. Reopening the same document under the same scope keeps it. */
-    fun open(name: PolicyDocumentName, current: SessionState) {
+    /** The screen instance that opened what is shown; only it may close it (review, PR #267). */
+    private var owner: Any? = null
+
+    /**
+     * Opens [name] for the rendered [current] session on behalf of [opener] (one screen instance). Reopening the same
+     * document under the same scope keeps it, handing ownership to the newer screen.
+     */
+    fun open(name: PolicyDocumentName, current: SessionState, opener: Any = Unit) {
+        owner = opener
         val scope = scopeOf(current)
         val shown = mutable.value
         if (shown != null && shown.name == name && shown.scope == scope && shown.status !is PolicyDocumentStatus.Failed) return
@@ -57,7 +64,14 @@ class PolicyDocumentViewModel(private val reads: PolicyReads) : ViewModel() {
         load(shown.name, shown.scope, current)
     }
 
-    fun close() { job?.cancel(); job = null; session = null; mutable.value = null }
+    /**
+     * Drops the document when [closer] still owns it. A screen leaving through its exit transition after a newer one has
+     * opened (a quick Back then another document) must not wipe the newer screen's document.
+     */
+    fun close(closer: Any = Unit) {
+        if (owner !== closer) return
+        job?.cancel(); job = null; session = null; owner = null; mutable.value = null
+    }
 
     private fun load(name: PolicyDocumentName, scope: String, current: SessionState) {
         job?.cancel()

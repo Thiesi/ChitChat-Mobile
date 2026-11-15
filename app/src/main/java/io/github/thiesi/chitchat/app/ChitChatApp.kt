@@ -844,8 +844,10 @@ private fun policyRoute(name: io.github.thiesi.chitchat.core.policies.PolicyDocu
 private fun PolicyRoute(model: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel,
     name: io.github.thiesi.chitchat.core.policies.PolicyDocumentName, session: io.github.thiesi.chitchat.core.session.SessionState, server: String?) {
     val activity = androidx.activity.compose.LocalActivity.current
-    LaunchedEffect(name, session.server, session.generation) { model.open(name, session) }
-    androidx.compose.runtime.DisposableEffect(model) { onDispose { if (activity?.isChangingConfigurations != true) model.close() } }
+    // This screen instance owns what it opens; its late dispose (exit transition) can't close a newer screen's document.
+    val owner = remember { Any() }
+    LaunchedEffect(name, session.server, session.generation) { model.open(name, session, owner) }
+    androidx.compose.runtime.DisposableEffect(model) { onDispose { if (activity?.isChangingConfigurations != true) model.close(owner) } }
     val host = server?.let { runCatching { java.net.URI(it).host }.getOrNull() }.orEmpty()
     io.github.thiesi.chitchat.feature.policies.PolicyDocumentScreen(model, name, session.installationName ?: breakableHost(host))
 }
