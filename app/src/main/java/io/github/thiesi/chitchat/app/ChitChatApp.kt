@@ -259,6 +259,11 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         SideEffect { if (tabRoot && entryTab != null && entryTab.name != currentTab) currentTab = entryTab.name }
         // "TAB=scope key" per saved tab stack (a read-only, bundle-safe list).
         var tabScopes by rememberSaveable { mutableStateOf(listOf<String>()) }
+        // Onboarding (O2a): Welcome passed; a server saved during this onboarding (so a failed bootstrap returns to
+        // step 2 with the address kept); a flow chosen on Server found (Back from a form returns to the chooser).
+        var welcomed by rememberSaveable { mutableStateOf(false) }
+        var savedInOnboarding by rememberSaveable { mutableStateOf(false) }
+        var chosen by rememberSaveable { mutableStateOf(false) }
         // Reselect at a tab root scrolls that root to the top (navigation-shell.md); one count per tab.
         var reselects by rememberSaveable { mutableStateOf(listOf(0, 0, 0, 0)) }
         fun savedScope(of: ShellTab) = tabScopes.firstOrNull { it.startsWith("${of.name}=") }?.substringAfter('=')
@@ -481,11 +486,29 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             // never retain the editor's scrolled offset on the confirmation.
                             key(state.settings.server?.value, session.generation) {
                                 ScreenContent {
+                                    val connecting = session.phase == SessionPhase.CONNECTING || session.phase == SessionPhase.NO_SERVER
                                     if (state.settings.server == null) {
                                         if (session.error?.kind == FailureKind.STORAGE || session.storageWarning) AuthScreen(session, auth)
-                                        else ServerEditor(state, model, onSaved = {})
+                                        else if (!welcomed) WelcomeScreen { welcomed = true }
+                                        else {
+                                            androidx.activity.compose.BackHandler { welcomed = false }
+                                            ServerEditor(state, model, onSaved = {}, onSubmitted = { savedInOnboarding = true; chosen = false })
+                                        }
                                     } else if (session.phase == SessionPhase.AUTHENTICATED) {
                                         // Entering the shell; the signed-in hub is the You tab.
+                                    } else if (savedInOnboarding && session.user == null &&
+                                        (connecting || session.phase == SessionPhase.INVALIDATED && session.error != null)) {
+                                        // Step 2 in place: connecting, or a failed bootstrap with the address kept and one notice.
+                                        // An outdated server is a successful bootstrap and goes to Server found (O1).
+                                        ServerEditor(state, model, onSaved = {}, onSubmitted = { savedInOnboarding = true; chosen = false },
+                                            connecting = connecting, failure = session.error.takeIf { session.phase == SessionPhase.INVALIDATED },
+                                            onRetry = auth::reconnect)
+                                    } else if (session.phase == SessionPhase.ANONYMOUS && !chosen) {
+                                        ServerFound(session, state.settings.server?.value, onChoose = { flow -> auth.selectForm(flow); chosen = true },
+                                            onOtherServer = { nav.navigate(SERVER_NEW_ROUTE) })
+                                    } else if (session.phase == SessionPhase.ANONYMOUS) {
+                                        androidx.activity.compose.BackHandler { chosen = false }
+                                        AuthScreen(session, auth, onBack = { chosen = false })
                                     } else {
                                         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                                             Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.headlineLarge)
@@ -507,13 +530,15 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         }
                         composable("server") {
                             ScreenContent {
-                                if (session.canChangeServer) ServerEditor(state, model, onSaved = { nav.popBackStack() })
+                                if (session.canChangeServer) ServerEditor(state, model, onSaved = { nav.popBackStack() },
+                                    onSubmitted = { savedInOnboarding = true; chosen = false })
                                 else Text(stringResource(R.string.sign_out_to_change_server))
                             }
                         }
                         composable(SERVER_NEW_ROUTE) { // "Use a different server": step 2 with the field empty.
                             ScreenContent {
-                                if (session.canChangeServer) ServerEditor(state, model, onSaved = { nav.popBackStack() }, startEmpty = true)
+                                if (session.canChangeServer) ServerEditor(state, model, onSaved = { nav.popBackStack() }, startEmpty = true,
+                                    onSubmitted = { savedInOnboarding = true; chosen = false })
                                 else Text(stringResource(R.string.sign_out_to_change_server))
                             }
                         }
@@ -767,16 +792,26 @@ private fun ScreenContent(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSaved: () -> Unit, startEmpty: Boolean = false) {
+private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSaved: () -> Unit, startEmpty: Boolean = false,
+    onSubmitted: () -> Unit = {}, connecting: Boolean = false, failure: io.github.thiesi.chitchat.core.network.ApiFailure? = null,
+    onRetry: () -> Unit = {}) {
     var address by rememberSaveable { mutableStateOf(if (startEmpty) "" else state.settings.server?.value.orEmpty()) }
     var submitted by rememberSaveable { mutableStateOf(false) }
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val busy = state.saving || connecting
+    val host = (ServerAddress.parse(address) as? AddressResult.Valid)?.address?.value?.let { runCatching { java.net.URI(it).host }.getOrNull() }
+        ?: address.trim()
     val submitAddress: () -> Unit = {
         submitted = true
-        if (model.saveServer(address) is AddressResult.Valid) {
+        val parsed = ServerAddress.parse(address)
+        // Continue after a failure on the same address is a fresh bootstrap of it, never a silent no-op.
+        if (failure != null && parsed is AddressResult.Valid && parsed.address == state.settings.server) {
+            focus.clearFocus(); keyboard?.hide(); onSubmitted(); onRetry()
+        } else if (model.saveServer(address) is AddressResult.Valid) {
             focus.clearFocus()
             keyboard?.hide()
+            onSubmitted()
         }
     }
     LaunchedEffect(state.settings.server, state.saving, submitted) {
@@ -787,12 +822,12 @@ private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSav
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text(stringResource(R.string.welcome_title), style = MaterialTheme.typography.headlineLarge)
-        Text(stringResource(R.string.welcome_body), style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.onboarding_where_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineLarge)
+        if (failure != null && !busy) io.github.thiesi.chitchat.core.ui.InlineError(stringResource(stepTwoNotice(failure), host))
         OutlinedTextField(
             value = address,
             onValueChange = { address = it; submitted = false; model.clearAddressError() },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("onboarding_server_input"),
             label = { Text(stringResource(R.string.server_address)) },
             supportingText = {
                 Text(stringResource(when (state.addressError) {
@@ -804,17 +839,16 @@ private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSav
             },
             isError = state.addressError != null,
             singleLine = true,
+            readOnly = busy,
             enabled = !state.saving,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { submitAddress() }),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go, autoCorrectEnabled = false),
+            keyboardActions = KeyboardActions(onGo = { if (!busy) submitAddress() }),
          shape = MaterialTheme.shapes.medium)
         PrimaryButton(
             onClick = submitAddress,
-            enabled = !state.saving && address.isNotBlank(),
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(stringResource(if (state.saving) R.string.saving else R.string.save_server)) }
-        Text(stringResource(R.string.preview_limit), style = MaterialTheme.typography.bodySmall)
-        PrivacyCard()
+            enabled = !busy && address.isNotBlank(),
+            modifier = Modifier.fillMaxWidth().testTag("onboarding_continue"),
+        ) { Text(if (busy) stringResource(R.string.onboarding_looking_for, host) else stringResource(R.string.save_server)) }
     }
 }
 

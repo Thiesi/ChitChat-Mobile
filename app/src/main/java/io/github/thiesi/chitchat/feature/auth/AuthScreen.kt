@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -48,7 +49,7 @@ import io.github.thiesi.chitchat.core.session.AuthFlow
 import kotlinx.coroutines.delay
 
 @Composable
-fun AuthScreen(state: SessionState, model: AuthViewModel) {
+fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? = null) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.pauseRegistration() }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -81,7 +82,8 @@ fun AuthScreen(state: SessionState, model: AuthViewModel) {
                 Text(stringResource(R.string.checking_session))
             }
             SessionPhase.ANONYMOUS -> {
-                Text(stringResource(R.string.connected_to_server), style = MaterialTheme.typography.titleLarge)
+                // The flow was chosen on Server found (O2a); each form has its own title.
+                if (state.authFlow == AuthFlow.SIGN_IN) Text(stringResource(R.string.onboarding_sign_in_title), style = MaterialTheme.typography.titleLarge)
                 state.public?.lockdown?.takeIf { it.enabled }?.let {
                     Text(stringResource(R.string.maintenance_notice))
                     it.message?.takeIf(String::isNotBlank)?.let { message -> Text(message) }
@@ -102,14 +104,9 @@ fun AuthScreen(state: SessionState, model: AuthViewModel) {
                     PasswordForm(model, enabled, state.authFlow == AuthFlow.RESTORE)
                 }
                 if (state.public?.providers?.isNotEmpty() == true) Text(stringResource(R.string.providers_unavailable))
-                if (state.authFlow != AuthFlow.SIGN_IN) TextButton(onClick = { model.selectForm(AuthFlow.SIGN_IN) }, enabled = !state.busy) {
-                    Text(stringResource(R.string.back_to_sign_in))
-                }
-                if (state.authFlow == AuthFlow.SIGN_IN) {
-                    TextButton(onClick = { model.selectForm(AuthFlow.RESTORE) }, enabled = !state.busy) { Text(stringResource(R.string.restore_account)) }
-                    if (state.public?.registrationEnabled == true && !state.public.lockdown.enabled) TextButton(onClick = { model.selectForm(AuthFlow.REGISTER) }, enabled = !state.busy) {
-                        Text(stringResource(R.string.create_account))
-                    }
+                // Flow selection moved to Server found; Back returns there (onboarding-restyle.md).
+                if (onBack != null) TextButton(onClick = onBack, enabled = !state.busy, modifier = Modifier.testTag("onboarding_back")) {
+                    Text(stringResource(R.string.back))
                 }
                 // P-221: below every action on Sign in and Create account only (no other screen gains it).
                 if (state.authFlow != AuthFlow.RESTORE)

@@ -1,6 +1,10 @@
 package io.github.thiesi.chitchat.app
 
 import io.github.thiesi.chitchat.feature.account.TestChitChatApp as ChitChatApp
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 
 import androidx.compose.foundation.layout.Box
@@ -43,7 +47,7 @@ class FoundationJourneyTest {
     @get:Rule val compose = createComposeRule()
     private fun saveServer() {
         closeSoftKeyboard()
-        compose.onNodeWithText("Save server").performScrollTo().assertIsEnabled().assertIsDisplayed().performClick()
+        compose.onNodeWithTag("onboarding_continue").performScrollTo().assertIsEnabled().assertIsDisplayed().performClick()
     }
 
     private fun model(failFirstWrite: Boolean = false, reloadDelayMillis: Long = 0, writes: AtomicInteger = AtomicInteger()): SettingsViewModel {
@@ -79,12 +83,13 @@ class FoundationJourneyTest {
         compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(model, auth) } }
         compose.waitUntil(5000) { !model.state.value.loading }
         compose.onNodeWithText("Settings").assertDoesNotExist()
-        compose.onNodeWithText("Save server").assertDoesNotExist()
+        compose.onNodeWithTag("onboarding_welcome_start").assertDoesNotExist(); compose.onNodeWithTag("onboarding_continue").assertDoesNotExist()
         compose.runOnIdle { assertEquals(0L, sessions.state.value.generation) }
         failRead.set(false)
         compose.onNodeWithText("Try again").assertIsDisplayed().performClick()
         compose.onNodeWithText("Settings").assertIsDisplayed()
-        compose.onNodeWithText("Save server").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("onboarding_welcome_start").performScrollTo().assertIsDisplayed() // Welcome (O2a)
+        compose.onNodeWithTag("onboarding_preview").performScrollTo().performClick() // P-55: the disclosure before sign-in.
         compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.preview_limit))
             .performScrollTo().assertIsDisplayed()
     }
@@ -94,6 +99,7 @@ class FoundationJourneyTest {
         val model = model(failFirstWrite = true, reloadDelayMillis = 200, writes = writes)
         compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(model, remember { AuthViewModel(TestSessions()) }) } }
         compose.waitUntil(5000) { !model.state.value.loading }
+        compose.onNodeWithTag("onboarding_welcome_start").performClick()
         compose.onNodeWithText("Server address").performTextInput("chat.example.org")
         saveServer()
         compose.runOnIdle { assertEquals("First write must reach the store", 1, writes.get()) }
@@ -102,34 +108,36 @@ class FoundationJourneyTest {
         saveServer()
         compose.runOnIdle { assertEquals("Retry save must reach the store", 2, writes.get()) }
         compose.waitUntil(5000) { model.state.value.settings.server != null }
-        compose.onNodeWithText("https://chat.example.org/").assertIsDisplayed()
+        compose.onNode(hasText("chat.example.org") and hasAnyAncestor(hasTestTag("onboarding_server_card"))).assertIsDisplayed()
     }
 
     @Test fun rejectsCleartextAndAllowsCorrection() {
         val model = model()
         compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(model, remember { AuthViewModel(TestSessions()) }) } }
+        compose.onNodeWithTag("onboarding_welcome_start").performClick()
         compose.onNodeWithText("Server address").performTextInput("http://chat.example.org")
         compose.onNodeWithText("Server address").assertTextContains("http://chat.example.org")
         saveServer()
         compose.runOnIdle { assertEquals(AddressError.HTTPS, model.state.value.addressError) }
-        compose.onNodeWithText("Your server must use HTTPS.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.https_required)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Server address").performTextReplacement("https://chat.example.org")
         saveServer()
-        compose.onNodeWithText("https://chat.example.org/").assertIsDisplayed()
+        compose.onNode(hasText("chat.example.org") and hasAnyAncestor(hasTestTag("onboarding_server_card"))).assertIsDisplayed()
     }
 
     @Test fun savesAddressChangesThemeAndForgetsServer() {
         val model = model()
         compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(model, remember { AuthViewModel(TestSessions()) }) } }
+        compose.onNodeWithTag("onboarding_welcome_start").performClick()
         compose.onNodeWithText("Server address").performTextInput("chat.example.org")
         saveServer()
-        compose.onNodeWithText("https://chat.example.org/").assertIsDisplayed()
+        compose.onNode(hasText("chat.example.org") and hasAnyAncestor(hasTestTag("onboarding_server_card"))).assertIsDisplayed()
         compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Dark").performClick()
         compose.onNodeWithText("Forget server").performScrollTo().performClick()
         compose.onNodeWithText("Forget this server?").assertIsDisplayed()
         compose.onAllNodesWithText("Forget server").onLast().performClick()
         compose.onNodeWithContentDescription("Back").performClick()
-        compose.onNodeWithText("Save server").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("onboarding_continue").performScrollTo().assertIsDisplayed()
     }
 }

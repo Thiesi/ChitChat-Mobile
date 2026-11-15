@@ -53,6 +53,7 @@ class AuthJourneyTest {
 
     private fun content() { compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(settings, auth) } } }
     private fun enterCredentials() {
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Server found: choose sign in (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().performClick()
@@ -191,6 +192,7 @@ class AuthJourneyTest {
     @Test fun restoredFormDoesNotPutPasswordIntoSavedState() {
         val restoration = StateRestorationTester(compose)
         restoration.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(settings, auth) } }
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Server found: choose sign in (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("unsaved-fixture-password")
         restoration.emulateSavedInstanceStateRestore()
@@ -202,8 +204,9 @@ class AuthJourneyTest {
     private fun registrationForm() {
         sessions.registrationEnabled = true
         content()
-        compose.onNodeWithText("Create account").performScrollTo().performClick()
-        compose.onNodeWithText("Join this server").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("onboarding_create").performScrollTo().performClick() // Server found's Create (O2a).
+        compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.create_account_title))
+            .performScrollTo().assertIsDisplayed() // Copy table: "Make yourself at home".
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
     }
@@ -244,7 +247,7 @@ class AuthJourneyTest {
         sessions.registrationEnabled = true
         val restoration = StateRestorationTester(compose)
         restoration.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(settings, auth) } }
-        compose.onNodeWithText("Create account").performScrollTo().performClick()
+        compose.onNodeWithTag("onboarding_create").performScrollTo().performClick() // Server found's Create (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         for (label in listOf("Password", "Confirm password")) compose.onNodeWithText(label).performScrollTo().performTextInput("fixture-password")
         restoration.emulateSavedInstanceStateRestore()
@@ -257,8 +260,8 @@ class AuthJourneyTest {
     @Test fun restorationExplainsPendingClosureAndRequiresMfaBeforeConfirmation() {
         sessions.requireMfa = true
         content()
-        compose.onNodeWithText("Create account").assertDoesNotExist()
-        compose.onNodeWithText("Restore account").performScrollTo().performClick()
+        compose.onNodeWithTag("onboarding_create").assertDoesNotExist() // Registration off: no Create on Server found.
+        compose.onNodeWithTag("onboarding_restore").performScrollTo().performClick()
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         compose.onNodeWithText("Restore and sign in").performScrollTo().performClick()
