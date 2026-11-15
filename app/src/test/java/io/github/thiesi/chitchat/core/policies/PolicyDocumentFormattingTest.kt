@@ -76,6 +76,8 @@ class PolicyDocumentFormattingTest {
     @Test fun autolinksAndBareUrlsAreClassifiedTooWithoutTrailingPunctuation() {
         val content = (only("See <https://chat.example/a> or https://chat.example/b. Mail <mailto:x@chat.example>.") as Paragraph).content
         assertEquals(listOf("https://chat.example/a", "https://chat.example/b", "mailto:x@chat.example"), links(content).map { it.target })
+        val parens = (only("(see https://chat.example/wiki/Rule_(one)) and https://chat.example/x).") as Paragraph).content
+        assertEquals(listOf("https://chat.example/wiki/Rule_(one)", "https://chat.example/x"), links(parens).map { it.target })
     }
 
     @Test fun imagesAreDroppedWithTheirAltTextAndNeverBecomeLinks() {
@@ -115,11 +117,27 @@ class PolicyDocumentFormattingTest {
         }
     }
 
-    @Test fun pathologicalDelimitersStayWithinTheWorkBudget() {
-        val started = System.nanoTime()
-        val result = parse("*".repeat(60_000) + "\n\n" + "[".repeat(60_000) + "\n\n" + "`".repeat(60_000))
-        assertTrue("Bounded work", (System.nanoTime() - started) / 1_000_000 < 5_000)
-        assertTrue(plainText(result.blocks).isNotBlank())
+    /** Deterministic: the work counter, not the clock. The limit is linear in the input; a generous clock only backstops. */
+    @Test fun pathologicalDelimitersStayWithinALinearWorkBudget() {
+        // Inline runs after text: a line of only `*` is a (dropped) thematic break and a leading ``` an empty fence.
+        val inputs = listOf("x " + "*".repeat(60_000), "[".repeat(60_000), "x " + "`".repeat(60_000), "_a".repeat(30_000),
+            "[x](".repeat(15_000), "> ".repeat(4) + "**a ".repeat(15_000),
+            // Unclosed scans (review, PR #265): autolink and destination brackets and title quotes with no closer.
+            "x " + "<".repeat(100_000), "[x](<".repeat(30_000), "[x](y \"".repeat(20_000),
+            "https://chat.example/" + ")".repeat(100_000), "*a" + "*".repeat(60_000) + "a", "__a" + "_".repeat(60_000) + "a")
+        for (input in inputs) {
+            var spent = -1L; var limit = -1L
+            val started = System.nanoTime()
+            val result = PolicyDocumentFormatting.parse(input) { s, l -> spent = s; limit = l }
+            assertTrue("Work reported", spent >= 0)
+            // Spending can overshoot the limit by at most the one step that tripped it (a step is at most one line).
+            assertTrue("Within the work budget: $spent of $limit", spent <= limit + input.length + 1)
+            assertEquals(PolicyDocumentFormatting.workLimit(input.length), limit)
+            assertTrue("Never a blank document", plainText(result.blocks).isNotBlank())
+            assertTrue("Runaway backstop only", (System.nanoTime() - started) / 1_000_000 < 30_000)
+        }
+        val (small, large) = PolicyDocumentFormatting.workLimit(10_000) to PolicyDocumentFormatting.workLimit(100_000)
+        assertTrue("The limit is linear in the input length", large <= 10 * small)
     }
 
     @Test fun anUnclosedFenceKeepsTheRestAsPlainText() {

@@ -41,12 +41,18 @@ internal object PolicyDocumentFormatting {
     private const val MAX_DEPTH = 8
     private const val WORK_PER_CHAR = 24
 
-    fun parse(markdown: String): FormattedDocument {
+    /** [onWork] (tests only) receives the work spent and the input's limit, whether the parse finished or fell back. */
+    fun parse(markdown: String, onWork: ((spent: Long, limit: Long) -> Unit)? = null): FormattedDocument {
         val text = markdown.replace("\r\n", "\n").replace('\r', '\n')
         if (text.length > MAX_INPUT_CHARS) return literal(text)
-        return try { FormattedDocument(blocks(text, Budget(text.length))) }
+        val budget = Budget(text.length)
+        return try { FormattedDocument(blocks(text, budget)) }
         catch (_: TooComplex) { literal(text) }
+        finally { onWork?.invoke(budget.spent, workLimit(text.length)) }
     }
+
+    /** The work any input may take: linear in its length, so no input can make parsing superlinear. */
+    internal fun workLimit(length: Int): Long = length.toLong() * WORK_PER_CHAR + 4_096
 
     /** The literal fallback: paragraphs split at blank lines, every character kept as text. */
     private fun literal(text: String) = FormattedDocument(
@@ -217,8 +223,7 @@ internal object PolicyDocumentFormatting {
                     }
                 }
                 c == '<' -> {
-                    val close = text.indexOf('>', i + 1).takeIf { it in (i + 1) until until } ?: -1
-                    budget.spend(if (close < 0) 1 else close - i)
+                    val close = scanFor(text, '>', i + 1, until, budget)
                     val inside = if (close > 0) text.substring(i + 1, close) else ""
                     val target = if (close > 0 && inside.none { it == ' ' || it == '<' }) classify(inside) else null
                     if (target == null) { plain.append(c); i++ }
@@ -226,9 +231,17 @@ internal object PolicyDocumentFormatting {
                 }
                 (c == 'h' || c == 'H') && (i == from || !text[i - 1].isLetterOrDigit()) && bareStart(text, i, until) -> {
                     var end = i
-                    while (end < until && !text[end].isWhitespace() && text[end] != '<') { budget.spend(); end++ }
+                    var opens = 0; var closes = 0
+                    while (end < until && !text[end].isWhitespace() && text[end] != '<') {
+                        budget.spend()
+                        if (text[end] == '(') opens++ else if (text[end] == ')') closes++
+                        end++
+                    }
+                    // Trailing punctuation isn't part of the URL; a ')' stays when it balances an earlier '('. Counted
+                    // once and updated as characters drop, so this stays linear.
                     while (end > i && text[end - 1] in ".,;:!?'\")") {
-                        if (text[end - 1] == ')' && text.substring(i, end).count { it == '(' } >= text.substring(i, end).count { it == ')' }) break
+                        budget.spend()
+                        if (text[end - 1] == ')') { if (opens >= closes) break; closes-- }
                         end--
                     }
                     val candidate = text.substring(i, end)
@@ -256,7 +269,8 @@ internal object PolicyDocumentFormatting {
         var j = start + width + 1
         while (j + width <= until) {
             budget.spend()
-            if (text[j] == mark && run(text, j, until, mark) >= width && !text[j - 1].isWhitespace() &&
+            // A closer needs only `width` marks here: a constant check, so a long run can't make this scan quadratic.
+            if (text[j] == mark && (width == 1 || (j + 1 < until && text[j + 1] == mark)) && !text[j - 1].isWhitespace() &&
                 (mark != '_' || j + width >= until || !text[j + width].isLetterOrDigit())) {
                 val content = inline(text, start + width, j, depth + 1, budget)
                 return (if (width == 2) DocumentInline.Strong(content) else DocumentInline.Emphasis(content)) to j + width
@@ -287,7 +301,7 @@ internal object PolicyDocumentFormatting {
         while (j < until && text[j] == ' ') j++
         val destination: String
         if (j < until && text[j] == '<') {
-            val close = text.indexOf('>', j + 1).takeIf { it in (j + 1) until until } ?: return null
+            val close = scanFor(text, '>', j + 1, until, budget).takeIf { it >= 0 } ?: return null
             destination = text.substring(j + 1, close); j = close + 1
         } else {
             val begin = j
@@ -303,7 +317,7 @@ internal object PolicyDocumentFormatting {
         while (j < until && text[j] == ' ') j++
         if (j < until && (text[j] == '"' || text[j] == '\'')) {
             val quote = text[j]
-            val close = text.indexOf(quote, j + 1).takeIf { it in (j + 1) until until } ?: return null
+            val close = scanFor(text, quote, j + 1, until, budget).takeIf { it >= 0 } ?: return null
             j = close + 1
             while (j < until && text[j] == ' ') j++
         }
@@ -326,6 +340,13 @@ internal object PolicyDocumentFormatting {
         (i + 8 <= until && text.regionMatches(i, "https://", 0, 8, ignoreCase = true)) ||
             (i + 7 <= until && text.regionMatches(i, "http://", 0, 7, ignoreCase = true))
 
+    /** The first [mark] in [from, until), or -1. Every character looked at is charged, found or not (review, PR #265). */
+    private fun scanFor(text: String, mark: Char, from: Int, until: Int, budget: Budget): Int {
+        var i = from
+        while (i < until) { budget.spend(); if (text[i] == mark) return i; i++ }
+        return -1
+    }
+
     private fun run(text: String, from: Int, until: Int, mark: Char): Int {
         var end = from
         while (end < until && text[end] == mark) end++
@@ -345,9 +366,11 @@ internal object PolicyDocumentFormatting {
 
     private class TooComplex : RuntimeException(null, null, false, false)
     private class Budget(length: Int) {
-        private var work = length.toLong() * WORK_PER_CHAR + 4_096
+        private val limit = workLimit(length)
+        var spent = 0L
+            private set
         private var nodes = 0
-        fun spend(count: Int = 1) { work -= count; if (work < 0) throw TooComplex() }
+        fun spend(count: Int = 1) { spent += count; if (spent > limit) throw TooComplex() }
         fun node() { if (++nodes > MAX_NODES) throw TooComplex() }
     }
 }
