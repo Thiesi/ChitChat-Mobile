@@ -110,7 +110,8 @@ class NotificationRoutingJourneyTest {
     }
     private fun view(id: Long) { at("notification_view:$id").assertIsEnabled().performClick() }
     private fun back(toCenter: Boolean = true) {
-        compose.onNodeWithText(text(R.string.back)).assertIsDisplayed().performClick()
+        if (toCenter) compose.onNodeWithContentDescription(text(R.string.back)).assertIsDisplayed().performClick()
+        else Espresso.pressBack() // From the Activity root (no Back button, P-76).
         if (toCenter) fresh() else compose.openTab("activity").assertIsDisplayed()
     }
     private fun roomTarget(id: Long) {

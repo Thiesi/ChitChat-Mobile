@@ -19,6 +19,8 @@ STATUS_DESTINATION = ROOT / "app/build/reports/androidTests/status-presentation"
 STATUS_NAME = re.compile(r"status-(light|dark)-(?:(?:default|font200)-"
     r"(?:storage|offline|tls|incompatible|stopped|refresh|rate|rate-unknown|offline-edge|waiting-room|waiting-dm)|default-details)\.png")
 NAV_DESTINATION = ROOT / "app/build/reports/androidTests/nav-presentation"
+YOU_DESTINATION = ROOT / "app/build/reports/androidTests/you-presentation"
+YOU_NAME = re.compile(r"you-(light|dark)-(default|font200)-(session|about|header|rootbar|pushedbar)[.]png")
 NAV_NAME = re.compile(r"nav-((light|dark)-(default|font200)|black-default)\.png")
 DIALOG_DESTINATION = ROOT / "app/build/reports/androidTests/dialog-presentation"
 DIALOG_NAME = re.compile(r"dialog-(light|dark)-(default|font200)-"
@@ -93,6 +95,18 @@ def collect_search():
     for path in files:
         shutil.copyfile(path, SEARCH_DESTINATION / path.name)
     print(f"Search presentation captures collected: {len(files)} of 4.")
+
+
+def collect_you():
+    # The You hub: both top bars, the header, the session group and About and privacy, default and 2.0, light and dark.
+    files = list(islice(SOURCE.rglob("ccm-you-presentation/*"), 21))
+    if (not files or len(files) > 20 or len({p.name for p in files}) != len(files)
+        or any(YOU_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous You presentation output")
+    YOU_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, YOU_DESTINATION / path.name)
+    print(f"You presentation captures collected: {len(files)} of 20.")
 
 
 def collect_nav():
@@ -178,6 +192,10 @@ def main() -> int:
         collect_dialogs()
     except Exception:
         print("Dialog presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_you()
+    except Exception:
+        print("You presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_nav()
     except Exception:

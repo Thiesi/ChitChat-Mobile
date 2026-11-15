@@ -1,5 +1,6 @@
 package io.github.thiesi.chitchat.feature.notifications
 
+import androidx.test.espresso.Espresso
 import androidx.activity.ComponentActivity
 import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.enableEdgeToEdge
@@ -89,7 +90,8 @@ class NotificationCenterJourneyTest {
         return compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
     }
     private fun click(tag: String) { at(tag).assertIsEnabled().performClick() }
-    private fun back() { compose.onNodeWithText(text(R.string.back)).assertIsDisplayed().performClick() }
+    /** Leaves the Activity root: system Back, since tab roots have no Back button (P-76). */
+    private fun back() { Espresso.pressBack() }
     private fun readState(id: Long, read: Boolean) = at("notification:$id").assert(SemanticsMatcher.expectValue(
         SemanticsProperties.StateDescription, text(if (read) R.string.notifications_read else R.string.notifications_unread)))
 

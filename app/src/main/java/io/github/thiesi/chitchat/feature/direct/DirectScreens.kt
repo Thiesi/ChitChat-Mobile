@@ -115,6 +115,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
         var detailsOpen by remember { mutableStateOf(false) }
         DirectLifecycle(model::foreground, model::background, model::invalidate)
         val list = rememberLazyListState()
+        io.github.thiesi.chitchat.core.ui.OnTabReselect { list.animateScrollToItem(0) }
         // Session and stale notices live in the status slot under the top bar (S1b).
         io.github.thiesi.chitchat.feature.status.ReportScreenStatus(syncing = false, stale = state.stale)
         LazyColumn(Modifier.fillMaxSize().testTag("dm_inbox"), list, contentPadding = PaddingValues(16.dp),

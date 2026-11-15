@@ -259,6 +259,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         SideEffect { if (tabRoot && entryTab != null && entryTab.name != currentTab) currentTab = entryTab.name }
         // "TAB=scope key" per saved tab stack (a read-only, bundle-safe list).
         var tabScopes by rememberSaveable { mutableStateOf(listOf<String>()) }
+        // Reselect at a tab root scrolls that root to the top (navigation-shell.md); one count per tab.
+        var reselects by rememberSaveable { mutableStateOf(listOf(0, 0, 0, 0)) }
         fun savedScope(of: ShellTab) = tabScopes.firstOrNull { it.startsWith("${of.name}=") }?.substringAfter('=')
         fun withScope(of: ShellTab, key: String?) = tabScopes.filterNot { it.startsWith("${of.name}=") } +
             listOfNotNull(key?.let { "${of.name}=$it" })
@@ -281,7 +283,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             val current = liveTab() ?: return
             if (actual.phase != SessionPhase.AUTHENTICATED) return
             focus.clearFocus()
-            if (current == target) { nav.popBackStack(target.pattern, false); return }
+            if (current == target) {
+                if (nav.currentBackStackEntry?.destination?.route == target.pattern && nav.previousBackStackEntry == null)
+                    reselects = reselects.toMutableList().also { it[target.ordinal]++ }
+                else nav.popBackStack(target.pattern, false)
+                return
+            }
             val route = target.route(actual) ?: return
             val key = scopeKey(actual)
             val keep = restore && savedScope(target) == key
@@ -390,7 +397,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         Scaffold(
             topBar = {
                 if (!compactKeyboard) TopAppBar(
-                    title = { BarTitle(if (entry?.destination?.route == NOTIFICATIONS_ROUTE) R.string.notifications_title
+                    title = { BarTitle(large = tabRoot, title = if (entry?.destination?.route == NOTIFICATIONS_ROUTE) R.string.notifications_title
                         else if (entry?.destination?.route == SEARCH_ROUTE) R.string.message_search_title
                         else if (entry?.destination?.route?.startsWith("direct") == true) R.string.dm_title
                         else if (entry?.destination?.route?.startsWith("conversation/") == true || entry?.destination?.route == NOTIFICATION_ROOM_ROUTE)
@@ -404,10 +411,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         else -> R.string.app_name
                     }) },
                     navigationIcon = {
-                        // N1 keeps the text Back; at a Direct, Activity or You root it acts as system Back (the Rooms root).
-                        if (!atHome && !(tabRoot && tab == ShellTab.ROOMS)) TextButton(onClick = {
-                            if (tabRoot && tab != null) roomsRoot() else nav.popBackStack()
-                        }) { Text(stringResource(R.string.back)) }
+                        // P-76: pushed destinations get an icon Back; tab roots have none (system Back still works there).
+                        if (!atHome && !tabRoot) NavBackButton { nav.popBackStack() }
                     },
                     actions = {
                         if (tabRoot && (tab == ShellTab.ROOMS || tab == ShellTab.DIRECT) && search != null &&
@@ -505,14 +510,14 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         }
                         navigation(route = SHELL_GRAPH, startDestination = ROOMS_ROUTE) {
                         composable(YOU_ROUTE) {
-                            if (session.phase == SessionPhase.AUTHENTICATED) ScreenContent {
+                            if (session.phase == SessionPhase.AUTHENTICATED) TabRoot(reselects[ShellTab.YOU.ordinal]) { ScreenContent {
                                 YouScreen(session, auth, state.settings.server?.value, pushSettings != null,
                                     onNotifications = { nav.navigate("notification_settings") { launchSingleTop = true } },
                                     onAppearance = { nav.navigate("settings") { launchSingleTop = true } },
                                     onAccount = { nav.navigate("account") { launchSingleTop = true } },
                                     onChangeServer = { nav.navigate("server") },
                                     onLicences = { nav.navigate(LICENCES_ROUTE) { launchSingleTop = true } })
-                            }
+                            } }
                         }
                         composable("account") {
                             if (session.phase == SessionPhase.AUTHENTICATED) ScreenContent {
@@ -547,7 +552,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                     modifier = Modifier.fillMaxWidth().testTag("room_directory_drafts")) {
                                     Text(stringResource(R.string.room_drafts_count, roomDraftCount))
                                 }
-                                Box(Modifier.weight(1f)) { RoomsScreen(rooms, auth::refresh, openRoom) }
+                                Box(Modifier.weight(1f)) { TabRoot(reselects[ShellTab.ROOMS.ordinal]) { RoomsScreen(rooms, auth::refresh, openRoom) } }
                             }
                         }
                         composable(NOTIFICATIONS_ROUTE, arguments = notificationArguments()) { destination ->
@@ -566,7 +571,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                             notificationDestination(server, tap.link)?.let { openNoticeLink(destination, it) }
                                         }
                                     }
-                                    NotificationCenterScreen(notifications, displayedSession, auth::refresh,
+                                    TabRoot(reselects[ShellTab.ACTIVITY.ordinal]) { NotificationCenterScreen(notifications, displayedSession, auth::refresh,
                                         onOpen = if (messageTargets == null) null else { item, link ->
                                             val current = auth.state.value
                                             if (nav.currentBackStackEntry === destination && notifications.belongsTo(displayedSession) &&
@@ -574,7 +579,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                                 notifications.state.value.notifications.any { it === item }) openNoticeLink(destination, link)
                                         }) {
                                         nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-                                    }
+                                    } }
                                 }
                             }
                         }
@@ -628,9 +633,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             val args = destination.arguments
                             if (directInbox != null && directThread != null && args != null && matchesDirectScope(session,
                                 args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
-                                DirectInboxScreen(directInbox, directThread, auth::refresh, isCurrentEntry = {
+                                TabRoot(reselects[ShellTab.DIRECT.ordinal]) { DirectInboxScreen(directInbox, directThread, auth::refresh, isCurrentEntry = {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-                                }) { openDirect(it) }
+                                }) { openDirect(it) } }
                         }
                         composable(DIRECT_THREAD_ROUTE, arguments = directArguments(thread = true)) { destination ->
                             val args = destination.arguments
@@ -730,10 +735,17 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
 private const val LICENCES_ROUTE = "licences"
 private const val LICENCE_ROUTE = "licences/{index}"
 
+/** A tab root: its screen sees the tab's reselect count (scroll to top on reselection). */
+@Composable
+private fun TabRoot(reselect: Int, content: @Composable () -> Unit) =
+    androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalTabReselect provides reselect, content = content)
+
 @Composable
 private fun ScreenContent(content: @Composable () -> Unit) {
+    val scroll = rememberScrollState()
+    io.github.thiesi.chitchat.core.ui.OnTabReselect { scroll.animateScrollTo(0) }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        Modifier.fillMaxSize().verticalScroll(scroll).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(Modifier.widthIn(max = 600.dp).fillMaxWidth()) { content() }
@@ -856,7 +868,7 @@ private fun SettingsScreen(state: SettingsUiState, model: SettingsViewModel, can
  * scale on one ellipsized line and keeps its full text in semantics as a heading.
  */
 @Composable
-internal fun BarTitle(@androidx.annotation.StringRes title: Int) {
+internal fun BarTitle(@androidx.annotation.StringRes title: Int, large: Boolean = false) {
     val text = stringResource(title)
     if (title == R.string.app_name) {
         val size = with(androidx.compose.ui.platform.LocalDensity.current) { 22.dp.toSp() }
@@ -864,5 +876,6 @@ internal fun BarTitle(@androidx.annotation.StringRes title: Int) {
             style = MaterialTheme.typography.titleLarge.copy(fontSize = size, lineHeight = size * 1.27f),
             maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Visible)
     } else Text(text, Modifier.testTag("bar_title").semantics { heading() }, maxLines = 1,
-        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        style = if (large) MaterialTheme.typography.headlineSmall else androidx.compose.material3.LocalTextStyle.current)
 }

@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.auth
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.SemanticsMatcher
@@ -74,7 +75,7 @@ class AuthJourneyTest {
         compose.onNodeWithText("No rooms are available to this account.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { auth.signOut() }
         compose.onNodeWithText("Back to sign-in").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Back").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Back").assertDoesNotExist()
         assertEquals(io.github.thiesi.chitchat.core.session.SessionPhase.SIGNED_OUT, sessions.state.value.phase)
         compose.onNodeWithText("Back to sign-in").performClick()
         compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed()
@@ -117,7 +118,7 @@ class AuthJourneyTest {
         compose.runOnIdle { auth.signOut() }
         compose.onNodeWithText("Back to sign-in").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Navigation private fixture").assertDoesNotExist()
-        compose.onNodeWithText("Back").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Back").assertDoesNotExist()
         compose.runOnIdle {
             assertEquals("", conversationModel.state.value.draft)
             assertEquals(emptyList<RoomMessage>(), conversationModel.state.value.messages)
@@ -151,7 +152,7 @@ class AuthJourneyTest {
         compose.onNodeWithText("Change server").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithTag("you_appearance").performScrollTo().performClick()
         compose.onNodeWithText("Forget server").performScrollTo().assertIsNotEnabled()
-        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Sign out").performScrollTo().performClick()
         compose.onNodeWithText("Signed in as Alice").assertDoesNotExist()
         compose.onNodeWithText("Back to sign-in").performScrollTo().performClick()
@@ -178,7 +179,7 @@ class AuthJourneyTest {
         compose.openTab("you").performClick()
         compose.onNodeWithTag("you_account").performScrollTo().performClick()
         compose.onNodeWithText("Your personal data").assertIsDisplayed()
-        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Signed in as Alice").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("you_account").performScrollTo().performClick()
         compose.runOnIdle { auth.signOut() }

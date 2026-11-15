@@ -3,6 +3,11 @@ package io.github.thiesi.chitchat.app
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.semantics.collectionItemInfo
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -26,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.Text
@@ -113,12 +119,14 @@ internal fun ShellBar(tabs: List<ShellTab>, current: ShellTab, unread: Int?, cou
                 while (s > floor && widest(s) > available) s = maxOf(floor, s - 0.02f) // Rounding: never trust linear width.
                 s
             }
-            Row(Modifier.fillMaxWidth()) {
+            // TalkBack: "Rooms, tab, 1 of 4" (the group and its position).
+            Row(Modifier.fillMaxWidth().selectableGroup().semantics { collectionInfo = CollectionInfo(1, tabs.size) }) {
                 tabs.forEachIndexed { index, tab ->
                     val selected = tab == current
                     val tint = if (selected) colors.onSurface else colors.onSurfaceVariant
                     Column(Modifier.weight(1f).heightIn(min = 80.dp)
                         .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(tab) })
+                        .semantics { collectionItemInfo = CollectionItemInfo(0, 1, index, 1) }
                         .testTag(tab.tag).then(if (tab == ShellTab.ACTIVITY && countText != null)
                             Modifier.semantics { stateDescription = countText } else Modifier)
                         .padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
@@ -151,6 +159,7 @@ internal fun YouScreen(session: SessionState, auth: AuthViewModel, server: Strin
     @Composable fun Row(text: Int, tag: String, onClick: () -> Unit) =
         TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag)) { Text(stringResource(text)) }
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        session.user?.let { user -> ProfileHeader(user.username, user.roles) }
         Column {
             if (pushAvailable) Row(R.string.notification_settings_open, "notification_settings_open", onNotifications)
             Row(R.string.appearance, "you_appearance", onAppearance)
@@ -170,4 +179,32 @@ internal fun YouScreen(session: SessionState, auth: AuthViewModel, server: Strin
         }
         PrivacyCard()
     }
+}
+
+/** The global roles the server reports, highest first; anything else (member, unknown) shows no badge. */
+private val GLOBAL_ROLES = listOf("super_admin" to R.string.role_super_admin, "admin" to R.string.role_admin,
+    "chat_admin" to R.string.role_chat_admin, "global_moderator" to R.string.role_global_moderator)
+
+/** You's header: initial pebble, username and a display-only badge for the highest reported global role. */
+@Composable
+private fun ProfileHeader(username: String, roles: List<String>) {
+    val colors = ChitChatTheme.colors
+    Row(Modifier.testTag("you_header"), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(48.dp).background(colors.raised, CircleShape), contentAlignment = Alignment.Center) {
+            Text(username.take(1).uppercase(), style = MaterialTheme.typography.titleMedium, color = colors.text)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(username, style = MaterialTheme.typography.titleLarge)
+            GLOBAL_ROLES.firstOrNull { it.first in roles }?.let { (_, label) ->
+                Text(stringResource(label), Modifier.testTag("you_role").background(colors.steward, CircleShape)
+                    .padding(horizontal = 10.dp, vertical = 2.dp), color = colors.onSteward, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+}
+
+/** P-76: the top bar's Back on pushed destinations, an icon described "Back". */
+@Composable
+internal fun NavBackButton(onBack: () -> Unit) = IconButton(onClick = onBack, Modifier.testTag("nav_back")) {
+    Icon(painterResource(R.drawable.ic_back), contentDescription = stringResource(R.string.back))
 }

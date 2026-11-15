@@ -154,7 +154,7 @@ class SearchResultJourneyTest {
         compose.runOnIdle { assertFalse(direct.state.value.latestWindow); assertEquals(20L, direct.state.value.fixedUpper) }
     }
     private fun backToSearch() {
-        hideIme(); compose.onNodeWithText(text(R.string.back)).performNativeTap()
+        hideIme(); compose.onNodeWithContentDescription(text(R.string.back)).performNativeTap()
         compose.onNodeWithTag("message_search_query").assertIsDisplayed()
         compose.runOnIdle { assertEquals("", search.state.value.query); assertNull(search.state.value.results) }
     }

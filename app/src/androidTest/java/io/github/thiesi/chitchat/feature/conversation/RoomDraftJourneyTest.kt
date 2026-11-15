@@ -109,7 +109,7 @@ class RoomDraftJourneyTest {
     } }
     private fun back() {
         dismissIme()
-        compose.onNodeWithText("Back").assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription("Back").assertIsDisplayed().performClick()
         compose.onNodeWithTag("rooms_directory").assertIsDisplayed()
         compose.waitUntil(5_000) { directory.state.value.loaded && !directory.state.value.busy }
     }
