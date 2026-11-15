@@ -366,7 +366,7 @@ class DirectJourneyTest {
         compose.runOnIdle { assertTrue(connection.state.value.broadcasts.isEmpty()) }
         compose.onNodeWithText("Close").performClick()
         closeSoftKeyboard()
-        compose.onNodeWithText("Back").assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription("Back").assertIsDisplayed().performClick()
         compose.onNodeWithTag("dm_inbox").assertIsDisplayed()
         compose.waitUntil(5_000) { !inbox.state.value.busy && inbox.state.value.inbox != null }
         compose.onNodeWithText("3 unread").assertDoesNotExist()
@@ -378,7 +378,7 @@ class DirectJourneyTest {
         compose.runOnIdle { sessions.state.value = sessions.state.value.copy(generation = sessions.state.value.generation + 1,
             user = SessionUser(9, "Replacement", listOf("member"), 1, false)) }
         compose.waitUntil(5_000) { thread.state.value.peerId == null }
-        compose.onNodeWithText("Scoped draft fixture").assertDoesNotExist(); compose.onNodeWithText("Back").assertDoesNotExist()
+        compose.onNodeWithText("Scoped draft fixture").assertDoesNotExist(); compose.onNodeWithContentDescription("Back").assertDoesNotExist()
         compose.runOnIdle { assertEquals(readsBeforeSwitch, direct.histories); assertTrue(thread.drafts.value.isEmpty()); thread.background(); inbox.background() }
     }
 

@@ -133,7 +133,7 @@ class ReplyComposerJourneyTest {
         compose.waitUntil(5_000) { ime == 0 }
         assertEquals("IME visibility must be confirmed, not inferred from a missing window", false, nativeInputWindow().imeVisible)
     }
-    private fun back() { hideIme(); compose.onNodeWithText(text(R.string.back)).assertIsDisplayed().performNativeTap(); fresh() }
+    private fun back() { hideIme(); compose.onNodeWithContentDescription(text(R.string.back)).assertIsDisplayed().performNativeTap(); fresh() }
     private fun dialogTag(tag: String) = compose.onNode(hasTestTag(tag) and hasAnyAncestor(isDialog()))
     private fun dialog(id: Int) = compose.onNode(hasText(text(id)) and hasAnyAncestor(isDialog()))
     private fun menu(isRoom: Boolean, resource: Long = if (isRoom) 43 else 9, id: Long = 20) {

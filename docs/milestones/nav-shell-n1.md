@@ -100,11 +100,29 @@ proves no read happens before it.
   with each journey's original input routing (`performNativeTap` or `performClick`). The You rows replace the old
   Account and Settings actions, and the search action keeps its `message_search_open` tag on the Rooms and Direct top bars.
 
-## Carried to N2
+## N2a: top bar and shell polish
 
-- The top bar: an IconButton back described "Back" on pushed destinations, large titles, and no back affordance on
-  the Direct, Activity and You roots. The text Back there is an accepted N1 interim only (P-76).
-- A You capture that reaches About and privacy and Sign out (P-75, P-77).
-- Scroll to top on reselection, and TalkBack positions ("Rooms, tab, 1 of 4").
-- The profile header.
-- The P-221 accessibility feedback row: ChitChat v3.14.0's public `accessibility_feedback`, https or mailto only.
+- **Back (P-76):** pushed destinations, onboarding's included, show an `IconButton` with the Lantern back icon
+  (`nav_back`, described "Back"). Tab roots have none and use large (`headlineSmall`) titles. System Back is
+  unchanged: at the Direct, Activity or You root it goes to the Rooms root, and at the Rooms root it leaves the app.
+- **Reselection:** reselecting the current tab at its root scrolls it to the top (`OnTabReselect` in core/ui, one
+  count per tab, ignoring the count seen at entry so entering or restoring a root never scrolls). It never refreshes.
+  Reselecting below the root still pops to the root.
+- **TalkBack:** the bar is a selectable group with collection info, so each tab reads as "Rooms, tab, 1 of 4". The
+  Activity count text stays its badge description.
+- **Profile header on You:** an initial pebble, the username, and a display-only badge (steward style) for the
+  highest global role the server reports for the signed-in user: Super-Administrator, Administrator, Chat
+  Administrator or Global Moderator. Nothing for members or unknown roles, and nothing inferred.
+- **Tests:**
+  - `NavShellJourneyTest`: P-76 on roots and pushed screens; reselect scrolls to the top without a refresh; tab
+    positions; the role badge for known, unknown and member roles.
+  - `YouPresentationTest`: the session group (outlined Sign out, P-75) and About and privacy (P-77) below the fold, at
+    default and 200%, light and dark (`ccm-you-presentation`, 8 files).
+- **Affordance changed, text Back → system Back:** journeys that left a tab root by the old text Back now use
+  `Espresso.pressBack()`, the same OS back as the P-73 test. None of them has the IME up at that point.
+
+## Carried to N2b
+
+- The P-221 accessibility feedback row: ChitChat v3.14.0's public `accessibility_feedback`, https or mailto only (no
+  whitespace or control characters, at most 2,048 characters), shown in You's About and privacy and as an onboarding
+  footer link, opened only by an explicit external choice.

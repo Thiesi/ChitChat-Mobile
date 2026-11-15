@@ -78,7 +78,9 @@ fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom:
     val ready = session.phase == SessionPhase.AUTHENTICATED && !session.busy &&
         !session.refreshRequired && !session.storageWarning && now >= session.retryAtMillis
     val canMutate = ready && !state.busy && !state.stale && !state.mutationUncertain
-    LazyColumn(Modifier.fillMaxWidth().testTag("rooms_directory"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val directory = androidx.compose.foundation.lazy.rememberLazyListState()
+    io.github.thiesi.chitchat.core.ui.OnTabReselect { directory.animateScrollToItem(0) }
+    LazyColumn(Modifier.fillMaxWidth().testTag("rooms_directory"), directory, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.rooms_title), style = MaterialTheme.typography.headlineMedium)

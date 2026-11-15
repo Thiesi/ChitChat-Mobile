@@ -68,6 +68,7 @@ internal fun NotificationCenterScreen(model: NotificationCenterViewModel, expect
     val canGet = ready && !value.busy
     val canRead = canGet && value.loaded && !value.stale && !value.unknownRead
     val list = rememberLazyListState()
+    io.github.thiesi.chitchat.core.ui.OnTabReselect { list.animateScrollToItem(0) }
     LaunchedEffect(value.scrollRequest) { if (value.scrollRequest > 0) list.scrollToItem(0) }
     // Session and stale notices live in the status slot under the top bar (S1b).
     io.github.thiesi.chitchat.feature.status.ReportScreenStatus(syncing = false,

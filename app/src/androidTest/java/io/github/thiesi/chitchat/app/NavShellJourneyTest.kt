@@ -10,6 +10,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
@@ -104,25 +106,28 @@ class NavShellJourneyTest {
         compose.waitUntil(5_000) { directory.state.value.loaded && !directory.state.value.busy }
     }
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
-    private fun back() = compose.onNodeWithText(text(R.string.back)).assertIsDisplayed().performClick()
+    private fun back() = compose.onNodeWithContentDescription(text(R.string.back)).assertIsDisplayed().performClick()
     private fun openRoom() {
         compose.onNodeWithTag("rooms_directory").performScrollToNode(hasText("Room 43"))
         compose.onNodeWithText("Room 43").assertIsDisplayed().performClick()
         compose.onNode(hasText(text(R.string.rooms_open_conversation)) and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         compose.waitUntil(5_000) { room.state.value.roomId == 43L && room.state.value.loaded && !room.state.value.busy }
     }
+    private fun noBack() = compose.onNodeWithTag("nav_back").assertDoesNotExist() // P-76: tab roots have no Back.
     private fun bar(present: Boolean) = ShellTab.entries.forEach {
         if (present) compose.onNodeWithTag(it.tag).assertIsDisplayed() else compose.onNodeWithTag(it.tag).assertDoesNotExist()
     }
 
     @Test fun barIsOnTheFourRootsOnlyAndNeverSignedOut() {
         signedIn(); bar(true)
-        compose.onNodeWithText(text(R.string.back)).assertDoesNotExist() // The Rooms root has no Back.
+        compose.onNodeWithContentDescription(text(R.string.back)).assertDoesNotExist() // The Rooms root has no Back.
         openRoom(); bar(false); back(); bar(true)
-        compose.openTab("direct").performClick(); compose.onNodeWithTag("dm_inbox").assertExists(); bar(true)
-        compose.openTab("activity").performClick(); compose.onNodeWithTag("notification_list").assertExists(); bar(true)
-        compose.openTab("you").performClick(); compose.onNodeWithTag("you_session").assertExists(); bar(true)
-        compose.onNodeWithTag("you_account").performScrollTo().performClick(); bar(false); back(); bar(true)
+        compose.openTab("direct").performClick(); compose.onNodeWithTag("dm_inbox").assertExists(); bar(true); noBack()
+        compose.openTab("activity").performClick(); compose.onNodeWithTag("notification_list").assertExists(); bar(true); noBack()
+        compose.openTab("you").performClick(); compose.onNodeWithTag("you_session").assertExists(); bar(true); noBack()
+        compose.onNodeWithTag("you_account").performScrollTo().performClick(); bar(false)
+        compose.onNodeWithTag("nav_back").assertIsDisplayed().assert(hasContentDescription(text(R.string.back))) // P-76
+        back(); bar(true)
         compose.runOnIdle { auth.signOut() }
         compose.waitUntil(5_000) { sessions.state.value.phase != SessionPhase.AUTHENTICATED }
         bar(false)
@@ -252,6 +257,43 @@ class NavShellJourneyTest {
             }
             Espresso.closeSoftKeyboard(); compose.waitUntil(5_000) { ime == 0 }
             compose.openTab(tab).assertIsDisplayed()
+        }
+    }
+
+    @Test fun reselectingTheCurrentTabAtItsRootScrollsToTheTopWithoutARefresh() {
+        signedIn()
+        compose.openTab("you").performClick(); compose.onNodeWithTag("licences_open").performScrollTo()
+        compose.onNodeWithTag("you_header").assertIsNotDisplayed()
+        compose.openTab("you").performClick()
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("you_header").assertIsDisplayed() }.isSuccess }
+        compose.openTab("activity").performClick()
+        compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
+        compose.onNodeWithTag("notification_list").performScrollToNode(hasTestTag("notification:48"))
+        compose.onNodeWithTag("notification:60").assertIsNotDisplayed()
+        val loads = compose.runOnIdle { notices.state.value.notifications.size }
+        compose.openTab("activity").performClick()
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("notification:60").assertIsDisplayed() }.isSuccess }
+        compose.runOnIdle { assertFalse("Reselection is not a refresh", notices.state.value.busy)
+            assertEquals(loads, notices.state.value.notifications.size) }
+    }
+
+    @Test fun tabsAnnounceTheirPositionInTheBar() {
+        signedIn()
+        compose.onNode(SemanticsMatcher("bar group") { it.config.getOrNull(SemanticsProperties.CollectionInfo)?.columnCount == 4 }).assertExists()
+        ShellTab.entries.forEachIndexed { index, tab ->
+            assertEquals(tab.name, index, compose.onNodeWithTag(tab.tag).fetchSemanticsNode().config[SemanticsProperties.CollectionItemInfo].columnIndex)
+        }
+    }
+
+    @Test fun theProfileHeaderShowsOnlyAReportedGlobalRole() {
+        signedIn(); compose.openTab("you").performClick()
+        compose.onNodeWithTag("you_header").assert(hasAnyDescendant(hasText("Viewer")))
+        compose.onNodeWithTag("you_role").assertDoesNotExist() // A member has no global role badge.
+        for ((roles, shown) in listOf(listOf("member", "wizard") to null, listOf("member", "admin") to R.string.role_admin,
+            listOf("global_moderator", "super_admin") to R.string.role_super_admin)) {
+            compose.runOnIdle { sessions.state.value = sessions.state.value.copy(user = sessions.state.value.user!!.copy(roles = roles)) }
+            if (shown == null) compose.onNodeWithTag("you_role").assertDoesNotExist()
+            else compose.onNodeWithTag("you_role").assertTextEquals(text(shown))
         }
     }
 

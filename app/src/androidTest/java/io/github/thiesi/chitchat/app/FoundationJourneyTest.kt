@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.app
 
 import io.github.thiesi.chitchat.feature.account.TestChitChatApp as ChitChatApp
+import androidx.compose.ui.test.onNodeWithContentDescription
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -128,7 +129,7 @@ class FoundationJourneyTest {
         compose.onNodeWithText("Forget server").performScrollTo().performClick()
         compose.onNodeWithText("Forget this server?").assertIsDisplayed()
         compose.onAllNodesWithText("Forget server").onLast().performClick()
-        compose.onNodeWithText("Back").performClick()
+        compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Save server").performScrollTo().assertIsDisplayed()
     }
 }

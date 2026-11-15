@@ -87,7 +87,9 @@ class ThemePresentationJourneyTest {
     private var observedWidth=0f
     private var observedHeight=0f
     private fun text(id: Int)=InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
-    private fun back() { compose.onNodeWithText(text(R.string.back)).assertIsDisplayed().performNativeTap() }
+    private fun back() { compose.onNodeWithContentDescription(text(R.string.back)).assertIsDisplayed().performNativeTap() }
+    /** From a tab root, which has no Back button (P-76). */
+    private fun rootBack() { androidx.test.espresso.Espresso.pressBack() }
     private fun SemanticsNodeInteraction.reveal(): SemanticsNodeInteraction {
         var parent=fetchSemanticsNode().parent
         while(parent!=null) {
@@ -200,10 +202,10 @@ class ThemePresentationJourneyTest {
         compose.onNodeWithTag("dm_conversation:8").assertIsDisplayed().performNativeTap()
         compose.waitUntil(5_000) { thread.state.value.let { it.loaded && !it.busy && it.peerId==8L } }
         compose.onNodeWithTag("dm_composer").assertHeightIsAtLeast(48.dp).assertIsDisplayed()
-        capture(label,"thread");back();back()
+        capture(label,"thread");back();rootBack()
         compose.openTab("activity").performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
-        capture(label,"activity");back()
+        capture(label,"activity");rootBack()
         compose.openTab("you").performNativeTap();compose.onNodeWithTag("you_account").reveal().performNativeTap()
         capture(label,"account");back()
         compose.openTab("rooms").performNativeTap();compose.onNodeWithTag("message_search_open").performNativeTap()

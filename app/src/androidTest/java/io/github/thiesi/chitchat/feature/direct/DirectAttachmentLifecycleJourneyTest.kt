@@ -1,5 +1,6 @@
 package io.github.thiesi.chitchat.feature.direct
 
+import androidx.test.espresso.Espresso
 import androidx.activity.ComponentActivity
 import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.enableEdgeToEdge
@@ -97,7 +98,7 @@ class DirectAttachmentLifecycleJourneyTest {
     }
     private fun backToInbox() {
         compose.runOnIdle { atOriginalThread = false }
-        compose.onNodeWithText("Back").performNativeTap()
+        compose.onNodeWithContentDescription("Back").performNativeTap()
         compose.onNodeWithTag("dm_inbox").assertIsDisplayed()
         compose.waitForIdle()
         compose.runOnIdle { assertFalse("Navigation must not cancel the authorized upload", wire.cancelled) }
@@ -117,7 +118,7 @@ class DirectAttachmentLifecycleJourneyTest {
 
     @Test fun homeNavigationRetainsUploadAndKeepsItsAcknowledgmentPrivate() {
         contentAndStartUpload(); backToInbox()
-        compose.onNodeWithText("Back").performNativeTap()
+        Espresso.pressBack() // The Direct root has no Back button (P-76): system Back, as a person would.
         compose.openTab("direct").assertIsDisplayed()
         compose.runOnIdle { assertFalse(wire.cancelled); wire.ack() }
         compose.waitUntil(5_000) { thread.drafts.value[8]?.attachment?.phase == DirectAttachmentPhase.CONFIRMED }
