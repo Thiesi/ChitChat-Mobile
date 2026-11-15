@@ -164,6 +164,20 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         return decode<RoomMentionReply>(request("rooms/mentionable-users.php?$query").require200()).validUsers(viewer,limit)
     }
 
+    /**
+     * One public `policies/show.php` read (policies.md). `404 policy_document_not_found` is NotPublished; every other
+     * refusal stays typed. `html` is never decoded: hosted documents carry their Markdown, external ones their URL.
+     */
+    suspend fun policyDocument(name: io.github.thiesi.chitchat.core.policies.PolicyDocumentName): io.github.thiesi.chitchat.core.policies.PolicyDocument {
+        val raw = try { request("policies/show.php?document=${name.wire}").require200() }
+        catch (failure: ApiFailure) {
+            if (failure.status == 404 && failure.code == "policy_document_not_found")
+                return io.github.thiesi.chitchat.core.policies.PolicyDocument.NotPublished
+            throw failure
+        }
+        return withContext(Dispatchers.Default) { policyDocumentReply(raw.body) }
+    }
+
     suspend fun profile(userId: Long, roomId: Long?): ProfileSnapshot {
         validateProfileTarget(userId, roomId)
         val path = "users/profile.php?user_id=$userId" + (roomId?.let { "&room_id=$it" } ?: "")
@@ -741,5 +755,24 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
             (ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() - System.currentTimeMillis()) / 1000
         } catch (_: Exception) { return null }
         return seconds.coerceIn(0, 86_400)
+    }
+}
+
+/** Decodes a `policies/show.php` body; anything outside the documented shape is INCOMPATIBLE, never a guessed document. */
+internal fun policyDocumentReply(body: String): io.github.thiesi.chitchat.core.policies.PolicyDocument {
+    val document = try { apiJson.parseToJsonElement(body) } catch (_: SerializationException) { null }
+        .let { (it as? kotlinx.serialization.json.JsonObject)?.get("document") as? kotlinx.serialization.json.JsonObject }
+        ?: throw ApiFailure(FailureKind.INCOMPATIBLE)
+    fun text(key: String) = (document[key] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+    return when (text("source")) {
+        "hosted" -> io.github.thiesi.chitchat.core.policies.PolicyDocument.Hosted(
+            markdown = text("markdown") ?: throw ApiFailure(FailureKind.INCOMPATIBLE),
+            version = (document["version"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { !it.isString }
+                ?.content?.toIntOrNull()?.takeIf { it >= 1 },
+            updatedAt = text("updated_at")?.takeIf { it.length in 1..64 },
+            changeSummary = text("change_summary"))
+        "external" -> io.github.thiesi.chitchat.core.policies.PolicyDocument.External(
+            io.github.thiesi.chitchat.core.policies.policyUrl(document["url"]) ?: throw ApiFailure(FailureKind.INCOMPATIBLE))
+        else -> throw ApiFailure(FailureKind.INCOMPATIBLE)
     }
 }

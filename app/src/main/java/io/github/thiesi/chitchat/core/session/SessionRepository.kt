@@ -39,6 +39,8 @@ data class PublicSession(
     val lockdown: Lockdown,
     /** P-221: a validated https or mailto address, or null when the server has none (presence gating). */
     val accessibilityFeedback: String? = null,
+    /** Installation policies (policies.md, P-176): null when the server sent none (unknown); entries null when None. */
+    val policies: io.github.thiesi.chitchat.core.policies.PolicyDiscovery? = null,
 )
 
 data class SessionState(
@@ -653,7 +655,8 @@ class SessionRepository internal constructor(
 
     private fun SessionReply.publicSession() = PublicSession(registrationEnabled, providers,
         lockdown.copy(message = lockdown.message?.take(500)),
-        io.github.thiesi.chitchat.core.network.accessibilityFeedbackUrl(accessibilityFeedback))
+        io.github.thiesi.chitchat.core.network.accessibilityFeedbackUrl(accessibilityFeedback),
+        io.github.thiesi.chitchat.core.policies.policyDiscovery(policies))
 
     private class Runtime(val server: ServerAddress, val api: SessionHttp) {
         var csrf: String? = null
