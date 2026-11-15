@@ -55,6 +55,7 @@ class AccountRecreationTest {
     }
     private fun start(destination: ExportDestination = ExportDestination { _, current -> current(); writes++ }) {
         compose.runOnUiThread { installContent(compose.activity) }
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Server found: choose sign in (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         // Hosted diagnostics showed zero sign-in calls, not a failed export/recreation.

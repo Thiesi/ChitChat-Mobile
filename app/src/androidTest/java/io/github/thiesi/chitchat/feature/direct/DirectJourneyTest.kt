@@ -316,6 +316,7 @@ class DirectJourneyTest {
                 Box(Modifier.size(320.dp, 640.dp)) { TestChitChatApp(settings, auth, directInbox = inbox, directThread = thread, realtime = connection) }
             }
         }
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Server found: choose sign in (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Viewer")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         closeSoftKeyboard()

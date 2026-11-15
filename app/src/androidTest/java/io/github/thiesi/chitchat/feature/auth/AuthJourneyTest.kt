@@ -13,6 +13,8 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -53,6 +55,7 @@ class AuthJourneyTest {
 
     private fun content() { compose.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(settings, auth) } } }
     private fun enterCredentials() {
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Server found: choose sign in (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().performClick()
@@ -78,6 +81,7 @@ class AuthJourneyTest {
         compose.onNodeWithContentDescription("Back").assertDoesNotExist()
         assertEquals(io.github.thiesi.chitchat.core.session.SessionPhase.SIGNED_OUT, sessions.state.value.phase)
         compose.onNodeWithText("Back to sign-in").performClick()
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Sign-out returns to Server found (O2a).
         compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed()
     }
 
@@ -156,6 +160,7 @@ class AuthJourneyTest {
         compose.onNodeWithText("Sign out").performScrollTo().performClick()
         compose.onNodeWithText("Signed in as Alice").assertDoesNotExist()
         compose.onNodeWithText("Back to sign-in").performScrollTo().performClick()
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Sign-out returns to Server found (O2a).
         compose.onNodeWithText("Username").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
     }
 
@@ -176,7 +181,14 @@ class AuthJourneyTest {
         content()
         compose.onNodeWithText("Account").assertDoesNotExist()
         enterCredentials()
-        compose.openTab("you").performClick()
+        // Failure-only scalars for an unexplained API36 timeout here (PR #260): the same wait and deadline, no retry.
+        try { compose.openTab("you") } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            val count = { tag: String -> compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().size }
+            throw AssertionError("Shell after sign-in: phase=${sessions.state.value.phase}, logins=${sessions.logins}, " +
+                "tabs=${count("nav_tab_you")}, title=${count("bar_title")}, " +
+                "form=${compose.onAllNodesWithText("Username").fetchSemanticsNodes().size}, " +
+                "window=${io.github.thiesi.chitchat.testing.nativeInputWindow()}", e)
+        }.performClick()
         compose.onNodeWithTag("you_account").performScrollTo().performClick()
         compose.onNodeWithText("Your personal data").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
@@ -191,6 +203,7 @@ class AuthJourneyTest {
     @Test fun restoredFormDoesNotPutPasswordIntoSavedState() {
         val restoration = StateRestorationTester(compose)
         restoration.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(settings, auth) } }
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Server found: choose sign in (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("unsaved-fixture-password")
         restoration.emulateSavedInstanceStateRestore()
@@ -202,8 +215,9 @@ class AuthJourneyTest {
     private fun registrationForm() {
         sessions.registrationEnabled = true
         content()
-        compose.onNodeWithText("Create account").performScrollTo().performClick()
-        compose.onNodeWithText("Join this server").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("onboarding_create").performScrollTo().performClick() // Server found's Create (O2a).
+        compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.create_account_title))
+            .performScrollTo().assertIsDisplayed() // Copy table: "Make yourself at home".
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
     }
@@ -244,7 +258,7 @@ class AuthJourneyTest {
         sessions.registrationEnabled = true
         val restoration = StateRestorationTester(compose)
         restoration.setContent { Box(Modifier.size(320.dp, 480.dp)) { ChitChatApp(settings, auth) } }
-        compose.onNodeWithText("Create account").performScrollTo().performClick()
+        compose.onNodeWithTag("onboarding_create").performScrollTo().performClick() // Server found's Create (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         for (label in listOf("Password", "Confirm password")) compose.onNodeWithText(label).performScrollTo().performTextInput("fixture-password")
         restoration.emulateSavedInstanceStateRestore()
@@ -257,8 +271,8 @@ class AuthJourneyTest {
     @Test fun restorationExplainsPendingClosureAndRequiresMfaBeforeConfirmation() {
         sessions.requireMfa = true
         content()
-        compose.onNodeWithText("Create account").assertDoesNotExist()
-        compose.onNodeWithText("Restore account").performScrollTo().performClick()
+        compose.onNodeWithTag("onboarding_create").assertDoesNotExist() // Registration off: no Create on Server found.
+        compose.onNodeWithTag("onboarding_restore").performScrollTo().performClick()
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         compose.onNodeWithText("Restore and sign in").performScrollTo().performClick()

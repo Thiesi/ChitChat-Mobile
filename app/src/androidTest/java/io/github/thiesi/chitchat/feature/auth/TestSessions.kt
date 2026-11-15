@@ -26,10 +26,15 @@ class TestSessions : SessionController {
     var failNextRegistration = false
     var registrations = 0
     var restores = 0
+    /** One-shot: shapes the next connect to a server (a failed bootstrap, an outdated server, lockdown, a public field).
+     *  The app's start-up connect(null) never consumes it. */
+    @Volatile var nextConnect: ((SessionState) -> SessionState)? = null
     override suspend fun connect(server: ServerAddress?) {
-        state.value = SessionState(server, state.value.generation + 1,
+        val connected = SessionState(server, state.value.generation + 1,
             if (server == null) SessionPhase.NO_SERVER else SessionPhase.ANONYMOUS,
             public = PublicSession(registrationEnabled, emptyList(), Lockdown(false)))
+        val shape = if (server != null) nextConnect?.also { nextConnect = null } else null
+        state.value = shape?.invoke(connected) ?: connected
     }
     override suspend fun signIn(username: String, password: String, restore: Boolean) {
         check(password.isNotEmpty()) { "The fixture must receive the submitted password before field clearing" }

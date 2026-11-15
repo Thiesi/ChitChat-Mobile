@@ -75,6 +75,7 @@ class RoomDraftJourneyTest {
                 TestChitChatApp(settings, auth, roomModel = directory, conversationModel = model)
             }
         }
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Server found: choose sign in (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Viewer")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         dismissIme()

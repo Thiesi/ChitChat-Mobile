@@ -19,6 +19,8 @@ STATUS_DESTINATION = ROOT / "app/build/reports/androidTests/status-presentation"
 STATUS_NAME = re.compile(r"status-(light|dark)-(?:(?:default|font200)-"
     r"(?:storage|offline|tls|incompatible|stopped|refresh|rate|rate-unknown|offline-edge|waiting-room|waiting-dm)|default-details)\.png")
 NAV_DESTINATION = ROOT / "app/build/reports/androidTests/nav-presentation"
+ONBOARDING_DESTINATION = ROOT / "app/build/reports/androidTests/onboarding-presentation"
+ONBOARDING_NAME = re.compile(r"onboarding-(light|dark)-(default|font200)-(welcome|address|foundtop|found|failure)[.]png")
 UPDATE_DESTINATION = ROOT / "app/build/reports/androidTests/update-presentation"
 UPDATE_NAME = re.compile(r"update-(light|dark)-(default|font200)-(setup|session)(-actions)?[.]png")
 A11Y_DESTINATION = ROOT / "app/build/reports/androidTests/a11y-presentation"
@@ -137,6 +139,19 @@ def collect_update():
     print(f"Server update presentation captures collected: {len(files)} of 16.")
 
 
+def collect_onboarding():
+    # Onboarding O2a: Welcome, Where do you chat?, Server found (top and scrolled), default and 2.0 font, light and dark,
+    # plus a step 2 failure notice at 2.0.
+    files = list(islice(SOURCE.rglob("ccm-onboarding-presentation/*"), 19))
+    if (not files or len(files) > 18 or len({p.name for p in files}) != len(files)
+        or any(ONBOARDING_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous onboarding presentation output")
+    ONBOARDING_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, ONBOARDING_DESTINATION / path.name)
+    print(f"Onboarding presentation captures collected: {len(files)} of 18.")
+
+
 def collect_nav():
     # Navigation shell bottom bar at default and 2.0 font, light and dark.
     files = list(islice(SOURCE.rglob("ccm-nav-presentation/*"), 6))
@@ -232,6 +247,10 @@ def main() -> int:
         collect_update()
     except Exception:
         print("Server update presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_onboarding()
+    except Exception:
+        print("Onboarding presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_nav()
     except Exception:
