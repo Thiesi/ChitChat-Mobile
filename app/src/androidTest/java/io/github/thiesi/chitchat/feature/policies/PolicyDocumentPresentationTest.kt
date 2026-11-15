@@ -65,7 +65,9 @@ class PolicyDocumentPresentationTest {
         Use `/me` for actions. <b>Raw HTML</b> stays literal, and ![an image](https://chat.example.test/x.png) is dropped.
 
         ## Questions
-        Ask in the [help desk](https://chat.example.test/help), see the [old archive](http://chat.example.test/old) or write to <mailto:admin@chat.example.test>.
+        Ask in the [help desk](https://chat.example.test/help) or write to <mailto:admin@chat.example.test>.
+
+        Older posts live in the [old archive](http://chat.example.test/old).
     """.trimIndent(), 3, "2026-11-08T12:00:00+00:00", null)
 
     private fun presentation(dark: Boolean) {

@@ -122,18 +122,22 @@ class SessionRepository internal constructor(
     private val mutable = MutableStateFlow(SessionState())
     override val state = mutable.asStateFlow()
 
-    /** One public `policies/show.php` read for the rendered session's server and generation; never across a change. */
+    /**
+     * One public `policies/show.php` read for the rendered session's server and generation; never across a change. A
+     * missing server or a change during the read is a typed EXPIRED failure (the screen offers Try again), never a bare
+     * cancellation that would leave it loading (review, PR #267).
+     */
     override suspend fun policyDocument(name: io.github.thiesi.chitchat.core.policies.PolicyDocumentName,
         expected: SessionState): io.github.thiesi.chitchat.core.policies.PolicyDocument {
         val api = lock.withLock {
             val current = mutable.value
-            val active = runtime ?: throw CancellationException("No server")
-            if (active.server != expected.server || current.generation != expected.generation) throw CancellationException("Session changed")
+            val active = runtime ?: throw ApiFailure(FailureKind.EXPIRED)
+            if (active.server != expected.server || current.generation != expected.generation) throw ApiFailure(FailureKind.EXPIRED)
             if (current.updateRequired) throw ApiFailure(FailureKind.INCOMPATIBLE) // Nothing new starts (server-update.md).
             active.api
         }
         val document = api.policyDocument(name)
-        if (mutable.value.generation != expected.generation || runtime?.api !== api) throw CancellationException("Session changed")
+        if (mutable.value.generation != expected.generation || runtime?.api !== api) throw ApiFailure(FailureKind.EXPIRED)
         return document
     }
     private var runtime: Runtime? = null

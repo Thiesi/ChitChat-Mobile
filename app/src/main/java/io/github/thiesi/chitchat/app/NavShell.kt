@@ -179,7 +179,8 @@ internal fun YouScreen(session: SessionState, auth: AuthViewModel, server: Strin
             Text(stringResource(R.string.you_app_version, BuildConfig.VERSION_NAME))
             Row(R.string.oss_licences_open, "licences_open", onLicences)
             // The server's documents, each only when published (play-readiness.md §1); the legal notice is a link only.
-            if (onPolicy != null) PolicyRows(session, server, onPolicy, "you")
+            // Nothing new starts while the update state shows (server-update.md), as on Server found.
+            if (onPolicy != null && !session.updateRequired) PolicyRows(session, server, onPolicy, "you")
             LegalNoticeRow(session, server)
             io.github.thiesi.chitchat.core.ui.AccessibilityFeedbackLink(session.public?.accessibilityFeedback, Modifier.fillMaxWidth())
         }

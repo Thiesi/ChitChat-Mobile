@@ -9,7 +9,8 @@ and the Create-account consent line are O3b.
 
 `PolicyReads.policyDocument(name, expected)`, implemented by `SessionRepository`, makes one public
 `policies/show.php` read. It works signed in or signed out.
-- It's fenced to the rendered session's server and generation: a change during the read discards the result.
+- It's fenced to the rendered session's server and generation: a missing server or a change during the read is a
+  typed EXPIRED failure, so the screen offers Try again rather than staying on Loading.
 - It's refused while the server-update state shows (nothing new starts, [server-update check](server-update-check.md)).
 
 `PolicyDocumentViewModel` holds one document in memory while its screen is open. Retry is a fresh GET. A real departure
@@ -41,7 +42,7 @@ installation is the application name, else the host with the display-only dot br
 Each row appears only when `policies` discovery publishes that document; missing (unknown) or None shows nothing.
 - **Server found** (onboarding step 3): "{installation}'s privacy policy" and "{installation}'s rules", below the
   privacy line (the link O2a deferred). They're hidden while the server-update state shows.
-- **You → About and privacy:** the same two rows, plus "**{installation}'s legal notice**" with the open-external
+- **You → About and privacy:** the same two rows (also hidden while the update state shows), plus "**{installation}'s legal notice**" with the open-external
   icon. The legal notice is a link only, with no document screen, and opens through the explicit choice.
 
 Signed out, the screens are onboarding destinations (`policy/rules`, `policy/privacy`). Signed in, they're shell
@@ -49,10 +50,18 @@ destinations under You (`you/policy/…`), so neither path crosses the other gra
 
 ## Verification
 
+- `PolicyReadsTest` (JVM, a real `SessionRepository` over fixture TLS): the read signed out and signed in; EXPIRED
+  for another server's or an earlier generation's session; refused (INCOMPATIBLE) while the update state shows.
+- `PolicyDocumentViewModelTest` (JVM): reopening the same document and scope keeps it; a newer scope reloads; close drops
+  it and drops a late result; Retry is a fresh read; a stray cancellation from the read becomes Failed with Try again,
+  never a stuck Loading.
+
 - `PolicyDocumentJourneyTest`:
   - Server found shows only published rows and opens a hosted document;
   - no discovery shows no rows;
   - document links go through the choice (https gets Open, http the insecure line with no Open);
+  - per-link routing in a mixed paragraph: the second link, targeted by its own annotation, gets its own dialog in
+    both orders (http after https, https after http);
   - external https opens through the choice, external http shows the insecure line;
   - NotPublished; a failure, then Retry as a fresh GET;
   - signed in, You shows both rows and the legal notice link through the choice, with a version caption.

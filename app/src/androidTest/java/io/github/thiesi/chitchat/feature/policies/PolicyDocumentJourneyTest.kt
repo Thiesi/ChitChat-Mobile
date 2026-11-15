@@ -84,6 +84,31 @@ class PolicyDocumentJourneyTest {
         compose.onNodeWithTag("policy_link_open").assertDoesNotExist()
     }
 
+    /**
+     * Real documents mix https and http links in one paragraph: the SECOND link, targeted by its own annotation (not
+     * "the first link"), gets the dialog for that link, in both orders (technical lead, PR #267).
+     */
+    @Test fun eachLinkInAMixedParagraphRoutesToItsOwnChoice() {
+        reads.next = PolicyDocument.Hosted("Read [secure](https://chat.example.test/a) or [plain](http://insecure.example.test/b).\n\n" +
+            "Old [legacy](http://insecure.example.test/c) and new [current](https://current.example.test/d).", 1, null, null)
+        install(both)
+        compose.onNodeWithTag("onboarding_rules").performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("policy_body").fetchSemanticsNodes().isNotEmpty() }
+        fun tapLink(paragraph: String, target: String) = compose.onNode(hasText(paragraph, substring = true) and
+            hasAnyAncestor(hasTestTag("policy_body"))).performFirstLinkClick { range ->
+            (range.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag == target
+        }
+        tapLink("plain", "http://insecure.example.test/b") // The second link, after an https one.
+        compose.onNodeWithText(text(R.string.external_link_insecure_title)).assertExists()
+        compose.onNodeWithText(text(R.string.external_link_insecure, "insecure.example.test")).assertExists()
+        compose.onNodeWithTag("policy_link_open").assertDoesNotExist()
+        compose.onNodeWithTag("policy_link_cancel").performClick()
+        tapLink("current", "https://current.example.test/d") // The second link, after an http one.
+        compose.onNodeWithText(text(R.string.a11y_feedback_web, "current.example.test")).assertExists()
+        compose.onNodeWithTag("policy_link_open").assertExists()
+        compose.onNodeWithText(text(R.string.external_link_insecure_title)).assertDoesNotExist()
+    }
+
     @Test fun externalDocumentsOpenOnlyHttpsAndExplainAnInsecureAddress() {
         reads.next = PolicyDocument.External("https://example.org/privacy")
         install(both)

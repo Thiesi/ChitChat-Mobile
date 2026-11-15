@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.policies.FormattedDocument
 import io.github.thiesi.chitchat.core.policies.PolicyDocument
 import io.github.thiesi.chitchat.core.policies.PolicyDocumentFormatting
@@ -15,6 +16,7 @@ import io.github.thiesi.chitchat.core.session.SessionState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,8 +70,11 @@ class PolicyDocumentViewModel(private val reads: PolicyReads) : ViewModel() {
                     is PolicyDocument.External -> PolicyDocumentStatus.External(document.url)
                     PolicyDocument.NotPublished -> PolicyDocumentStatus.NotPublished
                 }
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (failure: ApiFailure) { PolicyDocumentStatus.Failed(failure) }
+            } catch (cancelled: CancellationException) {
+                // Only this job's own cancellation (close, a newer load) ends silently; anything else shows Try again.
+                if (!isActive) throw cancelled
+                PolicyDocumentStatus.Failed(ApiFailure(FailureKind.EXPIRED))
+            } catch (failure: ApiFailure) { PolicyDocumentStatus.Failed(failure) }
             val shown = mutable.value
             if (shown != null && shown.name == name && shown.scope == scope) mutable.value = shown.copy(status = status)
         }
