@@ -81,6 +81,25 @@ internal fun PreviewDisclosure() {
 internal val OnboardingEmphasis = SemanticsPropertyKey<String>("OnboardingEmphasis")
 private var SemanticsPropertyReceiver.emphasis by OnboardingEmphasis
 
+/**
+ * The server's privacy policy and rules rows, each only when `policies` discovery publishes it (missing or None shows
+ * nothing). They open the document screen.
+ */
+@Composable
+internal fun PolicyRows(session: SessionState, server: String?,
+    onPolicy: (io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit, tagPrefix: String) {
+    val installation = session.installationName ?: breakableHost(server?.let { runCatching { java.net.URI(it).host }.getOrNull() }.orEmpty())
+    val policies = session.public?.policies ?: return
+    if (policies.privacy != null) TextButton(onClick = { onPolicy(io.github.thiesi.chitchat.core.policies.PolicyDocumentName.PRIVACY) },
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("${tagPrefix}_privacy_policy")) {
+        Text(stringResource(R.string.policy_privacy_title, installation))
+    }
+    if (policies.rules != null) TextButton(onClick = { onPolicy(io.github.thiesi.chitchat.core.policies.PolicyDocumentName.RULES) },
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("${tagPrefix}_rules")) {
+        Text(stringResource(R.string.policy_rules_title, installation))
+    }
+}
+
 /** Step 2's notice for a failed bootstrap of a server saved during this onboarding (onboarding-restyle.md copy table). */
 internal fun stepTwoNotice(failure: ApiFailure): Int = when {
     failure.kind == FailureKind.TLS -> R.string.onboarding_tls
@@ -95,7 +114,8 @@ internal fun stepTwoNotice(failure: ApiFailure): Int = when {
  * choices. No guest entry until M7.
  */
 @Composable
-internal fun ServerFound(session: SessionState, server: String?, onChoose: (AuthFlow) -> Unit, onOtherServer: () -> Unit) {
+internal fun ServerFound(session: SessionState, server: String?, onChoose: (AuthFlow) -> Unit, onOtherServer: () -> Unit,
+    onPolicy: ((io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit)? = null) {
     val host = server?.let { runCatching { java.net.URI(it).host }.getOrNull() } ?: server.orEmpty()
     val public = session.public
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -147,6 +167,8 @@ internal fun ServerFound(session: SessionState, server: String?, onChoose: (Auth
             Icon(painterResource(R.drawable.ic_info), contentDescription = null, tint = ChitChatTheme.colors.textMuted)
             Text(stringResource(R.string.onboarding_privacy_line), color = ChitChatTheme.colors.textMuted)
         }
+        // The server's own documents, only when discovery publishes them (P-173/P-176; O2a deferred this link).
+        if (onPolicy != null && !session.updateRequired) PolicyRows(session, server, onPolicy, "onboarding")
         PreviewDisclosure()
         AccessibilityFeedbackLink(public?.accessibilityFeedback) // P-221: below every action.
     }

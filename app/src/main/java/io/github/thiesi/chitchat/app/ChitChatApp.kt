@@ -143,6 +143,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     pushSettings: io.github.thiesi.chitchat.feature.push.NotificationSettingsViewModel? = null,
     pushPhone: io.github.thiesi.chitchat.feature.push.PushPhoneViewModel? = null,
     pushTaps: io.github.thiesi.chitchat.core.push.PendingPushTap? = null,
+    policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session = auth.state.collectAsStateWithLifecycle().value
@@ -437,6 +438,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         "notification_settings" -> R.string.notification_settings_title
                         FIND_PEOPLE_ROUTE -> R.string.find_people_title
                         LICENCES_ROUTE, LICENCE_ROUTE -> R.string.oss_licences_title
+                        POLICY_RULES_ROUTE, SHELL_POLICY_RULES_ROUTE -> R.string.policy_rules_bar
+                        POLICY_PRIVACY_ROUTE, SHELL_POLICY_PRIVACY_ROUTE -> R.string.policy_privacy_bar
                         ROOMS_ROUTE -> R.string.rooms_title
                         YOU_ROUTE -> R.string.nav_you
                         else -> R.string.app_name
@@ -530,7 +533,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                             onRetry = auth::reconnect)
                                     } else if (session.phase == SessionPhase.ANONYMOUS && !chosen) {
                                         ServerFound(session, state.settings.server?.value, onChoose = { flow -> auth.selectForm(flow); chosen = true },
-                                            onOtherServer = { nav.navigate(SERVER_NEW_ROUTE) })
+                                            onOtherServer = { nav.navigate(SERVER_NEW_ROUTE) },
+                                            onPolicy = policies?.let { { name -> nav.navigate(policyRoute(name, shell = false)) { launchSingleTop = true } } })
                                     } else if (session.phase == SessionPhase.ANONYMOUS) {
                                         // Like the visible Back: no leaving the form while its POST is in flight (its outcome shows there).
                                         androidx.activity.compose.BackHandler(enabled = !session.busy) { chosen = false }
@@ -552,6 +556,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                         }
                                     }
                                 }
+                            }
+                        }
+                        for ((route, name) in listOf(POLICY_RULES_ROUTE to io.github.thiesi.chitchat.core.policies.PolicyDocumentName.RULES,
+                            POLICY_PRIVACY_ROUTE to io.github.thiesi.chitchat.core.policies.PolicyDocumentName.PRIVACY)) composable(route) {
+                            if (session.phase != SessionPhase.AUTHENTICATED && policies != null) ScreenContent {
+                                PolicyRoute(policies, name, session, state.settings.server?.value)
                             }
                         }
                         composable("server") {
@@ -579,7 +589,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                     onAppearance = { nav.navigate("settings") { launchSingleTop = true } },
                                     onAccount = { nav.navigate("account") { launchSingleTop = true } },
                                     onChangeServer = { nav.navigate("server") },
-                                    onLicences = { nav.navigate(LICENCES_ROUTE) { launchSingleTop = true } })
+                                    onLicences = { nav.navigate(LICENCES_ROUTE) { launchSingleTop = true } },
+                                    onPolicy = policies?.let { { name -> nav.navigate(policyRoute(name, shell = true)) { launchSingleTop = true } } })
                             } }
                         }
                         composable(FIND_PEOPLE_ROUTE) {
@@ -595,6 +606,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             if (session.phase == SessionPhase.AUTHENTICATED) ScreenContent {
                                 AccountScreen(account, session, auth::refresh)
                                 typingPreferences?.let { TypingPreferenceCard(it, session, auth::refresh) }
+                            }
+                        }
+                        for ((route, name) in listOf(SHELL_POLICY_RULES_ROUTE to io.github.thiesi.chitchat.core.policies.PolicyDocumentName.RULES,
+                            SHELL_POLICY_PRIVACY_ROUTE to io.github.thiesi.chitchat.core.policies.PolicyDocumentName.PRIVACY)) composable(route) {
+                            if (session.phase == SessionPhase.AUTHENTICATED && policies != null) ScreenContent {
+                                PolicyRoute(policies, name, session, state.settings.server?.value)
                             }
                         }
                         composable(LICENCES_ROUTE) {
@@ -808,6 +825,32 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
 private const val LICENCES_ROUTE = "licences"
 private const val SERVER_NEW_ROUTE = "server_new"
 private const val FIND_PEOPLE_ROUTE = "find_people"
+// Server documents (O3a2): signed out from Server found, signed in from You (inside the shell).
+private const val POLICY_RULES_ROUTE = "policy/rules"
+private const val POLICY_PRIVACY_ROUTE = "policy/privacy"
+private const val SHELL_POLICY_RULES_ROUTE = "you/policy/rules"
+private const val SHELL_POLICY_PRIVACY_ROUTE = "you/policy/privacy"
+
+private fun policyRoute(name: io.github.thiesi.chitchat.core.policies.PolicyDocumentName, shell: Boolean) = when (name) {
+    io.github.thiesi.chitchat.core.policies.PolicyDocumentName.RULES -> if (shell) SHELL_POLICY_RULES_ROUTE else POLICY_RULES_ROUTE
+    io.github.thiesi.chitchat.core.policies.PolicyDocumentName.PRIVACY -> if (shell) SHELL_POLICY_PRIVACY_ROUTE else POLICY_PRIVACY_ROUTE
+}
+
+/**
+ * One document screen: opened for the rendered session (server and generation), and dropped when the screen genuinely
+ * leaves; a configuration change keeps it (memory only, play-readiness.md §1).
+ */
+@Composable
+private fun PolicyRoute(model: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel,
+    name: io.github.thiesi.chitchat.core.policies.PolicyDocumentName, session: io.github.thiesi.chitchat.core.session.SessionState, server: String?) {
+    val activity = androidx.activity.compose.LocalActivity.current
+    // This screen instance owns what it opens; its late dispose (exit transition) can't close a newer screen's document.
+    val owner = remember { Any() }
+    LaunchedEffect(name, session.server, session.generation) { model.open(name, session, owner) }
+    androidx.compose.runtime.DisposableEffect(model) { onDispose { if (activity?.isChangingConfigurations != true) model.close(owner) } }
+    val host = server?.let { runCatching { java.net.URI(it).host }.getOrNull() }.orEmpty()
+    io.github.thiesi.chitchat.feature.policies.PolicyDocumentScreen(model, name, session.installationName ?: breakableHost(host))
+}
 
 /** The first screen a new account sees after the shell is entered. O4a (recovery key) and O3b (rules) insert before it. */
 private fun firstNewAccountStep(): String = FIND_PEOPLE_ROUTE

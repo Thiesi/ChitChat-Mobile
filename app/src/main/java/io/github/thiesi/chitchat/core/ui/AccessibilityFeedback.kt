@@ -46,24 +46,5 @@ internal fun AccessibilityFeedbackLink(url: String?, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun AccessibilityFeedbackChoice(url: String, onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val mail = url.startsWith("mailto:")
-    val destination = if (mail) url.removePrefix("mailto:").substringBefore('?') else url.toUri().host.orEmpty()
-    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.lanternDialogEdge().testTag("a11y_feedback_dialog"),
-        title = { Text(stringResource(R.string.a11y_feedback)) },
-        text = { DialogScrollBody(Modifier.testTag("a11y_feedback_body")) {
-            Text(stringResource(if (mail) R.string.a11y_feedback_mail else R.string.a11y_feedback_web, destination))
-        } },
-        confirmButton = { TextButton(onClick = {
-            onDismiss()
-            val intent = if (mail) Intent(Intent.ACTION_SENDTO, url.toUri())
-                else Intent(Intent.ACTION_VIEW, url.toUri()).addCategory(Intent.CATEGORY_BROWSABLE)
-            try { context.startActivity(intent) }
-            catch (_: ActivityNotFoundException) { Toast.makeText(context, R.string.a11y_feedback_failed, Toast.LENGTH_SHORT).show() }
-            catch (_: SecurityException) { Toast.makeText(context, R.string.a11y_feedback_failed, Toast.LENGTH_SHORT).show() }
-        }, Modifier.testTag("a11y_feedback_open")) {
-            Text(stringResource(if (mail) R.string.a11y_feedback_open_mail else R.string.a11y_feedback_open_web))
-        } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
-}
+private fun AccessibilityFeedbackChoice(url: String, onDismiss: () -> Unit) =
+    ExternalLinkChoice(url, stringResource(R.string.a11y_feedback), "a11y_feedback", onDismiss) // Validated https or mailto.

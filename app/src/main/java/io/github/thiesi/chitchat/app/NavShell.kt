@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -155,7 +157,7 @@ internal fun ShellBar(tabs: List<ShellTab>, current: ShellTab, unread: Int?, cou
 @Composable
 internal fun YouScreen(session: SessionState, auth: AuthViewModel, server: String?, pushAvailable: Boolean,
     onNotifications: () -> Unit, onAppearance: () -> Unit, onAccount: () -> Unit, onChangeServer: () -> Unit,
-    onLicences: () -> Unit) {
+    onLicences: () -> Unit, onPolicy: ((io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit)? = null) {
     @Composable fun Row(text: Int, tag: String, onClick: () -> Unit) =
         TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag)) { Text(stringResource(text)) }
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -176,10 +178,30 @@ internal fun YouScreen(session: SessionState, auth: AuthViewModel, server: Strin
             Text(stringResource(R.string.you_about), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.you_app_version, BuildConfig.VERSION_NAME))
             Row(R.string.oss_licences_open, "licences_open", onLicences)
+            // The server's documents, each only when published (play-readiness.md §1); the legal notice is a link only.
+            // Nothing new starts while the update state shows (server-update.md), as on Server found.
+            if (onPolicy != null && !session.updateRequired) PolicyRows(session, server, onPolicy, "you")
+            LegalNoticeRow(session, server)
             io.github.thiesi.chitchat.core.ui.AccessibilityFeedbackLink(session.public?.accessibilityFeedback, Modifier.fillMaxWidth())
         }
         PrivacyCard()
     }
+}
+
+/** "{installation}'s legal notice" with the open-external icon, only when published; it opens through the explicit choice. */
+@Composable
+private fun LegalNoticeRow(session: SessionState, server: String?) {
+    val url = session.public?.policies?.legalNotice?.url ?: return
+    val installation = session.installationName ?: breakableHost(server?.let { runCatching { java.net.URI(it).host }.getOrNull() }.orEmpty())
+    var choosing by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    val title = stringResource(R.string.policy_legal_notice, installation)
+    TextButton(onClick = { choosing = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("you_legal_notice")) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f, fill = false))
+            androidx.compose.material3.Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_open_external), contentDescription = null)
+        }
+    }
+    if (choosing) io.github.thiesi.chitchat.core.ui.ExternalLinkChoice(url, title, "you_legal_notice") { choosing = false }
 }
 
 /** The global roles the server reports, highest first; anything else (member, unknown) shows no badge. */

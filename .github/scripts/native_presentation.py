@@ -21,6 +21,8 @@ STATUS_NAME = re.compile(r"status-(light|dark)-(?:(?:default|font200)-"
 NAV_DESTINATION = ROOT / "app/build/reports/androidTests/nav-presentation"
 ONBOARDING_DESTINATION = ROOT / "app/build/reports/androidTests/onboarding-presentation"
 FIND_PEOPLE_DESTINATION = ROOT / "app/build/reports/androidTests/find-people-presentation"
+POLICY_DESTINATION = ROOT / "app/build/reports/androidTests/policy-presentation"
+POLICY_NAME = re.compile(r"policy-(light|dark)-(default|font200)-(hosted|external|unpublished|httpdialog|loading|failed)[.]png")
 FIND_PEOPLE_NAME = re.compile(r"find-people-(light|dark)-(default|font200)-(top|joined|failed|uncertain)[.]png")
 ONBOARDING_NAME = re.compile(r"onboarding-(light|dark)-(default|font200)-(welcome|address|foundtop|found|failure)[.]png")
 UPDATE_DESTINATION = ROOT / "app/build/reports/androidTests/update-presentation"
@@ -139,6 +141,18 @@ def collect_update():
     for path in files:
         shutil.copyfile(path, UPDATE_DESTINATION / path.name)
     print(f"Server update presentation captures collected: {len(files)} of 16.")
+
+
+def collect_policy():
+    # Policy documents (O3a2): hosted, external, not published at both sizes; the http dialog, loading and failure at 2.0.
+    files = list(islice(SOURCE.rglob("ccm-policy-presentation/*"), 19))
+    if (not files or len(files) > 18 or len({p.name for p in files}) != len(files)
+        or any(POLICY_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous policy presentation output")
+    POLICY_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, POLICY_DESTINATION / path.name)
+    print(f"Policy presentation captures collected: {len(files)} of 18.")
 
 
 def collect_find_people():
@@ -261,6 +275,10 @@ def main() -> int:
         collect_update()
     except Exception:
         print("Server update presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_policy()
+    except Exception:
+        print("Policy presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_find_people()
     except Exception:

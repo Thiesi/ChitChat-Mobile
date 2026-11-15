@@ -209,7 +209,11 @@ internal object PolicyDocumentFormatting {
                 }
                 c == '!' && i + 1 < until && text[i + 1] == '[' -> {
                     val link = linkAt(text, i + 1, until, budget)
-                    if (link == null) { plain.append(c); i++ } else i = link.end // An image: dropped, alt text too.
+                    if (link == null) { plain.append(c); i++ }
+                    else { // An image: dropped, alt text too, without leaving a double space behind (J, PR #267).
+                        i = link.end
+                        if (plain.endsWith(' ') && i < until && text[i] == ' ') i++
+                    }
                 }
                 c == '[' -> {
                     val link = linkAt(text, i, until, budget)
