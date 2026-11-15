@@ -68,7 +68,7 @@ class RealtimeTransportAndroidTest {
             .body(": heartbeat\n\n").bodyDelay(100, TimeUnit.MILLISECONDS).build())
         assertSame(RealtimeSignal.Opened, api.events(0).first())
         server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
-            .body("""{"csrf_token":"${"a".repeat(64)}","user":null,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}""").build())
+            .body("""{"csrf_token":"${"a".repeat(64)}","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}""").build())
         assertNull(api.bootstrap().user); assertEquals(2, server.requestCount)
     }
 }

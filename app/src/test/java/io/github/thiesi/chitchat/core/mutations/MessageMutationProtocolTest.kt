@@ -44,14 +44,14 @@ class MessageMutationProtocolTest {
         .apply { cookie?.let { addHeader("Set-Cookie", it) } }.build()
     private fun take() = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS))
     private suspend fun login(id: Long = 7, withPrivacy: Boolean = true): SessionState {
-        server.enqueue(json("""{"csrf_token":"${"a".repeat(64)}","user":null,"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}"""))
+        server.enqueue(json("""{"csrf_token":"${"a".repeat(64)}","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}"""))
         sessions.connect((ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address); take()
         val user = """{"id":$id,"username":"Viewer","roles":["member"],"session_version":1,"guest":false}"""
         server.enqueue(json("""{"csrf_token":"$csrf","user":$user,"mfa_required":false}""",
             cookie = "SITE=auth$id; Secure; HttpOnly; Path=/"))
         sessions.signIn("Viewer", "fixture-password"); take()
         if (withPrivacy) {
-            server.enqueue(json("""{"csrf_token":"$csrf","user":$user,"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false},"privacy":$privacy}"""))
+            server.enqueue(json("""{"csrf_token":"$csrf","user":$user,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false},"privacy":$privacy}"""))
             sessions.refresh(); take()
         }
         return sessions.state.value

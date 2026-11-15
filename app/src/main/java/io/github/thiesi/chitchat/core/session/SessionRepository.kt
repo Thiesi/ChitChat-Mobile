@@ -66,6 +66,10 @@ data class SessionState(
     val webPush: io.github.thiesi.chitchat.core.push.WebPushDiscovery = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
     /** `application.name` from the last bootstrap, for copy only; null means use the host. */
     val installationName: String? = null,
+    /** The last bootstrap's server is definitely older than the minimum (server-update.md); nothing new starts. */
+    val updateRequired: Boolean = false,
+    /** `application.version` as reported, for the update state's details line and note; null is unknown. */
+    val reportedVersion: String? = null,
     /**
      * Counts successful bootstraps (fresh session and policy) in this generation; a new generation starts at 0.
      * Read only by Send when back online, which needs a revalidation strictly newer than its reconnect.
@@ -328,6 +332,8 @@ class SessionRepository internal constructor(
                         else AttachmentPolicy.Unavailable,
                     webPush = if (reply.user != null && !reply.user.guest) reply.webPush else io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unavailable,
                     installationName = io.github.thiesi.chitchat.core.network.installationName(reply.application),
+                    updateRequired = reply.discovery?.let { needsServerUpdate(it, member = reply.user != null && !reply.user.guest) } ?: true,
+                    reportedVersion = displayedServerVersion(reply.discovery?.version),
                     bootstrapSequence = mutable.value.bootstrapSequence + 1,
                 )
                 active.bootstrapActive = false
@@ -407,6 +413,9 @@ class SessionRepository internal constructor(
         val active = runtime ?: throw ApiFailure(FailureKind.EXPIRED)
         if (current.phase != SessionPhase.AUTHENTICATED || current.user == null || current.busy || active.bootstrapActive || active.policyChanging ||
             current.refreshRequired || active.csrf == null) throw ApiFailure(FailureKind.EXPIRED)
+        // P-182: against a server that needs an update nothing NEW starts. Work that already holds access finishes under
+        // its own rules (a POST is never cancelled); Check again is the ordinary refresh bootstrap.
+        if (current.updateRequired) throw ApiFailure(FailureKind.INCOMPATIBLE)
         if (!active.withinLifetime(clock.millis())) {
             invalidate(active, ApiFailure(FailureKind.EXPIRED))
             throw ApiFailure(FailureKind.EXPIRED)

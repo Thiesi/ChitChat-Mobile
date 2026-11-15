@@ -555,6 +555,16 @@
     <string name="you_privacy_security">Privacy and security</string>
     <string name="you_about">About and privacy</string>
     <string name="you_app_version">App version %1$s</string>
+    <string name="server_update_title">This server needs an update</string>
+    <string name="server_update_setup_body">%1$s runs an older version of ChitChat than this app supports. Ask the person who runs it to update the server. Nothing is wrong with your account.</string>
+    <string name="server_update_session_title">%1$s needs an update</string>
+    <string name="server_update_session_body">This app can\'t continue with this server until it\'s updated. Your account and messages are safe on the server, and you\'ll pick up where you left off once it\'s updated.</string>
+    <string name="server_update_details">Server version %1$s · this app needs %2$s or newer.</string>
+    <string name="server_update_details_unknown">Server version unknown · this app needs %1$s or newer.</string>
+    <string name="server_update_copy_note">Copy a note for the operator</string>
+    <string name="server_update_note_copied">Note copied</string>
+    <string name="server_update_other_server">Use a different server</string>
+    <string name="server_update_check_again">Check again</string>
     <string name="a11y_feedback">Accessibility feedback</string>
     <string name="a11y_feedback_web">This opens %1$s in your browser. Nothing from your session is sent with it.</string>
     <string name="a11y_feedback_mail">This opens your mail app to write to %1$s. Nothing from your session is added.</string>

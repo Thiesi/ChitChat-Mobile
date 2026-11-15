@@ -33,7 +33,7 @@ class SessionHttpTest {
     private fun response(body: String, code: Int = 200, cookie: String? = null): MockResponse =
         MockResponse.Builder().code(code).body(body).addHeader("Content-Type", "application/json")
             .apply { cookie?.let { addHeader("Set-Cookie", it) } }.build()
-    private fun anonymous(csrf: String = token) = """{"csrf_token":"$csrf","user":null,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false},"future_field":true}"""
+    private fun anonymous(csrf: String = token) = """{"csrf_token":"$csrf","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false},"future_field":true}"""
     private fun user() = """{"id":7,"username":"Alice","roles":["member"],"session_version":2,"guest":false}"""
 
     @Test fun everyRequestNamesTheAppWithoutADeviceModel() = runTest {

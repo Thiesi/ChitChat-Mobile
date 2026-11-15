@@ -174,7 +174,7 @@ class ConversationHttpTest {
         assertEquals(0, server.requestCount)
     }
     @Test fun malformedIgnoreMuteAndClockPolicyCannotBecomeAuthenticatedConversationPolicy() = runTest {
-        val base = """{"csrf_token":"$csrf","user":{"id":7,"username":"Alice","roles":[],"session_version":2,"guest":false},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}"""
+        val base = """{"csrf_token":"$csrf","user":{"id":7,"username":"Alice","roles":[],"session_version":2,"guest":false},"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}"""
         for (extra in listOf(""","ignored_user_ids":[-1]}""", ""","ignored_user_ids":[8,8]}""",
             ""","muted_everywhere":{"id":1,"scope":"room","room_id":42,"expires_at":null,"reason":"private"}}""",
             ""","preferences":{"hour_cycle":"invalid"}}""")) {

@@ -47,14 +47,14 @@ class MessageTargetProtocolTest {
         .apply { cookie?.let { addHeader("Set-Cookie", it) } }.build()
     private fun take() = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS))
     private suspend fun login(): SessionState {
-        server.enqueue(json("""{"csrf_token":"$a","user":null,"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}""",
+        server.enqueue(json("""{"csrf_token":"$a","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}""",
             cookie = "SITE=anon; Secure; HttpOnly; Path=/"))
         sessions.connect((ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address); take()
         server.enqueue(json("""{"csrf_token":"$b","user":$user,"mfa_required":false}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
         sessions.signIn("Viewer", "fixture-password"); take(); return sessions.state.value
     }
     private fun bootstrap(disclosure: String? = privacy, ignored: String? = "[]") =
-        """{"csrf_token":"$c","user":$user,"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false},"preferences":{"hour_cycle":"h23"}${ignored?.let { ",\"ignored_user_ids\":$it" } ?: ""}${disclosure?.let { ",\"privacy\":$it" } ?: ""}}"""
+        """{"csrf_token":"$c","user":$user,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false},"preferences":{"hour_cycle":"h23"}${ignored?.let { ",\"ignored_user_ids\":$it" } ?: ""}${disclosure?.let { ",\"privacy\":$it" } ?: ""}}"""
     private fun rows(vararg ids: Long, roomId: Long = 42) = apiJson.encodeToString(MessagesReply(ids.map {
         RoomMessage(it, roomId, 8, "Peer", "text", "Stale raw fixture", false, "2026-10-20T12:00:00Z")
     }))

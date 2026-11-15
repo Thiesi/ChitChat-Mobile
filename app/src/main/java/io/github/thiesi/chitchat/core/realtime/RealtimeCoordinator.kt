@@ -193,7 +193,7 @@ class RealtimeCoordinator(
 
     private fun transport() {
         val session = sessions.state.value
-        val blocked = session.refreshRequired || session.storageWarning
+        val blocked = session.refreshRequired || session.storageWarning || session.updateRequired // P-182
         if (!active() || blocked || terminal) {
             epoch++; streamJob?.cancel()
             mutable.value = mutable.value.copy(phase = when {

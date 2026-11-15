@@ -34,12 +34,12 @@ class DirectSessionJourneyTest {
             .body(body).apply { cookie?.let { addHeader("Set-Cookie", it) } }.build()
         fun take() = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS))
         try {
-            server.enqueue(response("""{"csrf_token":"$a","user":null,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}""",
+            server.enqueue(response("""{"csrf_token":"$a","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}""",
                 "SITE=anon; Secure; HttpOnly; Path=/"))
             sessions.connect((ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address); take()
             server.enqueue(response("""{"csrf_token":"$b","user":$user,"mfa_required":false}""", "SITE=auth; Secure; HttpOnly; Path=/"))
             sessions.signIn("Viewer", "fixture-password"); take()
-            server.enqueue(response("""{"csrf_token":"$c","user":$user,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false},"ignored_user_ids":[],"preferences":{},"privacy":{"direct_messages":{"end_to_end_encrypted":false,"admin_inspection_enabled":false,"admin_inspection_role":"super_admin","retention":"for up to 30 days","retention_days":30},"message_revisions":{"admin_review_enabled":true,"admin_review_role":"admin","reason_required":true,"audit_each_review":true,"participant_notification":false}}}"""))
+            server.enqueue(response("""{"csrf_token":"$c","user":$user,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false},"ignored_user_ids":[],"preferences":{},"privacy":{"direct_messages":{"end_to_end_encrypted":false,"admin_inspection_enabled":false,"admin_inspection_role":"super_admin","retention":"for up to 30 days","retention_days":30},"message_revisions":{"admin_review_enabled":true,"admin_review_role":"admin","reason_required":true,"audit_each_review":true,"participant_notification":false}}}"""))
             server.enqueue(response("""{"user":{"id":8,"username":"Peer"},"relationship":{"blocked_by_me":false,"messaging_available":true}}"""))
             val direct = SessionDirectRepository(sessions)
             val context = direct.context(8); take(); take()

@@ -46,7 +46,11 @@ internal class SessionReply(
     val application: kotlinx.serialization.json.JsonElement? = null,
     /** Read leniently (P-221, ChitChat v3.14.0); see [accessibilityFeedbackUrl]. */
     @SerialName("accessibility_feedback") val accessibilityFeedback: kotlinx.serialization.json.JsonElement? = null,
-)
+) {
+    /** The server-update facts of this body (server-update.md), attached by [SessionHttp.bootstrap]; never decoded. */
+    @kotlinx.serialization.Transient
+    var discovery: io.github.thiesi.chitchat.core.session.ServerDiscovery? = null
+}
 
 /**
  * The server's accessibility feedback address (`accessibility_feedback.url`, P-221), presence-gated: an `https` URL

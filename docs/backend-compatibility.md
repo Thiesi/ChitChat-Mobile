@@ -75,8 +75,8 @@ minimum guarantees it. All three known instances (chitchat, talksquare, cctest) 
 it can't be detected on an older server. Before that it was v3.7.0 (`eba61e9`), per the
 [maintainer's baseline decision](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6747953068)
 and [its activation](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6806140508).
-There are no older-server fallbacks. No code constant exists yet; the pending setup and server-update
-check will use 3.10.0.
+There are no older-server fallbacks. `MINIMUM_SERVER_VERSION` (`core/session/ServerUpdate.kt`) is 3.10.0, and
+the setup and revalidation check is implemented ([server-update check](milestones/server-update-check.md)).
 The source links below retain the original **v3.2.1 / `4f53ff497f5572072fddad42d8ac3979e9cdf0d1`**
 audit; they are historical evidence, not a current minimum or tested-installation claim.
 Only merged backend contracts may be adopted; pending work appears in [backend issues](backend-dependencies.md).

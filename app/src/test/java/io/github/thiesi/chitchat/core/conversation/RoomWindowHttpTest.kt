@@ -48,7 +48,7 @@ class RoomWindowHttpTest {
     private suspend fun login() {
         server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
             .addHeader("Set-Cookie", "SITE=anon; Secure; HttpOnly; Path=/")
-            .body("""{"csrf_token":"${"a".repeat(64)}","user":null,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}""").build())
+            .body("""{"csrf_token":"${"a".repeat(64)}","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}""").build())
         sessions.connect((ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address)
         server.enqueue(MockResponse.Builder().addHeader("Content-Type", "application/json")
             .addHeader("Set-Cookie", "SITE=auth; Secure; HttpOnly; Path=/")
