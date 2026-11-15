@@ -567,6 +567,17 @@
     <string name="onboarding_restore">Restore a closed account</string>
     <string name="onboarding_privacy_line">Your server hosts your conversations. Messages are not end-to-end encrypted.</string>
     <string name="onboarding_sign_in_title">Welcome back</string>
+    <string name="find_people_title">Find your people</string>
+    <string name="find_people_heading">Welcome, %1$s. Pull up a chair.</string>
+    <string name="find_people_body">These rooms are open to everyone on %1$s. Join any that look like your kind of place.</string>
+    <string name="find_people_notifications">We won\'t ask about notifications now. You can turn them on any time in You.</string>
+    <string name="find_people_join">Join</string>
+    <string name="find_people_joining">Joining…</string>
+    <string name="find_people_joined">Joined</string>
+    <string name="find_people_uncertain">We couldn\'t confirm whether you joined.</string>
+    <string name="find_people_check">Check room</string>
+    <string name="find_people_empty">No open rooms yet. Invitations and new rooms will show up in Rooms.</string>
+    <string name="find_people_start">Start chatting</string>
     <string name="server_update_title">This server needs an update</string>
     <string name="server_update_setup_body">%1$s runs an older version of ChitChat than this app supports. Ask the person who runs it to update the server. Nothing is wrong with your account.</string>
     <string name="server_update_session_title">%1$s needs an update</string>

@@ -50,6 +50,8 @@ data class RoomsUiState(
     val notice: String? = null,
     val syncing: Boolean = false,
     val syncError: ApiFailure? = null,
+    /** Find your people (O2b): the listed room whose Join was chosen last; its row shows that attempt's outcome. */
+    val joinTarget: Long? = null,
 )
 
 class RoomsViewModel(private val operations: RoomOperations, private val realtime: RealtimeController? = null,
@@ -182,6 +184,24 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
             mutable.value = mutable.value.copy(selected = joined, notice = "joined")
             openTransfer(joined)
             mutationInFlight = false
+            reconcile(current)
+        }
+    }
+
+    /**
+     * Find your people (onboarding.md step 5, P-54): one explicit, confirmed join of a listed public room. One POST,
+     * then the ordinary list reconcile; "Joined" comes only from that confirmed membership. A failure leaves the
+     * directory stale (and uncertain when ambiguous), so canMutate refuses another join until an explicit GET.
+     */
+    fun joinListed(id: Long) {
+        val room = mutable.value.rooms.firstOrNull { it.id == id } ?: return
+        if (room.isMember || room.visibility != "public" || !canMutate()) return
+        mutable.value = mutable.value.copy(joinTarget = id)
+        start(true) { current ->
+            operations.join(id)
+            current()
+            mutationInFlight = false
+            mutable.value = mutable.value.copy(notice = "joined")
             reconcile(current)
         }
     }

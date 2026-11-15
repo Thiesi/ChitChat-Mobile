@@ -122,6 +122,7 @@ import io.github.thiesi.chitchat.core.notifications.NotificationDestination
 import io.github.thiesi.chitchat.core.notifications.notificationDestination
 import io.github.thiesi.chitchat.core.push.pushTapSettled
 import io.github.thiesi.chitchat.core.session.SessionPhase
+import io.github.thiesi.chitchat.core.session.AuthFlow
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
 import androidx.lifecycle.Lifecycle
@@ -264,6 +265,16 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         var welcomed by rememberSaveable { mutableStateOf(false) }
         var savedInOnboarding by rememberSaveable { mutableStateOf(false) }
         var chosen by rememberSaveable { mutableStateOf(false) }
+        // New-account steps (onboarding.md 5; O4a's recovery key and O3b's rules will insert before Find your people):
+        // a successful Create leaves one pending step, consumed when the shell is first entered. Never set by sign-in or
+        // restore. `creating` remembers that the submitted flow was Create; the session itself can't tell the two apart.
+        var creating by rememberSaveable { mutableStateOf(false) }
+        var pendingNewAccountStep by rememberSaveable { mutableStateOf<String?>(null) }
+        LaunchedEffect(session.phase, session.authFlow, chosen) {
+            if (session.phase == SessionPhase.ANONYMOUS) creating = chosen && session.authFlow == AuthFlow.REGISTER
+            else if (session.phase == SessionPhase.AUTHENTICATED && creating) { pendingNewAccountStep = FIND_PEOPLE_ROUTE; creating = false }
+            else if (session.phase != SessionPhase.AUTHENTICATED) creating = false
+        }
         // The onboarding attempt ends at sign-in (or restore) and when the server is forgotten: later failures and
         // sign-outs use the ordinary screens and Server found's chooser, never step 2 or a remembered form.
         LaunchedEffect(session.phase == SessionPhase.AUTHENTICATED, state.hasLoadedSettings && state.settings.server == null) {
@@ -353,7 +364,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             // Two graphs: signed in, the shell (Rooms root first); otherwise onboarding, with every cleanup below.
             if (session.phase == SessionPhase.AUTHENTICATED && entry?.destination?.route == HOME_ROUTE) {
                 currentTab = ShellTab.ROOMS.name
-                nav.navigate(SHELL_GRAPH) { popUpTo(HOME_ROUTE) { inclusive = true } }; return@LaunchedEffect
+                nav.navigate(SHELL_GRAPH) { popUpTo(HOME_ROUTE) { inclusive = true } }
+                pendingNewAccountStep?.let { step -> pendingNewAccountStep = null; nav.navigate(step) }
+                return@LaunchedEffect
             }
             val searchArgs = entry?.arguments
             val atSearch = entry?.destination?.route == SEARCH_ROUTE
@@ -419,6 +432,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         "settings" -> R.string.settings
                         "account", NOTIFICATION_ACCOUNT_ROUTE -> R.string.account
                         "notification_settings" -> R.string.notification_settings_title
+                        FIND_PEOPLE_ROUTE -> R.string.find_people_title
                         LICENCES_ROUTE, LICENCE_ROUTE -> R.string.oss_licences_title
                         ROOMS_ROUTE -> R.string.rooms_title
                         YOU_ROUTE -> R.string.nav_you
@@ -426,7 +440,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                     }) },
                     navigationIcon = {
                         // P-76: pushed destinations get an icon Back; tab roots have none (system Back still works there).
-                        if (!atHome && !tabRoot) NavBackButton { nav.popBackStack() }
+                        // Find your people is the one exception (O2b): its single exit is Start chatting; system Back does the same.
+                        if (!atHome && !tabRoot && entry?.destination?.route != FIND_PEOPLE_ROUTE) NavBackButton { nav.popBackStack() }
                     },
                     actions = {
                         if (tabRoot && (tab == ShellTab.ROOMS || tab == ShellTab.DIRECT) && search != null &&
@@ -563,6 +578,15 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                     onChangeServer = { nav.navigate("server") },
                                     onLicences = { nav.navigate(LICENCES_ROUTE) { launchSingleTop = true } })
                             } }
+                        }
+                        composable(FIND_PEOPLE_ROUTE) {
+                            if (session.phase == SessionPhase.AUTHENTICATED) {
+                                val startChatting = { nav.popBackStack(ROOMS_ROUTE, false); Unit }
+                                androidx.activity.compose.BackHandler(onBack = startChatting)
+                                val host = state.settings.server?.value?.let { runCatching { java.net.URI(it).host }.getOrNull() }.orEmpty()
+                                io.github.thiesi.chitchat.feature.rooms.FindPeopleScreen(rooms, session.user?.username.orEmpty(),
+                                    session.installationName ?: breakableHost(host), startChatting)
+                            }
                         }
                         composable("account") {
                             if (session.phase == SessionPhase.AUTHENTICATED) ScreenContent {
@@ -780,6 +804,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
 
 private const val LICENCES_ROUTE = "licences"
 private const val SERVER_NEW_ROUTE = "server_new"
+private const val FIND_PEOPLE_ROUTE = "find_people"
 private const val LICENCE_ROUTE = "licences/{index}"
 
 /** A tab root: its screen sees the tab's reselect count (scroll to top on reselection). */

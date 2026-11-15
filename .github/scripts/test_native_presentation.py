@@ -235,6 +235,26 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def find_people_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-find-people-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_find_people_captures_are_copied_and_keep_the_original_status(self):
+        self.results(5)
+        files = [Path("find-people-light-default-top.png"), Path("find-people-dark-font200-joined.png")]
+        self.find_people_files(files)
+        self.assertEqual(5, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.FIND_PEOPLE_DESTINATION / path.name)
+        self.assertEqual(3, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_find_people_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"find-people-light-default-top-{n}.png") for n in range(17)],
+            [Path("a/find-people-dark-default-top.png"), Path("b/find-people-dark-default-top.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.find_people_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def onboarding_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-onboarding-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
