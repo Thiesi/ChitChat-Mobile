@@ -49,12 +49,12 @@ class OnboardingJourneyTest {
     private fun addressIs(value: String) = compose.onNodeWithTag("onboarding_server_input")
         .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(value)))
 
-    @Test fun welcomeLeadsToTheAddressBackReturnsAndRecreationKeepsTheStep() {
+    /** P-50 (the step survives recreation) is proven on the production restore path in OnboardingRecreationTest. */
+    @Test fun welcomeLeadsToTheAddressAndBackReturns() {
         toAddress(); compose.onNodeWithTag("onboarding_server_input").assertExists()
         Espresso.pressBack(); compose.onNodeWithTag("onboarding_welcome_start").assertExists()
         compose.onNodeWithTag("onboarding_welcome_start").performClick()
-        compose.activityRule.scenario.recreate(); compose.activityRule.scenario.onActivity { it.setContent { TestChitChatApp(settings, auth) } }
-        compose.onNodeWithTag("onboarding_server_input").assertExists() // P-50: the same step after recreation.
+        compose.onNodeWithTag("onboarding_server_input").assertExists()
     }
 
     @Test fun theFeatureDisclosureAndPrivacyLineAreReachableBeforeSignIn() {
@@ -93,16 +93,35 @@ class OnboardingJourneyTest {
         compose.onNodeWithTag("onboarding_sign_in").assertDoesNotExist(); compose.onNodeWithTag("onboarding_create").assertDoesNotExist()
     }
 
+    private fun emphasis(tag: String, value: String) =
+        compose.onNodeWithTag(tag).assert(SemanticsMatcher.expectValue(OnboardingEmphasis, value))
+
+    /** P-52 plus J1 (visual-vocabulary.md): one persimmon primary. Create is it when shown; otherwise Sign in. */
     @Test fun createAppearsOnlyWithRegistrationOnAndNoLockdown() {
         sessions.registrationEnabled = true
         toAddress(); submit("chat.example.test")
         compose.onNodeWithTag("onboarding_create").assertExists()
+        emphasis("onboarding_create", "primary"); emphasis("onboarding_sign_in", "secondary")
         sessions.nextConnect = { it.copy(public = it.public!!.copy(lockdown = Lockdown(true, "Back at noon"))) }
         compose.runOnIdle { auth.reconnect() }
         compose.onNodeWithTag("onboarding_create").assertDoesNotExist(); compose.onNodeWithTag("onboarding_signup_closed").assertExists()
+        emphasis("onboarding_sign_in", "primary")
         sessions.registrationEnabled = false
         compose.runOnIdle { auth.reconnect() }
         compose.onNodeWithTag("onboarding_create").assertDoesNotExist(); compose.onNodeWithTag("onboarding_signup_closed").assertExists()
+        emphasis("onboarding_sign_in", "primary")
+    }
+
+    /** J2: the card host breaks after dots for display only; semantics keep the raw host, with or without a name. */
+    @Test fun theServerCardKeepsTheRawHostInSemantics() {
+        toAddress(); submit("chat.example.test")
+        val card = hasAnyAncestor(hasTestTag("onboarding_server_card"))
+        compose.onNode(hasText("chat.example.test", substring = false) and card).assertExists()
+        compose.onAllNodes(hasText(breakableHost("chat.example.test"), substring = true) and card).assertCountEquals(0)
+        sessions.nextConnect = { it.copy(installationName = "Example Chat") }
+        compose.runOnIdle { auth.reconnect() }
+        compose.onNode(hasText("Example Chat", substring = false) and card).assertExists()
+        compose.onNode(hasText("chat.example.test", substring = false) and card).assertExists()
     }
 
     @Test fun backFromAFormReturnsToTheChooserAndTheFooterSitsOnServerFound() {

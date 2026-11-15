@@ -10,13 +10,17 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.server.ServerAddress
+import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.settings.*
 import io.github.thiesi.chitchat.feature.account.TestChitChatApp
 import io.github.thiesi.chitchat.feature.auth.AuthViewModel
@@ -68,10 +72,24 @@ class OnboardingPresentationTest {
                 compose.onNodeWithTag("onboarding_continue").performScrollTo().assertIsDisplayed()
                 capture("onboarding-$label-$name-address")
                 compose.onNodeWithTag("onboarding_continue").performClick()
+                compose.onNodeWithTag("onboarding_server_card").assertIsDisplayed()
+                capture("onboarding-$label-$name-foundtop") // Unscrolled: the server card (J3). Host-only fixture.
                 for (tag in listOf("onboarding_create", "onboarding_sign_in", "onboarding_restore", "onboarding_other_server", "a11y_feedback"))
                     compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
                 compose.onNodeWithTag("onboarding_create").performScrollTo()
                 capture("onboarding-$label-$name-found")
+                if (fontScale == 2f) { // A step 2 failure notice at 200% (J3).
+                    sessions.nextConnect = { it.copy(phase = SessionPhase.INVALIDATED, error = ApiFailure(FailureKind.TLS)) }
+                    compose.onNodeWithTag("onboarding_other_server").performScrollTo().performClick()
+                    // A different host: saving the same address again starts no new connect.
+                    compose.onNodeWithTag("onboarding_server_input").performTextReplacement("other.example.test")
+                    Espresso.closeSoftKeyboard()
+                    compose.onNodeWithTag("onboarding_continue").performScrollTo().performClick()
+                    compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext
+                        .getString(io.github.thiesi.chitchat.R.string.onboarding_tls, "other.example.test")).assertExists()
+                    compose.onNodeWithTag("onboarding_continue").performScrollTo().assertIsDisplayed()
+                    capture("onboarding-$label-$name-failure")
+                }
             }
         }
     }

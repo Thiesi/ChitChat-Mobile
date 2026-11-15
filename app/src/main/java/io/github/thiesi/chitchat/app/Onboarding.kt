@@ -24,8 +24,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.network.ApiFailure
@@ -33,6 +38,7 @@ import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.session.AuthFlow
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
+import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
 import io.github.thiesi.chitchat.core.ui.AccessibilityFeedbackLink
 import io.github.thiesi.chitchat.core.ui.InlineError
 import io.github.thiesi.chitchat.core.ui.PrimaryButton
@@ -70,6 +76,10 @@ internal fun PreviewDisclosure() {
     }
 }
 
+/** Which emphasis an onboarding action has; tests pin one persimmon primary per screen (visual-vocabulary.md). */
+internal val OnboardingEmphasis = SemanticsPropertyKey<String>("OnboardingEmphasis")
+private var SemanticsPropertyReceiver.emphasis by OnboardingEmphasis
+
 /** Step 2's notice for a failed bootstrap of a server saved during this onboarding (onboarding-restyle.md copy table). */
 internal fun stepTwoNotice(failure: ApiFailure): Int = when {
     failure.kind == FailureKind.TLS -> R.string.onboarding_tls
@@ -92,8 +102,12 @@ internal fun ServerFound(session: SessionState, server: String?, onChoose: (Auth
             modifier = Modifier.testTag("onboarding_server_card")) {
             Icon(painterResource(R.drawable.ic_lock), contentDescription = null, tint = ChitChatTheme.colors.textMuted)
             Column {
-                Text(session.installationName ?: host, style = MaterialTheme.typography.titleLarge)
-                if (session.installationName != null) Text(host, style = MaterialTheme.typography.bodyMedium, color = ChitChatTheme.colors.textMuted)
+                // The host breaks after its dots for display only (#259); semantics carry the raw host.
+                val name = session.installationName
+                Text(name ?: breakableHost(host), Modifier.clearAndSetSemantics { text = AnnotatedString(name ?: host) },
+                    style = MaterialTheme.typography.titleLarge)
+                if (name != null) Text(breakableHost(host), Modifier.clearAndSetSemantics { text = AnnotatedString(host) },
+                    style = MaterialTheme.typography.bodyMedium, color = ChitChatTheme.colors.textMuted)
             }
         }
         if (session.updateRequired) ServerUpdateNotice(session, server, onOtherServer)
@@ -103,12 +117,20 @@ internal fun ServerFound(session: SessionState, server: String?, onChoose: (Auth
             if (public?.lockdown?.enabled == true) InlineError(public.lockdown.message?.takeIf(String::isNotBlank)
                 ?.let { "${stringResource(R.string.maintenance_notice)} $it" } ?: stringResource(R.string.maintenance_notice))
             else if (public?.providers?.isNotEmpty() == true) Text(stringResource(R.string.providers_unavailable))
-            if (public?.registrationEnabled == true && !public.lockdown.enabled)
-                PrimaryButton(onClick = { onChoose(AuthFlow.REGISTER) }, modifier = Modifier.fillMaxWidth().testTag("onboarding_create")) {
+            // One persimmon primary: Create when sign-up is open (Sign in is then the outlined secondary), else Sign in.
+            val canCreate = public?.registrationEnabled == true && !public.lockdown.enabled
+            if (canCreate)
+                PrimaryButton(onClick = { onChoose(AuthFlow.REGISTER) },
+                    modifier = Modifier.fillMaxWidth().testTag("onboarding_create").semantics { emphasis = "primary" }) {
                     Text(stringResource(R.string.onboarding_create_account))
                 }
             else Text(stringResource(R.string.registration_disabled), Modifier.testTag("onboarding_signup_closed"))
-            PrimaryButton(onClick = { onChoose(AuthFlow.SIGN_IN) }, modifier = Modifier.fillMaxWidth().testTag("onboarding_sign_in")) {
+            if (canCreate) LanternOutlinedButton(onClick = { onChoose(AuthFlow.SIGN_IN) },
+                modifier = Modifier.fillMaxWidth().testTag("onboarding_sign_in").semantics { emphasis = "secondary" }) {
+                Text(stringResource(R.string.onboarding_sign_in))
+            }
+            else PrimaryButton(onClick = { onChoose(AuthFlow.SIGN_IN) },
+                modifier = Modifier.fillMaxWidth().testTag("onboarding_sign_in").semantics { emphasis = "primary" }) {
                 Text(stringResource(R.string.onboarding_sign_in))
             }
             TextButton(onClick = { onChoose(AuthFlow.RESTORE) }, Modifier.heightIn(min = 48.dp).testTag("onboarding_restore")) {
