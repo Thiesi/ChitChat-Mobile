@@ -167,7 +167,11 @@ summary requests.
   - on a pushed destination, pop it;
   - at the root of Direct, Activity or You, go to the Rooms root;
   - at the Rooms root, leave the app (the Activity finishes, and genuine-background rules
-    apply through `ON_STOP` as today).
+    apply through `ON_STOP` as today);
+  - on **Find your people** (onboarding step 5, new accounts only), go to the Rooms root,
+    exactly like its Start chatting button. The account already exists, so Back never returns
+    to the create form, and joins already confirmed stay joined (technical lead ruling,
+    2026-11-15).
 - **`ON_STOP` handling** stays at the Activity level as today. The conversation exception
   checks the *current* route, including conversations pushed on any tab.
 - **Notification lifecycle:** `inNotifications` becomes "the Activity tab root is the current
@@ -188,6 +192,9 @@ summary requests.
   affordance. Pushed destinations show an `IconButton` back arrow with the content
   description **"Back"**, so existing instrumented tests that find "Back" by text are
   updated to find it by content description in the same PR.
+- **Exception: Find your people** (onboarding step 5) shows its title "Find your people"
+  with **no** back icon, although it's pushed. Its only exit is Start chatting, or system Back
+  that does the same (System Back above). This is deliberate, not a P-76 defect.
 - Actions: Search on Rooms and Direct. Account and Settings actions disappear (now under You).
 - The status slot (`StatusSlot`, status-presentation.md) stays directly under the top bar
   on every signed-in destination, with at most one notice chosen by `resolveStatus` and its
@@ -224,6 +231,6 @@ Extends P-30:
 | P-73 | Back and reselection behave as specified. Leaving from the Rooms root goes through the genuine-background path. | C |
 | P-74 | The Activity badge uses only the existing summary count and modes. Rooms and Direct show no badge (decided; revisit with ChitChat#153/#154). No new polling or background requests. | C, R |
 | P-75 | You contains every control from the old hub, `account` and `settings`, with unchanged behavior. Sign out is not persimmon-filled. | C, R |
-| P-76 | Pushed destinations use an icon back button described "Back". Tab roots have none. | C |
+| P-76 | Pushed destinations use an icon back button described "Back". Tab roots have none. Exception: Find your people (onboarding step 5) has none, and system Back goes to the Rooms root. | C |
 | P-77 | You's About and privacy group shows only rows whose source exists (licences and app version today), never disabled placeholders. Licences move there from `account` with unchanged behaviour. The status slot stays the single notice area under the top bar on every tab. | C |
 | P-78 | Every bottom-bar label renders on one line at default and 200% on windows 272dp and wider (the tested boundary), never broken mid-word. When needed, all four share one measured size (bold-measured, floor 18sp). Narrower windows may wrap but never clip. Selected colour is `onSurface`, never `steward`. | C |
