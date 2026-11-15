@@ -79,6 +79,7 @@ class AuthJourneyTest {
         compose.onNodeWithContentDescription("Back").assertDoesNotExist()
         assertEquals(io.github.thiesi.chitchat.core.session.SessionPhase.SIGNED_OUT, sessions.state.value.phase)
         compose.onNodeWithText("Back to sign-in").performClick()
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Sign-out returns to Server found (O2a).
         compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed()
     }
 
@@ -157,6 +158,7 @@ class AuthJourneyTest {
         compose.onNodeWithText("Sign out").performScrollTo().performClick()
         compose.onNodeWithText("Signed in as Alice").assertDoesNotExist()
         compose.onNodeWithText("Back to sign-in").performScrollTo().performClick()
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Sign-out returns to Server found (O2a).
         compose.onNodeWithText("Username").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
     }
 
