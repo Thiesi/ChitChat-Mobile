@@ -98,6 +98,7 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         val raw = request("session.php")
         if (raw.status != 200) throw ApiFailure(FailureKind.INCOMPATIBLE)
         val reply = decode<SessionReply>(raw)
+        reply.discovery = io.github.thiesi.chitchat.core.session.serverDiscovery(raw.body)
         requireValidCsrf(reply.csrfToken)
         reply.user?.let(::requireValidUser)
         reply.ignoredUserIds?.let { incompatibleUnless(it.all { id -> id > 0 } && it.distinct().size == it.size) }

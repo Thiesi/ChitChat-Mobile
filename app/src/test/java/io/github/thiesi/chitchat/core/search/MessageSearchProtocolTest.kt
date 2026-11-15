@@ -36,7 +36,7 @@ class MessageSearchProtocolTest {
     private val query = MessageSearchRequest("private fixture", MessageSearchScope.ROOMS)
     private val privacy = """{"direct_messages":{"end_to_end_encrypted":false,"admin_inspection_enabled":true,"admin_inspection_role":"admin","retention":"Fixture retention","retention_days":30},"message_revisions":{"admin_review_enabled":true,"admin_review_role":"admin","reason_required":true,"audit_each_review":true,"participant_notification":false}}"""
     private fun privacyBootstrap(policy: String) =
-        """{"csrf_token":"$authenticated","user":${apiJson.encodeToString(sessions.state.value.user)},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false},"privacy":$policy}"""
+        """{"csrf_token":"$authenticated","user":${apiJson.encodeToString(sessions.state.value.user)},"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false},"privacy":$policy}"""
     private suspend fun refreshPrivacy(policy: String = privacy) {
         server.enqueue(json(privacyBootstrap(policy))); sessions.refresh(); take()
     }
@@ -55,7 +55,7 @@ class MessageSearchProtocolTest {
         .apply { cookie?.let { addHeader("Set-Cookie", it) } }.build()
     private fun take() = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS))
     private suspend fun login(id: Long = 7, version: Int = 1): SessionState {
-        server.enqueue(json("""{"csrf_token":"$anonymous","user":null,"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}""",
+        server.enqueue(json("""{"csrf_token":"$anonymous","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}""",
             cookie = "SITE=anon; Secure; HttpOnly; Path=/"))
         sessions.connect((ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address); take()
         server.enqueue(json("""{"csrf_token":"$authenticated","user":{"id":$id,"username":"Viewer","roles":["member"],"session_version":$version,"guest":false},"mfa_required":false}""",
@@ -197,11 +197,11 @@ class MessageSearchProtocolTest {
         assertEquals(4, server.requestCount)
     }
     @Test fun guestAndAnonymousStatesNeverOpenAMemberSearchCapability() = runTest {
-        server.enqueue(json("""{"csrf_token":"$anonymous","user":{"id":10,"username":"Guest","roles":[],"session_version":1,"guest":true},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}"""))
+        server.enqueue(json("""{"csrf_token":"$anonymous","user":{"id":10,"username":"Guest","roles":[],"session_version":1,"guest":true},"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}"""))
         sessions.connect((ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address); take()
         assertEquals(SessionPhase.GUEST, sessions.state.value.phase)
         failure { repository.search(sessions.state.value, query) }; assertEquals(1, server.requestCount)
-        server.enqueue(json("""{"csrf_token":"$anonymous","user":null,"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}"""))
+        server.enqueue(json("""{"csrf_token":"$anonymous","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}"""))
         sessions.connect((ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address); take()
         assertEquals(SessionPhase.ANONYMOUS, sessions.state.value.phase)
         failure { repository.search(sessions.state.value, query) }; assertEquals(2, server.requestCount)

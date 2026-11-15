@@ -39,10 +39,10 @@ class DirectProtocolTest {
         .addHeader("Content-Type", "application/json").body(body).apply { cookie?.let { addHeader("Set-Cookie", it) } }.build()
     private fun bootstrap(user: String = viewer, policy: String? = privacy): String {
         val extra = policy?.let { """, "privacy":$it""" } ?: ""
-        return """{"csrf_token":"$c","user":$user,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false},"ignored_user_ids":[],"preferences":{"hour_cycle":"h23"}$extra}"""
+        return """{"csrf_token":"$c","user":$user,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false},"ignored_user_ids":[],"preferences":{"hour_cycle":"h23"}$extra}"""
     }
     private suspend fun login() {
-        server.enqueue(json("""{"csrf_token":"$a","user":null,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}""",
+        server.enqueue(json("""{"csrf_token":"$a","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}""",
             cookie = "SITE=anon; Secure; HttpOnly; Path=/"))
         sessions.connect((ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address); take()
         server.enqueue(json("""{"csrf_token":"$b","user":$viewer,"mfa_required":false}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))

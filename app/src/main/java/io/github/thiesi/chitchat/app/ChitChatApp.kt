@@ -394,7 +394,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             it == NOTIFICATION_ROOM_ROUTE || it == SEARCH_ROUTE } == true
         val compactConversation = conversationRoute && maxHeight < 400.dp
         val compactKeyboard = imeVisible && maxHeight < 240.dp
-        Scaffold(
+        if (session.phase == SessionPhase.AUTHENTICATED && session.updateRequired)
+            ServerUpdateScreen(session, state.settings.server?.value, onCheckAgain = auth::refresh, onSignOut = auth::signOut)
+        else Scaffold(
             topBar = {
                 if (!compactKeyboard) TopAppBar(
                     title = { BarTitle(large = tabRoot, title = if (entry?.destination?.route == NOTIFICATIONS_ROUTE) R.string.notifications_title
@@ -488,11 +490,15 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                                             Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.headlineLarge)
                                             Text(state.settings.server!!.value, style = MaterialTheme.typography.titleMedium)
-                                            AuthScreen(session, auth)
-                                            LanternOutlinedButton(onClick = { nav.navigate("server") }, enabled = session.canChangeServer) {
-                                                Text(stringResource(R.string.change_server))
+                                            if (session.updateRequired && session.phase in setOf(SessionPhase.ANONYMOUS, SessionPhase.GUEST))
+                                                ServerUpdateNotice(session, state.settings.server?.value) { nav.navigate(SERVER_NEW_ROUTE) }
+                                            else {
+                                                AuthScreen(session, auth)
+                                                LanternOutlinedButton(onClick = { nav.navigate("server") }, enabled = session.canChangeServer) {
+                                                    Text(stringResource(R.string.change_server))
+                                                }
+                                                if (!session.canChangeServer) Text(stringResource(R.string.sign_out_to_change_server))
                                             }
-                                            if (!session.canChangeServer) Text(stringResource(R.string.sign_out_to_change_server))
                                             PrivacyCard()
                                         }
                                     }
@@ -502,6 +508,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         composable("server") {
                             ScreenContent {
                                 if (session.canChangeServer) ServerEditor(state, model, onSaved = { nav.popBackStack() })
+                                else Text(stringResource(R.string.sign_out_to_change_server))
+                            }
+                        }
+                        composable(SERVER_NEW_ROUTE) { // "Use a different server": step 2 with the field empty.
+                            ScreenContent {
+                                if (session.canChangeServer) ServerEditor(state, model, onSaved = { nav.popBackStack() }, startEmpty = true)
                                 else Text(stringResource(R.string.sign_out_to_change_server))
                             }
                         }
@@ -655,7 +667,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         }
         }
         // Back at a Direct, Activity or You root goes to the Rooms root; at the Rooms root the system leaves the app.
-        BackHandler(enabled = session.phase == SessionPhase.AUTHENTICATED && tabRoot && tab != null && tab != ShellTab.ROOMS) { roomsRoot() }
+        BackHandler(enabled = session.phase == SessionPhase.AUTHENTICATED && !session.updateRequired && tabRoot && tab != null &&
+            tab != ShellTab.ROOMS) { roomsRoot() }
         RoomDraftsDialog(conversations, session, openRoom)
         val profileChoice = profileState?.selection
         if (profiles != null && profileChoice != null && profileChoice.matches(displayedSession) &&
@@ -733,6 +746,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
 }
 
 private const val LICENCES_ROUTE = "licences"
+private const val SERVER_NEW_ROUTE = "server_new"
 private const val LICENCE_ROUTE = "licences/{index}"
 
 /** A tab root: its screen sees the tab's reselect count (scroll to top on reselection). */
@@ -753,8 +767,8 @@ private fun ScreenContent(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSaved: () -> Unit) {
-    var address by rememberSaveable { mutableStateOf(state.settings.server?.value.orEmpty()) }
+private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSaved: () -> Unit, startEmpty: Boolean = false) {
+    var address by rememberSaveable { mutableStateOf(if (startEmpty) "" else state.settings.server?.value.orEmpty()) }
     var submitted by rememberSaveable { mutableStateOf(false) }
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current

@@ -11,7 +11,7 @@ class AttachmentPolicyTest {
         "room":{"maximum_attempts":10,"window_seconds":3600},
         "direct_message":{"maximum_attempts":4,"window_seconds":900}}}"""
     private fun session(field: String) = apiJson.decodeFromString<SessionReply>(
-        """{"csrf_token":"${"a".repeat(64)}","user":null,"registration_enabled":true,
+        """{"csrf_token":"${"a".repeat(64)}","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":true,
             "sign_in_providers":[],"lockdown":{"enabled":false}$field}""").attachmentPolicy
 
     @Test fun missingNullAndZeroStayDistinctWithoutGuessedDefaults() {

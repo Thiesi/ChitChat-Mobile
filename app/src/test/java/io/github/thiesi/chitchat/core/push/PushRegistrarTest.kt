@@ -57,7 +57,7 @@ class PushRegistrarTest {
     private fun json(body: String, status: Int = 200) = MockResponse.Builder().code(status).body(body)
         .addHeader("Content-Type", "application/json").addHeader("Set-Cookie", "SITE=x; Secure; HttpOnly; Path=/").build()
     private fun bootstrap(person: String, extra: String = "") =
-        """{"csrf_token":"$b","user":$person,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}$extra}"""
+        """{"csrf_token":"$b","user":$person,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}$extra}"""
 
     private suspend fun login() {
         server.enqueue(json(bootstrap("null").replace(b, a)))

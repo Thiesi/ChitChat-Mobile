@@ -44,7 +44,7 @@ class RoomMentionProtocolTest {
         .apply { cookie?.let { addHeader("Set-Cookie", it) } }.build()
     private fun take() = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS))
     private suspend fun login(id: Long = 7, version: Int = 1): SessionState {
-        server.enqueue(json("""{"csrf_token":"$anonymous","user":null,"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}""",
+        server.enqueue(json("""{"csrf_token":"$anonymous","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}""",
             cookie = "SITE=anon; Secure; HttpOnly; Path=/"))
         sessions.connect((ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address); take()
         server.enqueue(json("""{"csrf_token":"$authenticated","user":{"id":$id,"username":"Viewer","roles":["member"],"session_version":$version,"guest":false},"mfa_required":false}""",

@@ -19,6 +19,8 @@ STATUS_DESTINATION = ROOT / "app/build/reports/androidTests/status-presentation"
 STATUS_NAME = re.compile(r"status-(light|dark)-(?:(?:default|font200)-"
     r"(?:storage|offline|tls|incompatible|stopped|refresh|rate|rate-unknown|offline-edge|waiting-room|waiting-dm)|default-details)\.png")
 NAV_DESTINATION = ROOT / "app/build/reports/androidTests/nav-presentation"
+UPDATE_DESTINATION = ROOT / "app/build/reports/androidTests/update-presentation"
+UPDATE_NAME = re.compile(r"update-(light|dark)-(default|font200)-(setup|session)(-actions)?[.]png")
 A11Y_DESTINATION = ROOT / "app/build/reports/androidTests/a11y-presentation"
 A11Y_NAME = re.compile(r"a11y-(light|dark)-(default|font200)-(signin|you|dialog)[.]png")
 YOU_DESTINATION = ROOT / "app/build/reports/androidTests/you-presentation"
@@ -123,6 +125,18 @@ def collect_a11y():
     print(f"Accessibility feedback presentation captures collected: {len(files)} of 12.")
 
 
+def collect_update():
+    # "This server needs an update": setup and revalidation, default and 2.0 font, light and dark.
+    files = list(islice(SOURCE.rglob("ccm-update-presentation/*"), 17))
+    if (not files or len(files) > 16 or len({p.name for p in files}) != len(files)
+        or any(UPDATE_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous server update presentation output")
+    UPDATE_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, UPDATE_DESTINATION / path.name)
+    print(f"Server update presentation captures collected: {len(files)} of 16.")
+
+
 def collect_nav():
     # Navigation shell bottom bar at default and 2.0 font, light and dark.
     files = list(islice(SOURCE.rglob("ccm-nav-presentation/*"), 6))
@@ -214,6 +228,10 @@ def main() -> int:
         collect_a11y()
     except Exception:
         print("Accessibility feedback presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_update()
+    except Exception:
+        print("Server update presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_nav()
     except Exception:

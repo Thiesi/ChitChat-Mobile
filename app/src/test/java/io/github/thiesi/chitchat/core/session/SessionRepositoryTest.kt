@@ -69,7 +69,7 @@ class SessionRepositoryTest {
         .code(status).body(body).addHeader("Content-Type", "application/json")
         .apply { cookie?.let { addHeader("Set-Cookie", it) } }.build()
     private fun bootstrapBody(user: String = "null", csrf: String = a) =
-        """{"csrf_token":"$csrf","user":$user,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}"""
+        """{"csrf_token":"$csrf","user":$user,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}"""
     private val attachmentPolicy = """{"max_bytes":17,"allowed_mime_types":["image/png"],"previewable_mime_types":["image/png"]}"""
     private fun attachmentBootstrap(person: String = user, policy: String = attachmentPolicy) =
         bootstrapBody(person).dropLast(1) + """, "attachments":$policy}"""
@@ -96,6 +96,29 @@ class SessionRepositoryTest {
         sessions.refresh()
         assertEquals("GET", server.takeRequest(5, TimeUnit.SECONDS)?.method)
         assertNotNull(sessions.state.value.privacy)
+    }
+
+    @Test fun anOutdatedServerKeepsTheSessionButStartsNothingNewUntilCheckAgain() = runTest {
+        login()
+        server.enqueue(json(bootstrapBody(user, b).replace("\"version\":\"3.10.0\"", "\"version\":\"3.9.0\"")))
+        sessions.refresh(); server.takeRequest()
+        assertTrue(sessions.state.value.updateRequired); assertEquals("3.9.0", sessions.state.value.reportedVersion)
+        assertEquals("The session stays signed in", SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        val before = server.requestCount
+        assertEquals("P-182: no new access", FailureKind.INCOMPATIBLE,
+            (runCatching { sessions.openAccess() }.exceptionOrNull() as ApiFailure).kind)
+        assertEquals("Nothing reached the server", before, server.requestCount)
+        server.enqueue(json(bootstrapBody(user, b))); sessions.refresh(); server.takeRequest() // Check again: one explicit GET.
+        assertFalse(sessions.state.value.updateRequired); assertEquals("3.10.0", sessions.state.value.reportedVersion)
+        sessions.openAccess()
+    }
+
+    @Test fun anAnonymousServerWithoutCapabilitiesNeedsTheUpdateAtSetup() = runTest {
+        server.enqueue(json("""{"csrf_token":"$a","user":null,"registration_enabled":true,"sign_in_providers":[],"lockdown":{"enabled":false}}"""))
+        sessions.connect(address()); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(SessionPhase.ANONYMOUS, sessions.state.value.phase)
+        assertTrue("No capabilities.schema_version: older than 3.3.0", sessions.state.value.updateRequired)
+        assertNull(sessions.state.value.reportedVersion)
     }
 
     @Test fun onlyASuccessfulBootstrapMovesTheSequenceAndOnlyByOne() = runTest {
