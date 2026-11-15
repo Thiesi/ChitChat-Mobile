@@ -4,6 +4,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
@@ -34,9 +37,11 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * The You hub below the fold (presentation lead, PR251): the session group with the outlined Sign out (P-75) and
- * About and privacy (P-77), captured at a real Configuration font scale (default and 2.0), light and dark. No network.
+ * The You hub (presentation lead, PR251/PR256): the top bar on a tab root and a pushed screen (P-76), the profile
+ * header, the session group with the outlined Sign out (P-75) and About and privacy (P-77), captured at a real
+ * Configuration font scale (default and 2.0), light and dark. No network.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 class YouPresentationTest {
     @get:Rule val compose = createEmptyComposeRule()
     @After fun reset() { FontScaleTestActivity.requestedFontScale = 1f }
@@ -55,13 +60,20 @@ class YouPresentationTest {
                 scenario.onActivity { activity ->
                     assertEquals("A real Configuration font scale", fontScale, activity.resources.configuration.fontScale)
                     val auth = AuthViewModel(TestSessions())
-                    activity.setContent { ChitChatTheme(dark = dark) {
-                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
+                    activity.setContent { ChitChatTheme(dark = dark) { Column(Modifier.fillMaxSize()) {
+                        // P-76 with the real pieces: a tab root (large title, no Back) and a pushed screen (icon Back).
+                        TopAppBar(title = { BarTitle(R.string.nav_you, large = true) }, Modifier.testTag("bar_root"))
+                        TopAppBar(title = { BarTitle(R.string.oss_licences_title) }, Modifier.testTag("bar_pushed"),
+                            navigationIcon = { NavBackButton {} })
+                        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(24.dp)) {
                             YouScreen(session, auth, session.server?.value, pushAvailable = false, onNotifications = {},
                                 onAppearance = {}, onAccount = {}, onChangeServer = {}, onLicences = {})
                         }
-                    } }
+                    } } }
                 }
+                capture("you-$label-$name-rootbar", "bar_root")
+                capture("you-$label-$name-pushedbar", "bar_pushed")
+                capture("you-$label-$name-header", "you_header") // The admin fixture: steward "Administrator" badge.
                 val signOut = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.sign_out)
                 compose.onNode(hasText(signOut) and hasAnyAncestor(hasTestTag("you_session"))).performScrollTo()
                 capture("you-$label-$name-session", "you_session")

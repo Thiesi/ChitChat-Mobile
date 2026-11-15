@@ -41,9 +41,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.ui.res.painterResource
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import androidx.compose.runtime.Composable
@@ -415,9 +412,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                     }) },
                     navigationIcon = {
                         // P-76: pushed destinations get an icon Back; tab roots have none (system Back still works there).
-                        if (!atHome && !tabRoot) IconButton(onClick = { nav.popBackStack() }, Modifier.testTag("nav_back")) {
-                            Icon(painterResource(R.drawable.ic_back), contentDescription = stringResource(R.string.back))
-                        }
+                        if (!atHome && !tabRoot) NavBackButton { nav.popBackStack() }
                     },
                     actions = {
                         if (tabRoot && (tab == ShellTab.ROOMS || tab == ShellTab.DIRECT) && search != null &&

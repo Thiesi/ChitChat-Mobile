@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.Text
@@ -200,4 +201,10 @@ private fun ProfileHeader(username: String, roles: List<String>) {
             }
         }
     }
+}
+
+/** P-76: the top bar's Back on pushed destinations, an icon described "Back". */
+@Composable
+internal fun NavBackButton(onBack: () -> Unit) = IconButton(onClick = onBack, Modifier.testTag("nav_back")) {
+    Icon(painterResource(R.drawable.ic_back), contentDescription = stringResource(R.string.back))
 }
