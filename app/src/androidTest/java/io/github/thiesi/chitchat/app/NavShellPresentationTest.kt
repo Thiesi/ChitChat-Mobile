@@ -137,7 +137,7 @@ class NavShellPresentationTest {
 internal fun labelShortfall(layout: TextLayoutResult, label: Rect, item: Rect): String? {
     for (line in 0 until layout.lineCount) {
         if (layout.isLineEllipsized(line)) return "line $line ellipsized"
-        val width = layout.getLineRight(line) - layout.getLineLeft(line)
+        val width = layout.multiParagraph.getLineWidth(line) // Unclamped glyph width; line right/left clamp to the layout.
         if (width > label.width + 0.5f) return "line $line is ${width}px wide, drawn ${label.width}px"
     }
     val bottom = layout.getLineBottom(layout.lineCount - 1)

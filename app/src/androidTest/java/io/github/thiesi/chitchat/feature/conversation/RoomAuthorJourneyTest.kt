@@ -85,7 +85,7 @@ class RoomAuthorJourneyTest {
             // Seed one authored server row. Tests below exercise author controls, not another send fixture.
             runBlocking { api.rooms.send(43, "Authored fixture", null) }
         }
-        compose.onNodeWithText(text(R.string.app_name)).assertIsDisplayed().performNativeTap()
+        compose.onNodeWithTag("bar_title").assertIsDisplayed().performNativeTap()
         compose.openTab("activity").performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
         compose.onNodeWithTag("notification_list").performScrollToNode(hasTestTag("notification_view:60"))

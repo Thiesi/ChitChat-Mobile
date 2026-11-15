@@ -116,7 +116,7 @@ class CompletionJourneyTest {
             sessions.state.value=sessions.state.value.copy(chatPolicy=api.policy,privacy=api.privacy)
             runBlocking { api.directs.send(8,"Completion fixture",null) }
         }
-        compose.onNodeWithText(text(R.string.app_name)).performNativeTap()
+        compose.onNodeWithTag("bar_title").performNativeTap()
         compose.openTab("activity").performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
         val notice=if (roomTarget) 60 else 55

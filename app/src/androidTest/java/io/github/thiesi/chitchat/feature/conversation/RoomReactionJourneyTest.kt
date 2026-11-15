@@ -87,7 +87,7 @@ class RoomReactionJourneyTest {
                 listOf(MessagePerson(if (deleted) 7 else 8, if (deleted) "Viewer" else "Peer")), !deleted))
             if (deleted) api.rooms.deleted += 43L to 101L
         }
-        compose.onNodeWithText(text(R.string.app_name)).assertIsDisplayed().performNativeTap()
+        compose.onNodeWithTag("bar_title").assertIsDisplayed().performNativeTap()
         compose.openTab("activity").performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
         compose.onNodeWithTag("notification_list").performScrollToNode(hasTestTag("notification_view:60"))

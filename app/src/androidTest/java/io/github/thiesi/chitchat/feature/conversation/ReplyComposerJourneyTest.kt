@@ -100,7 +100,7 @@ class ReplyComposerJourneyTest {
         }
         // Retire a previous fixture's system clipboard preview with an outside, inert app tap.
         // Do not clear exported text or let the preview intercept the notification-entry tap.
-        compose.onNodeWithText(text(R.string.app_name)).assertIsDisplayed().performNativeTap()
+        compose.onNodeWithTag("bar_title").assertIsDisplayed().performNativeTap()
         compose.openTab("activity").assertIsDisplayed().performNativeTap(); fresh()
     }
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)

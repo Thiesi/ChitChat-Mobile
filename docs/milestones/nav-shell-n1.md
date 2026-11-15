@@ -34,7 +34,8 @@ profile header and the remaining captures.
 The bar is Material `NavigationBar` with Lantern nav icons, always-visible labels, a bold selected label and a
 `primary`-tint indicator. It shows only on a tab root while signed in. It's out of layout and semantics on pushed
 destinations, on onboarding and while the IME is visible. The Rooms and Direct roots hold a field (directory lookup, DM
-search); the bar sits below the content, so the focused field doesn't move when the bar leaves, and nothing touches focus
+search). DM search sits at the top and doesn't move when the bar leaves. The Rooms lookup sits below the room list, so
+the IME's own bring-into-view scroll moves it, and it stays focused above the IME. Nothing touches focus
 or the IME. The Activity badge uses only the existing summary count (`CountBadge`, "99+", a dot while stale), and its
 `stateDescription` is the same count text the old hub button carried. Rooms and Direct have no badge.
 

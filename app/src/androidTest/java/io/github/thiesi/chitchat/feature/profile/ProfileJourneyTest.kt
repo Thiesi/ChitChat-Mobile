@@ -86,7 +86,7 @@ class ProfileJourneyTest {
             if (blocked) runBlocking { api.directs.setBlocked(8,true) }
             runBlocking { api.directs.send(8,"Profile direct fixture",null) }
         }
-        compose.onNodeWithText(text(R.string.app_name)).assertIsDisplayed().performNativeTap()
+        compose.onNodeWithTag("bar_title").assertIsDisplayed().performNativeTap()
         compose.openTab("activity").performNativeTap()
         compose.waitUntil(5_000) { notices.state.value.loaded && !notices.state.value.busy }
         val notice=if (roomTarget) 60 else 55
