@@ -178,7 +178,8 @@ class GuidelinesPresentationTest {
                     compose.onNodeWithTag("policy_document_dialog").assertDoesNotExist()
                     val kept = compose.onNodeWithTag("registration_password").fetchSemanticsNode()
                         .config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text
-                    assertEquals("The password is kept after reading the rules", "fixture-password", kept)
+                    // Semantics carries the masked text (one bullet per character), never the password itself.
+                    assertEquals("The password is kept after reading the rules", "•".repeat("fixture-password".length), kept)
                 }
             }
         }
