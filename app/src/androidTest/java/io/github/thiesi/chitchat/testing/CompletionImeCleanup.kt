@@ -12,8 +12,17 @@ internal fun awaitCompletionImeHidden(
     waitUntil: (Long, () -> Boolean) -> Unit,
     composeImeBottom: () -> Int,
     nativeImeVisible: () -> Boolean?,
-    emitTimeout: (String) -> Unit = { Log.w("CCMCompletionIme", it) },
+    identity: String? = null,
+    emitTimeout: ((String) -> Unit)? = null,
 ) {
+    // Default: logcat plus a small file. The logcat line can be lost to ring-buffer rotation before the wrapper reads it,
+    // so the same allowlisted line also goes to CompletionSampleFile. Both run inside the runCatching below: neither can
+    // replace the timeout.
+    val emit = emitTimeout ?: { line: String ->
+        Log.w("CCMCompletionIme", line)
+        identity?.let { CompletionSampleFile.write(it, line) }
+        Unit
+    }
     var compose: Int? = null
     var first = "unobserved"
     var second = "unobserved"
@@ -30,7 +39,7 @@ internal fun awaitCompletionImeHidden(
         // This is the last in-wait sample, not a new atomic or post-timeout observation.
         // Diagnostic failure must never replace or suppress the original timeout.
         runCatching {
-            emitTimeout("sample=last_wait_predicate compose=${compose ?: "unobserved"} native1=$first native2=$second")
+            emit("sample=last_wait_predicate compose=${compose ?: "unobserved"} native1=$first native2=$second")
         }
         throw failure
     }

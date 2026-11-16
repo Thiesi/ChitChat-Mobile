@@ -67,7 +67,7 @@ class CompletionImeCleanupTest {
                 assertEquals(5_000L, deadline)
                 repeat(2) { assertFalse(condition()) }
                 throw failure
-            }, { if (++polls == 1) 0 else 9 }, { ++nativeReads == 2 }, records::add)
+            }, { if (++polls == 1) 0 else 9 }, { ++nativeReads == 2 }, emitTimeout = records::add)
             fail()
         } catch (actual: ComposeTimeoutException) { assertSame(failure, actual) }
         assertEquals(2, nativeReads) // No stale first/second values or post-timeout probes.
@@ -81,7 +81,7 @@ class CompletionImeCleanupTest {
             val records = mutableListOf<String>()
             try {
                 awaitCompletionImeHidden({ _, condition -> assertFalse(condition()); throw failure },
-                    { 0 }, { reads++; visible }, records::add)
+                    { 0 }, { reads++; visible }, emitTimeout = records::add)
                 fail()
             } catch (actual: ComposeTimeoutException) { assertSame(failure, actual) }
             assertEquals(1, reads)
@@ -96,7 +96,7 @@ class CompletionImeCleanupTest {
         val records = mutableListOf<String>()
         try {
             awaitCompletionImeHidden({ _, condition -> assertFalse(condition()); throw failure },
-                { 0 }, native::next, records::add)
+                { 0 }, native::next, emitTimeout = records::add)
             fail()
         } catch (actual: ComposeTimeoutException) { assertSame(failure, actual) }
         assertEquals(2, native.reads)
@@ -163,5 +163,22 @@ class CompletionImeCleanupTest {
             reads++
             return remaining.removeAt(0).also { last = it }
         }
+    }
+
+    /** The file channel writes exactly the allowlisted line with its test identity, and refuses anything else. */
+    @Test fun theSampleFileHoldsOnlyTheAllowlistedLineAndItsIdentity() {
+        val folder = java.io.File(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.cacheDir,
+            "ccm-sample-test").apply { deleteRecursively(); mkdirs() }
+        try {
+            val line = "sample=last_wait_predicate compose=259 native1=unobserved native2=unobserved"
+            assertEquals("test=CompletionJourneyTest.someTest $line\n", CompletionSampleFile.write("CompletionJourneyTest.someTest", line, folder))
+            assertEquals("test=CompletionJourneyTest.someTest $line\n", java.io.File(folder, "CompletionJourneyTest.someTest.txt").readText())
+            assertNull("Free text is refused", CompletionSampleFile.write("CompletionJourneyTest.other", "sample=last_wait_predicate compose=1 native1=hidden native2=hidden extra", folder))
+            assertNull("A view name or text is refused", CompletionSampleFile.write("CompletionJourneyTest.other", "Hello world", folder))
+            assertNull("A path-like identity is refused", CompletionSampleFile.write("../escape.test", line, folder))
+            repeat(CompletionSampleFile.MAX_FILES) { n -> CompletionSampleFile.write("CompletionJourneyTest.t$n", line, folder) }
+            assertNull("The per-run bound holds", CompletionSampleFile.write("CompletionJourneyTest.overflow", line, folder))
+            assertTrue((folder.listFiles()?.size ?: 0) <= CompletionSampleFile.MAX_FILES)
+        } finally { folder.deleteRecursively() }
     }
 }

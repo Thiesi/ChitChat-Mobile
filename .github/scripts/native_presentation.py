@@ -20,6 +20,13 @@ STATUS_NAME = re.compile(r"status-(light|dark)-(?:(?:default|font200)-"
     r"(?:storage|offline|tls|incompatible|stopped|refresh|rate|rate-unknown|offline-edge|waiting-room|waiting-dm)|default-details)\.png")
 NAV_DESTINATION = ROOT / "app/build/reports/androidTests/nav-presentation"
 ONBOARDING_DESTINATION = ROOT / "app/build/reports/androidTests/onboarding-presentation"
+CLEANUP_DESTINATION = ROOT / "app/build/reports/androidTests/device/completion-cleanup"
+CLEANUP_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}[.][A-Za-z][A-Za-z0-9_]{0,127}[.]txt")
+CLEANUP_LINE = re.compile(r"test=([A-Za-z][A-Za-z0-9_]{0,63}[.][A-Za-z][A-Za-z0-9_]{0,127}) "
+    r"sample=last_wait_predicate compose=(?:unobserved|-?(?:0|[1-9][0-9]{0,9})) "
+    r"native1=(?:unobserved|unknown|hidden|visible) native2=(?:unobserved|unknown|hidden|visible)\n")
+CLEANUP_MAX_FILES = 64
+CLEANUP_MAX_BYTES = 256
 FIND_PEOPLE_DESTINATION = ROOT / "app/build/reports/androidTests/find-people-presentation"
 POLICY_DESTINATION = ROOT / "app/build/reports/androidTests/policy-presentation"
 POLICY_NAME = re.compile(r"policy-(light|dark)-(default|font200)-(hosted|external|unpublished|httpdialog|loading|failed)[.]png")
@@ -141,6 +148,26 @@ def collect_update():
     for path in files:
         shutil.copyfile(path, UPDATE_DESTINATION / path.name)
     print(f"Server update presentation captures collected: {len(files)} of 16.")
+
+
+def collect_cleanup_samples():
+    # The Completion cleanup's failure-only sample (completion-ime-cleanup-observations.md): exactly one allowlisted line
+    # per file, named for its test; anything foreign, malformed, oversized or excess rejects the whole set before copying.
+    files = list(islice(SOURCE.rglob("ccm-completion-cleanup/*"), CLEANUP_MAX_FILES + 1))
+    if not files:
+        return
+    if len(files) > CLEANUP_MAX_FILES or len({p.name for p in files}) != len(files):
+        raise ValueError("Excess or ambiguous Completion cleanup samples")
+    for path in files:
+        if CLEANUP_NAME.fullmatch(path.name) is None or path.stat().st_size > CLEANUP_MAX_BYTES:
+            raise ValueError("Foreign or oversized Completion cleanup sample")
+        match = CLEANUP_LINE.fullmatch(path.read_text(encoding="utf-8"))
+        if match is None or f"{match.group(1)}.txt" != path.name:
+            raise ValueError("Malformed Completion cleanup sample")
+    CLEANUP_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, CLEANUP_DESTINATION / path.name)
+    print(f"Completion cleanup samples collected: {len(files)}.")
 
 
 def collect_policy():
@@ -275,6 +302,10 @@ def main() -> int:
         collect_update()
     except Exception:
         print("Server update presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_cleanup_samples()
+    except Exception:
+        print("Completion cleanup samples unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_policy()
     except Exception:
