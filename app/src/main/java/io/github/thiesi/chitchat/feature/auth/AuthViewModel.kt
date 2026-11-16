@@ -76,6 +76,11 @@ class AuthViewModel(private val sessions: SessionController) : ViewModel() {
         else if (state.value.authFlow == AuthFlow.REGISTER && state.value.registration == RegistrationPreparation.IDLE) prepareRegistration()
     }
 
+    /** "I've saved it" on the key display: the key is discarded; nothing records whether it was saved. */
+    fun recoveryKeySaved(expected: io.github.thiesi.chitchat.core.session.SessionState) {
+        viewModelScope.launch { sessions.dropRegistrationRecoveryKey(expected) }
+    }
+
     fun signOut() {
         preparation?.cancel()
         operation?.cancel()

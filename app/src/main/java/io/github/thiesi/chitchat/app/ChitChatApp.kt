@@ -445,6 +445,16 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         val guidelinesGate = guidelines != null && signedInUser != null && session.server != null && !session.updateRequired
         if (session.phase == SessionPhase.AUTHENTICATED && session.updateRequired)
             ServerUpdateScreen(session, state.settings.server?.value, onCheckAgain = auth::refresh, onSignOut = auth::signOut)
+        // The registration key is shown once, before the guidelines screen and the shell (recovery-key.md, O4a2a).
+        // The order is: update screen, key display, guidelines, then the shell or Find your people.
+        else if (session.phase == SessionPhase.AUTHENTICATED && session.registrationRecoveryKey != null) {
+            val server = state.settings.server?.value
+            val host = server?.let { runCatching { java.net.URI(it).host }.getOrNull() }.orEmpty()
+            RecoveryKeyDisplay(RecoveryKeyView(session.registrationRecoveryKey, R.string.recovery_key_title_save,
+                createdAt = (session.recoveryKey as? io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known)?.createdAt),
+                installation = session.installationName ?: breakableHost(host), host = host, username = session.user?.username.orEmpty(),
+                onSaved = { auth.recoveryKeySaved(session) })
+        }
         else if (guidelinesGate && acceptedGuidelines == null)
             Surface(Modifier.fillMaxSize().testTag("guidelines_loading"), color = MaterialTheme.colorScheme.background) {}
         else if (guidelinesGate && guidelines != null && signedInUser != null && session.server != null &&

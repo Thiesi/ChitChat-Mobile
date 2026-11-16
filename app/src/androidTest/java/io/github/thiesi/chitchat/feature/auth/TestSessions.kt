@@ -76,6 +76,9 @@ class TestSessions : SessionController {
                 error = ApiFailure(FailureKind.HTTP, 409, "username_taken"))
         } else success(username)
     }
+    override suspend fun dropRegistrationRecoveryKey(expected: SessionState) {
+        if (state.value.generation == expected.generation) state.value = state.value.copy(registrationRecoveryKey = null)
+    }
     override suspend fun signOut() {
         state.value = SessionState(state.value.server, state.value.generation + 1, SessionPhase.SIGNED_OUT)
     }

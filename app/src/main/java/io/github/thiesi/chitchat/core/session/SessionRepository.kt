@@ -113,6 +113,8 @@ interface SessionController {
     suspend fun selectAuthFlow(flow: AuthFlow)
     suspend fun prepareRegistration()
     suspend fun register(username: String, password: String, birthDate: String?)
+    /** The key display confirmed "I've saved it": the registration key leaves memory (recovery-key.md, P-184). */
+    suspend fun dropRegistrationRecoveryKey(expected: SessionState) {}
 }
 
 /** Local transitions and vault writes are serialized; network calls never hold the lock. */
@@ -615,7 +617,7 @@ class SessionRepository internal constructor(
     }
 
     /** The key display confirmed "I've saved it" (or closed): the registration key is dropped from memory. */
-    internal suspend fun dropRegistrationRecoveryKey(expected: SessionState) = lock.withLock {
+    override suspend fun dropRegistrationRecoveryKey(expected: SessionState) = lock.withLock {
         val current = mutable.value
         if (current.generation == expected.generation && current.user?.id == expected.user?.id)
             mutable.value = current.copy(registrationRecoveryKey = null)
