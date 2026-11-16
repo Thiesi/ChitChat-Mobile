@@ -14,6 +14,11 @@ to `anr` / `app_error` / `other`, and never stored as raw window text.
   - an ANR or error dialog has focus;
   - the focused window isn't a launcher (`com.google.android.apps.nexuslauncher`, `com.android.launcher3`);
   - the expected IME isn't selected.
+- **Boot home:** the exact component `com.android.settings/com.android.settings.FallbackHome` counts as healthy. It's
+  Android's interim home, shown right after boot until the real launcher is ready. Evidence from main run 43938459454
+  (e99c73a): `environment.json` had boot completed, focus on FallbackHome and the IME selected, and the early-logcat
+  boot dump ended with processes still starting and no launcher process yet. The TL ruled for this exact allowlist
+  entry, with no settle wait and still one read. ANR, error dialog, no focus and any other window stay unhealthy.
 - **On unhealthy:** the job ends at once with `Native emulator unhealthy (reasons); instrumentation not started.`, and
   `device/environment.json` records `classification: emulator_unhealthy` and its reasons.
 - **Not done:** it never dismisses a dialog, force-stops an app, retries or waits. Pin and setting mismatches keep the
