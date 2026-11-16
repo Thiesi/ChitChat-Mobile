@@ -74,6 +74,11 @@ class GuidelinesPresentationTest {
         override suspend fun refresh() = Unit
     }
 
+    private val documents = io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel(object : io.github.thiesi.chitchat.core.policies.PolicyReads {
+        override suspend fun policyDocument(name: io.github.thiesi.chitchat.core.policies.PolicyDocumentName, expected: SessionState) =
+            io.github.thiesi.chitchat.core.policies.PolicyDocument.NotPublished
+    })
+
     @Test fun presentationLight() = presentation(dark = false)
     @Test fun presentationDark() = presentation(dark = true)
 
@@ -126,7 +131,9 @@ class GuidelinesPresentationTest {
             val auth = AuthViewModel(sessions)
             ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
                 scenario.onActivity { activity ->
-                    activity.setContent { Box(Modifier.fillMaxSize().testTag("guidelines_host")) { TestChitChatApp(settings, auth) } }
+                    activity.setContent { Box(Modifier.fillMaxSize().testTag("guidelines_host")) {
+                        TestChitChatApp(settings, auth, policies = documents)
+                    } }
                 }
                 compose.waitUntil(5_000) { !settings.state.value.loading }
                 compose.onNodeWithTag("onboarding_welcome_start").performScrollTo().performClick()
@@ -135,6 +142,11 @@ class GuidelinesPresentationTest {
                 compose.onNodeWithTag("onboarding_continue").performScrollTo().performClick()
                 compose.onNodeWithTag("onboarding_create").performScrollTo().performClick()
                 compose.onNodeWithTag("registration_rules_consent").performScrollTo().assertIsDisplayed()
+                // Both linked phrases are real links (the production root always supplies the document screen).
+                val text = compose.onNodeWithTag("registration_rules_consent").fetchSemanticsNode()
+                    .config[androidx.compose.ui.semantics.SemanticsProperties.Text].single()
+                assertEquals(listOf("registration_rules_link", "registration_privacy_link"),
+                    text.getLinkAnnotations(0, text.length).map { (it.item as androidx.compose.ui.text.LinkAnnotation.Clickable).tag })
                 capture("guidelines-$label-$name-create")
             }
         }
