@@ -314,6 +314,28 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def auth_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-auth-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_auth_captures_are_copied_and_keep_the_original_status(self):
+        self.results(5)
+        files = [Path("auth-light-default-signin-keyboard.png"), Path("auth-dark-font200-create-keyboard.png"),
+            Path("auth-light-font200-create-block.png")]
+        self.auth_files(files)
+        self.assertEqual(5, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.AUTH_DESTINATION / path.name)
+        self.assertEqual(4, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_auth_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"auth-light-default-signin-keyboard-{n}.png") for n in range(11)],
+            [Path("a/auth-dark-default-signin-keyboard.png"), Path("b/auth-dark-default-signin-keyboard.png")],
+            [Path("auth-dark-default-create-block.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.auth_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def rules_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-rules-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))

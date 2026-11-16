@@ -1,5 +1,15 @@
 package io.github.thiesi.chitchat.app
 
+import androidx.compose.foundation.background
+
+import androidx.compose.ui.draw.drawBehind
+
+import androidx.compose.ui.layout.boundsInWindow
+
+import androidx.compose.ui.layout.onGloballyPositioned
+
+import androidx.compose.ui.layout.onSizeChanged
+
 import io.github.thiesi.chitchat.core.settings.covers
 import androidx.compose.material3.Surface
 
@@ -908,11 +918,28 @@ private fun TabRoot(reselect: Int, content: @Composable () -> Unit) =
 private fun ScreenContent(content: @Composable () -> Unit) {
     val scroll = rememberScrollState()
     io.github.thiesi.chitchat.core.ui.OnTabReselect { scroll.animateScrollTo(0) }
-    Column(
-        Modifier.fillMaxSize().verticalScroll(scroll).padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Column(Modifier.widthIn(max = 600.dp).fillMaxWidth()) { content() }
+    // A form's primary action can pin below the scroller, above the keyboard (#275, PL): the screen's own background,
+    // 16dp around the button, and a 1dp line edge only while content is hidden beneath it.
+    val slot = remember { io.github.thiesi.chitchat.core.ui.PinnedActionSlot() }
+    val line = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.line
+    androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalPinnedActions provides slot) {
+        Column(Modifier.fillMaxSize().onSizeChanged { slot.availableHeight = it.height }) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { slot.viewport = it.boundsInWindow() }
+                    .verticalScroll(scroll).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Column(Modifier.widthIn(max = 600.dp).fillMaxWidth()) { content() }
+            }
+            slot.content?.let { pinned ->
+                Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).drawBehind {
+                    if (scroll.canScrollForward) drawLine(line, androidx.compose.ui.geometry.Offset(0f, 0.5f),
+                        androidx.compose.ui.geometry.Offset(size.width, 0.5f), 1.dp.toPx())
+                }.padding(16.dp).testTag("pinned_action"), contentAlignment = Alignment.Center) {
+                    Box(Modifier.widthIn(max = 600.dp).fillMaxWidth()) { pinned() }
+                }
+            }
+        }
     }
 }
 

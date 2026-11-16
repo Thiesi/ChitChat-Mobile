@@ -1,5 +1,31 @@
 package io.github.thiesi.chitchat.feature.auth
 
+import androidx.compose.foundation.layout.isImeVisible
+
+import androidx.compose.foundation.layout.WindowInsets
+
+import kotlinx.coroutines.launch
+
+import androidx.compose.ui.semantics.contentDescription
+
+import androidx.compose.ui.semantics.LiveRegionMode
+
+import androidx.compose.ui.semantics.liveRegion
+
+import androidx.compose.runtime.key
+
+import androidx.compose.foundation.layout.size
+
+import androidx.compose.foundation.layout.Box
+
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+
+import androidx.compose.ui.layout.positionInWindow
+
+import androidx.compose.ui.layout.onGloballyPositioned
+
+import androidx.compose.ui.layout.onSizeChanged
+
 import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
 
 
@@ -98,7 +124,7 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
             isError = attempted && problem == RegistrationProblem.CONFIRMATION,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { submit() }), shape = MaterialTheme.shapes.medium)
+            keyboardActions = KeyboardActions(onDone = { focus.clearFocus(); keyboard?.hide() }), shape = MaterialTheme.shapes.medium)
         if (attempted && problem != null) InlineError(stringResource(when (problem) {
             RegistrationProblem.USERNAME -> R.string.username_policy
             RegistrationProblem.PASSWORD -> R.string.password_policy
@@ -119,10 +145,7 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
                 Text(stringResource(R.string.refresh_registration_check))
             }
         }
-        state.public?.policies?.rules?.let { RulesConsent(state, onPolicy) }
-        PrimaryButton(onClick = submit, enabled = ready, modifier = Modifier.fillMaxWidth().testTag("registration_submit")) {
-            Text(stringResource(R.string.create_account))
-        }
+        CreateBlock(state, onPolicy, enabled = ready, submit = submit)
     }
     if (pickerOpen) {
         val today = remember { LocalDate.now(ZoneOffset.UTC) }
@@ -177,4 +200,68 @@ private fun RulesConsent(state: SessionState,
     }
     Text(text, androidx.compose.ui.Modifier.testTag("registration_rules_consent"),
         color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.textMuted)
+}
+
+/**
+ * The consent line and Create my account as one block (#275; PL and TL): the line is visible whenever Create can be
+ * tapped.
+ * - **Keyboard hidden:** pinned above the bottom, outside the scroller.
+ * - **Keyboard up:** absent entirely, so there's no Create while typing. The last field's Done hides the keyboard and
+ *   brings the block back. A hardware keyboard never shows the IME, so the block stays.
+ * - **Very short windows:** when the block would take more than half the height, it sits in flow at the end of the
+ *   scroller. A tap on Create while any part of the line is off screen only brings the block into view and announces
+ *   why (announced only, no visible text); it doesn't submit.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun CreateBlock(state: SessionState, onPolicy: ((io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit)?,
+    enabled: Boolean, submit: () -> Unit) {
+    if (WindowInsets.isImeVisible) return
+    val slot = io.github.thiesi.chitchat.core.ui.LocalPinnedActions.current
+    var pinnedHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val inFlow = slot != null && slot.availableHeight > 0 && pinnedHeight * 2 > slot.availableHeight
+    if (slot == null || inFlow) InFlowCreateBlock(state, onPolicy, enabled, submit, slot)
+    else io.github.thiesi.chitchat.core.ui.PinnedAction {
+        Column(Modifier.fillMaxWidth().onSizeChanged { pinnedHeight = it.height }.testTag("registration_create_block"),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            state.public?.policies?.rules?.let { RulesConsent(state, onPolicy) }
+            PrimaryButton(onClick = submit, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("registration_submit")) {
+                Text(stringResource(R.string.onboarding_create_account))
+            }
+        }
+    }
+}
+
+@Composable
+private fun InFlowCreateBlock(state: SessionState, onPolicy: ((io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit)?,
+    enabled: Boolean, submit: () -> Unit, slot: io.github.thiesi.chitchat.core.ui.PinnedActionSlot?) {
+    val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var line by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var announcement by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val hasLine = state.public?.policies?.rules != null
+    Column(Modifier.fillMaxWidth().bringIntoViewRequester(requester).testTag("registration_create_block"),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Unclipped (position plus size): a clipped rect of an off-screen line could look "inside" the viewport.
+        if (hasLine) Box(Modifier.onGloballyPositioned {
+            line = androidx.compose.ui.geometry.Rect(it.positionInWindow(), androidx.compose.ui.geometry.Size(it.size.width.toFloat(), it.size.height.toFloat()))
+        }) { RulesConsent(state, onPolicy) }
+        PrimaryButton(onClick = {
+            val viewport = slot?.viewport
+            val shown = line
+            val lineVisible = !hasLine || viewport == null || shown == null ||
+                (shown.top >= viewport.top && shown.bottom <= viewport.bottom)
+            if (lineVisible) submit()
+            else { scope.launch { requester.bringIntoView() }; announcement++ }
+        }, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("registration_submit")) {
+            Text(stringResource(R.string.onboarding_create_account))
+        }
+        // Announced only: the scroll shows sighted users what happened (TL and PL, #275).
+        if (announcement > 0) key(announcement) {
+            val message = stringResource(R.string.registration_review_agreement)
+            Box(Modifier.size(1.dp).testTag("registration_review_announcement").semantics {
+                liveRegion = LiveRegionMode.Polite; contentDescription = message
+            })
+        }
+    }
 }
