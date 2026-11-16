@@ -59,13 +59,17 @@ import io.github.thiesi.chitchat.core.ui.DialogScrollBody
 import kotlinx.coroutines.delay
 
 @Composable
-fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom: (Long) -> Unit) {
+fun RoomsScreen(model: RoomsViewModel, onRefreshSession: () -> Unit, onOpenRoom: (Long) -> Unit,
+    isCurrentEntry: () -> Boolean = { true }) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
     val activity = LocalActivity.current
-    LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground() }
+    // The root's actual-entry identity tells an app stop (this entry is still current) from a navigation departure,
+    // whose ON_STOP can arrive after its exit transition, when a newer screen sharing this model has already started.
+    val owner = remember { Any() }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground(owner) }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-        if (activity?.isChangingConfigurations != true) model.background()
+        if (activity?.isChangingConfigurations != true) { if (isCurrentEntry()) model.background() else model.departed(owner) }
     }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
