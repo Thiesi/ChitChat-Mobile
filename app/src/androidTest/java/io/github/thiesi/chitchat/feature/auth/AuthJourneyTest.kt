@@ -5,6 +5,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -58,12 +60,51 @@ class AuthJourneyTest {
         compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Server found: choose sign in (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
-        compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().performClick()
+        val submit = compose.onNodeWithText("Sign in").performScrollTo()
+        // #275: failure-only scalars for an intermittent API36 "not displayed" here. The same assertion, no retry, no text.
+        try { submit.assertIsDisplayed() } catch (e: AssertionError) {
+            val sampled = android.os.SystemClock.uptimeMillis()
+            val node = runCatching { submit.fetchSemanticsNode() }.getOrNull()
+            val root = runCatching { compose.onRoot().fetchSemanticsNode() }.getOrNull()
+            throw AssertionError("Sign in not displayed (#275): sampledAt=$sampled, " +
+                "nodeInRoot=${node?.boundsInRoot}, nodeInWindow=${node?.boundsInWindow}, rootInWindow=${root?.boundsInWindow}, " +
+                "visible=${visibleFrame()}, window=${io.github.thiesi.chitchat.testing.nativeInputWindow()}", e)
+        }
+        submit.performClick()
+    }
+
+    /**
+     * #262: failure-only scalars for an intermittent API36 shell wait after sign-in. The same wait (`openTab`) and 5s
+     * deadline, no retry; on timeout only scalars are added (no text).
+     */
+    private fun shellTab(name: String): SemanticsNodeInteraction =
+        try { compose.openTab(name) } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            val count = { tag: String -> compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().size }
+            throw AssertionError("Shell after sign-in: sampledAt=${android.os.SystemClock.uptimeMillis()}, " +
+                "phase=${sessions.state.value.phase}, logins=${sessions.logins}, " +
+                "tabs=${count("nav_tab_$name")}, title=${count("bar_title")}, " +
+                "form=${compose.onAllNodesWithText("Username").fetchSemanticsNodes().size}, " +
+                "visible=${visibleFrame()}, window=${io.github.thiesi.chitchat.testing.nativeInputWindow()}", e)
+        }
+
+    /** The resumed window's visible display frame and decor size, sampled on the main thread; scalars only. */
+    private fun visibleFrame(): String {
+        var result = "unknown"
+        runCatching {
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                val activity = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).singleOrNull() ?: return@runOnMainSync
+                val decor = activity.window.decorView
+                val frame = android.graphics.Rect().also(decor::getWindowVisibleDisplayFrame)
+                result = "frame=${frame.toShortString()}, decor=${decor.width}x${decor.height}, at=${android.os.SystemClock.uptimeMillis()}"
+            }
+        }
+        return result
     }
 
     @Test fun authenticatedRoomsNavigationReturnsToTheExistingAccountHome() {
         content(); enterCredentials()
-        compose.openTab("you").performClick()
+        shellTab("you").performClick()
         compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.auth_preview_limit))
             .performScrollTo().assertIsDisplayed()
         compose.openTab("rooms").performClick()
@@ -74,7 +115,7 @@ class AuthJourneyTest {
 
     @Test fun logoutWhileViewingRoomsRetiresTheProtectedDestination() {
         content(); enterCredentials()
-        compose.openTab("rooms").performClick()
+        shellTab("rooms").performClick()
         compose.onNodeWithText("No rooms are available to this account.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { auth.signOut() }
         compose.onNodeWithText("Back to sign-in").performScrollTo().assertIsDisplayed()
@@ -113,7 +154,7 @@ class AuthJourneyTest {
         compose.waitUntil(5_000) {
             sessions.state.value.phase == io.github.thiesi.chitchat.core.session.SessionPhase.AUTHENTICATED && !sessions.state.value.busy
         }
-        compose.openTab("rooms").performClick()
+        shellTab("rooms").performClick()
         compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Fixture Lounge").assertIsDisplayed() }.isSuccess }
         compose.onNodeWithText("Fixture Lounge").performClick()
         compose.onNodeWithText("Open conversation").performScrollTo().performClick()
@@ -181,14 +222,8 @@ class AuthJourneyTest {
         content()
         compose.onNodeWithText("Account").assertDoesNotExist()
         enterCredentials()
-        // Failure-only scalars for an unexplained API36 timeout here (PR #260): the same wait and deadline, no retry.
-        try { compose.openTab("you") } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
-            val count = { tag: String -> compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().size }
-            throw AssertionError("Shell after sign-in: phase=${sessions.state.value.phase}, logins=${sessions.logins}, " +
-                "tabs=${count("nav_tab_you")}, title=${count("bar_title")}, " +
-                "form=${compose.onAllNodesWithText("Username").fetchSemanticsNodes().size}, " +
-                "window=${io.github.thiesi.chitchat.testing.nativeInputWindow()}", e)
-        }.performClick()
+        // Failure-only scalars for an unexplained API36 timeout here (PR #260, #262): the same wait and deadline, no retry.
+        shellTab("you").performClick()
         compose.onNodeWithTag("you_account").performScrollTo().performClick()
         compose.onNodeWithText("Your personal data").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
