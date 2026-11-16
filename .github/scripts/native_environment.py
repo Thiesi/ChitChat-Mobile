@@ -18,6 +18,10 @@ SCALAR = re.compile(r"[A-Za-z0-9_./:+@-]{1,256}")
 # error dialog, or no focus, means the emulator is unusable for instrumentation. Only a class or component is kept,
 # never raw window text.
 LAUNCHERS = ("com.google.android.apps.nexuslauncher", "com.android.launcher3")
+# Android's interim home, shown right after boot until the real launcher is ready. It's a healthy boot state, not an
+# obstruction: main run 43938459454 recorded it with boot completed and the IME selected, while launcher processes were
+# still starting (TL ruling: allowlist this exact component, no settle wait).
+BOOT_HOME = "com.android.settings/com.android.settings.FallbackHome"
 FOCUS = re.compile(r"mCurrentFocus=Window\{[0-9a-f]+ u\d+ ([^}]*)\}")
 
 
@@ -66,7 +70,7 @@ def health(data: dict) -> list[str]:
     if focus is None: reasons.append("no_window_focus")
     elif focus == "anr": reasons.append("anr_dialog_has_focus")
     elif focus == "app_error": reasons.append("error_dialog_has_focus")
-    elif focus.split("/", 1)[0] not in LAUNCHERS: reasons.append("launcher_not_focused")
+    elif focus != BOOT_HOME and focus.split("/", 1)[0] not in LAUNCHERS: reasons.append("launcher_not_focused")
     return reasons
 
 

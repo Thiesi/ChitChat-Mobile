@@ -201,8 +201,17 @@ class RoomAuthorJourneyTest {
         compose.runOnIdle { assertTrue(room.state.value.authorDialog?.checked == true) }
         compose.onNodeWithTag("author_change_confirm").assertIsDisplayed().performNativeTap() // Fresh review, no POST.
         compose.runOnIdle { assertEquals(1, api.authorChanges.writes.size) }
+        // #284: a plain, non-syncing read of the dialog right before the second tap (no idle wait, so the timing is
+        // unchanged), kept only for the failure-only scalars below.
+        val tappedAt = android.os.SystemClock.uptimeMillis(); val tapped = room.state.value.authorDialog
         compose.onNodeWithTag("author_change_confirm").assertIsDisplayed().performNativeTap() // Already reflected: local unchanged validation.
-        dialogText(R.string.author_unchanged).assertExists()
+        try { dialogText(R.string.author_unchanged).assertExists() } catch (e: AssertionError) {
+            val now = room.state.value; val dialog = now.authorDialog
+            throw AssertionError("Unchanged validation missing (#284): tappedAt=$tappedAt, sampledAt=${android.os.SystemClock.uptimeMillis()}, " +
+                "sameRequest=${tapped?.request === dialog?.request}, tappedChecked=${tapped?.checked}, checked=${dialog?.checked}, " +
+                "validation=${dialog?.validation}, authorUnknown=${now.authorUnknown != null}, busy=${now.busy}, " +
+                "writes=${api.authorChanges.writes.size}", e)
+        }
         compose.runOnIdle { assertEquals(1, api.authorChanges.writes.size) }
         dialogText(R.string.cancel).assertIsDisplayed().performNativeTap()
     }

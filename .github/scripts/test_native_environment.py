@@ -39,6 +39,11 @@ class EnvironmentTests(unittest.TestCase):
                 self.assertEqual([reason], env.health(data))
         data = ready(); data["currentFocus"] = "com.android.launcher3/.Launcher"
         self.assertEqual([], env.health(data))
+        # The interim boot home is healthy; any other Settings window still isn't.
+        data = ready(); data["currentFocus"] = "com.android.settings/com.android.settings.FallbackHome"
+        self.assertEqual([], env.health(data))
+        data = ready(); data["currentFocus"] = "com.android.settings/com.android.settings.Settings"
+        self.assertEqual(["launcher_not_focused"], env.health(data))
 
     def test_focus_keeps_only_a_component_or_a_dialog_class_never_window_text(self):
         line = lambda title: f"  mCurrentFocus=Window{{3f2a1b u0 {title}}}\n"
