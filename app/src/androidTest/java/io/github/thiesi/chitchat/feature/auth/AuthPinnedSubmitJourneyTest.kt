@@ -69,6 +69,7 @@ class AuthPinnedSubmitJourneyTest {
         install()
         compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick()
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
+        compose.onNodeWithTag("sign_in_password").performScrollTo()
         compose.tapNativeInput("sign_in_password", imeBottom = { imeBottom })
         compose.onNodeWithTag("sign_in_password").performTextInput("fixture-password")
         // No performScrollTo: the button is pinned outside the scroller.
@@ -86,6 +87,7 @@ class AuthPinnedSubmitJourneyTest {
         compose.onNodeWithTag("registration_rules_consent").assertIsDisplayed()
         compose.onNodeWithTag("registration_username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithTag("registration_password").performScrollTo().performTextInput("fixture-password")
+        compose.onNodeWithTag("registration_confirmation").performScrollTo() // Into the scroller's viewport before the native tap.
         compose.tapNativeInput("registration_confirmation", imeBottom = { imeBottom })
         compose.onNodeWithTag("registration_confirmation").performTextInput("fixture-password")
         if (imeBottom > 0) {

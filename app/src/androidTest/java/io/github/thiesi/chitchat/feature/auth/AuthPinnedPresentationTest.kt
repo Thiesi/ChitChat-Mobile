@@ -72,15 +72,19 @@ class AuthPinnedPresentationTest {
                 compose.waitUntil(5_000) { !settings.state.value.loading }
                 if (form == "signin") {
                     compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick()
+                    compose.onNodeWithTag("sign_in_password").performScrollTo()
                     compose.tapNativeInput("sign_in_password", imeBottom = { imeBottom })
                     compose.onNodeWithTag("sign_in_submit").assertIsDisplayed()
                     capture("auth-$label-$name-signin-keyboard")
                 } else {
                     compose.onNodeWithTag("onboarding_create").performScrollTo().performClick()
                     if (fontScale == 2f) {
+                        // Deterministic for this fixture (rules only, full-screen host): pinned even at 200% (TL: assert, don't branch).
+                        assertEquals("Create block pinned", true, compose.onAllNodesWithTag("pinned_action").fetchSemanticsNodes().isNotEmpty())
                         compose.onNodeWithTag("registration_rules_consent").assertIsDisplayed()
                         capture("auth-$label-$name-create-block")
                     }
+                    compose.onNodeWithTag("registration_username").performScrollTo()
                     compose.tapNativeInput("registration_username", imeBottom = { imeBottom })
                     capture("auth-$label-$name-create-keyboard")
                 }

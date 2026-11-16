@@ -8,6 +8,8 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -122,6 +124,7 @@ class GuidelinesPresentationTest {
         for (dark in listOf(false, true)) for ((name, fontScale) in listOf("default" to 1f, "font200" to 2f)) {
             val label = if (dark) "dark" else "light"
             FontScaleTestActivity.requestedFontScale = fontScale
+            expectInFlow = fontScale == 2f
             val sessions = TestSessions().apply {
                 registrationEnabled = true
                 nextConnect = { it.copy(installationName = "The Common Room", public = it.public!!.copy(policies = policies)) }
@@ -145,7 +148,7 @@ class GuidelinesPresentationTest {
                 Espresso.closeSoftKeyboard()
                 compose.onNodeWithTag("onboarding_continue").performScrollTo().performClick()
                 compose.onNodeWithTag("onboarding_create").performScrollTo().performClick()
-                compose.onNodeWithTag("registration_rules_consent").assertIsDisplayed()
+                createBlockNode("registration_rules_consent").assertIsDisplayed()
                 // Both linked phrases are real links (the production root always supplies the document screen).
                 val text = compose.onNodeWithTag("registration_rules_consent").fetchSemanticsNode()
                     .config[androidx.compose.ui.semantics.SemanticsProperties.Text].single()
@@ -154,7 +157,7 @@ class GuidelinesPresentationTest {
                 capture("guidelines-$label-$name-create")
                 if (dark && fontScale == 2f) {
                     // The document dialog over the Create form, dark at 200% (PL, O3b2 J).
-                    compose.onNodeWithTag("registration_rules_consent").performFirstLinkClick { range ->
+                    createBlockNode("registration_rules_consent").performFirstLinkClick { range ->
                         (range.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag == "registration_rules_link"
                     }
                     compose.waitUntil(5_000) {
@@ -171,7 +174,7 @@ class GuidelinesPresentationTest {
                     compose.onNodeWithTag("registration_confirmation").performScrollTo().performTextReplacement("fixture-password")
                     compose.onNodeWithTag("registration_confirmation").performImeAction() // Done reveals the consent block (#275).
                     Espresso.closeSoftKeyboard()
-                    compose.onNodeWithTag("registration_rules_consent").performFirstLinkClick { range ->
+                    createBlockNode("registration_rules_consent").performFirstLinkClick { range ->
                         (range.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag == "registration_rules_link"
                     }
                     compose.onNodeWithTag("policy_document_dialog").assertIsDisplayed()
@@ -187,11 +190,24 @@ class GuidelinesPresentationTest {
                     assertEquals("The password is kept after reading the rules", "•".repeat("fixture-password".length), kept)
                     // The SAME password (and confirmation): submitting reaches the fixture, which checks the received
                     // password is exactly the typed one before counting the registration.
-                    compose.onNodeWithTag("registration_submit").performClick()
+                    createBlockNode("registration_submit").performClick()
                     compose.waitUntil(5_000) { sessions.registrations == 1 }
                 }
             }
         }
+    }
+
+    /**
+     * The Create block's mode is deterministic for this fixture (rules and privacy, full-screen host): pinned at the
+     * default scale, in flow at 200% because the longer consent line makes the block taller than half the window (#275,
+     * TL: assert the mode rather than branch on it). In flow, the line needs a scroll.
+     */
+    private var expectInFlow = false
+    private fun createBlockNode(tag: String): SemanticsNodeInteraction {
+        val pinned = compose.onAllNodesWithTag("pinned_action").fetchSemanticsNodes().isNotEmpty()
+        assertEquals("Create block mode (in flow expected: $expectInFlow)", !expectInFlow, pinned)
+        val node = compose.onNodeWithTag(tag)
+        return if (expectInFlow) node.performScrollTo() else node
     }
 
     private fun undersized(tag: String): String? {
