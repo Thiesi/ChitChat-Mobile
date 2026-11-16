@@ -33,6 +33,7 @@ import io.github.thiesi.chitchat.feature.policies.RulesUpdateViewModel
 import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
 import io.github.thiesi.chitchat.testing.openTab
+import io.github.thiesi.chitchat.testing.performNativeTap
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
@@ -159,7 +160,8 @@ class RulesUpdatePresentationTest {
                         error = io.github.thiesi.chitchat.core.network.ApiFailure(io.github.thiesi.chitchat.core.network.FailureKind.TLS)) }
                     compose.waitUntil(5_000) { compose.onAllNodesWithTag("rules_banner").fetchSemanticsNodes().isEmpty() }
                     compose.runOnIdle { api.refuse = true; assertTrue(model.updateDraft(sessions.state.value, 42, "Hello rules")) }
-                    compose.onNodeWithTag("conversation_send").assertIsDisplayed().performClick() // Pinned outside any scroller.
+                    // Pinned outside any scroller; the same native tap the other journeys use on Send.
+                    compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsEnabled().performNativeTap()
                     compose.waitUntil(5_000) { compose.onAllNodesWithTag("rules_updated").fetchSemanticsNodes().isNotEmpty() }
                     compose.runOnIdle { assertEquals(1, api.sends.get()); assertEquals("Hello rules", model.state.value.draft) }
                 }
