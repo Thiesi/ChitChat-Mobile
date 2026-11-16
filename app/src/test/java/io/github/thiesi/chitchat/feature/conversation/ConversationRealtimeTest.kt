@@ -135,6 +135,33 @@ class ConversationRealtimeTest {
         assertFalse(model.state.value.reconciledAfterUncertain); assertEquals("New room draft", model.drafts.value[43]?.body)
         model.acknowledgeDuplicateRisk(); assertTrue(model.state.value.uncertainSend); assertEquals(1, api.sends)
     }
+    /**
+     * The transition ordering CI hides: room B's screen has started on the shared model, then room A's late ON_STOP (a
+     * departure) arrives. B keeps its load and draft, and stays selected for realtime; A's stop changes nothing.
+     */
+    @Test fun aLateDepartureFromAnOlderRoomLeavesTheNewerRoomAlone() = runTest(dispatcher) {
+        val a = Any(); val b = Any()
+        model.foreground(a); model.open(42, interacted = true); runCurrent()
+        model.foreground(b); model.open(43, interacted = true); runCurrent()
+        model.updateDraft("Newer room draft")
+        assertTrue(model.state.value.loaded)
+        model.leavePane(a); runCurrent() // A's ON_STOP, after the transition.
+        assertEquals(43L, model.state.value.roomId); assertTrue(model.state.value.loaded); assertFalse(model.state.value.stale)
+        assertEquals("Newer room draft", model.state.value.draft)
+    }
+
+    /** A late departure doesn't cancel the newer room's send in flight either. */
+    @Test fun aLateDepartureCannotCancelTheNewerRoomsSend() = runTest(dispatcher) {
+        val a = Any(); val b = Any()
+        model.foreground(a); model.open(42, interacted = true); runCurrent()
+        model.foreground(b); model.open(43, interacted = true); runCurrent()
+        api.sendGate = CompletableDeferred(); model.updateDraft("Newer room send"); model.send(); runCurrent()
+        model.leavePane(a); runCurrent()
+        assertTrue(model.state.value.sending); assertFalse(model.state.value.uncertainSend)
+        api.sendGate!!.complete(Unit); runCurrent()
+        assertFalse(model.state.value.uncertainSend); assertEquals("", model.state.value.draft)
+    }
+
     @Test fun leavingThePaneRetainsSendUntilAcknowledgmentAndKeepsTargetAdoptionWaiting() = runTest(dispatcher) {
         open(); val snapshot = target(20, 43); api.sendGate = CompletableDeferred()
         model.updateDraft("Pending navigation fixture"); model.send(); runCurrent()

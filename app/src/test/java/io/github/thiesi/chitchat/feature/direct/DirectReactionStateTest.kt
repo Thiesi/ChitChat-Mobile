@@ -110,6 +110,15 @@ class DirectReactionStateTest {
         assertTrue(model.beginReactions(api.session.value,8,row()))
     }
 
+    /** Navigation keeps an authorized reaction in flight (DM navigation path fix); it confirms with no unknown state. */
+    @Test fun navigationKeepsAReactionInFlight()=runTest(dispatcher) {
+        open(); api.gate=CompletableDeferred(); model.setReaction(begin(),ReactionEmoji.HEART,true); runCurrent()
+        model.leavePane(); runCurrent()
+        assertNull("Not turned into an unknown reaction",model.state.value.reactionUnknown)
+        api.gate!!.complete(Unit); runCurrent()
+        assertNull(model.state.value.reactionUnknown); assertEquals(1,api.reacts)
+    }
+
     @Test fun committedButUnconfirmedChoiceNeedsExplicitGetThenReviewAndNewChoice()=runTest(dispatcher) {
         open(); api.reactionFailure=ApiFailure(FailureKind.HTTP,500,"publication_failed"); val old=begin()
         model.setReaction(old,ReactionEmoji.HEART,true); runCurrent(); val pending=checkNotNull(model.state.value.reactionUnknown)

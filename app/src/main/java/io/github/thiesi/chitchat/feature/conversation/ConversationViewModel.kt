@@ -185,7 +185,11 @@ class ConversationViewModel internal constructor(private val operations: Convers
         else if (interacted) invalidate()
     }
 
-    fun foreground() {
+    /** The screen that last brought this conversation to the foreground; only its departure counts (late-stop race). */
+    private var paneOwner: Any? = null
+
+    fun foreground(owner: Any = Unit) {
+        paneOwner = owner
         foreground = true
         if (mutable.value.attachmentReview != null) return // Same-entry restoration retains its explicit check, never replays it.
         if (mutable.value.loaded && realtime != null) invalidate()
@@ -200,8 +204,13 @@ class ConversationViewModel internal constructor(private val operations: Convers
     }
     fun cancel() { background(); realtime?.selectRoom(null, false) }
 
-    /** Navigation must not turn an already authorized write into unknown delivery. */
-    fun leavePane() {
+    /**
+     * Navigation must not turn an already authorized write into unknown delivery. A departure from a screen that no
+     * longer owns the pane (its ON_STOP arriving after its exit transition, when a newer conversation screen has already
+     * started on this shared model) changes nothing: the newer screen keeps its load, waiting state, draft and guards.
+     */
+    fun leavePane(owner: Any = Unit) {
+        if (paneOwner !== owner) return
         val value = mutable.value
         if (!belongsTo(session.value) || (uploadPosting == null && !postInFlight && !value.sending && !value.authorWriting && !value.reactionWriting &&
             authorPosting == null && reactionPosting == null && readJob?.isActive != true)) {

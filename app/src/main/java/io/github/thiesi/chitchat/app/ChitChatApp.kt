@@ -704,8 +704,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             if (session.phase == SessionPhase.AUTHENTICATED && id > 0)
                                 ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured,
                                     onProfile = profileOpener(destination, id), completion = completion, completionEntryId = destination.id,
-                                    onStopped = { if (nav.currentBackStackEntry === destination) conversations.background()
-                                        else conversations.leavePane() }) {
+                                    onStopped = { owner -> if (nav.currentBackStackEntry === destination) conversations.background()
+                                        else conversations.leavePane(owner) }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
                         }
                         composable(NOTIFICATION_ROOM_ROUTE, arguments = notificationArguments() +
@@ -716,8 +716,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                 args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
                                 ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured,
                                     onProfile = profileOpener(destination, id), completion = completion, completionEntryId = destination.id,
-                                    onStopped = { if (nav.currentBackStackEntry === destination) conversations.background()
-                                        else conversations.leavePane() }) {
+                                    onStopped = { owner -> if (nav.currentBackStackEntry === destination) conversations.background()
+                                        else conversations.leavePane(owner) }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
                         }
                         composable(DIRECT_INBOX_ROUTE, arguments = directArguments()) { destination ->
@@ -735,8 +735,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                 args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
                                 DirectThreadScreen(directThread, peer, auth::refresh, messageTargets, targetObscured,
                                     onProfile = profileOpener(destination), completion = completion, completionEntryId = destination.id,
-                                    onStopped = { if (nav.currentBackStackEntry === destination) directThread.background()
-                                        else directThread.leavePane() }) {
+                                    onStopped = { owner -> if (nav.currentBackStackEntry === destination) directThread.background()
+                                        else directThread.leavePane(owner) }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
                         }
                         }
