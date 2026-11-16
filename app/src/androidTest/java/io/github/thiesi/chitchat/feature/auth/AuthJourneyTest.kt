@@ -19,6 +19,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.AnnotatedString
@@ -60,7 +61,7 @@ class AuthJourneyTest {
         compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Server found: choose sign in (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
-        val submit = compose.onNodeWithText("Sign in").performScrollTo()
+        val submit = compose.onNodeWithText("Sign in")
         // #275: failure-only scalars for an intermittent API36 "not displayed" here. The same assertion, no retry, no text.
         try { submit.assertIsDisplayed() } catch (e: AssertionError) {
             val sampled = android.os.SystemClock.uptimeMillis()
@@ -123,7 +124,7 @@ class AuthJourneyTest {
         assertEquals(io.github.thiesi.chitchat.core.session.SessionPhase.SIGNED_OUT, sessions.state.value.phase)
         compose.onNodeWithText("Back to sign-in").performClick()
         compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Sign-out returns to Server found (O2a).
-        compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Sign in").assertIsDisplayed()
     }
 
     @Test fun roomConversationNavigationAndLogoutClearMessagesAndDraft() {
@@ -183,7 +184,7 @@ class AuthJourneyTest {
         compose.runOnIdle { sessions.nextLoginCompletion = completion }
         compose.onNodeWithText("Password").performScrollTo().performTextInput("corrected-fixture-password")
         try {
-            compose.onNodeWithText("Sign in").performScrollTo().performClick()
+            compose.onNodeWithText("Sign in").performClick()
             compose.waitUntil(5_000) { sessions.logins == 2 }
             compose.onNodeWithText("Signed in as Alice").assertDoesNotExist()
             compose.onNodeWithText("Password").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
@@ -260,7 +261,8 @@ class AuthJourneyTest {
     @Test fun registrationValidatesConfirmationBeforeSendingAndKeepsFormReachable() {
         registrationForm()
         compose.onNodeWithText("Confirm password").performScrollTo().performTextInput("different-password")
-        compose.onNodeWithText("Create account").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Confirm password").performImeAction() // The last field's Done reveals Create (#275).
+        compose.onNodeWithText("Create my account").assertIsDisplayed().performClick()
         compose.onNodeWithText("The passwords do not match.").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, sessions.registrations) }
     }
@@ -269,12 +271,13 @@ class AuthJourneyTest {
         sessions.failNextRegistration = true
         registrationForm()
         compose.onNodeWithText("Confirm password").performScrollTo().performTextInput("fixture-password")
-        compose.onNodeWithText("Create account").performScrollTo().performClick()
+        compose.onNodeWithText("Confirm password").performImeAction() // The last field's Done reveals Create (#275).
+        compose.onNodeWithText("Create my account").performClick()
         compose.onNodeWithText("That username is already registered. Choose another, or sign in.").assertIsDisplayed()
         compose.onNodeWithText("Username").assertTextContains("Alice")
         for (label in listOf("Password", "Confirm password")) compose.onNodeWithText(label)
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
-        compose.onNodeWithText("Create account").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithText("Create my account").assertIsNotEnabled()
         compose.onNodeWithText("Refresh anti-bot check").performScrollTo().performClick()
         compose.onNodeWithText("Anti-bot check ready.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, sessions.registrations) }
@@ -310,7 +313,7 @@ class AuthJourneyTest {
         compose.onNodeWithTag("onboarding_restore").performScrollTo().performClick()
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
-        compose.onNodeWithText("Restore and sign in").performScrollTo().performClick()
+        compose.onNodeWithText("Restore and sign in").performClick()
         compose.onNodeWithText("Finish account restoration").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("The server confirmed that your account was restored.").assertDoesNotExist()
         compose.onNodeWithText("Recovery code").performScrollTo().performTextInput("UNUSED-FIXTURE-CODE")

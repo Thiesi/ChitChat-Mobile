@@ -322,7 +322,7 @@ class DirectJourneyTest {
         closeSoftKeyboard()
         if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
             compose.waitUntil(5_000) { imeBottom == 0 }
-        compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        compose.onNodeWithText("Sign in").assertIsDisplayed().assertIsEnabled().performClick()
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.AUTHENTICATED }
         compose.runOnIdle { connection.state.value = RealtimeState(phase = RealtimePhase.LIVE, generation = sessions.state.value.generation) }
         if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")

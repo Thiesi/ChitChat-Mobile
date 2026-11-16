@@ -61,7 +61,7 @@ class AccountRecreationTest {
         // Hosted diagnostics showed zero sign-in calls, not a failed export/recreation.
         // Settle the password IME before measuring/tapping the moving scrollable button.
         closeSoftKeyboard()
-        compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        compose.onNodeWithText("Sign in").assertIsDisplayed().assertIsEnabled().performClick()
         // Authentication state collection can finish after the click's idle boundary.
         // Wait for the destination affordance, not a timing-dependent immediate query.
         try {

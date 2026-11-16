@@ -54,7 +54,8 @@ class FindPeopleJourneyTest {
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         for (label in listOf("Password", "Confirm password")) compose.onNodeWithText(label).performScrollTo().performTextInput("fixture-password")
         Espresso.closeSoftKeyboard()
-        compose.onNodeWithText("Create account").performScrollTo().performClick()
+        compose.onNodeWithText("Confirm password").performImeAction() // The last field's Done reveals Create (#275).
+        compose.onNodeWithText("Create my account").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("find_people").fetchSemanticsNodes().isNotEmpty() }
         compose.waitUntil(5_000) { rooms.state.value.loaded && !rooms.state.value.busy }
     }
@@ -75,7 +76,7 @@ class FindPeopleJourneyTest {
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         Espresso.closeSoftKeyboard()
-        compose.onNodeWithText("Sign in").performScrollTo().performClick()
+        compose.onNodeWithText("Sign in").performClick()
         compose.openTab("rooms").assertIsSelected()
         compose.onNodeWithTag("find_people").assertDoesNotExist()
     }
@@ -121,7 +122,7 @@ class FindPeopleJourneyTest {
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
         Espresso.closeSoftKeyboard()
-        compose.onNodeWithText("Sign in").performScrollTo().performClick()
+        compose.onNodeWithText("Sign in").performClick()
         compose.openTab("rooms").assertIsSelected()
         compose.onNodeWithTag("find_people").assertDoesNotExist()
     }

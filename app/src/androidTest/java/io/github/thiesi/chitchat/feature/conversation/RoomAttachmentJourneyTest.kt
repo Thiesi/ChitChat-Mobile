@@ -84,7 +84,7 @@ class RoomAttachmentJourneyTest {
         compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick() // Server found: choose sign in (O2a).
         compose.onNodeWithText("Username").performScrollTo().performTextInput("Viewer")
         compose.onNodeWithText("Password").performScrollTo().performTextInput("fixture-password")
-        compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        compose.onNodeWithText("Sign in").assertIsDisplayed().assertIsEnabled().performClick()
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.AUTHENTICATED }
         compose.runOnIdle { sessions.state.value = sessions.state.value.copy(attachmentPolicy = policy,
             chatPolicy = ChatPolicy(emptySet(), null, DisplayPreferences())) }

@@ -30,6 +30,8 @@ CLEANUP_MAX_BYTES = 256
 FIND_PEOPLE_DESTINATION = ROOT / "app/build/reports/androidTests/find-people-presentation"
 POLICY_DESTINATION = ROOT / "app/build/reports/androidTests/policy-presentation"
 POLICY_NAME = re.compile(r"policy-(light|dark)-(default|font200)-(hosted|external|unpublished|httpdialog|loading|failed)[.]png")
+AUTH_DESTINATION = ROOT / "app/build/reports/androidTests/auth-presentation"
+AUTH_NAME = re.compile(r"auth-(light|dark)-((default|font200)-(signin|create)-keyboard|font200-create-block)[.]png")
 RULES_DESTINATION = ROOT / "app/build/reports/androidTests/rules-presentation"
 RULES_NAME = re.compile(r"rules-(light|dark)-((default|font200)-dialog(-expanded)?|font200-banner(-offline)?)[.]png")
 GUIDELINES_DESTINATION = ROOT / "app/build/reports/androidTests/guidelines-presentation"
@@ -224,6 +226,18 @@ def collect_rules():
     print(f"Rules presentation captures collected: {len(files)} of 12.")
 
 
+def collect_auth():
+    # #275: Sign in and Create with the keyboard up (default and 2.0) and Create's pinned block at 2.0; light and dark.
+    files = list(islice(SOURCE.rglob("ccm-auth-presentation/*"), 11))
+    if (not files or len(files) > 10 or len({p.name for p in files}) != len(files)
+        or any(AUTH_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous auth presentation output")
+    AUTH_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, AUTH_DESTINATION / path.name)
+    print(f"Auth presentation captures collected: {len(files)} of 10.")
+
+
 def collect_onboarding():
     # Onboarding O2a: Welcome, Where do you chat?, Server found (top and scrolled), default and 2.0 font, light and dark,
     # plus a step 2 failure notice at 2.0.
@@ -352,6 +366,10 @@ def main() -> int:
         collect_rules()
     except Exception:
         print("Rules presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_auth()
+    except Exception:
+        print("Auth presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_onboarding()
     except Exception:

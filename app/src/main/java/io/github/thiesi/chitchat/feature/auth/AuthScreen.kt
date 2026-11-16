@@ -178,13 +178,16 @@ private fun PasswordForm(model: AuthViewModel, enabled: Boolean, restore: Boolea
     OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().semantics { contentType = ContentType.Username },
         label = { Text(stringResource(R.string.username)) }, enabled = enabled, singleLine = true,
         keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Next), shape = MaterialTheme.shapes.medium)
-    OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().semantics { contentType = ContentType.Password },
+    OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().testTag("sign_in_password").semantics { contentType = ContentType.Password },
         label = { Text(stringResource(R.string.password)) }, enabled = enabled, singleLine = true,
         visualTransformation = PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { submit() }), shape = MaterialTheme.shapes.medium)
-    PrimaryButton(onClick = submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(if (restore) R.string.restore_and_sign_in else R.string.sign_in))
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Go),
+        keyboardActions = KeyboardActions(onGo = { submit() }, onDone = { submit() }), shape = MaterialTheme.shapes.medium)
+    // Pinned above the keyboard, outside the scroller (#275, PL): it stays visible while typing.
+    io.github.thiesi.chitchat.core.ui.PinnedAction {
+        PrimaryButton(onClick = submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth().testTag("sign_in_submit")) {
+            Text(stringResource(if (restore) R.string.restore_and_sign_in else R.string.sign_in))
+        }
     }
 }
 
