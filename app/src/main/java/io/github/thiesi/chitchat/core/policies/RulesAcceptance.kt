@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.core.policies
 
 import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.session.SessionState
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -17,6 +18,15 @@ import kotlinx.serialization.json.intOrNull
 
 /** `user.rules`: the version this account accepted (0 = none), when, and whether the current version still needs it. */
 data class RulesStatus(val acceptedVersion: Int, val acceptedAt: String?, val acceptanceRequired: Boolean)
+
+/** The account-level rules operations the guidelines screens use (SessionRepository). */
+interface RulesOperations {
+    val state: kotlinx.coroutines.flow.StateFlow<SessionState>
+    /** One POST of the shown [version] for the rendered [expected] session; never resent. */
+    suspend fun acceptRules(version: Int, expected: SessionState): RulesAcceptResult
+    /** The ordinary session refresh (a GET): re-reads the rules status after Outdated or Unknown. */
+    suspend fun refresh()
+}
 
 /** One `policies/accept.php` POST. Never resent: Unknown needs a session GET; Outdated needs a re-read and a new choice. */
 sealed interface RulesAcceptResult {

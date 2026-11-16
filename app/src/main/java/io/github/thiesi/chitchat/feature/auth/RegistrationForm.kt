@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
@@ -52,7 +53,8 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled: Boolean) {
+internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled: Boolean,
+    onPolicy: ((io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit)? = null) {
     var username by rememberSaveable { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
@@ -79,17 +81,19 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(stringResource(R.string.create_account_title), style = MaterialTheme.typography.titleLarge)
         Text(stringResource(R.string.registration_policy))
-        OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().semantics { contentType = ContentType.NewUsername },
+        OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().testTag("registration_username")
+            .semantics { contentType = ContentType.NewUsername },
             label = { Text(stringResource(R.string.username)) }, enabled = enabled, singleLine = true,
             isError = attempted && problem == RegistrationProblem.USERNAME,
             supportingText = { Text(stringResource(R.string.username_policy)) },
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Next), shape = MaterialTheme.shapes.medium)
-        OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().semantics { contentType = ContentType.NewPassword },
+        OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().testTag("registration_password")
+            .semantics { contentType = ContentType.NewPassword },
             label = { Text(stringResource(R.string.password)) }, enabled = enabled, singleLine = true,
             isError = attempted && problem == RegistrationProblem.PASSWORD,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Next), shape = MaterialTheme.shapes.medium)
-        OutlinedTextField(confirmation, { confirmation = it }, Modifier.fillMaxWidth(),
+        OutlinedTextField(confirmation, { confirmation = it }, Modifier.fillMaxWidth().testTag("registration_confirmation"),
             label = { Text(stringResource(R.string.confirm_password)) }, enabled = enabled, singleLine = true,
             isError = attempted && problem == RegistrationProblem.CONFIRMATION,
             visualTransformation = PasswordVisualTransformation(),
@@ -115,7 +119,10 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
                 Text(stringResource(R.string.refresh_registration_check))
             }
         }
-        PrimaryButton(onClick = submit, enabled = ready, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create_account)) }
+        state.public?.policies?.rules?.let { RulesConsent(state, onPolicy) }
+        PrimaryButton(onClick = submit, enabled = ready, modifier = Modifier.fillMaxWidth().testTag("registration_submit")) {
+            Text(stringResource(R.string.create_account))
+        }
     }
     if (pickerOpen) {
         val today = remember { LocalDate.now(ZoneOffset.UTC) }
@@ -140,4 +147,34 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
             CompositionLocalProvider(LocalSaveableStateRegistry provides null) { DatePicker(picker) }
         }
     }
+}
+
+/**
+ * Above Create my account while the server publishes rules (play-readiness.md §1): "By creating an account, you agree
+ * to {installation}'s rules" (and, with a privacy policy, "and acknowledge its privacy policy"). The linked words open
+ * the document screen; registration then sends the rendered version (O3b1).
+ */
+@Composable
+private fun RulesConsent(state: SessionState,
+    onPolicy: ((io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit)?) {
+    val installation = installationOf(state)
+    val rules = stringResource(R.string.registration_rules_link, installation)
+    val privacy = stringResource(R.string.registration_privacy_link).takeIf { state.public?.policies?.privacy != null }
+    val sentence = if (privacy != null) stringResource(R.string.registration_rules_privacy_consent, rules, privacy)
+        else stringResource(R.string.registration_rules_consent, rules)
+    val linkStyle = androidx.compose.ui.text.TextLinkStyles(androidx.compose.ui.text.SpanStyle(
+        color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.steward,
+        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline))
+    val text = androidx.compose.ui.text.buildAnnotatedString {
+        append(sentence)
+        fun link(words: String, tag: String, name: io.github.thiesi.chitchat.core.policies.PolicyDocumentName) {
+            val start = sentence.indexOf(words).takeIf { it >= 0 } ?: return
+            if (onPolicy == null) return
+            addLink(androidx.compose.ui.text.LinkAnnotation.Clickable(tag, linkStyle) { onPolicy(name) }, start, start + words.length)
+        }
+        link(rules, "registration_rules_link", io.github.thiesi.chitchat.core.policies.PolicyDocumentName.RULES)
+        privacy?.let { link(it, "registration_privacy_link", io.github.thiesi.chitchat.core.policies.PolicyDocumentName.PRIVACY) }
+    }
+    Text(text, androidx.compose.ui.Modifier.testTag("registration_rules_consent"),
+        color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.textMuted)
 }

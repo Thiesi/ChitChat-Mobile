@@ -25,3 +25,6 @@ signing.properties
 .codebase-memory/
 .tooling/
 .review-body.md
+
+# Python bytecode (collector unit tests)
+__pycache__/
