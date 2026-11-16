@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
+import io.github.thiesi.chitchat.core.policies.isRulesRefusal
+
 import io.github.thiesi.chitchat.core.media.AttachmentMemoryBudget
 import io.github.thiesi.chitchat.core.media.AttachmentPickSource
 import io.github.thiesi.chitchat.core.media.AttachmentPolicy
@@ -1012,7 +1014,11 @@ class ConversationViewModel internal constructor(private val operations: Convers
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: ApiFailure) {
                 if (isCurrent(expected, attempt, roomId)) {
-                    // Any exception after starting a mutation can follow its committed write.
+                    // Any exception after starting a mutation can follow its committed write, except the rules refusal:
+                    // the server checks rules acceptance under the content transaction's lock and refuses before any
+                    // commit (policies.md, play-readiness.md §1). That one is definite, so no author or reaction
+                    // uncertainty; the edit dialog keeps its text and the chip is unchanged.
+                    if (failure.isRulesRefusal()) { authorPosting = null; reactionPosting = null }
                     if (failure.status in setOf(403, 404) && failure.code in setOf("room_forbidden", "room_not_found"))
                         clearUnauthorized(failure)
                     else mutable.value = mutable.value.copy(error = failure, stale = true)

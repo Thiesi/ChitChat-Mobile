@@ -126,6 +126,20 @@ class RoomReactionStateTest {
         model.setReaction(fresh, ReactionEmoji.HEART, true); runCurrent(); assertEquals(2, fake.writes)
     }
 
+    /** O3b3b: 403 rules_acceptance_required is definite. The chip stays unchanged, nothing is unknown, nothing resends. */
+    @Test fun aRulesRefusedReactionLeavesTheChipUnchangedIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); val before = model.state.value.messages
+        fake.failure = ApiFailure(FailureKind.HTTP, 403, "rules_acceptance_required")
+        model.setReaction(begin(), ReactionEmoji.HEART, true); runCurrent()
+        assertNull("Definite: no reaction uncertainty", model.state.value.reactionUnknown)
+        assertFalse(model.state.value.uncertainSend)
+        assertEquals("A refused reaction leaves the chip unchanged", before.map { it.id to it.reactions }, model.state.value.messages.map { it.id to it.reactions })
+        fake.failure = null
+        fake.session.value = fake.session.value.copy(rules = io.github.thiesi.chitchat.core.policies.RulesStatus(4, null, false))
+        runCurrent()
+        assertEquals("Nothing resends after I agree", 1, fake.writes)
+    }
+
     @Test fun failedExplicitGetRetainsSameUnknownAndDoesNotReplay() = runTest(dispatcher) {
         open(); fake.failure = ApiFailure(FailureKind.NETWORK); model.setReaction(begin(), ReactionEmoji.HEART, true); runCurrent()
         val unknown = checkNotNull(model.state.value.reactionUnknown); fake.getFailure = ApiFailure(FailureKind.NETWORK)

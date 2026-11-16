@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.direct
 
+import io.github.thiesi.chitchat.core.policies.isRulesRefusal
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -542,6 +544,10 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             catch (_: IncompleteRange) { if (current(seq, peer, expected)) mutable.value = mutable.value.copy(
                 stale = true, incompleteRange = true, newerAvailable = true) }
             catch (failure: ApiFailure) { if (current(seq, peer, expected)) {
+                // The rules refusal is checked under the content transaction's lock and refused before any commit
+                // (policies.md, play-readiness.md §1): definite, so no author or reaction uncertainty. Every other failure
+                // after a mutation starts keeps M5b1's possibly-committed handling.
+                if (failure.isRulesRefusal()) { authorPosting = null; reactionPosting = null }
                 val pending = write
                 val inaccessible = pending == null && (failure.status == 404 ||
                     failure.status == 403 && failure.code != "csrf_failed") || failure.kind == FailureKind.INCOMPATIBLE && pending == null

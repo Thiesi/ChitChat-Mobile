@@ -55,3 +55,9 @@ internal fun rulesStatus(field: JsonElement?): RulesStatus? {
 internal fun userRulesStatus(body: String): RulesStatus? = try {
     ((Json.parseToJsonElement(body) as? JsonObject)?.get("user") as? JsonObject)?.get("rules").let(::rulesStatus)
 } catch (_: IllegalArgumentException) { null }
+
+/**
+ * `403 rules_acceptance_required` (policies.md): the server checks rules acceptance under the content transaction's
+ * lock and refuses before any commit, so this refusal is definite. Nothing is unknown and nothing resends.
+ */
+fun ApiFailure.isRulesRefusal(): Boolean = status == 403 && code == "rules_acceptance_required"

@@ -145,6 +145,19 @@ class DirectAuthorChangeTest {
         model.updateAuthorBody(fresh, "A different explicit choice"); model.submitAuthor(fresh); runCurrent()
         assertEquals(2, changes.edits); assertEquals("A different explicit choice", model.state.value.messages.first().body)
     }
+    /**
+     * O3b3b: 403 rules_acceptance_required is the one definite author refusal. The dialog keeps its text, nothing is
+     * unknown, and nothing resends. (The next test keeps a plain 403 uncertain, so the exception can't widen.)
+     */
+    @Test fun aRulesRefusedDirectEditKeepsItsTextIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); val request = choose(); model.updateAuthorBody(request, "Refused edit")
+        changes.failure = ApiFailure(FailureKind.HTTP, 403, "rules_acceptance_required"); model.submitAuthor(request); runCurrent()
+        assertNull("Definite: no author uncertainty", model.state.value.authorUnknown)
+        assertEquals("The edit dialog keeps its text", "Refused edit", model.state.value.authorDialog?.body)
+        changes.failure = null; api.session.value = api.session.value.copy(rules = io.github.thiesi.chitchat.core.policies.RulesStatus(4, null, false)); runCurrent()
+        assertEquals("Nothing resends after I agree", 1, changes.edits)
+    }
+
     @Test fun forbiddenPostIsAlsoUncertainAndAFailedRecoveryGetCannotClearIt() = runTest(dispatcher) {
         open(); val request = choose(); model.updateAuthorBody(request, "Proposal")
         changes.failure = ApiFailure(FailureKind.HTTP, 403, "forbidden"); model.submitAuthor(request); runCurrent()
