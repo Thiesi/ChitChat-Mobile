@@ -27,7 +27,8 @@ data class SettingsUiState(
     val hasLoadedSettings: Boolean = false,
 )
 
-class SettingsViewModel(private val store: SettingsStore) : ViewModel() {
+class SettingsViewModel(private val store: SettingsStore,
+    private val acceptances: io.github.thiesi.chitchat.core.settings.GuidelinesAcceptanceStore? = null) : ViewModel() {
     private val mutableState = MutableStateFlow(SettingsUiState())
     val state = mutableState.asStateFlow()
     private var observation: Job? = null
@@ -60,7 +61,11 @@ class SettingsViewModel(private val store: SettingsStore) : ViewModel() {
     }
 
     fun clearAddressError() { mutableState.update { it.copy(addressError = null) } }
-    fun forgetServer() = write { store.saveServer(null) }
+    /** Forgetting the server also removes its guidelines acceptance records (P-170); sign-out keeps them. */
+    fun forgetServer() = write {
+        state.value.settings.server?.value?.let { origin -> acceptances?.forgetServer(origin) }
+        store.saveServer(null)
+    }
     fun setTheme(theme: ThemePreference) = write { store.saveTheme(theme) }
     fun setPureBlack(enabled: Boolean) = write { store.savePureBlack(enabled) }
 
@@ -75,8 +80,9 @@ class SettingsViewModel(private val store: SettingsStore) : ViewModel() {
     }
 
     companion object {
-        fun factory(store: SettingsStore): ViewModelProvider.Factory = viewModelFactory {
-            initializer { SettingsViewModel(store) }
+        fun factory(store: SettingsStore, acceptances: io.github.thiesi.chitchat.core.settings.GuidelinesAcceptanceStore? = null):
+            ViewModelProvider.Factory = viewModelFactory {
+            initializer { SettingsViewModel(store, acceptances) }
         }
     }
 }

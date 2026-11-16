@@ -99,6 +99,7 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         if (raw.status != 200) throw ApiFailure(FailureKind.INCOMPATIBLE)
         val reply = decode<SessionReply>(raw)
         reply.discovery = io.github.thiesi.chitchat.core.session.serverDiscovery(raw.body)
+        reply.rules = io.github.thiesi.chitchat.core.policies.userRulesStatus(raw.body)
         requireValidCsrf(reply.csrfToken)
         reply.user?.let(::requireValidUser)
         reply.ignoredUserIds?.let { incompatibleUnless(it.all { id -> id > 0 } && it.distinct().size == it.size) }
@@ -120,9 +121,21 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         return decode<RegistrationChallengeReply>(raw).challenge
     }
 
-    suspend fun register(username: String, password: String, birthDate: String?, nonce: String?, solution: String?, csrf: String): AuthReply =
-        auth("register.php", apiJson.encodeToString(RegistrationRequest(username, password, birthDate, "", nonce, solution)),
+    suspend fun register(username: String, password: String, birthDate: String?, nonce: String?, solution: String?, csrf: String,
+        acceptedRulesVersion: Int? = null): AuthReply =
+        auth("register.php", apiJson.encodeToString(RegistrationRequest(username, password, birthDate, "", nonce, solution, acceptedRulesVersion)),
             csrf, successStatus = 201, allowPending = false)
+
+    /**
+     * One CSRF `policies/accept.php` POST (policies.md) for [version], the version shown. Returns the new account status.
+     * Refusals stay typed (`409 rules_version_outdated` included) for the caller; never retried here.
+     */
+    suspend fun acceptRules(version: Int, csrf: String): io.github.thiesi.chitchat.core.policies.RulesStatus {
+        require(version >= 1)
+        val raw = request("policies/accept.php", """{"version":$version}""", csrf).require200()
+        val root = try { apiJson.parseToJsonElement(raw.body) as? kotlinx.serialization.json.JsonObject } catch (_: SerializationException) { null }
+        return io.github.thiesi.chitchat.core.policies.rulesStatus(root?.get("rules")) ?: throw ApiFailure(FailureKind.INCOMPATIBLE)
+    }
 
     suspend fun recovery(code: String, csrf: String): AuthReply =
         auth("mfa/login-recovery.php", apiJson.encodeToString(RecoveryRequest(code)), csrf, allowPending = false)
@@ -603,6 +616,7 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
     private suspend fun auth(path: String, body: String, csrf: String, successStatus: Int = 200, allowPending: Boolean = true): AuthReply {
         val raw = request(path, body, csrf)
         val reply = decode<AuthReply>(raw)
+        reply.rules = io.github.thiesi.chitchat.core.policies.userRulesStatus(raw.body)
         requireValidCsrf(reply.csrfToken)
         if (raw.status == 202) {
             if (!allowPending || !reply.mfaRequired || reply.user != null || "recovery_code" !in reply.methods) {

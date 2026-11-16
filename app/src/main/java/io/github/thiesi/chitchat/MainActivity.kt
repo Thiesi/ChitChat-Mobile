@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         settingsModel=ViewModelProvider(this,SettingsViewModel.factory(
+            (application as ChitChatApplication).settingsRepository,
             (application as ChitChatApplication).settingsRepository))[SettingsViewModel::class.java]
         pushTaps=ViewModelProvider(this)[PushTapViewModel::class.java]
         // Only a fresh launch carries a tap. A restored activity's intent is old and never replays.
