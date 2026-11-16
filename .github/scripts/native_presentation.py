@@ -30,6 +30,8 @@ CLEANUP_MAX_BYTES = 256
 FIND_PEOPLE_DESTINATION = ROOT / "app/build/reports/androidTests/find-people-presentation"
 POLICY_DESTINATION = ROOT / "app/build/reports/androidTests/policy-presentation"
 POLICY_NAME = re.compile(r"policy-(light|dark)-(default|font200)-(hosted|external|unpublished|httpdialog|loading|failed)[.]png")
+GUIDELINES_DESTINATION = ROOT / "app/build/reports/androidTests/guidelines-presentation"
+GUIDELINES_NAME = re.compile(r"guidelines-(light|dark)-(default|font200)-((plain|rules|outdated)(-actions)?|create)[.]png")
 FIND_PEOPLE_NAME = re.compile(r"find-people-(light|dark)-(default|font200)-(top|joined|failed|uncertain)[.]png")
 ONBOARDING_NAME = re.compile(r"onboarding-(light|dark)-(default|font200)-(welcome|address|foundtop|found|failure)[.]png")
 UPDATE_DESTINATION = ROOT / "app/build/reports/androidTests/update-presentation"
@@ -194,6 +196,19 @@ def collect_find_people():
     print(f"Find your people presentation captures collected: {len(files)} of 16.")
 
 
+def collect_guidelines():
+    # Before you chat (O3b2): without and with server rules, the 409 line (each top and scrolled to the actions) and the
+    # Create form's consent line; default and 2.0, light and dark.
+    files = list(islice(SOURCE.rglob("ccm-guidelines-presentation/*"), 29))
+    if (not files or len(files) > 28 or len({p.name for p in files}) != len(files)
+        or any(GUIDELINES_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous guidelines presentation output")
+    GUIDELINES_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, GUIDELINES_DESTINATION / path.name)
+    print(f"Guidelines presentation captures collected: {len(files)} of 28.")
+
+
 def collect_onboarding():
     # Onboarding O2a: Welcome, Where do you chat?, Server found (top and scrolled), default and 2.0 font, light and dark,
     # plus a step 2 failure notice at 2.0.
@@ -314,6 +329,10 @@ def main() -> int:
         collect_find_people()
     except Exception:
         print("Find your people presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_guidelines()
+    except Exception:
+        print("Guidelines presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_onboarding()
     except Exception:

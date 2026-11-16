@@ -49,7 +49,8 @@ import io.github.thiesi.chitchat.core.session.AuthFlow
 import kotlinx.coroutines.delay
 
 @Composable
-fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? = null) {
+fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? = null,
+    onPolicy: ((io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit)? = null) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.pauseRegistration() }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -62,7 +63,12 @@ fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? 
     val waiting = now < state.retryAtMillis
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         state.error?.let { failure ->
-            InlineError(errorText(failure))
+            InlineError(when (failure.code) {
+                // Rules acceptance at registration (play-readiness.md §1): the account wasn't created.
+                "rules_version_outdated" -> stringResource(R.string.registration_rules_outdated, installationOf(state))
+                "rules_acceptance_required" -> stringResource(R.string.registration_rules_required)
+                else -> errorText(failure)
+            })
         }
         if (state.registrationMayHaveSucceeded) Text(stringResource(R.string.registration_unknown))
         if (waiting) {
@@ -93,7 +99,7 @@ fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? 
                 }
                 val enabled = !state.busy && !state.refreshRequired && !waiting
                 if (state.authFlow == AuthFlow.REGISTER) {
-                    if (state.public?.registrationEnabled == true) RegistrationForm(state, model, enabled && !state.public.lockdown.enabled)
+                    if (state.public?.registrationEnabled == true) RegistrationForm(state, model, enabled && !state.public.lockdown.enabled, onPolicy)
                     else Text(stringResource(R.string.registration_disabled))
                 }
                 else {
@@ -232,3 +238,7 @@ private fun errorText(failure: ApiFailure): String = stringResource(when {
     failure.status == 401 -> R.string.session_expired
     else -> R.string.request_rejected
 })
+
+/** The installation's name, or its host with break points (as on Server found). */
+internal fun installationOf(state: SessionState): String = state.installationName
+    ?: io.github.thiesi.chitchat.app.breakableHost(state.server?.value?.let { runCatching { java.net.URI(it).host }.getOrNull() }.orEmpty())

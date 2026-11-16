@@ -1,5 +1,8 @@
 package io.github.thiesi.chitchat.app
 
+import io.github.thiesi.chitchat.core.settings.covers
+import androidx.compose.material3.Surface
+
 import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
 
 import android.content.res.Configuration
@@ -144,6 +147,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     pushPhone: io.github.thiesi.chitchat.feature.push.PushPhoneViewModel? = null,
     pushTaps: io.github.thiesi.chitchat.core.push.PendingPushTap? = null,
     policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel? = null,
+    guidelines: io.github.thiesi.chitchat.feature.policies.GuidelinesViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session = auth.state.collectAsStateWithLifecycle().value
@@ -423,8 +427,18 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             it == NOTIFICATION_ROOM_ROUTE || it == SEARCH_ROUTE } == true
         val compactConversation = conversationRoute && maxHeight < 400.dp
         val compactKeyboard = imeVisible && maxHeight < 240.dp
+        // Community guidelines (P-170): once per account on this device, between sign-in and the shell. Until the local
+        // record is read, a plain surface rather than a flash of either screen.
+        val acceptedGuidelines = guidelines?.accepted?.collectAsStateWithLifecycle()?.value
+        val signedInUser = session.user.takeIf { session.phase == SessionPhase.AUTHENTICATED }
+        val guidelinesGate = guidelines != null && signedInUser != null && session.server != null && !session.updateRequired
         if (session.phase == SessionPhase.AUTHENTICATED && session.updateRequired)
             ServerUpdateScreen(session, state.settings.server?.value, onCheckAgain = auth::refresh, onSignOut = auth::signOut)
+        else if (guidelinesGate && acceptedGuidelines == null)
+            Surface(Modifier.fillMaxSize().testTag("guidelines_loading"), color = MaterialTheme.colorScheme.background) {}
+        else if (guidelinesGate && guidelines != null && signedInUser != null && session.server != null &&
+            !acceptedGuidelines!!.covers(session.server.value, signedInUser.id))
+            GuidelinesScreen(session, session.server.value, guidelines, policies, onSignOut = auth::signOut)
         else Scaffold(
             topBar = {
                 if (!compactKeyboard) TopAppBar(
@@ -538,7 +552,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                     } else if (session.phase == SessionPhase.ANONYMOUS) {
                                         // Like the visible Back: no leaving the form while its POST is in flight (its outcome shows there).
                                         androidx.activity.compose.BackHandler(enabled = !session.busy) { chosen = false }
-                                        AuthScreen(session, auth, onBack = { chosen = false })
+                                        AuthScreen(session, auth, onBack = { chosen = false },
+                                            onPolicy = policies?.let { { name -> nav.navigate(policyRoute(name, shell = false)) { launchSingleTop = true } } })
                                     } else {
                                         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                                             Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.headlineLarge)
@@ -843,7 +858,7 @@ private fun policyRoute(name: io.github.thiesi.chitchat.core.policies.PolicyDocu
  * leaves; a configuration change keeps it (memory only, play-readiness.md §1).
  */
 @Composable
-private fun PolicyRoute(model: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel,
+internal fun PolicyRoute(model: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel,
     name: io.github.thiesi.chitchat.core.policies.PolicyDocumentName, session: io.github.thiesi.chitchat.core.session.SessionState, server: String?) {
     val activity = androidx.activity.compose.LocalActivity.current
     // This screen instance owns what it opens; its late dispose (exit transition) can't close a newer screen's document.

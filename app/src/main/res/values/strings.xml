@@ -611,6 +611,24 @@
     <string name="policy_loading">Loading the document…</string>
     <string name="policy_failed">The document couldn\'t be loaded.</string>
     <string name="policy_link_title">Open link</string>
+    <!-- Community guidelines (play-readiness.md §1; approved text 2026-11-07). -->
+    <string name="guidelines_title">Before you chat</string>
+    <string name="guidelines_lead">Be kind, be real, be safe.</string>
+    <string name="guidelines_rules">Don\'t harass, threaten or bully anyone. No hate based on who people are. No sexual content involving minors, ever. No spam, scams or malware. Don\'t share other people\'s private information. Don\'t pretend to be someone else. Nothing illegal.</string>
+    <string name="guidelines_reporting">You can report any message from its menu, and ignore people in rooms or block them in direct messages. Reports go to the people who moderate this server.</string>
+    <string name="guidelines_operator">%1$s is run by its own operators, who may have additional rules and moderate it. The ChitChat app maker doesn\'t run it.</string>
+    <string name="guidelines_operator_rules">%1$s is run by its own operators, who set the rules above and moderate it. The ChitChat app maker doesn\'t run it.</string>
+    <string name="guidelines_read_rules">Read %1$s\'s rules</string>
+    <string name="guidelines_consent">By tapping I agree, you accept these guidelines and %1$s\'s rules.</string>
+    <string name="guidelines_agree">I agree</string>
+    <string name="guidelines_saving">Saving…</string>
+    <string name="guidelines_rules_outdated">%1$s updated its rules just now. Please look again.</string>
+    <string name="registration_rules_consent">By creating an account, you agree to %1$s.</string>
+    <string name="registration_rules_privacy_consent">By creating an account, you agree to %1$s and acknowledge its %2$s.</string>
+    <string name="registration_rules_link">%1$s\'s rules</string>
+    <string name="registration_privacy_link">privacy policy</string>
+    <string name="registration_rules_outdated">%1$s updated its rules while you were signing up. Look at them, then create your account again.</string>
+    <string name="registration_rules_required">Something went wrong creating your account. Your details are kept; try again.</string>
     <string name="role_super_admin">Super-Administrator</string>
     <string name="role_admin">Administrator</string>
     <string name="role_chat_admin">Chat Administrator</string>

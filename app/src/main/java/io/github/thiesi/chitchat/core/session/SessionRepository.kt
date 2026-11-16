@@ -119,7 +119,7 @@ class SessionRepository internal constructor(
     private val clock: Clock = Clock.systemUTC(),
     private val push: PushTeardown = PushTeardown.NONE,
     private val http: (ServerAddress) -> SessionHttp = { SessionHttp(it) },
-) : SessionController, io.github.thiesi.chitchat.core.policies.PolicyReads {
+) : SessionController, io.github.thiesi.chitchat.core.policies.PolicyReads, io.github.thiesi.chitchat.core.policies.RulesOperations {
     private val lock = Mutex()
     private val mutable = MutableStateFlow(SessionState())
     override val state = mutable.asStateFlow()
@@ -301,12 +301,12 @@ class SessionRepository internal constructor(
             // The rules version of the session the form rendered with (policies.md): sent only when rules are published.
             Triple(active, proof, current.public?.policies?.rules?.version)
         } ?: return
-        var rulesOutdated = false
+        var rulesOutdated: ApiFailure? = null
         try {
             authenticated(pending.first, pending.first.api.register(username.trim(), password, birthDate,
                 pending.second.nonce, pending.second.solution, pending.first.csrf!!, acceptedRulesVersion = pending.third))
         } catch (failure: ApiFailure) {
-            rulesOutdated = failure.status == 409 && failure.code == "rules_version_outdated"
+            if (failure.status == 409 && failure.code == "rules_version_outdated") rulesOutdated = failure
             lock.withLock {
                 if (runtime === pending.first) {
                     val uncertain = failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT,
@@ -320,7 +320,14 @@ class SessionRepository internal constructor(
             }
         }
         // The account wasn't created; re-read the session so the form shows the new rules version. Never resubmitted.
-        if (rulesOutdated) refresh()
+        // The notice stays after that re-read (the bootstrap clears errors), unless something newer replaced it.
+        rulesOutdated?.let { outdated ->
+            refresh()
+            lock.withLock {
+                if (runtime === pending.first && mutable.value.phase == SessionPhase.ANONYMOUS && mutable.value.error == null)
+                    mutable.value = mutable.value.copy(error = outdated)
+            }
+        }
     }
 
     /**
@@ -328,7 +335,7 @@ class SessionRepository internal constructor(
      * [expected] session. The confirmed status is published only into that same session. Never resent: an ambiguous
      * result is Unknown (settle with a session GET), and 409 is Outdated (re-read, then a new choice).
      */
-    internal suspend fun acceptRules(version: Int, expected: SessionState = mutable.value): io.github.thiesi.chitchat.core.policies.RulesAcceptResult {
+    override suspend fun acceptRules(version: Int, expected: SessionState): io.github.thiesi.chitchat.core.policies.RulesAcceptResult {
         val access = try { openAccess(expected) } catch (failure: ApiFailure) {
             return io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Failed(failure)
         }

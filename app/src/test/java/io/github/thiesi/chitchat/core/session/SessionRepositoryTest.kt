@@ -635,7 +635,7 @@ class SessionRepositoryTest {
     @Test fun acceptingPostsTheShownVersionOnceAndPublishesTheConfirmedStatus() = runTest {
         signedInWithAccess()
         server.enqueue(json("""{"rules":{"accepted_version":4,"accepted_at":"2026-11-16T10:00:00+00:00","acceptance_required":false}}"""))
-        val result = sessions.acceptRules(4)
+        val result = sessions.acceptRules(4, sessions.state.value)
         val request = server.takeRequest(5, TimeUnit.SECONDS)!!
         assertEquals("/api/v1/policies/accept.php", request.url.encodedPath)
         assertEquals("""{"version":4}""", request.body?.utf8())
@@ -648,11 +648,11 @@ class SessionRepositoryTest {
         signedInWithAccess()
         val before = server.requestCount
         server.enqueue(error("rules_version_outdated", 409))
-        assertEquals(io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Outdated, sessions.acceptRules(4))
+        assertEquals(io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Outdated, sessions.acceptRules(4, sessions.state.value))
         server.enqueue(error("server_error", 503))
-        assertTrue(sessions.acceptRules(4) is io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Unknown)
+        assertTrue(sessions.acceptRules(4, sessions.state.value) is io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Unknown)
         server.enqueue(error("forbidden", 403))
-        assertTrue(sessions.acceptRules(4) is io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Failed)
+        assertTrue(sessions.acceptRules(4, sessions.state.value) is io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Failed)
         assertEquals("One POST per choice, none resent", before + 3, server.requestCount)
         assertEquals(true, sessions.state.value.rules?.acceptanceRequired)
     }
@@ -686,6 +686,7 @@ class SessionRepositoryTest {
         assertFalse(sessions.state.value.registrationMayHaveSucceeded)
         assertEquals(5, sessions.state.value.public?.policies?.rules?.version)
         assertEquals(SessionPhase.ANONYMOUS, sessions.state.value.phase)
+        assertEquals("The notice survives the re-read (the bootstrap clears errors)", "rules_version_outdated", sessions.state.value.error?.code)
     }
 
     @Test fun registrationAdoptsServerAssignedRolesAndRotatedCredentials() = runTest {

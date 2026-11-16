@@ -314,6 +314,28 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def guidelines_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-guidelines-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_guidelines_captures_are_copied_and_keep_the_original_status(self):
+        self.results(5)
+        files = [Path("guidelines-light-default-plain.png"), Path("guidelines-dark-font200-rules-actions.png"),
+            Path("guidelines-light-font200-outdated.png"), Path("guidelines-dark-default-create.png")]
+        self.guidelines_files(files)
+        self.assertEqual(5, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.GUIDELINES_DESTINATION / path.name)
+        self.assertEqual(5, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_guidelines_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"guidelines-light-default-plain-{n}.png") for n in range(29)],
+            [Path("a/guidelines-dark-default-plain.png"), Path("b/guidelines-dark-default-plain.png")],
+            [Path("guidelines-dark-default-create-actions.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.guidelines_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def onboarding_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-onboarding-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
