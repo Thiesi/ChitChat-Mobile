@@ -87,6 +87,7 @@ class RulesUpdatePresentationTest {
                     PolicyDocument.Hosted("# Rules", 4, null, summary)
             }
             val rulesUpdate = RulesUpdateViewModel(rulesOps, reads)
+            val documents = io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel(reads) // As production supplies it.
             val settings = SettingsViewModel(object : SettingsStore {
                 override val settings = MutableStateFlow(AppSettings(server = (ServerAddress.parse("chat.example.test") as AddressResult.Valid).address,
                     theme = if (dark) ThemePreference.DARK else ThemePreference.LIGHT))
@@ -101,7 +102,7 @@ class RulesUpdatePresentationTest {
                         CompositionLocalProvider(LocalAttachmentPickerOverride provides AttachmentPickerOverride { _, _, _ -> }) {
                             Box(Modifier.fillMaxSize().testTag("rules_host")) {
                                 TestChitChatApp(settings, auth, roomModel = directory, conversationModel = model,
-                                    realtime = realtime, rulesUpdate = rulesUpdate)
+                                    realtime = realtime, policies = documents, rulesUpdate = rulesUpdate)
                             }
                         }
                     }
@@ -130,7 +131,7 @@ class RulesUpdatePresentationTest {
                 compose.onNodeWithTag("rules_updated_show_all").performScrollTo().performClick()
                 compose.onNodeWithTag("rules_updated_summary").performScrollTo()
                 capture("rules-$label-$name-dialog-expanded", "rules_updated")
-                for (tag in listOf("rules_updated_show_all", "rules_updated_agree", "rules_updated_not_now"))
+                for (tag in listOf("rules_updated_read", "rules_updated_show_all", "rules_updated_agree", "rules_updated_not_now"))
                     compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
                 compose.onNodeWithTag("rules_updated_not_now").performClick()
                 compose.waitUntil(5_000) { compose.onAllNodesWithTag("rules_updated").fetchSemanticsNodes().isEmpty() }

@@ -56,6 +56,8 @@ class RulesUpdateJourneyTest {
     private val budget = AttachmentMemoryBudget(12L * 1024 * 1024)
     private val wire = RulesUploads()
     private val model = ConversationViewModel(api, attachmentBudget = budget, uploads = wire)
+    // Owned like the app owns it, so teardown clears it (as RoomAttachmentJourneyTest does) before checking the budget.
+    private val store = androidx.lifecycle.ViewModelStore().also { it.put("conversation", model) }
     private val accepts = CopyOnWriteArrayList<Int>()
     private val rulesOps = object : RulesOperations {
         override val state get() = sessions.state
@@ -77,7 +79,7 @@ class RulesUpdateJourneyTest {
     @Before fun configuration() { compose.activityRule.scenario.onActivity { it.enableEdgeToEdge() } }
     @After fun stop() {
         wire.release()
-        compose.runOnIdle { model.cancel(); directory.cancel() }
+        compose.runOnIdle { model.cancel(); directory.cancel(); store.clear() }
         compose.waitUntil(5_000) { budget.reservedBytes == 0L }
     }
 
