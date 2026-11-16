@@ -55,6 +55,15 @@ opened from the guidelines screen uses the same bar. Registration sends the rend
   kept; try again." (PL copy.)
 - **The form keeps its fields** under the existing rules, and nothing resends.
 
+## Open L4 item (manual, not a CI claim)
+
+TalkBack focus return after closing the document dialog isn't proven by CI. CI runs without TalkBack, and Compose
+can't place accessibility focus on a single link inside a Text. The platform normally restores focus when a dialog
+window closes. Making the whole consent line focusable was rejected by the PL: it would hide the individual links from
+TalkBack's link navigation. The check sits in [accessibility-verification.md](../design/accessibility-verification.md)
+L4 walkthrough script 1 (First run): Create form, consent line, open the rules link, the pane announces "Rules", Back,
+focus is back on the consent line. Record the result in the PR that performs the L4 walkthrough.
+
 ## Left out (dependency)
 
 The app's own privacy policy link isn't shown: the app has no published privacy policy URL yet (P-174 publishes it
