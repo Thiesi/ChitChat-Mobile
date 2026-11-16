@@ -14,6 +14,11 @@ REPORT = ROOT / "app/build/reports/androidTests/device/environment.json"
 EXPECTED_IME = "com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME"
 COMPONENT = re.compile(r"[A-Za-z0-9_.]+/[A-Za-z0-9_.$]+")
 SCALAR = re.compile(r"[A-Za-z0-9_./:+@-]{1,256}")
+# Emulator health (owner-approved CI health check): the focused window right after boot must be a launcher. An ANR or
+# error dialog, or no focus, means the emulator is unusable for instrumentation. Only a class or component is kept,
+# never raw window text.
+LAUNCHERS = ("com.google.android.apps.nexuslauncher", "com.android.launcher3")
+FOCUS = re.compile(r"mCurrentFocus=Window\{[0-9a-f]+ u\d+ ([^}]*)\}")
 
 
 def read(command: list[str]) -> str | None:
@@ -27,6 +32,29 @@ def read(command: list[str]) -> str | None:
 
 def scalar(raw: str | None) -> str | None:
     return raw if raw is not None and raw != "null" and SCALAR.fullmatch(raw) else None
+
+
+def focus_class(dump: str | None) -> str | None:
+    """The focused window as a component, "anr", "app_error" or "other"; None when nothing holds focus or it's unreadable."""
+    match = FOCUS.search(dump or "")
+    if match is None: return None
+    title = match[1].strip()
+    if title.startswith("Application Not Responding"): return "anr"
+    if title.startswith("Application Error"): return "app_error"
+    return title if COMPONENT.fullmatch(title) else "other"
+
+
+def health(data: dict) -> list[str]:
+    """Why the emulator is unusable before instrumentation (owner-approved health check); empty when healthy."""
+    reasons = []
+    if data.get("bootCompleted") != "1":
+        reasons.append("boot_not_completed")
+    focus = data.get("currentFocus")
+    if focus is None: reasons.append("no_window_focus")
+    elif focus == "anr": reasons.append("anr_dialog_has_focus")
+    elif focus == "app_error": reasons.append("error_dialog_has_focus")
+    elif focus.split("/", 1)[0] not in LAUNCHERS: reasons.append("launcher_not_focused")
+    return reasons
 
 
 def setting(namespace: str, name: str) -> str | None:
@@ -58,7 +86,9 @@ def fingerprint(*, image_api: int = 36) -> dict:
         revision = match[1] if match else None
     except OSError:
         pass
-    return dict(defaultIme=selected, enabledImes=enabled, imeVersionName=version,
+    return dict(bootCompleted=scalar(read(["adb", "shell", "getprop", "sys.boot_completed"])),
+                currentFocus=focus_class(read(["adb", "shell", "dumpsys", "window"])),
+                defaultIme=selected, enabledImes=enabled, imeVersionName=version,
                 buildFingerprint=scalar(read(["adb", "shell", "getprop", "ro.build.fingerprint"])),
                 securityPatch=scalar(read(["adb", "shell", "getprop", "ro.build.version.security_patch"])),
                 systemImageRevision=revision,
@@ -103,9 +133,16 @@ def main() -> int:
             return 1
     data = fingerprint(image_api=api)
     failures = preconditions(data, image_revision=IMAGE_PINS[api]["revision"], image_api=api)
+    # An unselected IME right after boot is an emulator state, not a pin mismatch: it counts as unhealthy too.
+    unhealthy = health(data) + [f for f in failures if f == "expected_ime_not_enabled_and_selected"]
+    classification = "emulator_unhealthy" if unhealthy else "precondition_failed" if failures else "ok"
     REPORT.parent.mkdir(parents=True, exist_ok=True)
-    REPORT.write_text(json.dumps(dict(environment=data, failedPreconditions=failures), indent=2) + "\n",
-                      encoding="utf-8")
+    REPORT.write_text(json.dumps(dict(environment=data, failedPreconditions=failures, unhealthy=unhealthy,
+                                      classification=classification), indent=2) + "\n", encoding="utf-8")
+    if unhealthy:
+        # A distinct, fast setup collapse (record it on #245). Never retried, waited out or repaired here.
+        print(f"Native emulator unhealthy ({', '.join(unhealthy)}); instrumentation not started.", file=sys.stderr)
+        return 1
     if failures:
         print("Native environment precondition failed; instrumentation not started.", file=sys.stderr)
         return 1

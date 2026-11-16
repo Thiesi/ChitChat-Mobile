@@ -93,6 +93,7 @@ jobs:
           disable-animations: true
           pre-emulator-launch-script: python3 -B .github/scripts/pin_journey_image.py
           script: |
+            nohup python3 -B .github/scripts/early_logcat.py > /dev/null 2>&1 &
             adb shell settings put secure show_ime_with_hard_keyboard 1
             python3 -B .github/scripts/native_environment.py
             python3 -B .github/scripts/native_presentation.py
@@ -154,6 +155,7 @@ jobs:
           disable-animations: true
           pre-emulator-launch-script: python3 -B .github/scripts/pin_journey_image.py
           script: |
+            nohup python3 -B .github/scripts/early_logcat.py > /dev/null 2>&1 &
             adb shell settings put secure show_ime_with_hard_keyboard 1
             python3 -B .github/scripts/native_environment.py
             python3 -B .github/scripts/native_presentation.py
