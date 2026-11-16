@@ -11,6 +11,7 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
@@ -113,22 +114,12 @@ internal fun RecoveryKeyDisplay(view: RecoveryKeyView, installation: String, hos
                 Text(stringResource(R.string.recovery_key_lead, installation))
                 view.note?.let { Text(stringResource(it)) }
                 KeyCard(view.key)
-                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        LanternOutlinedButton(onClick = {
-                            copied = copyKey(context, view.key, sdkInt)
-                        }, modifier = Modifier.testTag("recovery_key_copy")) { Text(stringResource(R.string.recovery_key_copy)) }
-                        // API 26–32 has no sensitive-clip flag: the keyboard may keep a copy (PL wording).
-                        if (sdkInt < 33) Text(stringResource(R.string.recovery_key_clipboard_history), Modifier.testTag("recovery_key_clipboard_line"),
-                            style = MaterialTheme.typography.bodySmall, color = ChitChatTheme.colors.textMuted)
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        LanternOutlinedButton(onClick = { fileFailed = false; save.launch(fileName) },
-                            modifier = Modifier.testTag("recovery_key_save_file")) { Text(stringResource(R.string.recovery_key_save_file)) }
-                        Text(stringResource(R.string.recovery_key_file_unencrypted), style = MaterialTheme.typography.bodySmall,
-                            color = ChitChatTheme.colors.textMuted)
-                    }
-                }
+                // API 26–32 has no sensitive-clip flag: the keyboard may keep a copy (PL wording).
+                KeyActions(clipboardLine = sdkInt < 33,
+                    copy = { LanternOutlinedButton(onClick = { copied = copyKey(context, view.key, sdkInt) },
+                        modifier = Modifier.testTag("recovery_key_copy")) { Text(stringResource(R.string.recovery_key_copy)) } },
+                    save = { LanternOutlinedButton(onClick = { fileFailed = false; save.launch(fileName) },
+                        modifier = Modifier.testTag("recovery_key_save_file")) { Text(stringResource(R.string.recovery_key_save_file)) } })
                 if (copied) Text(stringResource(R.string.recovery_key_copied), Modifier.testTag("recovery_key_copied")
                     .semantics { liveRegion = LiveRegionMode.Polite })
                 if (fileFailed) InlineError(stringResource(R.string.recovery_key_file_failed))
@@ -147,6 +138,47 @@ internal fun RecoveryKeyDisplay(view: RecoveryKeyView, installation: String, hos
         confirmButton = { TextButton(onClick = { confirming = false; onSaved() }, Modifier.testTag("recovery_key_saved")) {
             Text(stringResource(R.string.recovery_key_saved_confirm))
         } })
+}
+
+/**
+ * Copy and Save to a file side by side when both fit, with the caveat lines under the row in button order; stacked, each
+ * line under its own button, when they don't (PL J1 on #288). A measured switch, so the mode follows the real widths.
+ */
+@Composable
+private fun KeyActions(clipboardLine: Boolean, copy: @Composable () -> Unit, save: @Composable () -> Unit) {
+    val muted = ChitChatTheme.colors.textMuted
+    val style = MaterialTheme.typography.bodySmall
+    androidx.compose.ui.layout.Layout(content = {
+        Box { copy() }
+        Box { save() }
+        if (clipboardLine) Text(stringResource(R.string.recovery_key_clipboard_history), Modifier.testTag("recovery_key_clipboard_line"),
+            style = style, color = muted)
+        Text(stringResource(R.string.recovery_key_file_unencrypted), Modifier.testTag("recovery_key_file_line"), style = style, color = muted)
+    }, modifier = Modifier.fillMaxWidth().testTag("recovery_key_actions")) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val gap = 8.dp.roundToPx(); val lineGap = 4.dp.roundToPx()
+        val copyButton = measurables[0].measure(loose); val saveButton = measurables[1].measure(loose)
+        val clip = if (clipboardLine) measurables[2].measure(loose) else null
+        val file = measurables.last().measure(loose)
+        val row = copyButton.width + gap + saveButton.width <= width
+        val height = if (row) maxOf(copyButton.height, saveButton.height) + listOfNotNull(clip, file).sumOf { lineGap + it.height }
+            else copyButton.height + (clip?.let { lineGap + it.height } ?: 0) + gap + saveButton.height + lineGap + file.height
+        layout(width, height) {
+            var y = 0
+            if (row) {
+                copyButton.placeRelative(0, 0); saveButton.placeRelative(copyButton.width + gap, 0)
+                y = maxOf(copyButton.height, saveButton.height)
+                clip?.let { y += lineGap; it.placeRelative(0, y); y += it.height }
+                y += lineGap; file.placeRelative(0, y)
+            } else {
+                copyButton.placeRelative(0, 0); y = copyButton.height
+                clip?.let { y += lineGap; it.placeRelative(0, y); y += it.height }
+                y += gap; saveButton.placeRelative(0, y); y += saveButton.height
+                y += lineGap; file.placeRelative(0, y)
+            }
+        }
+    }
 }
 
 /** Six groups in the system monospace face, two rows of three that wrap at large text; TalkBack reads group by group. */

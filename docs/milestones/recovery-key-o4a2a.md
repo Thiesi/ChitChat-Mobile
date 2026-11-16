@@ -30,6 +30,9 @@ composed. The key lives in memory only (O4a1), so a process death drops it and t
 - **Copy:** puts the key in the clipboard. On API 33 and later the clip carries `android.content.extra.IS_SENSITIVE`
   (no preview, kept out of keyboard history); below 33 a line under Copy says the keyboard may keep a copy. The
   clipboard is never cleared later. "Copied. Paste it into your password manager." is announced politely.
+- **Layout of Copy and Save to a file:** side by side when both fit, with both caveat lines under the row in button
+  order (the clipboard line first); stacked when they don't, each line directly under its own button. A measured
+  switch on the real widths, not the font scale (presentation lead's J1 on #288).
 - **Save to a file:** an explicit document choice (`text/plain`, suggested name "ChitChat recovery key - {host}.txt")
   with the unencrypted line shown beforehand. The file holds the host, username, key, creation date and the warning
   line. No URI grant is kept and the file is never deleted later. A failure shows "The file wasn't saved."
@@ -47,5 +50,7 @@ composed. The key lives in memory only (O4a1), so a process death drops it and t
   - a recreated activity still shows the display first;
   - the clipboard-history line shows only below API 33.
 - `RecoveryKeyPresentationTest` captures the display (top and end), the API 32 line and the dialog, light and dark,
-  at a real Configuration font scale of 1 and 2, into `recovery-presentation`. FLAG_SECURE would blank a capture, so
+  at a real Configuration font scale of 1 and 2, into `recovery-presentation`. Light runs as API 32 (with the
+  clipboard line), dark as API 35. It pins the row at default and the stack at 200%, where each line sits, and the 48dp
+  targets. FLAG_SECURE would blank a capture, so
   these captures compose without an activity; the journey test asserts the flag on the real window.

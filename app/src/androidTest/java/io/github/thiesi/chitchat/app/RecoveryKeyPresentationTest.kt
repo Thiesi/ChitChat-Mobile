@@ -9,6 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
@@ -23,7 +25,8 @@ import org.junit.Test
 
 /**
  * The key display (O4a2a) for J, at a real Configuration font scale, light and dark: the display (the key card wrapping
- * at 200%), the "Saved your recovery key?" dialog, and the API ≤32 clipboard line. FLAG_SECURE would blank a pixel
+ * at 200%), the "Saved your recovery key?" dialog, and the actions side by side at default or stacked at 200%. Light runs
+ * as API 32 (the clipboard line), dark as API 35. FLAG_SECURE would blank a pixel
  * capture, so these captures run without an activity (`LocalActivity` provides null); RecoveryKeyJourneyTest asserts the
  * flag on the real window.
  */
@@ -46,12 +49,30 @@ class RecoveryKeyPresentationTest {
                     activity.setContent { ChitChatTheme(dark = dark) { CompositionLocalProvider(LocalActivity provides null) {
                         Box(Modifier.fillMaxSize().testTag("recovery_host")) {
                             RecoveryKeyDisplay(view, installation = "The Common Room", host = "chat.example.test", username = "Viewer",
-                                onSaved = {}, sdkInt = if (!dark && fontScale == 1f) 32 else 35)
+                                onSaved = {}, sdkInt = if (!dark) 32 else 35)
                         }
                     } } }
                 }
                 compose.onNodeWithTag("recovery_key_group_6").assertExists()
-                capture(if (!dark && fontScale == 1f) "recovery-$label-$name-display-api32" else "recovery-$label-$name-display", "recovery_host")
+                // J1: side by side at default (both fit), stacked at 200% (they don't). Deterministic for this window.
+                val copy = compose.onNodeWithTag("recovery_key_copy").getUnclippedBoundsInRoot()
+                val save = compose.onNodeWithTag("recovery_key_save_file").getUnclippedBoundsInRoot()
+                val file = compose.onNodeWithTag("recovery_key_file_line").getUnclippedBoundsInRoot()
+                val clip = if (!dark) compose.onNodeWithTag("recovery_key_clipboard_line").getUnclippedBoundsInRoot() else null
+                org.junit.Assert.assertTrue("48dp targets", copy.height >= 48.dp && save.height >= 48.dp)
+                if (fontScale == 1f) {
+                    assertEquals("Copy and Save share a row at default", copy.top, save.top)
+                    // Both lines under the row, in button order.
+                    val rowBottom = maxOf(copy.bottom, save.bottom)
+                    clip?.let { org.junit.Assert.assertTrue("Clipboard line under the row", it.top >= rowBottom) }
+                    org.junit.Assert.assertTrue("File line under the row, after the clipboard line", file.top >= (clip?.bottom ?: rowBottom))
+                } else {
+                    org.junit.Assert.assertTrue("Save stacks below Copy at 200%", save.top >= copy.bottom)
+                    // Each line directly under its own button: the clipboard line between Copy and Save.
+                    clip?.let { org.junit.Assert.assertTrue("Clipboard line under Copy, above Save", it.top >= copy.bottom && it.bottom <= save.top) }
+                    org.junit.Assert.assertTrue("The file line sits under its own button", file.top >= save.bottom)
+                }
+                capture(if (!dark) "recovery-$label-$name-display-api32" else "recovery-$label-$name-display", "recovery_host")
                 compose.onNodeWithTag("recovery_key_continue").performScrollTo().assertIsDisplayed() // Reachable by scrolling (A-04).
                 capture("recovery-$label-$name-display-end", "recovery_host")
                 if (fontScale == 1f) {
