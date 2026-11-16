@@ -1,7 +1,7 @@
 """A bounded, allowlisted early logcat window for the native CI jobs (owner-approved CI health check).
 
-Started in the background before the environment check, it keeps the boot buffer and the first few instrumentation
-tests, so a cancelled or timed-out job still leaves evidence of what took window focus. Only allowlisted lines are kept,
+The environment check writes the boot buffer's markers first (one dump before its clear); this helper starts in the
+background right after that check and appends through the first few instrumentation tests, so a cancelled or timed-out job still leaves evidence of what took window focus. Only allowlisted lines are kept,
 each truncated, with no message text, credentials or test content. Focus is sampled as a component or dialog class
 only. Every line is flushed at once, so the file survives cancellation. It never retries, waits for health, dismisses
 dialogs or touches apps.
@@ -69,7 +69,7 @@ class Window:
 
 def main() -> int:
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    with OUTPUT.open("w", encoding="utf-8") as sink:
+    with OUTPUT.open("a", encoding="utf-8") as sink:  # After the environment check's boot-window lines.
         window = Window(sink)
         try:
             process = subprocess.Popen(["adb", "logcat", "-v", "time"], stdout=subprocess.PIPE,

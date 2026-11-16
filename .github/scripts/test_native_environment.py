@@ -65,6 +65,31 @@ class EnvironmentTests(unittest.TestCase):
                     if expected == "emulator_unhealthy": self.assertIn("Native emulator unhealthy", printed)
                     if expected == "precondition_failed": self.assertIn("precondition failed", printed)
 
+    def test_the_boot_window_is_one_allowlisted_dump_before_the_clear_and_never_fails_setup(self):
+        dump = "11-16 18:18:24.140 I/ActivityManager( 1): Start proc 905:com.android.systemui\n11-16 18:18:25.000 I/Chat( 2): private text"
+        sink = __import__("io").StringIO()
+        with patch.object(env, "read", side_effect=lambda c: dump if c[:3] == ["adb", "logcat", "-d"] else "") as read, \
+                patch.object(env, "fingerprint", return_value=ready()), patch.object(Path, "mkdir"), \
+                patch.object(Path, "write_text"), patch.object(Path, "open", return_value=__import__("contextlib").nullcontext(sink)):
+            self.assertEqual(0, env.main())
+        calls = [call.args[0] for call in read.call_args_list]
+        self.assertLess(calls.index(["adb", "logcat", "-d", "-v", "time"]), calls.index(["adb", "logcat", "-c"]))
+        self.assertIn("Start proc 905:com.android.systemui", sink.getvalue()); self.assertNotIn("private", sink.getvalue())
+        with patch.object(env, "read", side_effect=lambda c: None if c[:3] == ["adb", "logcat", "-d"] else ""), \
+                patch.object(env, "fingerprint", return_value=ready()), patch.object(Path, "mkdir"), patch.object(Path, "write_text"):
+            self.assertEqual(0, env.main())  # A missing dump is only missing evidence.
+
+    def test_the_boot_window_is_written_before_an_unhealthy_verdict_ends_the_job(self):
+        import contextlib, io
+        dump = "11-16 18:18:24.140 E/ActivityManager( 1): ANR in com.android.systemui"
+        sink = io.StringIO()
+        with patch.object(env, "read", side_effect=lambda c: dump if c[:3] == ["adb", "logcat", "-d"] else ""), \
+                patch.object(env, "fingerprint", return_value=dict(ready(), currentFocus="anr")), patch.object(Path, "mkdir"), \
+                patch.object(Path, "write_text") as write, patch.object(Path, "open", return_value=contextlib.nullcontext(sink)):
+            self.assertEqual(1, env.main())
+        self.assertIn('"classification": "emulator_unhealthy"', write.call_args.args[0])
+        self.assertIn("ANR in com.android.systemui", sink.getvalue())
+
     def test_setup_failure_stops_without_fingerprint_or_second_command(self):
         with patch.object(env, "read", return_value=None) as read, patch.object(env, "fingerprint") as fingerprint:
             self.assertEqual(1, env.main())
@@ -79,7 +104,7 @@ class EnvironmentTests(unittest.TestCase):
                     patch.object(env, "fingerprint", return_value=data) as fingerprint, \
                     patch.object(Path, "mkdir"), patch.object(Path, "write_text") as write:
                 self.assertEqual(int(wrong), env.main())
-                self.assertEqual([["adb", "logcat", "-G", "16M"], ["adb", "logcat", "-c"]],
+                self.assertEqual([["adb", "logcat", "-G", "16M"], ["adb", "logcat", "-d", "-v", "time"], ["adb", "logcat", "-c"]],
                                  [call.args[0] for call in read.call_args_list])
                 fingerprint.assert_called_once_with(image_api=36); write.assert_called_once()
                 self.assertIn('"failedPreconditions"', write.call_args.args[0])

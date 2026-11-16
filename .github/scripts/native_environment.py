@@ -44,6 +44,19 @@ def focus_class(dump: str | None) -> str | None:
     return title if COMPONENT.fullmatch(title) else "other"
 
 
+def keep_boot_window(dump: str | None):
+    """Writes the boot buffer's allowlisted markers to the early-logcat file; optional evidence that never fails setup."""
+    if dump is None: return
+    import early_logcat
+    try:
+        early_logcat.OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+        with early_logcat.OUTPUT.open("w", encoding="utf-8") as sink:
+            window = early_logcat.Window(sink)
+            for line in dump.splitlines()[-early_logcat.MAX_LINES:]: window.logcat(line)
+    except OSError:
+        pass
+
+
 def health(data: dict) -> list[str]:
     """Why the emulator is unusable before instrumentation (owner-approved health check); empty when healthy."""
     reasons = []
@@ -126,11 +139,15 @@ def preconditions(data: dict, *, image_revision: str = IMAGE_REVISION, image_api
 
 def main() -> int:
     api = requested_api()
-    # Enlarging/clearing the ring is suite setup, never a replay of instrumentation.
-    for command in (["adb", "logcat", "-G", "16M"], ["adb", "logcat", "-c"]):
-        if read(command) is None:
-            print("Native environment setup failed; instrumentation not started.", file=sys.stderr)
-            return 1
+    # Enlarging/clearing the ring is suite setup, never a replay of instrumentation. Nothing else reads logcat during
+    # it: the early-logcat helper starts only after this check (a concurrent reader made API36's setup fail, PR #282).
+    if read(["adb", "logcat", "-G", "16M"]) is None:
+        print("Native environment setup failed; instrumentation not started.", file=sys.stderr)
+        return 1
+    keep_boot_window(read(["adb", "logcat", "-d", "-v", "time"]))  # One allowlisted read of the boot buffer, before the clear.
+    if read(["adb", "logcat", "-c"]) is None:
+        print("Native environment setup failed; instrumentation not started.", file=sys.stderr)
+        return 1
     data = fingerprint(image_api=api)
     failures = preconditions(data, image_revision=IMAGE_PINS[api]["revision"], image_api=api)
     # An unselected IME right after boot is an emulator state, not a pin mismatch: it counts as unhealthy too.

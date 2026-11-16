@@ -93,9 +93,9 @@ jobs:
           disable-animations: true
           pre-emulator-launch-script: python3 -B .github/scripts/pin_journey_image.py
           script: |
-            nohup python3 -B .github/scripts/early_logcat.py > /dev/null 2>&1 &
             adb shell settings put secure show_ime_with_hard_keyboard 1
             python3 -B .github/scripts/native_environment.py
+            nohup python3 -B .github/scripts/early_logcat.py > /dev/null 2>&1 &
             python3 -B .github/scripts/native_presentation.py
       # Saved only from main pushes (PR caches are scoped to their merge ref and would only use quota),
       # and only when the installed image is verifiably the pinned revision at that path, even after test failures.
@@ -155,9 +155,9 @@ jobs:
           disable-animations: true
           pre-emulator-launch-script: python3 -B .github/scripts/pin_journey_image.py
           script: |
-            nohup python3 -B .github/scripts/early_logcat.py > /dev/null 2>&1 &
             adb shell settings put secure show_ime_with_hard_keyboard 1
             python3 -B .github/scripts/native_environment.py
+            nohup python3 -B .github/scripts/early_logcat.py > /dev/null 2>&1 &
             python3 -B .github/scripts/native_presentation.py
       - name: Classify and retain the original observation
         id: classify

@@ -22,9 +22,11 @@ to `anr` / `app_error` / `other`, and never stored as raw window text.
 
 ## Early logcat, always saved
 
-`early_logcat.py` starts in the background as each native job's first script line, before the environment check
-clears the buffer. It streams the boot buffer and the first five instrumentation tests into
-`device/early-logcat.txt`:
+The boot window comes first: the environment check makes **one** allowlisted `adb logcat -d` dump into
+`device/early-logcat.txt` after its resize and **before** its clear. That happens before the health verdict, so an
+`emulator_unhealthy` run still keeps its boot markers. `early_logcat.py` then starts in the background **after** the
+check and appends through the first five instrumentation tests. Nothing reads logcat during the check's resize or clear:
+a concurrent reader made API36's setup fail on PR #282's first head, so the order is pinned by a unit test.
 - **What's kept:** only allowlisted markers (test start, finish and failure; ANR, fatal and force-finish markers;
   process starts and deaths; `Displayed`; focus and input-dispatch timeouts), each truncated to 240 characters.
 - **Focus samples:** a component or dialog class every 5 seconds.
@@ -37,5 +39,7 @@ clears the buffer. It streams the boot buffer and the first five instrumentation
 
 - **`test_native_environment`:** health reasons for each unusable state, focus reduced to a component or class, and
   the distinct unhealthy versus precondition result and report.
+- **Boot window:** the `-d` dump comes before `-c`, it's written even when the verdict is `emulator_unhealthy`, and a
+  missing dump never fails setup.
 - **`test_early_logcat`:** only allowlisted, truncated markers survive; the window stops at five test starts or the line
   cap; focus samples never carry window text.
