@@ -100,7 +100,10 @@ dismissed.
     and under the offline slot notice; light and dark;
   - asserts Review has a 48dp target and the actions are reachable;
   - at 200%, an offline (level-2) notice hides the strip while the transcript and composer stay displayed; the strip
-    returns when the notice clears; under a secure-connection failure notice (also level 2), a send while the strip is
-    hidden still opens the dialog. Offline isn't used for the send check, since a clean text draft then waits to send
-    (S4a);
+    returns when the notice clears. Under **Unreachable** (RECONNECTING past the 5-second grace, crossed with the Compose
+    test clock, no sleep), a send while the strip is hidden still opens the dialog. That's the only reachable
+    combination: every connection-loss level-2 notice marks the room stale (Send off), offline defers a text draft
+    (S4a), and storage or refresh notices make the session not ready. **Caveat:** in the real app, Send while
+    reconnecting also depends on room presence (`activePresence`), which this fixture's conversation model (no realtime
+    controller) doesn't gate. The 403 → dialog path itself is proven by `RulesUpdateJourneyTest`;
   - collected by `native_presentation.collect_rules` (12 files).
