@@ -235,6 +235,45 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def cleanup_files(self, contents):
+        # Real temporary files (outside any report directory) so the collector's size and content checks run for real.
+        import tempfile
+        folder = Path(tempfile.mkdtemp(prefix="ccm-cleanup-test-"))
+        self.addCleanup(lambda: [f.unlink() for f in folder.iterdir()] and None)
+        files = []
+        for name, text in contents:
+            path = folder / name; path.write_bytes(text.encode("utf-8")); files.append(path)
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-completion-cleanup/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+        return files
+
+    LINE = "sample=last_wait_predicate compose=259 native1=unobserved native2=unobserved"
+
+    def test_cleanup_samples_are_copied_and_keep_the_original_status(self):
+        self.results(4)
+        files = self.cleanup_files([("CompletionJourneyTest.a.txt", f"test=CompletionJourneyTest.a {self.LINE}\n")])
+        self.assertEqual(4, runner.main()); self.assert_once()
+        self.copy.assert_any_call(files[0], runner.CLEANUP_DESTINATION / files[0].name)
+
+    def test_foreign_malformed_mismatched_oversized_or_excess_samples_are_rejected_before_copy(self):
+        self.results(0)
+        for contents in (
+            [("other.png", "x")],
+            [("CompletionJourneyTest.a.txt", f"test=CompletionJourneyTest.a {self.LINE} extra\n")],
+            [("CompletionJourneyTest.a.txt", "Hello world\n")],
+            [("CompletionJourneyTest.a.txt", f"test=CompletionJourneyTest.b {self.LINE}\n")],
+            [("CompletionJourneyTest.a.txt", f"test=CompletionJourneyTest.a {self.LINE}\n" + " " * 300)],
+            [(f"CompletionJourneyTest.t{n}.txt", f"test=CompletionJourneyTest.t{n} {self.LINE}\n") for n in range(65)],
+        ):
+            self.copy.reset_mock(); self.cleanup_files(contents)
+            self.assertEqual(0, runner.main())
+            self.assertFalse(any(call.args[1].parent == runner.CLEANUP_DESTINATION for call in self.copy.call_args_list))
+
+    def test_no_cleanup_samples_is_quiet(self):
+        self.results(0); self.cleanup_files([])
+        self.assertEqual(0, runner.main())
+        self.assertNotIn("Completion cleanup samples unavailable", self.stderr.getvalue())
+
     def policy_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-policy-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))

@@ -43,6 +43,29 @@ The wrapper requests this exact log tag and accepts only all four ordered fields
 known scalar names, Int32 bounds and no trailing data. It uses the existing
 failure-centered2000-record cap; no raw fallback or broader log retention.
 
+## File channel for the sample (2026-11-16)
+
+On PR #267 (CI run 43774242948) a #177 occurrence's sample was missing from `ime-lifecycle.txt`. The cap wasn't the
+cause: `selected_records()` protects failed-test windows. The wrapper reads logcat with `adb logcat -d` once, after the
+whole suite. The emulator's logcat ring buffer had rotated past a failure about eleven minutes earlier, so the record
+never reached the wrapper. The retained window started after it. The owner ruled that occurrence covered once; it isn't
+a precedent.
+
+So the emitter also writes the same allowlisted line to a small file in the instrumentation's additional output
+(`ccm-completion-cleanup/<Class>.<method>.txt`). The collector copies it beside the lifecycle file
+(`reports/androidTests/device/completion-cleanup/`).
+- **Content:** exactly `test=<Class>.<method>` plus the existing `sample=last_wait_predicate compose=… native1=…
+  native2=…` line, failure-only. No text, raw dumps, view names or exception payload. `CompletionSampleFile` refuses any
+  other line or identity, and the collector accepts only one exact line whose test identity matches its file name.
+- **Bounds:** at most 256 bytes per file and 64 files per run. The collector rejects the whole set before copying if
+  anything is foreign, malformed, mismatched, oversized or excess. It never changes the original native status.
+- **Unchanged:** the 5000ms deadline, the short-circuit order, both native-hidden probes, the single existing hide, the
+  logcat record and the 2000-record cap. Writing runs inside the same `runCatching` as the log, so it can't replace or
+  suppress the timeout. No CI emulator setup change (no `logcat -G`). Measurement only.
+- **Tests:** an Android case pins that the file holds only the allowlisted line with its identity and refuses free
+  text, view names, path-like identities and the per-run excess. Collector script tests cover copying (status kept),
+  rejection of foreign, malformed, mismatched, oversized and 65-file sets, and a quiet run with no samples.
+
 ## Verification and continuation
 
 New allowlist tests first failed3/28 before the narrow parser/tag addition; all28

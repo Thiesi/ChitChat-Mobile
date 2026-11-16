@@ -48,6 +48,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 /** Original root/VM consumers and one system input tap. Synthetic server facts, no live/device acceptance. */
 class CompletionJourneyTest {
     @get:Rule val compose=createAndroidComposeRule<ComponentActivity>()
+    @get:Rule val testName = org.junit.rules.TestName() // The cleanup sample's file names this test (measurement only).
     private val sessions=TestSessions()
     private val api=NativeChatFixtures(sessions)
     private val mentions=Mentions()
@@ -169,6 +170,7 @@ class CompletionJourneyTest {
             waitUntil = { timeout, condition -> compose.waitUntil(timeout, condition) },
             composeImeBottom = { ime },
             nativeImeVisible = { nativeInputWindow().imeVisible },
+            identity = "CompletionJourneyTest.${testName.methodName}",
         )
     }
 
