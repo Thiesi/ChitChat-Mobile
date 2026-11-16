@@ -102,7 +102,26 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
         }
     }
 
-    fun foreground() { foreground = true; if (realtime != null && mutable.value.loaded) invalidate() else refresh() }
+    /** The screen that last brought this model to the foreground; only its departure may end that (no late-stop race). */
+    private var foregroundOwner: Any? = null
+
+    fun foreground(owner: Any = Unit) {
+        foregroundOwner = owner
+        foreground = true; if (realtime != null && mutable.value.loaded) invalidate() else refresh()
+    }
+
+    /**
+     * A navigation departure, not an app stop: nothing is cancelled (a POST or GET in flight finishes and reconciles),
+     * and only the screen that last foregrounded the model ends its foreground. A screen whose exit transition ends after
+     * a newer screen sharing this model has started (Rooms under Find your people) changes nothing (defect found
+     * post-merge in O2b, unreleased).
+     */
+    fun departed(owner: Any) {
+        if (foregroundOwner !== owner) return
+        foreground = false
+        foregroundOwner = null
+        transferFlow?.retire() // Private transfer facts never outlive the screen that showed them.
+    }
 
     fun invalidate() {
         if (session.value.identity() == null || session.value.identity() != identity) return
@@ -119,8 +138,10 @@ class RoomsViewModel(private val operations: RoomOperations, private val realtim
         start(false, automatic = true) { current -> reconcile(current, automatic = true) }
     }
 
+    /** A genuine app stop: cancels what is running (M3a), whichever screen owned the foreground. */
     fun background() {
         foreground = false
+        foregroundOwner = null
         transferFlow?.retire() // Private transfer facts never outlive the foreground.
         cancelRequest()
     }

@@ -36,6 +36,50 @@ class RoomsViewModelTest {
     private fun TestScope.load() { model.refresh(); runCurrent() }
     private fun TestScope.select() { model.select(42); runCurrent() }
 
+    /**
+     * The transition ordering CI's disabled animations hide: Find your people foregrounds the shared model, then the
+     * outgoing Rooms entry's ON_STOP (a departure) arrives. Nothing is cancelled or marked stale, and an in-flight join
+     * survives and reconciles (defect found post-merge in O2b, unreleased).
+     */
+    @Test fun aLateRoomsDepartureAfterFindPeopleStartedCancelsNothing() = runTest(dispatcher) {
+        val rooms = Any(); val findPeople = Any()
+        model.foreground(rooms); runCurrent()
+        model.foreground(findPeople); runCurrent()
+        assertTrue(model.state.value.loaded)
+        val gate = CompletableDeferred<Unit>().also { fake.gate = it }
+        model.joinListed(42); runCurrent()
+        assertTrue(model.state.value.busy)
+        model.departed(rooms); runCurrent() // The late ON_STOP, after the transition.
+        assertTrue("Still busy, not cancelled", model.state.value.busy)
+        assertFalse(model.state.value.stale); assertFalse(model.state.value.mutationUncertain)
+        gate.complete(Unit); runCurrent()
+        assertTrue(model.state.value.rooms.single().isMember)
+        assertFalse(model.state.value.mutationUncertain); assertFalse(model.state.value.stale)
+        assertEquals(1, fake.joins)
+    }
+
+    /** The owning screen's departure ends the foreground without cancelling a running request. */
+    @Test fun theOwnersDepartureEndsForegroundButCancelsNothing() = runTest(dispatcher) {
+        val rooms = Any()
+        model.foreground(rooms); runCurrent()
+        val gate = CompletableDeferred<Unit>().also { fake.gate = it }
+        model.refresh(); runCurrent()
+        assertTrue(model.state.value.busy)
+        model.departed(rooms); runCurrent()
+        assertTrue("A departure never cancels", model.state.value.busy)
+        gate.complete(Unit); runCurrent()
+        assertFalse(model.state.value.busy); assertFalse(model.state.value.stale)
+    }
+
+    /** A genuine app stop still cancels and marks an in-flight join uncertain (M3a), whoever owned the foreground. */
+    @Test fun aGenuineBackgroundStillCancelsAndMarksTheJoinUncertain() = runTest(dispatcher) {
+        model.foreground(Any()); runCurrent()
+        fake.gate = CompletableDeferred()
+        model.joinListed(42); runCurrent()
+        model.background(); runCurrent()
+        assertTrue(model.state.value.mutationUncertain); assertTrue(model.state.value.stale); assertFalse(model.state.value.busy)
+    }
+
     @Test fun directoryAndDetailLoadWithoutJoiningOrCreatingPresence() = runTest(dispatcher) {
         load(); select()
         assertEquals(1, fake.lists); assertEquals(1, fake.details)

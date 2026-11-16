@@ -635,13 +635,15 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                 typingPreferences?.let { TypingPreferenceCard(it, session, auth::refresh) }
                             }
                         }
-                        composable("rooms") {
+                        composable("rooms") { destination ->
                             if (session.phase == SessionPhase.AUTHENTICATED) Column(Modifier.fillMaxSize()) {
                                 if (roomDraftCount > 0) TextButton(onClick = { conversations.showDrafts(displayedSession) },
                                     modifier = Modifier.fillMaxWidth().testTag("room_directory_drafts")) {
                                     Text(stringResource(R.string.room_drafts_count, roomDraftCount))
                                 }
-                                Box(Modifier.weight(1f)) { TabRoot(reselects[ShellTab.ROOMS.ordinal]) { RoomsScreen(rooms, auth::refresh, openRoom) } }
+                                Box(Modifier.weight(1f)) { TabRoot(reselects[ShellTab.ROOMS.ordinal]) {
+                                    RoomsScreen(rooms, auth::refresh, openRoom) { nav.currentBackStackEntry === destination }
+                                } }
                             }
                         }
                         composable(NOTIFICATIONS_ROUTE, arguments = notificationArguments()) { destination ->

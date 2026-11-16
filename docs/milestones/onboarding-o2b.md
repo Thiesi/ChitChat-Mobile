@@ -70,3 +70,24 @@ Joining reuses M3a's `RoomsViewModel`, single-flight `start()` and session gatin
 - `FindPeoplePresentationTest`: default and 200%, light and dark. Start chatting is on screen without scrolling, every
   Join has a 48dp touch target, and there are 16 captures (`ccm-find-people-presentation`): the top, a confirmed row,
   a definite failure and an uncertain one with Check room.
+
+## Post-merge defect: a late Rooms stop (found after merge, unreleased)
+
+Navigation moves an outgoing entry to CREATED only when its exit transition ends. Find your people is pushed right after
+the Rooms root composes, so with animations on, Rooms' entry ON_STOP arrived after Find your people had foregrounded the
+shared `RoomsViewModel`. Rooms then called `background()`, which cancels: it could cancel the list load and mark the
+directory stale, or cancel a join and mark it uncertain. CI couldn't see it, because its animations are disabled, which
+reverses the order.
+
+**Fix:** the general one, not a special case for Find your people.
+- RoomsScreen uses the root's actual-entry identity. If its entry is still current at ON_STOP, the app stopped:
+  `background()`, which cancels as M3a requires. Otherwise it was a navigation departure: `departed(owner)`.
+- `departed(owner)` cancels nothing, and it ends the foreground only for the screen that last foregrounded the model
+  (an owner token). Find your people passes its own owner, so any screen sharing the model is safe.
+
+**Tests:**
+- `RoomsViewModelTest`: a late departure after Find your people started cancels nothing, and a join in flight survives;
+  the owner's own departure cancels nothing; a genuine background still cancels and marks the join uncertain.
+- `RoomsDepartureOrderTest` (Compose): delivers the Rooms entry's ON_STOP after Find your people attached, while the
+  app keeps running. Nothing is cancelled or marked stale, and the join completes. The same stop as an app stop still
+  cancels.

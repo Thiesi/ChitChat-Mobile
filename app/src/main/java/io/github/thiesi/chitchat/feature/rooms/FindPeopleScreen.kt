@@ -46,14 +46,15 @@ fun FindPeopleScreen(model: RoomsViewModel, userName: String, installation: Stri
     // Only a genuine app background cancels (M3a); navigating to Rooms keeps an in-flight join, whose result
     // reconciles through the list there. The Activity's lifecycle, not this entry's, tells the two apart.
     val activity = LocalActivity.current
+    val owner = androidx.compose.runtime.remember { Any() }
     DisposableEffect(activity) {
         val lifecycle = (activity as? LifecycleOwner)?.lifecycle
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_START) model.foreground()
+            if (event == Lifecycle.Event.ON_START) model.foreground(owner)
             if (event == Lifecycle.Event.ON_STOP && activity?.isChangingConfigurations != true) model.background()
         }
         lifecycle?.addObserver(observer)
-        if (lifecycle == null) model.foreground()
+        if (lifecycle == null) model.foreground(owner)
         onDispose { lifecycle?.removeObserver(observer) }
     }
     val open = state.rooms.filter { it.visibility == "public" }
