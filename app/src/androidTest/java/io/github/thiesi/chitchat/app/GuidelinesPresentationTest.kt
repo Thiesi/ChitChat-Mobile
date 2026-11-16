@@ -165,7 +165,9 @@ class GuidelinesPresentationTest {
                 }
                 if (!dark && fontScale == 1f) {
                     // Reading the rules from the consent line keeps what was typed: the document opens over the form.
+                    compose.onNodeWithTag("registration_username").performScrollTo().performTextReplacement("Alice")
                     compose.onNodeWithTag("registration_password").performScrollTo().performTextReplacement("fixture-password")
+                    compose.onNodeWithTag("registration_confirmation").performScrollTo().performTextReplacement("fixture-password")
                     Espresso.closeSoftKeyboard()
                     compose.onNodeWithTag("registration_rules_consent").performScrollTo().performFirstLinkClick { range ->
                         (range.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag == "registration_rules_link"
@@ -178,8 +180,13 @@ class GuidelinesPresentationTest {
                     compose.onNodeWithTag("policy_document_dialog").assertDoesNotExist()
                     val kept = compose.onNodeWithTag("registration_password").fetchSemanticsNode()
                         .config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text
-                    // Semantics carries the masked text (one bullet per character), never the password itself.
+                    // Semantics carries the masked text (one bullet per character), never the password itself: the exact
+                    // bullet count equals the typed length.
                     assertEquals("The password is kept after reading the rules", "•".repeat("fixture-password".length), kept)
+                    // The SAME password (and confirmation): submitting reaches the fixture, which checks the received
+                    // password is exactly the typed one before counting the registration.
+                    compose.onNodeWithTag("registration_submit").performScrollTo().performClick()
+                    compose.waitUntil(5_000) { sessions.registrations == 1 }
                 }
             }
         }

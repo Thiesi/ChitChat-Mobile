@@ -81,7 +81,8 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(stringResource(R.string.create_account_title), style = MaterialTheme.typography.titleLarge)
         Text(stringResource(R.string.registration_policy))
-        OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().semantics { contentType = ContentType.NewUsername },
+        OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().testTag("registration_username")
+            .semantics { contentType = ContentType.NewUsername },
             label = { Text(stringResource(R.string.username)) }, enabled = enabled, singleLine = true,
             isError = attempted && problem == RegistrationProblem.USERNAME,
             supportingText = { Text(stringResource(R.string.username_policy)) },
@@ -92,7 +93,7 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
             isError = attempted && problem == RegistrationProblem.PASSWORD,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Next), shape = MaterialTheme.shapes.medium)
-        OutlinedTextField(confirmation, { confirmation = it }, Modifier.fillMaxWidth(),
+        OutlinedTextField(confirmation, { confirmation = it }, Modifier.fillMaxWidth().testTag("registration_confirmation"),
             label = { Text(stringResource(R.string.confirm_password)) }, enabled = enabled, singleLine = true,
             isError = attempted && problem == RegistrationProblem.CONFIRMATION,
             visualTransformation = PasswordVisualTransformation(),
@@ -119,7 +120,9 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
             }
         }
         state.public?.policies?.rules?.let { RulesConsent(state, onPolicy) }
-        PrimaryButton(onClick = submit, enabled = ready, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create_account)) }
+        PrimaryButton(onClick = submit, enabled = ready, modifier = Modifier.fillMaxWidth().testTag("registration_submit")) {
+            Text(stringResource(R.string.create_account))
+        }
     }
     if (pickerOpen) {
         val today = remember { LocalDate.now(ZoneOffset.UTC) }
