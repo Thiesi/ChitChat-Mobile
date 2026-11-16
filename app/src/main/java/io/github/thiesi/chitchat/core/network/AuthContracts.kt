@@ -55,6 +55,9 @@ internal class SessionReply(
     /** `user.rules` (policies.md), attached from the raw body; never part of the user's identity. */
     @kotlinx.serialization.Transient
     var rules: io.github.thiesi.chitchat.core.policies.RulesStatus? = null
+    /** `user.recovery_key` (password-recovery.md), attached from the raw body. */
+    @kotlinx.serialization.Transient
+    var recoveryKey: io.github.thiesi.chitchat.core.account.RecoveryKeyStatus = io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Unknown
 }
 
 /**
@@ -101,6 +104,12 @@ internal class AuthReply(
     /** `user.rules` on a login or registration user (policies.md), attached from the raw body. */
     @kotlinx.serialization.Transient
     var rules: io.github.thiesi.chitchat.core.policies.RulesStatus? = null
+    /** `user.recovery_key` on a login or registration user (password-recovery.md). */
+    @kotlinx.serialization.Transient
+    var recoveryKeyStatus: io.github.thiesi.chitchat.core.account.RecoveryKeyStatus = io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Unknown
+    /** The top-level key `register.php` returns once, for a password account. Never printed. */
+    @kotlinx.serialization.Transient
+    var registrationRecoveryKey: io.github.thiesi.chitchat.core.account.RecoveryKey? = null
 }
 
 @Serializable

@@ -238,6 +238,7 @@ class AccountViewModelTest {
                     passwordFailure?.let { throw it }
                     verified = true
                 }
+                override suspend fun createRecoveryKey(): io.github.thiesi.chitchat.core.account.CreatedRecoveryKey = error("No recovery key in this fixture")
                 override suspend fun verifyRecovery(code: String): Int {
                     recoveries++
                     if (waitForRecovery) awaitCancellation()

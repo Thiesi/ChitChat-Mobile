@@ -743,6 +743,98 @@ class SessionRepositoryTest {
         assertFalse(sessions.state.value.rulesRefused)
     }
 
+    // Recovery key (O4a1; recovery-key.md P-184, password-recovery.md).
+    private val fixtureKey = "A7K2-B9QX-C4MZ-D8RT-E2WN-F6HP"
+    private val keyedUser get() = user.dropLast(1) + ""","recovery_key":{"exists":true,"created_at":"2026-11-08T12:00:00+00:00"}}"""
+
+    @Test fun registrationHoldsTheOneShotKeyInMemoryAndAKeylessReplyMarksItUndelivered() = runTest {
+        anonymous(); registrationReady()
+        server.enqueue(json("""{"csrf_token":"$b","user":$keyedUser,"recovery_key":"$fixtureKey"}""", 201, "SITE=registered; Secure; HttpOnly; Path=/"))
+        sessions.register("Alice", "fixture-password", null); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(fixtureKey, sessions.state.value.registrationRecoveryKey?.value)
+        assertFalse(sessions.state.value.recoveryKeyUndelivered)
+        assertFalse("The key never reaches a debug string", sessions.state.value.toString().contains("A7K2"))
+        assertEquals(io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known(true, "2026-11-08T12:00:00+00:00"), sessions.state.value.recoveryKey)
+        sessions.dropRegistrationRecoveryKey(sessions.state.value)
+        assertNull(sessions.state.value.registrationRecoveryKey)
+    }
+
+    @Test fun aRegistrationWithoutAKeyIsMarkedUndelivered() = runTest {
+        anonymous(); registrationReady()
+        server.enqueue(json("""{"csrf_token":"$b","user":$keyedUser}""", 201, "SITE=registered; Secure; HttpOnly; Path=/"))
+        sessions.register("Alice", "fixture-password", null); server.takeRequest(5, TimeUnit.SECONDS)
+        assertNull(sessions.state.value.registrationRecoveryKey)
+        assertTrue(sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    private suspend fun ambiguousRegistrationThenSignIn(username: String) {
+        anonymous(); registrationReady()
+        server.enqueue(json("""{"error":{"code":"server_error","message":"x"}}""", 503))
+        sessions.register("Alice", "fixture-password", null); server.takeRequest(5, TimeUnit.SECONDS)
+        assertTrue(sessions.state.value.registrationMayHaveSucceeded)
+        // The real flow: the required refresh, the server's wait, then "Sign in instead" switches the form (which
+        // clears registrationMayHaveSucceeded) before signing in.
+        server.enqueue(json(bootstrapBody())); sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS)
+        clock.now += 31_000
+        sessions.selectAuthFlow(AuthFlow.SIGN_IN)
+        assertFalse(sessions.state.value.registrationMayHaveSucceeded)
+        server.enqueue(json("""{"csrf_token":"$b","user":$keyedUser,"mfa_required":false}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.signIn(username, "fixture-password"); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+    }
+
+    @Test fun aSignInToTheAmbiguouslyRegisteredUsernameIsMarkedUndeliveredEvenAfterTheFormSwitch() = runTest {
+        ambiguousRegistrationThenSignIn(" alice ")
+        assertTrue(sessions.state.value.recoveryKeyUndelivered)
+        assertNull(sessions.state.value.registrationRecoveryKey)
+    }
+
+    @Test fun aSignInToAnotherUsernameAfterAnAmbiguousRegistrationIsNotMarked() = runTest {
+        ambiguousRegistrationThenSignIn("Bob")
+        assertFalse(sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    /** TL (PR #287): the ambiguously registered username stays in runtime memory only. */
+    @Test fun theAmbiguouslyRegisteredUsernameNeverReachesSessionStateOrTheVault() = runTest {
+        anonymous(); registrationReady()
+        server.enqueue(json("""{"error":{"code":"server_error","message":"x"}}""", 503))
+        sessions.register("Zelda", "fixture-password", null); server.takeRequest(5, TimeUnit.SECONDS)
+        assertFalse("Not in session state (or any debug string of it)", sessions.state.value.toString().contains("Zelda"))
+        assertNull("Nothing was saved", vault.saved)
+        server.enqueue(json(bootstrapBody())); sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS)
+        clock.now += 31_000
+        server.enqueue(json("""{"csrf_token":"$b","user":$keyedUser,"mfa_required":false}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.signIn("Alice", "fixture-password"); server.takeRequest(5, TimeUnit.SECONDS)
+        assertFalse(sessions.state.value.toString().contains("Zelda"))
+        assertFalse("The saved session never holds it", vault.saved.toString().contains("Zelda"))
+        assertFalse(vault.saved!!.cookies.any { it.contains("Zelda") })
+    }
+
+    @Test fun aPlainSignInCarriesTheStatusButNoKeyAndNoMarker() = runTest {
+        anonymous()
+        server.enqueue(json("""{"csrf_token":"$b","user":$keyedUser,"mfa_required":false,"recovery_key":"$fixtureKey"}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.signIn("Alice", "fixture-password"); server.takeRequest(5, TimeUnit.SECONDS)
+        assertNull("Only registration hands over a key", sessions.state.value.registrationRecoveryKey)
+        assertFalse(sessions.state.value.recoveryKeyUndelivered)
+        assertTrue(sessions.state.value.recoveryKey is io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known)
+    }
+
+    @Test fun generatingAKeyPostsOnceAndOnlyTheDateReachesTheSession() = runTest {
+        anonymous()
+        server.enqueue(json("""{"csrf_token":"$b","user":$keyedUser,"mfa_required":false}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.signIn("Alice", "fixture-password"); server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(json(bootstrapBody(keyedUser, b))); sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS)
+        val access = io.github.thiesi.chitchat.core.account.SessionAccountRepository(sessions).open()
+        server.enqueue(json("""{"recovery_key":"$fixtureKey","created_at":"2026-11-16T10:00:00+00:00"}"""))
+        val created = access.createRecoveryKey()
+        val request = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("/api/v1/account/recovery-key.php", request.url.encodedPath)
+        assertEquals("{}", request.body?.utf8()); assertEquals(b, request.headers["X-CSRF-Token"])
+        assertEquals(fixtureKey, created.key.value)
+        assertEquals(io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known(true, "2026-11-16T10:00:00+00:00"), sessions.state.value.recoveryKey)
+        assertNull("The generated key never enters session state", sessions.state.value.registrationRecoveryKey)
+    }
+
     @Test fun registrationAdoptsServerAssignedRolesAndRotatedCredentials() = runTest {
         anonymous()
         registrationReady()

@@ -15,6 +15,8 @@ interface AccountAccess {
     suspend fun verificationMethods(): VerificationMethods
     suspend fun verifyPassword(password: String)
     suspend fun verifyRecovery(code: String): Int
+    /** One `account/recovery-key.php` POST; the confirmed date reaches the session state, the key only the caller. */
+    suspend fun createRecoveryKey(): CreatedRecoveryKey
 }
 
 interface AccountOperations {
