@@ -93,8 +93,11 @@ class RecoveryKeyJourneyTest {
         registered()
         assertTrue("FLAG_SECURE while the key shows (screenshots, recordings, recents thumbnail)", secure())
         assertFalse(exists("guidelines_screen")); assertFalse(exists("nav_tab_rooms"))
-        compose.onNodeWithTag("recovery_key_group_1").assertTextEquals("A7K2")
-        compose.onNodeWithTag("recovery_key_group_6").assertTextEquals("F6HP")
+        // Each group is a clear-and-set node: TalkBack reads it group by group, character by character (P-185).
+        key.split('-').forEachIndexed { index, group ->
+            compose.onNodeWithTag("recovery_key_group_${index + 1}")
+                .assertContentDescriptionEquals("Group ${index + 1} of 6: ${group.toList().joinToString(", ")}")
+        }
         // Continue and Back both ask first; Go back keeps the key on screen.
         compose.onNodeWithTag("recovery_key_continue").performScrollTo().performClick()
         compose.onNodeWithTag("recovery_key_go_back").performClick()
