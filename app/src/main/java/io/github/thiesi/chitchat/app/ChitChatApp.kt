@@ -552,8 +552,14 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                     } else if (session.phase == SessionPhase.ANONYMOUS) {
                                         // Like the visible Back: no leaving the form while its POST is in flight (its outcome shows there).
                                         androidx.activity.compose.BackHandler(enabled = !session.busy) { chosen = false }
+                                        // The consent line's documents open over the form, so it stays composed and keeps what
+                                        // was typed (the password never enters saved state; PR #273 review).
+                                        var formDocument by rememberSaveable { mutableStateOf<io.github.thiesi.chitchat.core.policies.PolicyDocumentName?>(null) }
                                         AuthScreen(session, auth, onBack = { chosen = false },
-                                            onPolicy = policies?.let { { name -> nav.navigate(policyRoute(name, shell = false)) { launchSingleTop = true } } })
+                                            onPolicy = policies?.let { { name -> formDocument = name } })
+                                        val open = formDocument
+                                        if (open != null && policies != null)
+                                            PolicyDocumentDialog(policies, open, session, state.settings.server?.value) { formDocument = null }
                                     } else {
                                         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                                             Text(stringResource(R.string.saved_server), style = MaterialTheme.typography.headlineLarge)

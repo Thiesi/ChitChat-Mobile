@@ -155,3 +155,23 @@ private fun guidelinesFailure(failure: ApiFailure): String = stringResource(when
     failure.code == "csrf_failed" -> R.string.session_refresh_needed
     else -> R.string.request_rejected
 })
+
+/**
+ * A server document over the screen it was opened from, full screen with icon Back (system Back closes it too). The
+ * screen below stays composed, so a form keeps what was typed without saving it anywhere.
+ */
+@Composable
+internal fun PolicyDocumentDialog(documents: PolicyDocumentViewModel, name: PolicyDocumentName, session: SessionState,
+    server: String?, onClose: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize().testTag("policy_document_dialog"), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                IconButton(onClick = onClose, Modifier.testTag("policy_document_dialog_back")) {
+                    Icon(painterResource(R.drawable.ic_back), contentDescription = stringResource(R.string.back))
+                }
+                Column(Modifier.padding(horizontal = 8.dp)) { PolicyRoute(documents, name, session, server) }
+            }
+        }
+    }
+}

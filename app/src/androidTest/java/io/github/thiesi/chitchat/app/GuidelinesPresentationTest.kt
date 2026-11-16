@@ -11,6 +11,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performFirstLinkClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.dp
@@ -148,6 +149,23 @@ class GuidelinesPresentationTest {
                 assertEquals(listOf("registration_rules_link", "registration_privacy_link"),
                     text.getLinkAnnotations(0, text.length).map { (it.item as androidx.compose.ui.text.LinkAnnotation.Clickable).tag })
                 capture("guidelines-$label-$name-create")
+                if (!dark && fontScale == 1f) {
+                    // Reading the rules from the consent line keeps what was typed: the document opens over the form.
+                    compose.onNodeWithTag("registration_password").performScrollTo().performTextReplacement("fixture-password")
+                    Espresso.closeSoftKeyboard()
+                    compose.onNodeWithTag("registration_rules_consent").performScrollTo().performFirstLinkClick { range ->
+                        (range.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag == "registration_rules_link"
+                    }
+                    compose.onNodeWithTag("policy_document_dialog").assertIsDisplayed()
+                    compose.waitUntil(5_000) {
+                        compose.onAllNodes(androidx.compose.ui.test.hasTestTag("policy_not_published")).fetchSemanticsNodes().isNotEmpty()
+                    }
+                    compose.onNodeWithTag("policy_document_dialog_back").performClick()
+                    compose.onNodeWithTag("policy_document_dialog").assertDoesNotExist()
+                    val kept = compose.onNodeWithTag("registration_password").fetchSemanticsNode()
+                        .config[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text
+                    assertEquals("The password is kept after reading the rules", "fixture-password", kept)
+                }
             }
         }
     }

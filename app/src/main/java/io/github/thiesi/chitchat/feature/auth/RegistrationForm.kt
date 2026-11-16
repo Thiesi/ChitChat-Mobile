@@ -86,7 +86,8 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
             isError = attempted && problem == RegistrationProblem.USERNAME,
             supportingText = { Text(stringResource(R.string.username_policy)) },
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Next), shape = MaterialTheme.shapes.medium)
-        OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().semantics { contentType = ContentType.NewPassword },
+        OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().testTag("registration_password")
+            .semantics { contentType = ContentType.NewPassword },
             label = { Text(stringResource(R.string.password)) }, enabled = enabled, singleLine = true,
             isError = attempted && problem == RegistrationProblem.PASSWORD,
             visualTransformation = PasswordVisualTransformation(),
