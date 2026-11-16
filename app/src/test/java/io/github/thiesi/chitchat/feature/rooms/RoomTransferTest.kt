@@ -261,6 +261,7 @@ class RoomTransferTest {
             override suspend fun export() = PersonalExport(ByteArray(0))
             override suspend fun verificationMethods() = VerificationMethods(false, true, 0)
             override suspend fun verifyPassword(password: String) = Unit
+            override suspend fun createRecoveryKey(): io.github.thiesi.chitchat.core.account.CreatedRecoveryKey = error("No recovery key in this fixture")
             override suspend fun verifyRecovery(code: String) = 0
         }
     }

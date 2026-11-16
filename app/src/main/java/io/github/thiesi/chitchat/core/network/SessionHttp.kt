@@ -108,6 +108,7 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         val reply = decode<SessionReply>(raw)
         reply.discovery = io.github.thiesi.chitchat.core.session.serverDiscovery(raw.body)
         reply.rules = io.github.thiesi.chitchat.core.policies.userRulesStatus(raw.body)
+        reply.recoveryKey = io.github.thiesi.chitchat.core.account.userRecoveryKeyStatus(raw.body)
         requireValidCsrf(reply.csrfToken)
         reply.user?.let(::requireValidUser)
         reply.ignoredUserIds?.let { incompatibleUnless(it.all { id -> id > 0 } && it.distinct().size == it.size) }
@@ -253,6 +254,16 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         requireActiveStepUp(reply.security.status, "recovery_code")
         if (reply.remaining !in 0..100) throw ApiFailure(FailureKind.INCOMPATIBLE)
         return reply.remaining
+    }
+
+    /**
+     * One CSRF `account/recovery-key.php` POST (password-recovery.md): it generates the first key or replaces the
+     * current one, and the previous key stops working immediately. Refusals stay typed for `withStepUp`; never retried.
+     */
+    suspend fun createRecoveryKey(csrf: String): io.github.thiesi.chitchat.core.account.CreatedRecoveryKey {
+        val raw = request("account/recovery-key.php", "{}", csrf).require200()
+        val root = try { apiJson.parseToJsonElement(raw.body) as? JsonObject } catch (_: SerializationException) { null }
+        return io.github.thiesi.chitchat.core.account.createdRecoveryKey(root)
     }
 
     suspend fun personalExport(csrf: String, userId: Long): PersonalExport {
@@ -625,6 +636,8 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         val raw = request(path, body, csrf)
         val reply = decode<AuthReply>(raw)
         reply.rules = io.github.thiesi.chitchat.core.policies.userRulesStatus(raw.body)
+        reply.recoveryKeyStatus = io.github.thiesi.chitchat.core.account.userRecoveryKeyStatus(raw.body)
+        reply.registrationRecoveryKey = io.github.thiesi.chitchat.core.account.registrationRecoveryKey(raw.body)
         requireValidCsrf(reply.csrfToken)
         if (raw.status == 202) {
             if (!allowPending || !reply.mfaRequired || reply.user != null || "recovery_code" !in reply.methods) {

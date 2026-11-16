@@ -55,6 +55,7 @@ internal class TestAccounts(override val session: StateFlow<SessionState>) : Acc
                 if (failPassword) throw ApiFailure(FailureKind.HTTP, 403, "step_up_invalid_credentials")
                 verified = true
             }
+            override suspend fun createRecoveryKey(): io.github.thiesi.chitchat.core.account.CreatedRecoveryKey = error("No recovery key in this fixture")
             override suspend fun verifyRecovery(code: String): Int {
                 recoveries++
                 check(code.isNotBlank())

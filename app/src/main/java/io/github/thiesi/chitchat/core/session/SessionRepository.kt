@@ -79,6 +79,19 @@ data class SessionState(
     val rulesRefused: Boolean = false,
     /** Counts this session's rules refusals (never reset by a bootstrap), so a new refusal reopens a dismissed dialog. */
     val rulesRefusal: Long = 0,
+    /** `user.recovery_key` (password-recovery.md): Unknown when the field is missing, so every recovery-key surface hides. */
+    val recoveryKey: io.github.thiesi.chitchat.core.account.RecoveryKeyStatus = io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Unknown,
+    /**
+     * The key `register.php` returned, held in memory only until the key display confirms it (P-184). A new session
+     * state (sign-out, another account) drops it. Its `toString` is redacted.
+     */
+    val registrationRecoveryKey: io.github.thiesi.chitchat.core.account.RecoveryKey? = null,
+    /**
+     * This account was created in this session but its key never reached the phone: the registration reply carried
+     * none, or registration was ambiguous and the person then signed in. With `recoveryKey` exists = true, the app
+     * shows "didn't reach this phone" (TL, O4a).
+     */
+    val recoveryKeyUndelivered: Boolean = false,
     /** `application.version` as reported, for the update state's details line and note; null is unknown. */
     val reportedVersion: String? = null,
     /**
@@ -223,6 +236,8 @@ class SessionRepository internal constructor(
                     active.proof = null
                     mutable.value = mutable.value.copy(authFlow = if (restore) AuthFlow.RESTORE else AuthFlow.SIGN_IN,
                         registration = RegistrationPreparation.IDLE)
+                    active.signInMayFollowUncertainRegistration =
+                        active.uncertainRegistration?.equals(username.trim(), ignoreCase = true) == true
                 }
             }
             val result = active.api.password(username.trim(), password, active.csrf!!, restore)
@@ -312,13 +327,15 @@ class SessionRepository internal constructor(
         var rulesOutdated: ApiFailure? = null
         try {
             authenticated(pending.first, pending.first.api.register(username.trim(), password, birthDate,
-                pending.second.nonce, pending.second.solution, pending.first.csrf!!, acceptedRulesVersion = pending.third))
+                pending.second.nonce, pending.second.solution, pending.first.csrf!!, acceptedRulesVersion = pending.third),
+                registration = true)
         } catch (failure: ApiFailure) {
             if (failure.status == 409 && failure.code == "rules_version_outdated") rulesOutdated = failure
             lock.withLock {
                 if (runtime === pending.first) {
                     val uncertain = failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT,
                         FailureKind.INCOMPATIBLE, FailureKind.REDIRECT) || (failure.status ?: 0) >= 500
+                    if (uncertain) pending.first.uncertainRegistration = username.trim()
                     failLocked(pending.first, failure)
                     mutable.value = mutable.value.copy(registrationMayHaveSucceeded = uncertain,
                         registration = RegistrationPreparation.FAILED,
@@ -403,6 +420,7 @@ class SessionRepository internal constructor(
                     installationName = io.github.thiesi.chitchat.core.network.installationName(reply.application),
                     updateRequired = reply.discovery?.let { needsServerUpdate(it, member = reply.user != null && !reply.user.guest) } ?: false,
                     rules = reply.rules.takeIf { reply.user != null },
+                    recoveryKey = if (reply.user != null) reply.recoveryKey else io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Unknown,
                     rulesRefused = false,
                     reportedVersion = displayedServerVersion(reply.discovery?.version),
                     bootstrapSequence = mutable.value.bootstrapSequence + 1,
@@ -429,7 +447,7 @@ class SessionRepository internal constructor(
         }
     }
 
-    private suspend fun authenticated(active: Runtime, reply: AuthReply) = lock.withLock {
+    private suspend fun authenticated(active: Runtime, reply: AuthReply, registration: Boolean = false) = lock.withLock {
         if (runtime !== active) return@withLock
         active.csrf = reply.csrfToken
         if (reply.mfaRequired) {
@@ -443,7 +461,15 @@ class SessionRepository internal constructor(
             mutable.value = mutable.value.copy(phase = SessionPhase.AUTHENTICATED, user = reply.user,
                 busy = true, error = null, recoveryCodesRemaining = reply.recoveryCodesRemaining,
                 chatPolicy = null, privacy = null, shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown, webPush = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
-                accountRestored = reply.restored, registrationMayHaveSucceeded = false, rules = reply.rules)
+                accountRestored = reply.restored, registrationMayHaveSucceeded = false, rules = reply.rules,
+                recoveryKey = reply.recoveryKeyStatus,
+                registrationRecoveryKey = reply.registrationRecoveryKey.takeIf { registration },
+                // The key display is the only way to see it: a registration without one, or a sign-in after an ambiguous
+                // registration, may have left a key that never reached this phone.
+                recoveryKeyUndelivered = (registration && reply.registrationRecoveryKey == null) ||
+                    (!registration && active.signInMayFollowUncertainRegistration))
+            if (registration || active.signInMayFollowUncertainRegistration) active.uncertainRegistration = null
+            active.signInMayFollowUncertainRegistration = false
             persist(active, reply.user)
         }
     }
@@ -584,6 +610,27 @@ class SessionRepository internal constructor(
                 }
             } }
         }
+    }
+
+    /** The key display confirmed "I've saved it" (or closed): the registration key is dropped from memory. */
+    internal suspend fun dropRegistrationRecoveryKey(expected: SessionState) = lock.withLock {
+        val current = mutable.value
+        if (current.generation == expected.generation && current.user?.id == expected.user?.id)
+            mutable.value = current.copy(registrationRecoveryKey = null)
+    }
+
+    /** "Didn't reach this phone" was acted on or no longer applies. */
+    internal suspend fun clearRecoveryKeyUndelivered(expected: SessionState) = lock.withLock {
+        val current = mutable.value
+        if (current.generation == expected.generation && current.user?.id == expected.user?.id)
+            mutable.value = current.copy(recoveryKeyUndelivered = false)
+    }
+
+    /** A confirmed Generate or Replace: the status shows the new key's date (the key itself never enters state). */
+    internal suspend fun recoveryKeyCreated(access: SessionAccess, createdAt: String) = lock.withLock {
+        ensureCurrent(access)
+        mutable.value = mutable.value.copy(recoveryKey = io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known(true, createdAt),
+            recoveryKeyUndelivered = false)
     }
 
     internal suspend fun recoveryConsumed(access: SessionAccess, remaining: Int) = lock.withLock {
@@ -750,6 +797,14 @@ class SessionRepository internal constructor(
 
     private class Runtime(val server: ServerAddress, val api: SessionHttp) {
         var csrf: String? = null
+        /**
+         * The username of a registration whose result was ambiguous (O4a). Unlike `registrationMayHaveSucceeded`, it
+         * survives switching to the sign-in form; a later sign-in to that same username consumes it and marks the key
+         * undelivered. Memory only, per runtime.
+         */
+        var uncertainRegistration: String? = null
+        /** A sign-in to [uncertainRegistration]'s username is in progress (it may finish through MFA). */
+        var signInMayFollowUncertainRegistration = false
         var signedInAt: Long? = null
         var lastValidatedAt: Long? = null
         var expectedUserId: Long? = null
