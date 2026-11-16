@@ -114,7 +114,8 @@ while `user.rules.acceptance_required` is true (the last bullet covers the other
     then create your account again." The form keeps its fields (the password fields follow
     their existing clearing rules). Never resubmit automatically.
   - `400 rules_acceptance_required` means the client sent no version. It's a client bug: show
-    the generic server-problem notice, and keep the form.
+    "Something went wrong creating your account. Your details are kept; try again." and keep
+    the form. Nothing resends automatically.
 - After a successful registration, `acceptance_required` is false, so the guidelines screen
   then asks only for the app guidelines and lists the server rows as reading links.
 
