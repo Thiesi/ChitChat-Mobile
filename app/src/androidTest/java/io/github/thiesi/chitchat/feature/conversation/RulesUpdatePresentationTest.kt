@@ -139,17 +139,29 @@ class RulesUpdatePresentationTest {
                 compose.onNodeWithTag("conversation_composer").assertIsDisplayed()
                 if (fontScale == 2f) {
                     capture("rules-$label-$name-banner", "rules_host")
-                    compose.runOnIdle { realtime.state.value = realtime.state.value.copy(phase = RealtimePhase.OFFLINE) }
-                    compose.waitUntil(5_000) { compose.onAllNodesWithTag("status_slot").fetchSemanticsNodes().isNotEmpty() }
-                    // Stacked, never overlapping, and the composer stays visible (P-108/A-04).
-                    val slot = compose.onNodeWithTag("status_slot").fetchSemanticsNode().boundsInRoot
-                    val banner = compose.onNodeWithTag("rules_banner").fetchSemanticsNode().boundsInRoot
-                    assertTrue("The banner sits below the slot notice: slot=$slot banner=$banner", banner.top >= slot.bottom - 0.5f)
-                    compose.onNodeWithTag("conversation_composer").assertIsDisplayed()
                     val review = compose.onNodeWithTag("rules_banner_review").fetchSemanticsNode()
                     val min = with(review.layoutInfo.density) { 48.dp.toPx() } - 0.5f
                     assertTrue("Review has a 48dp target", review.touchBoundsInRoot.height >= min && review.touchBoundsInRoot.width >= min)
+                    // J1 (PR #276): while the slot shows a level-2 notice the strip yields, so the transcript and composer
+                    // keep their room at 200%; it returns when the notice clears.
+                    compose.runOnIdle { realtime.state.value = realtime.state.value.copy(phase = RealtimePhase.OFFLINE) }
+                    compose.waitUntil(5_000) { compose.onAllNodesWithTag("status_slot").fetchSemanticsNodes().isNotEmpty() }
+                    compose.onNodeWithTag("rules_banner").assertDoesNotExist()
+                    compose.onNodeWithText("Fixture").assertIsDisplayed()
+                    compose.onNodeWithTag("conversation_composer").assertIsDisplayed()
                     capture("rules-$label-$name-banner-offline", "rules_host")
+                    compose.runOnIdle { realtime.state.value = realtime.state.value.copy(phase = RealtimePhase.LIVE) }
+                    compose.waitUntil(5_000) { compose.onAllNodesWithTag("rules_banner").fetchSemanticsNodes().isNotEmpty() }
+                    compose.onNodeWithTag("rules_banner").assertIsDisplayed()
+                    // A send while the strip is hidden still opens the dialog. A secure-connection failure is another
+                    // level-2 notice; offline is not used here because a clean text draft then waits to send (S4a).
+                    compose.runOnIdle { realtime.state.value = realtime.state.value.copy(phase = RealtimePhase.ERROR,
+                        error = io.github.thiesi.chitchat.core.network.ApiFailure(io.github.thiesi.chitchat.core.network.FailureKind.TLS)) }
+                    compose.waitUntil(5_000) { compose.onAllNodesWithTag("rules_banner").fetchSemanticsNodes().isEmpty() }
+                    compose.runOnIdle { api.refuse = true; assertTrue(model.updateDraft(sessions.state.value, 42, "Hello rules")) }
+                    compose.onNodeWithTag("conversation_send").performScrollTo().performClick()
+                    compose.waitUntil(5_000) { compose.onAllNodesWithTag("rules_updated").fetchSemanticsNodes().isNotEmpty() }
+                    compose.runOnIdle { assertEquals(1, api.sends.get()); assertEquals("Hello rules", model.state.value.draft) }
                 }
                 compose.runOnIdle { model.cancel(); directory.cancel() }
             }

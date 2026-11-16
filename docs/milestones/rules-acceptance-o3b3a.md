@@ -66,6 +66,10 @@ dismissed.
   - a 1dp `line` bottom edge;
   - no live region.
 - **Compact heights:** hidden with the slot (`compactConversation`).
+- **Precedence** (PL J1 on PR #276, TL-approved): the strip yields while the slot shows a level-2 (BLOCK) notice, so the
+  transcript and composer keep their room at 200%. It returns when that notice clears, and level-1 caption lines stack
+  with it. A send still opens the dialog on a 403, so nothing is lost. The slot reports its shown level through
+  `onShownLevel`.
 
 ## Verification
 
@@ -94,6 +98,9 @@ dismissed.
 - **`RulesUpdatePresentationTest`:**
   - captures: the dialog with a long summary collapsed and expanded (default and 200%), and the banner at 200%, alone
     and under the offline slot notice; light and dark;
-  - asserts the banner sits below the slot, the composer stays displayed, Review has a 48dp target, and the actions are
-    reachable;
+  - asserts Review has a 48dp target and the actions are reachable;
+  - at 200%, an offline (level-2) notice hides the strip while the transcript and composer stay displayed; the strip
+    returns when the notice clears; under a secure-connection failure notice (also level 2), a send while the strip is
+    hidden still opens the dialog. Offline isn't used for the send check, since a clean text draft then waits to send
+    (S4a);
   - collected by `native_presentation.collect_rules` (12 files).

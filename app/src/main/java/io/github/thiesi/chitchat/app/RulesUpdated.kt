@@ -128,8 +128,11 @@ internal fun RulesBanner(session: SessionState, server: String?, onReview: () ->
     }.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.Center,
         itemVerticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.padding(vertical = 8.dp).padding(end = 8.dp).semantics(mergeDescendants = true) {}.testTag("rules_banner_text"),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(painterResource(R.drawable.ic_info), contentDescription = null, Modifier.size(16.dp), tint = colors.textMuted)
+            verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Aligned to the first text line (PL, PR #276): centred on the first line's height, at any font scale.
+            val firstLine = with(androidx.compose.ui.platform.LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toDp() }
+            Icon(painterResource(R.drawable.ic_info), contentDescription = null,
+                Modifier.padding(top = ((firstLine - 16.dp) / 2).coerceAtLeast(0.dp)).size(16.dp), tint = colors.textMuted)
             Text(sentence, style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
         }
         TextButton(onClick = onReview, Modifier.heightIn(min = 48.dp).testTag("rules_banner_review")) {
