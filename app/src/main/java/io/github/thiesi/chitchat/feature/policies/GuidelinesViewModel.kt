@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -40,9 +41,11 @@ data class GuidelinesUi(
  * Unknown re-reads the session and moves on only if it no longer requires acceptance.
  */
 class GuidelinesViewModel(private val rules: RulesOperations, private val store: GuidelinesAcceptanceStore) : ViewModel() {
+    /** Records this process wrote successfully: they still count after the store's read flow failed and completed. */
+    private val recorded = MutableStateFlow<Set<GuidelinesAcceptance>>(emptySet())
     /** Null until the store's first read; a failed read is empty, so the screen shows rather than being skipped. */
-    val accepted: StateFlow<Set<GuidelinesAcceptance>?> = store.accepted
-        .catch { if (it is IOException) emit(emptySet()) else throw it }
+    val accepted: StateFlow<Set<GuidelinesAcceptance>?> = combine(
+        store.accepted.catch { if (it is IOException) emit(emptySet()) else throw it }, recorded) { stored, written -> stored + written }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val mutable = MutableStateFlow(GuidelinesUi())
     val state: StateFlow<GuidelinesUi> = mutable.asStateFlow()
@@ -77,7 +80,7 @@ class GuidelinesViewModel(private val rules: RulesOperations, private val store:
     }
 
     private suspend fun save(record: GuidelinesAcceptance, scope: GuidelinesUi) {
-        mutable.value = try { store.record(record); GuidelinesUi() }
+        mutable.value = try { store.record(record); recorded.value = recorded.value + record; GuidelinesUi() }
             catch (_: IOException) { scope.copy(failure = ApiFailure(FailureKind.STORAGE)) }
     }
 

@@ -132,4 +132,21 @@ class GuidelinesViewModelTest {
         assertEquals(0, ops.refreshes)
         assertFalse(store.accepted.value.covers(server.value, 7))
     }
+
+    /** PR #273 review: after a failed store read the flow completes; a later successful I agree must still open the app. */
+    @Test fun aSuccessfulRecordCountsEvenAfterTheStoreReadFailed() = runTest(dispatcher) {
+        val current = session(required = null, published = false)
+        val written = mutableListOf<GuidelinesAcceptance>()
+        val store = object : GuidelinesAcceptanceStore {
+            override val accepted = kotlinx.coroutines.flow.flow<Set<GuidelinesAcceptance>> { throw java.io.IOException("read failed") }
+            override suspend fun record(acceptance: GuidelinesAcceptance) { written += acceptance }
+            override suspend fun forgetServer(origin: String) = Unit
+        }
+        val model = GuidelinesViewModel(Rules(current), store)
+        advanceUntilIdle()
+        assertEquals("A failed read shows the screen", emptySet<GuidelinesAcceptance>(), model.accepted.value)
+        model.agree(current); advanceUntilIdle()
+        assertEquals(1, written.size)
+        assertTrue(model.accepted.value!!.covers(server.value, 7))
+    }
 }
