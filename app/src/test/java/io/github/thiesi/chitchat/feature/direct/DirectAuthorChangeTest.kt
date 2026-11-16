@@ -120,6 +120,16 @@ class DirectAuthorChangeTest {
         assertNull(model.state.value.authorUnknown); assertEquals("author_deleted", model.state.value.authorNotice)
         assertEquals(1, changes.deletes); assertFalse(model.state.value.uncertainSend)
     }
+    /** Navigation keeps an authorized author edit in flight (DM navigation path fix); it confirms with no unknown state. */
+    @Test fun navigationKeepsAnAuthorEditInFlight() = runTest(dispatcher) {
+        open(); val edit = choose(); model.updateAuthorBody(edit, "Edited while leaving")
+        changes.gate = CompletableDeferred(); model.submitAuthor(edit); runCurrent()
+        model.leavePane(); runCurrent()
+        assertNull("Not turned into an unknown edit", model.state.value.authorUnknown)
+        changes.gate!!.complete(Unit); runCurrent()
+        assertNull(model.state.value.authorUnknown); assertEquals(1, changes.edits)
+    }
+
     @Test fun committedButUnconfirmedEditNeedsExplicitGetAndFreshChoiceNotReplay() = runTest(dispatcher) {
         open(); val owner = api.session.value; val old = choose(); model.updateAuthorBody(old, "Committed proposal")
         changes.failure = ApiFailure(FailureKind.HTTP, 500); changes.commitBeforeFailure = true

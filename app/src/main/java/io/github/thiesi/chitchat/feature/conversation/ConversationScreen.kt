@@ -129,7 +129,7 @@ import io.github.thiesi.chitchat.feature.completion.*
 @Composable
 fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
     ignores: IgnorePersonViewModel? = null, targets: MessageTargetViewModel? = null, obscured: Boolean = false,
-    onStopped: (() -> Unit)? = null, onProfile: ((Long) -> Boolean)? = null,
+    onStopped: ((owner: Any) -> Unit)? = null, onProfile: ((Long) -> Boolean)? = null,
     completion: CompletionViewModel? = null, completionEntryId: String = "",
     isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
@@ -143,7 +143,7 @@ fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSess
 @Composable
 private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
     ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean,
-    onStopped: (() -> Unit)?, onProfile: ((Long) -> Boolean)?, completion: CompletionViewModel?, completionEntryId: String,
+    onStopped: ((owner: Any) -> Unit)?, onProfile: ((Long) -> Boolean)?, completion: CompletionViewModel?, completionEntryId: String,
     isCurrentEntry: () -> Boolean) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
@@ -226,9 +226,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val placementAnchor = state.anchor
     val placementMessages = state.messages
     var placedAnchor by remember { mutableStateOf<TimelineAnchor?>(null) }
-    LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground() }
+    val paneOwner = remember { Any() } // This screen instance; a late stop can't leave a newer screen's pane.
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground(paneOwner) }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) {
-        if (onStopped == null) model.background() else onStopped()
+        if (onStopped == null) model.background() else onStopped(paneOwner)
         ignores?.leaveRoom(session, roomId)
     } }
     LaunchedEffect(session.retryAtMillis, lifecycle) {

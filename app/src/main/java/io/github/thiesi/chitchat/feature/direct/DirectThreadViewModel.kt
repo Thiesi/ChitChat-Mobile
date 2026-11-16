@@ -139,7 +139,11 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         }
         if (!mutable.value.loaded) invalidate() // Entry is not explicit uncertain-send reconciliation/consent.
     }
-    fun foreground() {
+    /** The screen that last brought this thread to the foreground; only its departure counts (late-stop race). */
+    private var paneOwner: Any? = null
+
+    fun foreground(owner: Any = Unit) {
+        paneOwner = owner
         active = true
         if (mutable.value.attachmentReview == null) invalidate()
     }
@@ -157,10 +161,15 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         rememberDraft(); retire(); visibleNewest = null; viewport = null
     }
 
-    /** Preserve an explicitly authorized upload through navigation. App background still cancels. */
-    fun leavePane() {
+    /**
+     * Navigation preserves every authorized write in flight (send, author change, reaction, block, read and upload), as
+     * the room model does; only a genuine app background cancels and marks unknown delivery. A departure from a screen
+     * that no longer owns the pane (a late ON_STOP after a newer thread started) changes nothing.
+     */
+    fun leavePane(owner: Any = Unit) {
+        if (paneOwner !== owner) return
         dropWaiting()
-        if (uploadPosting == null || !currentIdentity()) { background(); return }
+        if ((uploadPosting == null && write == null) || !currentIdentity()) { background(); return }
         active = false; visibleNewest = null; viewport = null
         mutable.value = mutable.value.copy(atLatest = false, authorDialog = null, reactionDialog = null)
     }

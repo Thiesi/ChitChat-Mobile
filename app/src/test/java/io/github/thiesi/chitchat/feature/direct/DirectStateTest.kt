@@ -69,6 +69,63 @@ class DirectStateTest {
         assertFalse(thread.state.value.checkedUnknown); assertEquals("Other peer draft", thread.drafts.value[9]?.body)
         thread.allowDuplicateRisk(); assertTrue(thread.state.value.uncertainSend); assertEquals(1, api.sends)
     }
+    /** Defect in the existing DM navigation path: a navigated-away text send became unknown delivery. Navigation keeps it. */
+    @Test fun navigationKeepsATextSendInFlightAndConfirmsIt() = runTest(dispatcher) {
+        open(); thread.updateDraft("Sent while leaving"); api.gate = CompletableDeferred(); api.gated = "send"
+        thread.send(); runCurrent(); assertTrue(thread.state.value.sending)
+        thread.leavePane(); runCurrent()
+        assertTrue("Still sending, not cancelled", thread.state.value.sending); assertFalse(thread.state.value.uncertainSend)
+        api.gate!!.complete(Unit); runCurrent()
+        assertFalse(thread.state.value.uncertainSend); assertFalse(thread.state.value.sending)
+        assertEquals("", thread.state.value.draft); assertEquals(1, api.sends)
+    }
+
+    @Test fun navigationKeepsAnAuthorizedReadInFlight() = runTest(dispatcher) {
+        open(); api.gate = CompletableDeferred(); api.gated = "read"
+        thread.viewport(DirectAnchor(18, 0), setOf(18), 18, true); runCurrent(); assertEquals(1, api.reads)
+        thread.leavePane(); runCurrent()
+        assertTrue(thread.state.value.busy); assertFalse(thread.state.value.uncertainRead)
+        api.gate!!.complete(Unit); runCurrent()
+        assertFalse(thread.state.value.uncertainRead); assertEquals(1, api.reads)
+    }
+
+    @Test fun navigationKeepsABlockInFlight() = runTest(dispatcher) {
+        open(); api.gate = CompletableDeferred(); api.gated = "block"
+        thread.setBlocked(true); runCurrent(); assertEquals(1, api.blocks)
+        thread.leavePane(); runCurrent()
+        assertFalse(thread.state.value.uncertainBlock)
+        api.gate!!.complete(Unit); runCurrent()
+        assertFalse(thread.state.value.uncertainBlock); assertTrue(api.relationship.blockedByMe); assertEquals(1, api.blocks)
+    }
+
+    /** A genuine app background still cancels a text send in flight and marks unknown delivery, never resent (unchanged). */
+    @Test fun aGenuineBackgroundStillCancelsATextSendAsUnknownDelivery() = runTest(dispatcher) {
+        open(); thread.updateDraft("Unknown on background"); api.gate = CompletableDeferred(); api.gated = "send"
+        thread.send(); runCurrent()
+        thread.background(); runCurrent()
+        assertTrue(thread.state.value.uncertainSend)
+        api.gate!!.complete(Unit); runCurrent()
+        assertTrue(thread.state.value.uncertainSend); assertEquals(1, api.sends)
+    }
+
+    /**
+     * The transition ordering CI hides: thread B's screen has started on the shared model, then thread A's late ON_STOP
+     * (a departure) arrives. B keeps its load, draft and state; A's stop changes nothing.
+     */
+    @Test fun aLateDepartureFromAnOlderThreadLeavesTheNewerThreadAlone() = runTest(dispatcher) {
+        val a = Any(); val b = Any()
+        api.rows = listOf(row(18, 8), row(28, 9))
+        thread.open(8); thread.foreground(a); runCurrent()
+        thread.open(9); thread.foreground(b); runCurrent()
+        thread.updateDraft("Newer thread draft")
+        assertTrue(thread.state.value.loaded); val contexts = api.contexts
+        thread.leavePane(a); runCurrent() // A's ON_STOP, after the transition.
+        assertEquals(9L, thread.state.value.peerId); assertTrue(thread.state.value.loaded); assertFalse(thread.state.value.stale)
+        assertEquals("Newer thread draft", thread.state.value.draft); assertEquals(contexts, api.contexts)
+        thread.leavePane(b); runCurrent() // B's own departure still applies.
+        assertEquals("Newer thread draft", thread.drafts.value[9]?.body ?: thread.state.value.draft)
+    }
+
     @Test fun notificationPreparationRejectsAnActiveSendWithoutCancellingIt() = runTest(dispatcher) {
         open(); val snapshot = target(); thread.updateDraft("Pending send"); api.gate = CompletableDeferred(); api.gated = "send"
         thread.send(); runCurrent(); assertFalse(thread.canPrepareTarget(snapshot)); assertFalse(thread.prepareTarget(snapshot))
@@ -594,7 +651,7 @@ class DirectStateTest {
             return count
         }
         override suspend fun setBlocked(peerId: Long, blocked: Boolean): DirectRelationship {
-            blocks++; blockFailure?.let { throw it }
+            blocks++; await("block"); blockFailure?.let { throw it }
             relationship = DirectRelationship(blocked, !blocked && relationship.messagingAvailable); return relationship
         }
     }
