@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -38,6 +39,7 @@ import io.github.thiesi.chitchat.feature.auth.TestSessions
 import io.github.thiesi.chitchat.feature.policies.GuidelinesViewModel
 import io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel
 import io.github.thiesi.chitchat.feature.account.TestChitChatApp
+import io.github.thiesi.chitchat.testing.openTab
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -86,10 +88,16 @@ class GuidelinesJourneyTest {
     private val documents = PolicyDocumentViewModel(reads)
     private val rulesLink = PolicyLink("https://chat.example.test/rules", 4, "2026-11-08T12:00:00+00:00")
 
+    private val api = io.github.thiesi.chitchat.testing.NativeChatFixtures(sessions)
+    private val notices = io.github.thiesi.chitchat.feature.notifications.NotificationCenterViewModel(api.notices)
+    private val taps = io.github.thiesi.chitchat.core.push.PendingPushTap()
+    private fun install(activity: ComponentActivity) = activity.setContent { Box(Modifier.fillMaxSize()) {
+        TestChitChatApp(settings, auth, notifications = notices, pushTaps = taps, policies = documents, guidelines = guidelines)
+    } }
+    @org.junit.After fun close() { compose.runOnIdle { notices.background() } }
+
     private fun signIn(shape: (SessionState) -> SessionState = { it }) {
-        compose.runOnUiThread { compose.activity.setContent { Box(Modifier.fillMaxSize()) {
-            TestChitChatApp(settings, auth, policies = documents, guidelines = guidelines)
-        } } }
+        compose.runOnUiThread { install(compose.activity) }
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.ANONYMOUS }
         compose.runOnIdle { runBlocking { sessions.signIn("Viewer", "fixture-password") }
             sessions.state.value = shape(sessions.state.value) }
@@ -144,6 +152,46 @@ class GuidelinesJourneyTest {
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.SIGNED_OUT }
         compose.onNodeWithTag("guidelines_screen").assertDoesNotExist()
         assertTrue(store.accepted.value.isEmpty())
+    }
+
+    /**
+     * A push tap for this account while the screen is pending doesn't reach the shell. The existing guarded routing
+     * defers it: only the composed Activity destination consumes a tap, and nothing of the shell is composed until I
+     * agree. So it waits (still pending, never dropped or replayed elsewhere) and routes once, to Activity, after I agree.
+     */
+    @Test fun aPushTapWhileTheScreenIsPendingWaitsAndRoutesOnlyAfterIAgree() {
+        signIn()
+        compose.onNodeWithTag("guidelines_screen").assertIsDisplayed()
+        compose.runOnIdle { taps.offer(io.github.thiesi.chitchat.core.push.PushTap(server.value, 7, null)) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("guidelines_screen").assertIsDisplayed()
+        compose.onNodeWithTag("nav_tab_activity").assertDoesNotExist()
+        compose.onNodeWithTag("notification_list").assertDoesNotExist()
+        compose.runOnIdle { assertTrue("The tap waits behind the screen", taps.state.value != null) }
+        compose.onNodeWithTag("guidelines_agree").performScrollTo().performClick()
+        compose.waitUntil(5_000) { taps.state.value == null && compose.onAllNodesWithTagExists("notification_list") }
+        compose.openTab("activity").assertIsSelected()
+    }
+
+    /**
+     * A restored shell stack (activity recreation) with acceptance pending shows the screen, not the restored
+     * destination; after I agree, the restored stack is where the person was.
+     */
+    @Test fun aRestoredStackWithAcceptancePendingShowsTheScreenFirst() {
+        store.accepted.value = setOf(GuidelinesAcceptance(server.value, 7, io.github.thiesi.chitchat.core.settings.APP_GUIDELINES_VERSION))
+        signIn()
+        compose.openTab("activity").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTagExists("notification_list") }
+        compose.runOnIdle { store.accepted.value = emptySet() } // E.g. a new guidelines version: acceptance is pending again.
+        compose.onNodeWithTag("guidelines_screen").assertIsDisplayed()
+        compose.activityRule.scenario.recreate()
+        compose.activityRule.scenario.onActivity { install(it) }
+        compose.onNodeWithTag("guidelines_screen").assertIsDisplayed()
+        compose.onNodeWithTag("nav_tab_activity").assertDoesNotExist()
+        compose.onNodeWithTag("notification_list").assertDoesNotExist()
+        compose.onNodeWithTag("guidelines_agree").performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTagExists("notification_list") }
+        compose.openTab("activity").assertIsSelected()
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeTestRule.onAllNodesWithTagExists(tag: String) =
