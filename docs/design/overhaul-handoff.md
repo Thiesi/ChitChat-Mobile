@@ -197,7 +197,10 @@ against current main before acting.
     before merge; full-width secondaries paired with a primary keep that height. The step 2
     failure is the existing rose `InlineError` text above the field, not status-presentation's
     level-2 block (icon plus full-width block); see also debt 4. Hosts break only at their dots
-    (display-only U+200B, PR #259 and #260); keep that rule. Evidence: PR #260
+    (display-only U+200B, PR #259 and #260); keep that rule. The Create form's policy line still reads "An account is
+    created on this server, not with the app publisher. The server decides your permissions."
+    instead of 4b's "Your account is created on {host}, not with the app maker. The server
+    decides what you can do." (seen in PR #281's captures). Evidence: PR #260
     `onboarding-presentation` captures.
 12. **Trailing glyph after wrapped labels.** At 200% the wrapped "Accessibility feedback"
     label keeps its constraint width, so the open-external glyph sits at the row's end, not
