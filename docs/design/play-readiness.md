@@ -128,7 +128,8 @@ while `user.rules.acceptance_required` is true (the last bullet covers the other
   - title "**{installation} updated its rules**";
   - "Updated {date}" caption;
   - when the document's `change_summary` is non-empty: a `raised` card "**What changed**"
-    with the summary as **plain text** (no formatting, up to 6 lines, then "Show all");
+    with the summary as **plain text** (no formatting, up to 6 lines, then "Show all", which
+    expands it in place and becomes "Show less"; semantics carry the full text in both states);
   - the row "Read {installation}'s rules" to the document screen;
   - "By tapping I agree, you accept {installation}'s updated rules." in `textMuted`;
   - **I agree** (primary) and **Not now** (text button). This replaces the earlier draft's
@@ -138,6 +139,22 @@ while `user.rules.acceptance_required` is true (the last bullet covers the other
   search, files and settings work. A small level-1 banner sits at the top of each conversation,
   "**Agree to {installation}'s updated rules to send messages.**" with **Review**, and the
   composer stays enabled so drafts keep working.
+- **Presentation** (O3b3a, PR #276):
+  - The screen is a full-screen dialog over the composed shell (no departure; pending writes
+    untouched). It has the background surface, no bar, and a pane title equal to its title.
+    System Back is Not now.
+  - After Not now, the screen returns only on a new `403`, on Review, in a new process, or for
+    a newer required version than the one dismissed. It never returns on every foreground or
+    refresh.
+  - The banner sits outside `resolveStatus` (it isn't connection state). It's directly under
+    the status slot, or under the top bar when the slot is empty. Level 1: no background, a
+    16dp `info` glyph on the first text line, a `textMuted` caption, Review as a trailing text
+    button (48dp), and a 1dp `line` bottom edge. At 200% it wraps and Review moves below. Glyph
+    and sentence form one TalkBack node, with no live region.
+  - **Precedence:** while the slot shows a level-2 notice, the banner is hidden, and it returns
+    when the notice clears, so the two never crowd out the transcript at 200%. Caption-level
+    slot lines may stack with it. It's also hidden at compact conversation heights, like the
+    slot. A `403` still opens the screen.
 - There is no Sign out on this screen. Signing out stays in You, as always.
 - The `change_summary` comes from `GET policies/show.php?document=rules`. If that GET fails,
   the screen shows without the What changed card.
