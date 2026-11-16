@@ -146,6 +146,20 @@ class DirectAttachmentUploadTest {
         assertTrue(budget.reservedBytes > 0); assertEquals(1, wire.calls)
     }
 
+    /** O3b3b: 403 rules_acceptance_required is definite. The file and caption stay READY, nothing is unknown, no resend. */
+    @Test fun aRulesRefusedDirectUploadKeepsTheFileIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        val ready = prepared(); model.updateDraft("caption")
+        assertTrue(send(ready)); runCurrent()
+        wire.result.completeExceptionally(ApiFailure(FailureKind.HTTP, 403, "rules_acceptance_required")); runCurrent()
+        assertEquals(DirectAttachmentPhase.READY, view().phase)
+        assertEquals("caption", model.state.value.draft)
+        assertFalse(model.state.value.uncertainSend)
+        assertNotNull("Reading continues", model.state.value.context)
+        api.session.value = api.session.value.copy(rules = io.github.thiesi.chitchat.core.policies.RulesStatus(4, null, false)); runCurrent()
+        assertEquals("Nothing resends after I agree", 1, wire.calls)
+        assertEquals(DirectAttachmentPhase.READY, view().phase)
+    }
+
     @Test fun acknowledgedUploadNeverBecomesUnknownWhenCanonicalGetFails() = runTest(dispatcher) {
         val ready = prepared(); model.updateDraft("caption")
         assertTrue(send(ready)); runCurrent(); api.historyFailure = ApiFailure(FailureKind.NETWORK)

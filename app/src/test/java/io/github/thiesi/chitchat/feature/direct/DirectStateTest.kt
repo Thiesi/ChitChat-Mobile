@@ -452,6 +452,17 @@ class DirectStateTest {
         thread.cancelReply(owner, 8, selected); assertNull(thread.state.value.composerReply)
         assertFalse(thread.canSend())
     }
+    /** O3b3b: 403 rules_acceptance_required is definite. The draft stays, nothing is unknown, reading continues, no resend. */
+    @Test fun aRulesRefusedDirectSendKeepsTheDraftIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); thread.updateDraft("Unsent fixture")
+        api.sendFailure = ApiFailure(FailureKind.HTTP, 403, "rules_acceptance_required"); thread.send(); runCurrent()
+        assertFalse("Definite, never unknown", thread.state.value.uncertainSend)
+        assertEquals("The draft stays", "Unsent fixture", thread.state.value.draft)
+        assertNotNull("Reading continues", thread.state.value.context)
+        api.sendFailure = null; api.session.value = api.session.value.copy(rules = io.github.thiesi.chitchat.core.policies.RulesStatus(4, null, false)); runCurrent()
+        assertEquals("Nothing resends after I agree", 1, api.sends)
+    }
+
     @Test fun removingARejectedReplyKeepsItsTextButDoesNotResetStalenessOrSend() = runTest(dispatcher) {
         open(); val owner = api.session.value
         assertTrue(thread.replyTo(owner, 8, thread.state.value.messages.first()))

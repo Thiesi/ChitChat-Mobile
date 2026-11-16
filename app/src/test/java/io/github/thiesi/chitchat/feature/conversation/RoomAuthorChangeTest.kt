@@ -122,6 +122,27 @@ class RoomAuthorChangeTest {
         assertNotSame(old, model.state.value.authorDialog?.request); assertEquals(1, fake.writes)
     }
 
+    /** O3b3b: 403 rules_acceptance_required is definite. The edit dialog keeps its text, nothing is unknown, nothing resends. */
+    @Test fun aRulesRefusedEditKeepsItsTextIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 403, "rules_acceptance_required")
+        val request = begin(); model.updateAuthorBody(request, "Refused edit"); model.submitAuthor(request); runCurrent()
+        assertNull("Definite: no author uncertainty", model.state.value.authorUnknown)
+        assertFalse(model.state.value.uncertainSend)
+        assertEquals("The edit dialog keeps its text", "Refused edit", model.state.value.authorDialog?.body)
+        fake.writeFailure = null
+        fake.session.value = fake.session.value.copy(rules = io.github.thiesi.chitchat.core.policies.RulesStatus(4, null, false))
+        runCurrent()
+        assertEquals("Nothing resends after I agree", 1, fake.writes)
+    }
+
+    /** Guard (TL, O3b3b): only the exact rules refusal is definite. Another 403 after the write starts stays uncertain. */
+    @Test fun aDifferentForbiddenEditStillLeavesAuthorUncertainty() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 403, "forbidden")
+        val request = begin(); model.updateAuthorBody(request, "Maybe committed"); model.submitAuthor(request); runCurrent()
+        assertNotNull("M5b1: may have committed", model.state.value.authorUnknown)
+        assertEquals(1, fake.writes)
+    }
+
     @Test fun acknowledgedWriteFollowedByFailedGetStaysConfirmed() = runTest(dispatcher) {
         open(); fake.failGetAfterWrite = true; val request = begin()
         model.updateAuthorBody(request, "Confirmed edit"); model.submitAuthor(request); runCurrent()

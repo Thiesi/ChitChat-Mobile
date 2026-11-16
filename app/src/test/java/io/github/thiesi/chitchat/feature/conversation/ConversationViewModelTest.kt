@@ -259,6 +259,33 @@ class ConversationViewModelTest {
         assertEquals("Never replayed", 1, fake.sends)
     }
 
+    // O3b3b (play-readiness.md §1 "Write refusals"): 403 rules_acceptance_required is a definite refusal. The draft
+    // stays, no unknown state is set, and accepting the rules afterwards (the session changes) resends nothing.
+    private fun rulesRefusal() = ApiFailure(FailureKind.HTTP, 403, "rules_acceptance_required")
+    private fun acceptRules() { fake.session.value = fake.session.value.copy(rulesRefused = false,
+        rules = io.github.thiesi.chitchat.core.policies.RulesStatus(4, null, false)) }
+
+    @Test fun aRulesRefusedSendKeepsTheDraftSetsNoUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); fake.sendFailure = rulesRefusal()
+        model.updateDraft("Unsent fixture"); model.send(); advanceUntilIdle()
+        assertFalse("Definite, never unknown", model.state.value.uncertainSend)
+        assertEquals("The draft stays", "Unsent fixture", model.state.value.draft)
+        assertNotNull("Reading continues", model.state.value.context); assertEquals(2, model.state.value.messages.size)
+        fake.sendFailure = null; acceptRules(); advanceUntilIdle()
+        assertEquals("Nothing resends after I agree", 1, fake.sends)
+        assertEquals("Unsent fixture", model.state.value.draft)
+    }
+
+    @Test fun aRulesRefusedPingKeepsTheDraftSetsNoUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); fake.sendFailure = rulesRefusal()
+        model.updateDraft("/ping Bob fixture"); model.send(); advanceUntilIdle()
+        assertEquals("/ping Bob fixture", fake.lastBody)
+        assertFalse(model.state.value.uncertainSend)
+        assertEquals("/ping Bob fixture", model.state.value.draft)
+        fake.sendFailure = null; acceptRules(); advanceUntilIdle()
+        assertEquals(1, fake.sends)
+    }
+
     private class Conversations : ConversationOperations {
         override val session = MutableStateFlow(SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED,
             user = SessionUser(7, "Alice", listOf("member"), 1, false)))

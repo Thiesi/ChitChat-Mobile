@@ -294,6 +294,24 @@ class RoomAttachmentUploadTest {
         assertEquals(1, wire.calls)
     }
 
+    /**
+     * O3b3b: 403 rules_acceptance_required is a definite write refusal, not access loss. The transcript stays readable,
+     * the file and caption stay READY, nothing is unknown, and accepting the rules afterwards resends nothing.
+     */
+    @Test fun aRulesRefusedUploadKeepsTheFileAndTranscriptIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        val ready = prepared(); model.updateDraft("private caption")
+        assertTrue(send(ready)); runCurrent()
+        wire.result.completeExceptionally(ApiFailure(FailureKind.HTTP, 403, "rules_acceptance_required")); runCurrent()
+        assertNotNull("Reading continues", model.state.value.context)
+        assertEquals("private caption", model.drafts.value.getValue(42).body)
+        assertEquals(RoomAttachmentPhase.READY, view().phase)
+        assertFalse(model.state.value.uncertainSend)
+        api.session.value = api.session.value.copy(rules = io.github.thiesi.chitchat.core.policies.RulesStatus(4, null, false))
+        runCurrent()
+        assertEquals("Nothing resends after I agree", 1, wire.calls)
+        assertEquals(RoomAttachmentPhase.READY, view().phase)
+    }
+
     @Test fun lateAccessLossCannotClearTheNewRoomsTranscriptOrDraft() = runTest(dispatcher) {
         val ready = prepared()
         assertTrue(send(ready)); runCurrent()

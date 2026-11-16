@@ -110,6 +110,17 @@ class DirectReactionStateTest {
         assertTrue(model.beginReactions(api.session.value,8,row()))
     }
 
+    /** O3b3b: 403 rules_acceptance_required is definite. The chip stays unchanged, nothing is unknown, nothing resends. */
+    @Test fun aRulesRefusedDirectReactionLeavesTheChipUnchangedIsNotUnknownAndNeverResends()=runTest(dispatcher) {
+        open(); val before=model.state.value.messages.map { it.id to it.reactions }
+        api.reactionFailure=ApiFailure(FailureKind.HTTP,403,"rules_acceptance_required")
+        model.setReaction(begin(),ReactionEmoji.HEART,true); runCurrent()
+        assertNull("Definite: no reaction uncertainty",model.state.value.reactionUnknown)
+        assertEquals("A refused reaction leaves the chip unchanged",before,model.state.value.messages.map { it.id to it.reactions })
+        api.reactionFailure=null; api.session.value = api.session.value.copy(rules = io.github.thiesi.chitchat.core.policies.RulesStatus(4, null, false)); runCurrent()
+        assertEquals("Nothing resends after I agree",1,api.reacts)
+    }
+
     /** Navigation keeps an authorized reaction in flight (DM navigation path fix); it confirms with no unknown state. */
     @Test fun navigationKeepsAReactionInFlight()=runTest(dispatcher) {
         open(); api.gate=CompletableDeferred(); model.setReaction(begin(),ReactionEmoji.HEART,true); runCurrent()
