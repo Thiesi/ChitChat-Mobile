@@ -148,6 +148,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     pushTaps: io.github.thiesi.chitchat.core.push.PendingPushTap? = null,
     policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel? = null,
     guidelines: io.github.thiesi.chitchat.feature.policies.GuidelinesViewModel? = null,
+    rulesUpdate: io.github.thiesi.chitchat.feature.policies.RulesUpdateViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session = auth.state.collectAsStateWithLifecycle().value
@@ -507,6 +508,18 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                     // No current connection snapshot: the session rows still show, so Refresh session stays reachable (PR223 review).
                     io.github.thiesi.chitchat.feature.status.StatusSlot(session, null, {}, auth::refresh, auth::refresh,
                         syncing = screenStatus.current.syncing || session.busy, stale = screenStatus.current.stale, connection = false)
+                }
+                // Rules re-acceptance (O3b3a). The banner stacks directly under the status slot in room and DM conversations
+                // (hidden at compact heights, like the slot); the dialog sits over the composed shell.
+                if (rulesUpdate != null) {
+                    val rulesUi by rulesUpdate.state.collectAsStateWithLifecycle()
+                    val rulesRequired = io.github.thiesi.chitchat.feature.policies.rulesUpdateScope(session)
+                    val inConversation = entry?.destination?.route.let { it?.startsWith("conversation/") == true ||
+                        it == NOTIFICATION_ROOM_ROUTE || it == DIRECT_THREAD_ROUTE }
+                    if (rulesRequired != null && inConversation && !compactConversation)
+                        RulesBanner(session, state.settings.server?.value, onReview = rulesUpdate::review)
+                    if (rulesRequired != null && rulesRequired != rulesUi.dismissed)
+                        RulesUpdatedDialog(session, state.settings.server?.value, rulesUpdate, policies)
                 }
                 if (state.loading) {
                     CircularProgressIndicator()

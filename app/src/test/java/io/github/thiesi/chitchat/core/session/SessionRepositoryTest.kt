@@ -28,6 +28,8 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.runCurrent
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -687,6 +689,58 @@ class SessionRepositoryTest {
         assertEquals(5, sessions.state.value.public?.policies?.rules?.version)
         assertEquals(SessionPhase.ANONYMOUS, sessions.state.value.phase)
         assertEquals("The notice survives the re-read (the bootstrap clears errors)", "rules_version_outdated", sessions.state.value.error?.code)
+    }
+
+    // Rules refusals (O3b3a): only 403 rules_acceptance_required flags the session, fenced to runtime, account, generation.
+    private suspend fun settled() { repeat(20) { kotlinx.coroutines.yield(); Thread.sleep(5) } }
+
+    @Test fun aRulesRefusalFlagsTheSessionAndOnlyThatExactRefusalDoes() = runTest {
+        signedInWithAccess()
+        for ((status, code) in listOf(403 to "forbidden", 400 to "rules_acceptance_required", 409 to "rules_version_outdated")) {
+            server.enqueue(error(code, status)); sessions.acceptRules(4, sessions.state.value); server.takeRequest(5, TimeUnit.SECONDS)
+            withContext(Dispatchers.Default) { settled() }
+            assertFalse("$status $code must not flag", sessions.state.value.rulesRefused)
+        }
+        server.enqueue(error("rules_acceptance_required", 403)); sessions.acceptRules(4, sessions.state.value); server.takeRequest(5, TimeUnit.SECONDS)
+        withContext(Dispatchers.Default) { repeat(200) { if (!sessions.state.value.rulesRefused) { kotlinx.coroutines.yield(); Thread.sleep(5) } } }
+        assertTrue(sessions.state.value.rulesRefused)
+        assertEquals(1L, sessions.state.value.rulesRefusal)
+        // The next bootstrap: the server's status wins and the flag clears; the refusal count stays for the dialog.
+        server.enqueue(json(bootstrapBody(rulesUser, b))); sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertFalse(sessions.state.value.rulesRefused)
+        assertEquals(1L, sessions.state.value.rulesRefusal)
+        assertEquals(true, sessions.state.value.rules?.acceptanceRequired)
+    }
+
+    @Test fun aStaleRefusalNeverFlagsASuccessorSession() = runTest {
+        signedInWithAccess()
+        val first = apis.last()
+        val stale = first.requestScope() // The scope a request of the first session started in.
+        assertNotNull(stale)
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut(); server.takeRequest(5, TimeUnit.SECONDS)
+        signedInWithAccess()
+        val current = apis.last()
+        assertNotEquals("A new session's scope differs", stale, current.requestScope())
+        // The late reply of the old request reaches both the old runtime's listener and (if shared) the current one.
+        first.onRulesRefused?.invoke(stale)
+        current.onRulesRefused?.invoke(stale)
+        withContext(Dispatchers.Default) { settled() }
+        assertFalse("A stale refusal never flags the successor session", sessions.state.value.rulesRefused)
+        assertEquals(0L, sessions.state.value.rulesRefusal)
+        // The current scope does flag (the fence isn't simply closed).
+        current.onRulesRefused?.invoke(current.requestScope())
+        withContext(Dispatchers.Default) { repeat(200) { if (!sessions.state.value.rulesRefused) { kotlinx.coroutines.yield(); Thread.sleep(5) } } }
+        assertTrue(sessions.state.value.rulesRefused)
+    }
+
+    @Test fun aConfirmedAcceptClearsTheRefusal() = runTest {
+        signedInWithAccess()
+        apis.last().let { it.onRulesRefused?.invoke(it.requestScope()) }
+        withContext(Dispatchers.Default) { repeat(200) { if (!sessions.state.value.rulesRefused) { kotlinx.coroutines.yield(); Thread.sleep(5) } } }
+        assertTrue(sessions.state.value.rulesRefused)
+        server.enqueue(json("""{"rules":{"accepted_version":4,"accepted_at":"2026-11-16T10:00:00+00:00","acceptance_required":false}}"""))
+        sessions.acceptRules(4, sessions.state.value)
+        assertFalse(sessions.state.value.rulesRefused)
     }
 
     @Test fun registrationAdoptsServerAssignedRolesAndRotatedCredentials() = runTest {

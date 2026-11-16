@@ -72,6 +72,14 @@ internal fun chitChatUserAgent(versionName: String? = io.github.thiesi.chitchat.
 internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpClient(),
     private val userAgent: String = chitChatUserAgent()) {
     private val origin = server.value.toHttpUrl()
+
+    /**
+     * Rules refusals (policies.md, O3b3): the scope a request started in, captured when it's sent, and the listener told
+     * when a reply is exactly `403 rules_acceptance_required`. The owner decides whether that scope is still current, so a
+     * late reply never flags a successor session. Never retried or replayed here.
+     */
+    @Volatile internal var requestScope: () -> Any? = { null }
+    @Volatile internal var onRulesRefused: ((Any?) -> Unit)? = null
     private val jar = OriginCookieJar(origin)
     private val client = base.newBuilder()
         .dispatcher(Dispatcher()).connectionPool(ConnectionPool())
@@ -682,7 +690,15 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         return raw
     }
 
-    private suspend fun execute(call: Call, maxBytes: Long = 1_048_576, upload: AttachmentUpload? = null): RawReply = suspendCancellableCoroutine { continuation ->
+    private suspend fun execute(call: Call, maxBytes: Long = 1_048_576, upload: AttachmentUpload? = null): RawReply {
+        val started = requestScope()
+        return try { transmit(call, maxBytes, upload) } catch (failure: ApiFailure) {
+            if (failure.status == 403 && failure.code == RULES_ACCEPTANCE_REQUIRED) onRulesRefused?.invoke(started)
+            throw failure
+        }
+    }
+
+    private suspend fun transmit(call: Call, maxBytes: Long, upload: AttachmentUpload?): RawReply = suspendCancellableCoroutine { continuation ->
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
@@ -731,6 +747,7 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
 
     companion object {
         internal const val EXPORT_MAX_BYTES = 16L * 1024 * 1024
+        internal const val RULES_ACCEPTANCE_REQUIRED = "rules_acceptance_required"
         // PHP escapes Unicode: 100 x 4000 supplementary characters plus full quoted bodies
         // can exceed 9 MiB. Only bounded history/preview/mutation batches use this allowance;
         // auth, other small JSON and every error response retain the 1 MiB limit.

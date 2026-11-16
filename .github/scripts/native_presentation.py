@@ -30,6 +30,8 @@ CLEANUP_MAX_BYTES = 256
 FIND_PEOPLE_DESTINATION = ROOT / "app/build/reports/androidTests/find-people-presentation"
 POLICY_DESTINATION = ROOT / "app/build/reports/androidTests/policy-presentation"
 POLICY_NAME = re.compile(r"policy-(light|dark)-(default|font200)-(hosted|external|unpublished|httpdialog|loading|failed)[.]png")
+RULES_DESTINATION = ROOT / "app/build/reports/androidTests/rules-presentation"
+RULES_NAME = re.compile(r"rules-(light|dark)-((default|font200)-dialog(-expanded)?|font200-banner(-offline)?)[.]png")
 GUIDELINES_DESTINATION = ROOT / "app/build/reports/androidTests/guidelines-presentation"
 GUIDELINES_NAME = re.compile(r"guidelines-(light|dark)-(default|font200)-((plain|rules|outdated)(-actions)?|create(-dialog)?)[.]png")
 FIND_PEOPLE_NAME = re.compile(r"find-people-(light|dark)-(default|font200)-(top|joined|failed|uncertain)[.]png")
@@ -209,6 +211,19 @@ def collect_guidelines():
     print(f"Guidelines presentation captures collected: {len(files)} of 29.")
 
 
+def collect_rules():
+    # Rules re-acceptance (O3b3a): the dialog with "What changed" collapsed and expanded (default and 2.0) and the
+    # conversation banner at 2.0, alone and under the offline slot notice; light and dark.
+    files = list(islice(SOURCE.rglob("ccm-rules-presentation/*"), 13))
+    if (not files or len(files) > 12 or len({p.name for p in files}) != len(files)
+        or any(RULES_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous rules presentation output")
+    RULES_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, RULES_DESTINATION / path.name)
+    print(f"Rules presentation captures collected: {len(files)} of 12.")
+
+
 def collect_onboarding():
     # Onboarding O2a: Welcome, Where do you chat?, Server found (top and scrolled), default and 2.0 font, light and dark,
     # plus a step 2 failure notice at 2.0.
@@ -333,6 +348,10 @@ def main() -> int:
         collect_guidelines()
     except Exception:
         print("Guidelines presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_rules()
+    except Exception:
+        print("Rules presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_onboarding()
     except Exception:

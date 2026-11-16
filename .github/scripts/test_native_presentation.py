@@ -314,6 +314,28 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def rules_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-rules-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_rules_captures_are_copied_and_keep_the_original_status(self):
+        self.results(5)
+        files = [Path("rules-light-default-dialog.png"), Path("rules-dark-font200-dialog-expanded.png"),
+            Path("rules-light-font200-banner.png"), Path("rules-dark-font200-banner-offline.png")]
+        self.rules_files(files)
+        self.assertEqual(5, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.RULES_DESTINATION / path.name)
+        self.assertEqual(5, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_rules_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"rules-light-default-dialog-{n}.png") for n in range(13)],
+            [Path("a/rules-dark-default-dialog.png"), Path("b/rules-dark-default-dialog.png")],
+            [Path("rules-dark-default-banner.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.rules_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def guidelines_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-guidelines-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))

@@ -119,7 +119,7 @@ internal fun GuidelinesScreen(session: SessionState, server: String?, model: Gui
 }
 
 @Composable
-private fun DocumentRow(label: String, caption: String?, tag: String, enabled: Boolean, onClick: () -> Unit) {
+internal fun DocumentRow(label: String, caption: String?, tag: String, enabled: Boolean, onClick: () -> Unit) {
     // The row's text is its label; the icons are decorative (PL, O3b2).
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = enabled, onClick = onClick).testTag(tag)
         .padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
@@ -141,7 +141,7 @@ private fun updatedCaption(updatedAt: String?): String? = updatedAt
 
 /** The existing status ladder for a refused or unconfirmed accept, and a failed local save. The screen stays. */
 @Composable
-private fun guidelinesFailure(failure: ApiFailure): String = stringResource(when {
+internal fun guidelinesFailure(failure: ApiFailure): String = stringResource(when {
     failure.kind == FailureKind.STORAGE -> R.string.settings_error
     failure.kind == FailureKind.NETWORK || failure.kind == FailureKind.TIMEOUT -> R.string.network_error
     failure.kind == FailureKind.EXPIRED || failure.status == 401 -> R.string.session_expired
