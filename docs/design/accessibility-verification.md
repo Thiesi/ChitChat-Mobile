@@ -61,7 +61,10 @@ TalkBack on, and record pass or fail with notes in the PR. The real IME is used.
 the native input contracts.
 
 1. **First run:** Welcome → server address → Server found → Create account (anti-bot status
-   announced) → Find your people → first room.
+   announced) → consent line → open the rules link → the full-screen document announces
+   "Rules" → Back → focus returns to the consent line, and the typed fields are kept →
+   Create → Before you chat → I agree → Find your people → first room. CI can't prove the
+   focus return (no TalkBack there), so it's checked here (O3b2, PR #273).
 2. **Read and reply in a room:** open Rooms → room row reads name, info and unread → room
    header reads name and presence → swipe through a run (sender, text, time) → custom action
    "Message actions" → Reply → type → Send → the new bubble is announced in reading order.
