@@ -15,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performFirstLinkClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ActivityScenario
@@ -144,7 +145,7 @@ class GuidelinesPresentationTest {
                 Espresso.closeSoftKeyboard()
                 compose.onNodeWithTag("onboarding_continue").performScrollTo().performClick()
                 compose.onNodeWithTag("onboarding_create").performScrollTo().performClick()
-                compose.onNodeWithTag("registration_rules_consent").performScrollTo().assertIsDisplayed()
+                compose.onNodeWithTag("registration_rules_consent").assertIsDisplayed()
                 // Both linked phrases are real links (the production root always supplies the document screen).
                 val text = compose.onNodeWithTag("registration_rules_consent").fetchSemanticsNode()
                     .config[androidx.compose.ui.semantics.SemanticsProperties.Text].single()
@@ -153,7 +154,7 @@ class GuidelinesPresentationTest {
                 capture("guidelines-$label-$name-create")
                 if (dark && fontScale == 2f) {
                     // The document dialog over the Create form, dark at 200% (PL, O3b2 J).
-                    compose.onNodeWithTag("registration_rules_consent").performScrollTo().performFirstLinkClick { range ->
+                    compose.onNodeWithTag("registration_rules_consent").performFirstLinkClick { range ->
                         (range.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag == "registration_rules_link"
                     }
                     compose.waitUntil(5_000) {
@@ -168,8 +169,9 @@ class GuidelinesPresentationTest {
                     compose.onNodeWithTag("registration_username").performScrollTo().performTextReplacement("Alice")
                     compose.onNodeWithTag("registration_password").performScrollTo().performTextReplacement("fixture-password")
                     compose.onNodeWithTag("registration_confirmation").performScrollTo().performTextReplacement("fixture-password")
+                    compose.onNodeWithTag("registration_confirmation").performImeAction() // Done reveals the consent block (#275).
                     Espresso.closeSoftKeyboard()
-                    compose.onNodeWithTag("registration_rules_consent").performScrollTo().performFirstLinkClick { range ->
+                    compose.onNodeWithTag("registration_rules_consent").performFirstLinkClick { range ->
                         (range.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag == "registration_rules_link"
                     }
                     compose.onNodeWithTag("policy_document_dialog").assertIsDisplayed()
@@ -185,7 +187,7 @@ class GuidelinesPresentationTest {
                     assertEquals("The password is kept after reading the rules", "•".repeat("fixture-password".length), kept)
                     // The SAME password (and confirmation): submitting reaches the fixture, which checks the received
                     // password is exactly the typed one before counting the registration.
-                    compose.onNodeWithTag("registration_submit").performScrollTo().performClick()
+                    compose.onNodeWithTag("registration_submit").performClick()
                     compose.waitUntil(5_000) { sessions.registrations == 1 }
                 }
             }

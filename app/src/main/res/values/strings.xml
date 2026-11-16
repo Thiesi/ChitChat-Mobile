@@ -628,6 +628,7 @@
     <string name="registration_rules_link">%1$s\'s rules</string>
     <string name="registration_privacy_link">privacy policy</string>
     <string name="registration_rules_outdated">%1$s updated its rules while you were signing up. Look at them, then create your account again.</string>
+    <string name="registration_review_agreement">Review the agreement, then tap Create my account.</string>
     <string name="registration_rules_required">Something went wrong creating your account. Your details are kept; try again.</string>
     <!-- Rules re-acceptance (play-readiness.md §1, O3b3a). -->
     <string name="rules_updated_title">%1$s updated its rules</string>

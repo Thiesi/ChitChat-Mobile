@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso
@@ -79,7 +80,8 @@ class OnboardingRecreationTest {
             compose.onNodeWithText("Username").performScrollTo().performTextInput("Alice")
             for (label in listOf("Password", "Confirm password")) compose.onNodeWithText(label).performScrollTo().performTextInput("fixture-password")
             Espresso.closeSoftKeyboard()
-            compose.onNodeWithText("Create account").performScrollTo().performClick()
+            compose.onNodeWithText("Confirm password").performImeAction() // The last field's Done reveals Create (#275).
+            compose.onNodeWithText("Create account").performClick()
             compose.waitUntil(5_000) { compose.onAllNodesWithTag("find_people").fetchSemanticsNodes().isNotEmpty() }
             recreate(scenario)
             compose.onNodeWithTag("find_people").assertExists()
