@@ -19,7 +19,11 @@ composed. The key lives in memory only (O4a1), so a process death drops it and t
 ## The display
 
 - **Window:** FLAG_SECURE is set only while the display is composed, so the key stays out of screenshots, screen
-  recordings and the recents thumbnail; it's cleared when the display leaves. The root view is excluded from
+  recordings and the recents thumbnail. It's added in the display's `DisposableEffect`, which runs in the
+  composition's apply phase, before the frame that first draws the key; the recents thumbnail is taken from that window
+  on leaving, so it's blank. The tests assert the flag on the real window, not a captured thumbnail. It's cleared in
+  the effect's dispose, so every exit (I've saved it, sign-out, a session change, the activity ending) leaves later
+  screens capturable again. The root view is excluded from
   autofill (`IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS`), restored afterwards.
 - **Key card:** the six groups in the system monospace face, two rows of three that wrap at large text. TalkBack reads
   each group separately ("Group 1 of 6: A, 7, K, 2").

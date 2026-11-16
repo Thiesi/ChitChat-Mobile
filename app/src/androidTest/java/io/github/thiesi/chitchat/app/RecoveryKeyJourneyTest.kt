@@ -109,6 +109,26 @@ class RecoveryKeyJourneyTest {
         compose.openTab("rooms").assertIsDisplayed()
     }
 
+    @Test fun signOutAndASessionChangeEachClearTheSecureFlag() {
+        // Sign-out: the display leaves the composition and its dispose clears FLAG_SECURE.
+        registered()
+        assertTrue(secure())
+        compose.runOnIdle { runBlocking { sessions.signOut() } }
+        compose.waitUntil(5_000) { !exists("recovery_key_display") }
+        compose.runOnIdle { assertFalse("FLAG_SECURE is cleared after sign-out", secure()) }
+        // A session change (a new generation without the key) clears it too.
+        compose.runOnIdle {
+            runBlocking { sessions.signIn("Viewer", "fixture-password") }
+            sessions.state.value = sessions.state.value.copy(registrationRecoveryKey = RecoveryKey(key))
+        }
+        compose.waitUntil(5_000) { exists("recovery_key_display") }
+        compose.runOnIdle { assertTrue(secure()) }
+        compose.runOnIdle { sessions.state.value = sessions.state.value.copy(generation = sessions.state.value.generation + 1,
+            registrationRecoveryKey = null) }
+        compose.waitUntil(5_000) { !exists("recovery_key_display") }
+        compose.runOnIdle { assertFalse("FLAG_SECURE is cleared after a session change", secure()) }
+    }
+
     @Test fun copyMarksTheClipSensitive() {
         registered()
         compose.onNodeWithTag("recovery_key_copy").performScrollTo().performClick()
