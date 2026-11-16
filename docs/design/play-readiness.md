@@ -107,6 +107,20 @@ while `user.rules.acceptance_required` is true (the last bullet covers the other
   account**: "By creating an account, you agree to **{installation}'s rules**." The linked
   words open the document screen. With `policies.privacy`, the line continues "and
   acknowledge its **privacy policy**."
+- **Placement (#275; technical lead's consent requirement, 2026-11-16):** the consent line is
+  visible whenever Create my account can be tapped.
+  - **Keyboard hidden:** the line and Create form one block pinned at the bottom (the screen
+    background, 16dp padding, and a 1dp `line` edge only while content is hidden beneath).
+  - **Keyboard up:** the block hides, so Create can't be tapped while typing. The last field's
+    IME action is Done, which hides the keyboard and brings the block back. A hardware keyboard
+    shows no IME, so the block stays.
+  - **Very short windows** (the block would take more than half the available height, for
+    example landscape at large font scales): the block goes in-flow, as one unit, at the end of
+    the scroller. A tap on Create while any part of the line is off-screen brings the whole
+    block into view, doesn't submit, and announces "Review the agreement, then tap Create my
+    account." (polite, announcement only).
+  - Sign in has no consent line. Its button is pinned above the IME at all times, and IME Go on
+    the password submits.
 - Registration (and OIDC registration) sends `accepted_rules_version` with the version from
   the session the form rendered with.
   - `409 rules_version_outdated`: the account wasn't created. Re-read the session and show the
