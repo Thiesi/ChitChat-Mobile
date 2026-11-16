@@ -151,31 +151,41 @@ class RulesUpdateJourneyTest {
         }
     }
 
-    @Test fun anInFlightUploadSurvivesTheDialogAndNoReadIsSentWhileItIsUp() {
+    @Test fun anInFlightUploadSurvivesTheDialogAndCompletesUnderneathIt() {
         root()
         compose.onNodeWithTag("conversation_attach").assertIsDisplayed().assertIsEnabled().performNativeTap()
         compose.onNodeWithTag("attach_file").assertIsDisplayed().performNativeTap()
         compose.waitUntil(5_000) { model.drafts.value[42]?.attachment?.phase == RoomAttachmentPhase.READY }
         compose.onNodeWithTag("conversation_send").assertIsEnabled().performNativeTap()
         compose.waitUntil(5_000) { wire.calls == 1 }
-        compose.waitForIdle()
-        val readsBefore = api.reads.size
         // A refusal elsewhere opens the dialog while the upload is still in flight.
         compose.runOnIdle { sessions.state.value = sessions.state.value.copy(rulesRefused = true,
             rulesRefusal = sessions.state.value.rulesRefusal + 1) }
         compose.waitUntil(5_000) { dialogShown() }
-        // A newer message arrives under the dialog: it must not be acknowledged while the dialog is up.
-        compose.runOnIdle { api.newer = true; model.refresh() }
-        compose.waitUntil(5_000) { model.state.value.messages.any { it.id == 3L } && !model.state.value.busy }
         compose.waitForIdle()
-        compose.runOnIdle {
-            assertFalse("The upload isn't cancelled by the dialog", wire.cancelled)
-            assertEquals("No read acknowledgment while the dialog is up", readsBefore, api.reads.size)
-        }
+        compose.runOnIdle { assertFalse("The upload isn't cancelled by the dialog", wire.cancelled) }
         compose.runOnIdle { wire.ack() } // The upload completes underneath the dialog.
         compose.waitUntil(5_000) { model.drafts.value[42] == null }
         compose.runOnIdle { assertFalse(wire.cancelled); assertEquals(1, wire.calls) }
         assertTrue(dialogShown())
+    }
+
+    /**
+     * A newer message arriving under the dialog isn't acknowledged while the dialog is up (its window holds focus); once
+     * the dialog closes, the same message is acknowledged, so the suppression isn't vacuous.
+     */
+    @Test fun noReadIsSentWhileTheDialogIsUpAndTheReadFollowsWhenItCloses() {
+        root()
+        compose.runOnIdle { sessions.state.value = sessions.state.value.copy(rulesRefused = true,
+            rulesRefusal = sessions.state.value.rulesRefusal + 1) }
+        compose.waitUntil(5_000) { dialogShown() }
+        compose.runOnIdle { api.newer = true; model.refresh() }
+        compose.waitUntil(5_000) { model.state.value.messages.any { it.id == 3L } && !model.state.value.busy }
+        compose.waitForIdle()
+        compose.runOnIdle { assertFalse("No read acknowledgment of the newer message while the dialog is up", 3L in api.reads) }
+        compose.onNodeWithTag("rules_updated_not_now").performScrollTo().performClick()
+        compose.waitUntil(5_000) { !dialogShown() }
+        compose.waitUntil(5_000) { 3L in api.reads }
     }
 }
 
