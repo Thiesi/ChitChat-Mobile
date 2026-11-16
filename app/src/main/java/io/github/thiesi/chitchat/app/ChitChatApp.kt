@@ -148,6 +148,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     pushTaps: io.github.thiesi.chitchat.core.push.PendingPushTap? = null,
     policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel? = null,
     guidelines: io.github.thiesi.chitchat.feature.policies.GuidelinesViewModel? = null,
+    rulesUpdate: io.github.thiesi.chitchat.feature.policies.RulesUpdateViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session = auth.state.collectAsStateWithLifecycle().value
@@ -498,15 +499,34 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                // The slot reports its level so the rules strip yields to a level-2 notice (O3b3a J1).
+                var slotLevel by remember { mutableStateOf<io.github.thiesi.chitchat.core.status.StatusLevel?>(null) }
                 if (!compactConversation && session.phase == SessionPhase.AUTHENTICATED && realtime != null && connection?.generation == session.generation) {
                     io.github.thiesi.chitchat.feature.status.StatusSlot(session, connection, realtime::retry, auth::refresh, auth::refresh,
-                        syncing = screenStatus.current.syncing || session.busy, stale = screenStatus.current.stale)
+                        syncing = screenStatus.current.syncing || session.busy, stale = screenStatus.current.stale,
+                        onShownLevel = { slotLevel = it })
                     io.github.thiesi.chitchat.feature.realtime.AnnouncementCard(connection, realtime::dismissBroadcast,
                         roomId = entry?.arguments?.getLong("roomId")?.takeIf { it > 0 })
                 } else if (!compactConversation && session.phase == SessionPhase.AUTHENTICATED) {
                     // No current connection snapshot: the session rows still show, so Refresh session stays reachable (PR223 review).
                     io.github.thiesi.chitchat.feature.status.StatusSlot(session, null, {}, auth::refresh, auth::refresh,
-                        syncing = screenStatus.current.syncing || session.busy, stale = screenStatus.current.stale, connection = false)
+                        syncing = screenStatus.current.syncing || session.busy, stale = screenStatus.current.stale, connection = false,
+                        onShownLevel = { slotLevel = it })
+                } else androidx.compose.runtime.SideEffect { slotLevel = null }
+                // Rules re-acceptance (O3b3a). The banner stacks directly under the status slot in room and DM conversations
+                // (hidden at compact heights, like the slot); the dialog sits over the composed shell.
+                if (rulesUpdate != null) {
+                    val rulesUi by rulesUpdate.state.collectAsStateWithLifecycle()
+                    val rulesRequired = io.github.thiesi.chitchat.feature.policies.rulesUpdateScope(session)
+                    val inConversation = entry?.destination?.route.let { it?.startsWith("conversation/") == true ||
+                        it == NOTIFICATION_ROOM_ROUTE || it == DIRECT_THREAD_ROUTE }
+                    // It yields while the slot shows a level-2 notice (PL J1 on PR #276) and returns when that clears; a 403
+                    // still reopens the dialog, so nothing is lost. Level-1 slot lines stack with it.
+                    if (rulesRequired != null && inConversation && !compactConversation &&
+                        slotLevel != io.github.thiesi.chitchat.core.status.StatusLevel.BLOCK)
+                        RulesBanner(session, state.settings.server?.value, onReview = rulesUpdate::review)
+                    if (rulesRequired != null && rulesRequired != rulesUi.dismissed)
+                        RulesUpdatedDialog(session, state.settings.server?.value, rulesUpdate, policies)
                 }
                 if (state.loading) {
                     CircularProgressIndicator()

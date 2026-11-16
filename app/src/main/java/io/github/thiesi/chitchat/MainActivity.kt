@@ -87,12 +87,15 @@ class MainActivity : ComponentActivity() {
             val guidelines: io.github.thiesi.chitchat.feature.policies.GuidelinesViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.policies.GuidelinesViewModel.factory(
                     (application as ChitChatApplication).rulesOperations, (application as ChitChatApplication).settingsRepository))
+            val rulesUpdate: io.github.thiesi.chitchat.feature.policies.RulesUpdateViewModel = viewModel(
+                factory = io.github.thiesi.chitchat.feature.policies.RulesUpdateViewModel.factory(
+                    (application as ChitChatApplication).rulesOperations, (application as ChitChatApplication).policyReads))
             val policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel.factory((application as ChitChatApplication).policyReads))
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
                 notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings, pushPhone = pushPhone,
-                pushTaps = pushTaps.taps, policies = policies, guidelines = guidelines,
+                pushTaps = pushTaps.taps, policies = policies, guidelines = guidelines, rulesUpdate = rulesUpdate,
                 onThemeChanged = { dark ->
                 enableEdgeToEdge(
                     statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },

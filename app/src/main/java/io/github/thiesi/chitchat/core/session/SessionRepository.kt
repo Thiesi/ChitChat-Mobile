@@ -72,6 +72,13 @@ data class SessionState(
     val updateRequired: Boolean = false,
     /** `user.rules` (policies.md, P-171): null when unknown (no user, an older server or a malformed status). */
     val rules: io.github.thiesi.chitchat.core.policies.RulesStatus? = null,
+    /**
+     * A write of this session was refused with `403 rules_acceptance_required` (O3b3). A definite refusal: nothing was
+     * committed and nothing resends. Cleared by the next bootstrap (the server's status wins) or a confirmed accept.
+     */
+    val rulesRefused: Boolean = false,
+    /** Counts this session's rules refusals (never reset by a bootstrap), so a new refusal reopens a dismissed dialog. */
+    val rulesRefusal: Long = 0,
     /** `application.version` as reported, for the update state's details line and note; null is unknown. */
     val reportedVersion: String? = null,
     /**
@@ -167,6 +174,7 @@ class SessionRepository internal constructor(
                 if (server == null) return@withLock null
                 val next = Runtime(server, http(server))
                 runtime = next
+                watchRulesRefusals(next)
                 val saved = vault.read()
                 if (saved != null) {
                     if (!saved.usableFor(server, clock.millis()) || !next.api.restoreCookies(saved.cookies)) {
@@ -343,7 +351,7 @@ class SessionRepository internal constructor(
             val status = access.api.acceptRules(version, access.csrf)
             lock.withLock {
                 ensureCurrent(access)
-                mutable.value = mutable.value.copy(rules = status)
+                mutable.value = mutable.value.copy(rules = status, rulesRefused = false)
             }
             io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Accepted(status)
         } catch (failure: ApiFailure) {
@@ -395,6 +403,7 @@ class SessionRepository internal constructor(
                     installationName = io.github.thiesi.chitchat.core.network.installationName(reply.application),
                     updateRequired = reply.discovery?.let { needsServerUpdate(it, member = reply.user != null && !reply.user.guest) } ?: false,
                     rules = reply.rules.takeIf { reply.user != null },
+                    rulesRefused = false,
                     reportedVersion = displayedServerVersion(reply.discovery?.version),
                     bootstrapSequence = mutable.value.bootstrapSequence + 1,
                 )
@@ -717,6 +726,27 @@ class SessionRepository internal constructor(
         lockdown.copy(message = lockdown.message?.take(500)),
         io.github.thiesi.chitchat.core.network.accessibilityFeedbackUrl(accessibilityFeedback),
         io.github.thiesi.chitchat.core.policies.policyDiscovery(policies))
+
+    /** The account scope a request starts in; a refusal counts only if that exact scope is still the current one. */
+    private data class RefusalScope(val generation: Long, val userId: Long)
+
+    /** Refusal signals arrive on transport threads; they're applied under the lock, fenced to runtime, account and generation. */
+    private val signals = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
+    private fun watchRulesRefusals(owner: Runtime) {
+        owner.api.requestScope = {
+            mutable.value.let { state -> state.user?.takeIf { state.phase == SessionPhase.AUTHENTICATED }?.let { RefusalScope(state.generation, it.id) } }
+        }
+        owner.api.onRulesRefused = { started ->
+            if (started is RefusalScope) signals.launch {
+                lock.withLock {
+                    val state = mutable.value
+                    if (runtime === owner && state.phase == SessionPhase.AUTHENTICATED && state.generation == started.generation &&
+                        state.user?.id == started.userId) mutable.value = state.copy(rulesRefused = true, rulesRefusal = state.rulesRefusal + 1)
+                }
+            }
+        }
+    }
 
     private class Runtime(val server: ServerAddress, val api: SessionHttp) {
         var csrf: String? = null

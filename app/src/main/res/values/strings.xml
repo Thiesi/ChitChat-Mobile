@@ -629,6 +629,15 @@
     <string name="registration_privacy_link">privacy policy</string>
     <string name="registration_rules_outdated">%1$s updated its rules while you were signing up. Look at them, then create your account again.</string>
     <string name="registration_rules_required">Something went wrong creating your account. Your details are kept; try again.</string>
+    <!-- Rules re-acceptance (play-readiness.md §1, O3b3a). -->
+    <string name="rules_updated_title">%1$s updated its rules</string>
+    <string name="rules_updated_what_changed">What changed</string>
+    <string name="rules_updated_show_all">Show all</string>
+    <string name="rules_updated_show_less">Show less</string>
+    <string name="rules_updated_consent">By tapping I agree, you accept %1$s\'s updated rules.</string>
+    <string name="rules_updated_not_now">Not now</string>
+    <string name="rules_banner">Agree to %1$s\'s updated rules to send messages.</string>
+    <string name="rules_banner_review">Review</string>
     <string name="role_super_admin">Super-Administrator</string>
     <string name="role_admin">Administrator</string>
     <string name="role_chat_admin">Chat Administrator</string>

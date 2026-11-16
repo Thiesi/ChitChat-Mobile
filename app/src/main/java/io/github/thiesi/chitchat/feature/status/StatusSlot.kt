@@ -82,6 +82,8 @@ internal fun StatusSlot(
     /** False inside a dialog that only needs the session rows: the connection is shown by the slot behind it. */
     connection: Boolean = true,
     nowMillis: () -> Long = System::currentTimeMillis,
+    /** The level of the notice shown now (null when none), so a strip below can yield to a level-2 block (O3b3a J1). */
+    onShownLevel: ((StatusLevel?) -> Unit)? = null,
 ) {
     val visible = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.STARTED)
     val phase = if (!connection) RealtimePhase.LIVE else realtime?.phase ?: RealtimePhase.STOPPED
@@ -144,6 +146,8 @@ internal fun StatusSlot(
         stale = stale,
     )
     val notice = resolveStatus(inputs)
+    val shown = notice?.takeIf { session.phase == SessionPhase.AUTHENTICATED }?.level
+    androidx.compose.runtime.SideEffect { onShownLevel?.invoke(shown) }
     LaunchedEffect(notice, visible) { if (visible && notice.isDisconnection()) disconnected = true }
     if (notice != null && session.phase == SessionPhase.AUTHENTICATED) key(notice.announcementKey()) {
         StatusNoticeView(notice, session, onRetry, onRefresh, onStorageAction, { clock }, modifier)
