@@ -226,7 +226,7 @@ private fun CreateBlock(state: SessionState, onPolicy: ((io.github.thiesi.chitch
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             state.public?.policies?.rules?.let { RulesConsent(state, onPolicy) }
             PrimaryButton(onClick = submit, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("registration_submit")) {
-                Text(stringResource(R.string.create_account))
+                Text(stringResource(R.string.onboarding_create_account))
             }
         }
     }
@@ -254,7 +254,7 @@ private fun InFlowCreateBlock(state: SessionState, onPolicy: ((io.github.thiesi.
             if (lineVisible) submit()
             else { scope.launch { requester.bringIntoView() }; announcement++ }
         }, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("registration_submit")) {
-            Text(stringResource(R.string.create_account))
+            Text(stringResource(R.string.onboarding_create_account))
         }
         // Announced only: the scroll shows sighted users what happened (TL and PL, #275).
         if (announcement > 0) key(announcement) {

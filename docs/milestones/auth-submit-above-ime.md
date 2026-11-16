@@ -44,6 +44,12 @@ The consent line plus Create form **one block**, so the line is visible whenever
 - **`AuthJourneyTest.enterCredentials`:** asserts Sign in is displayed without `performScrollTo()`, so it now checks the
   product guarantee directly. The #275 scalars stay in place.
 
+## Label
+
+The Create form's submit reads **"Create my account"** (`onboarding_create_account`, onboarding-restyle 4b and the
+announcement), replacing the old "Create account". It's PL copy authority (J1 on PR #281); the unused `create_account`
+string is removed.
+
 ## Journey migration (navigation only)
 
 `performScrollTo()` came off the now-pinned Sign in, Restore and sign in, Create account and consent line, because
@@ -53,4 +59,10 @@ field. No assertion changed:
   `DirectJourneyTest`: Sign in;
 - `FindPeopleJourneyTest`: Sign in, plus Create with Done;
 - `OnboardingRecreationTest`: Create with Done;
-- `GuidelinesPresentationTest`: consent line and submit, with Done before the link.
+- `GuidelinesPresentationTest`: consent line and submit, with Done before the link. It also **asserts the Create
+  block's mode**: pinned at the default scale, and in flow at 200% in portrait, because its rules-plus-privacy line is
+  taller than half the window. That's normal and consent-safe (PL and TL), and its `guidelines-*-font200-create`
+  captures cover it.
+
+**Assertion text follows spec:** `AuthJourneyTest`, `OnboardingRecreationTest` and `FindPeopleJourneyTest` match
+"Create my account" instead of "Create account". Only the label text changed, per the PL's copy (J1).

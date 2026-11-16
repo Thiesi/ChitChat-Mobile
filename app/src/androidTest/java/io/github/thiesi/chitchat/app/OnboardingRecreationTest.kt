@@ -81,7 +81,7 @@ class OnboardingRecreationTest {
             for (label in listOf("Password", "Confirm password")) compose.onNodeWithText(label).performScrollTo().performTextInput("fixture-password")
             Espresso.closeSoftKeyboard()
             compose.onNodeWithText("Confirm password").performImeAction() // The last field's Done reveals Create (#275).
-            compose.onNodeWithText("Create account").performClick()
+            compose.onNodeWithText("Create my account").performClick()
             compose.waitUntil(5_000) { compose.onAllNodesWithTag("find_people").fetchSemanticsNodes().isNotEmpty() }
             recreate(scenario)
             compose.onNodeWithTag("find_people").assertExists()

@@ -262,7 +262,7 @@ class AuthJourneyTest {
         registrationForm()
         compose.onNodeWithText("Confirm password").performScrollTo().performTextInput("different-password")
         compose.onNodeWithText("Confirm password").performImeAction() // The last field's Done reveals Create (#275).
-        compose.onNodeWithText("Create account").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Create my account").assertIsDisplayed().performClick()
         compose.onNodeWithText("The passwords do not match.").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, sessions.registrations) }
     }
@@ -272,12 +272,12 @@ class AuthJourneyTest {
         registrationForm()
         compose.onNodeWithText("Confirm password").performScrollTo().performTextInput("fixture-password")
         compose.onNodeWithText("Confirm password").performImeAction() // The last field's Done reveals Create (#275).
-        compose.onNodeWithText("Create account").performClick()
+        compose.onNodeWithText("Create my account").performClick()
         compose.onNodeWithText("That username is already registered. Choose another, or sign in.").assertIsDisplayed()
         compose.onNodeWithText("Username").assertTextContains("Alice")
         for (label in listOf("Password", "Confirm password")) compose.onNodeWithText(label)
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
-        compose.onNodeWithText("Create account").assertIsNotEnabled()
+        compose.onNodeWithText("Create my account").assertIsNotEnabled()
         compose.onNodeWithText("Refresh anti-bot check").performScrollTo().performClick()
         compose.onNodeWithText("Anti-bot check ready.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, sessions.registrations) }
