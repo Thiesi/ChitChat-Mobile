@@ -86,7 +86,7 @@ class RoomDraftJourneyTest {
                 compose.activity.getSystemService(android.view.autofill.AutofillManager::class.java)?.cancel()
             }
         }
-        compose.onNodeWithText("Sign in").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
+        compose.onNodeWithText("Sign in").assertIsDisplayed().assertIsEnabled().performClick()
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.AUTHENTICATED }
         compose.runOnIdle { sessions.state.value = sessions.state.value.copy(shareTyping = true,
             chatPolicy = ChatPolicy(emptySet(), null, DisplayPreferences())) }

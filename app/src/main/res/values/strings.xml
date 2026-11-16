@@ -80,7 +80,6 @@
     <string name="request_rejected">The server rejected this request. Check your account or contact the server administrator.</string>
     <string name="maintenance_notice">This server is in maintenance lockdown. Sign-in may be restricted.</string>
     <string name="providers_unavailable">External-provider sign-in needs a native authentication handoff that this server does not yet support.</string>
-    <string name="create_account">Create account</string>
     <string name="create_account_title">Make yourself at home</string>
     <string name="registration_policy">An account is created on this server, not with the app publisher. The server decides your permissions.</string>
     <string name="username_policy">Use 3–32 ASCII letters, numbers, dots, underscores or hyphens, starting with a letter or number.</string>
@@ -628,6 +627,7 @@
     <string name="registration_rules_link">%1$s\'s rules</string>
     <string name="registration_privacy_link">privacy policy</string>
     <string name="registration_rules_outdated">%1$s updated its rules while you were signing up. Look at them, then create your account again.</string>
+    <string name="registration_review_agreement">Review the agreement, then tap Create my account.</string>
     <string name="registration_rules_required">Something went wrong creating your account. Your details are kept; try again.</string>
     <!-- Rules re-acceptance (play-readiness.md §1, O3b3a). -->
     <string name="rules_updated_title">%1$s updated its rules</string>
