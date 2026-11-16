@@ -259,7 +259,15 @@ class ConversationJourneyTest {
         dialogText(io.github.thiesi.chitchat.R.string.conversation_refresh).performScrollTo().assertIsEnabled().performClick()
         loaded()
         compose.onNodeWithContentDescription("Room details").assertIsDisplayed().performClick()
-        dialogText(io.github.thiesi.chitchat.R.string.conversation_allow_resend).performScrollTo().assertIsDisplayed().assertIsEnabled()
+        // #286: failure-only scalars when the duplicate-risk choice is missing. The same lookup, no retry, wait or text.
+        try {
+            dialogText(io.github.thiesi.chitchat.R.string.conversation_allow_resend).performScrollTo().assertIsDisplayed().assertIsEnabled()
+        } catch (e: AssertionError) {
+            val now = model.state.value
+            throw AssertionError("Allow resend missing (#286): sampledAt=${android.os.SystemClock.uptimeMillis()}, " +
+                "uncertainSend=${now.uncertainSend}, reconciledAfterUncertain=${now.reconciledAfterUncertain}, stale=${now.stale}, " +
+                "busy=${now.busy}, syncing=${now.syncing}, loaded=${now.loaded}, sends=${fake.sends}", e)
+        }
         compose.runOnIdle { assertEquals(1, fake.sends); assertEquals("Unconfirmed fixture", model.state.value.draft) }
     }
 
