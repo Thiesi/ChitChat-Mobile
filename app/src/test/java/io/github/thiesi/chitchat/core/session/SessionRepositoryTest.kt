@@ -794,6 +794,22 @@ class SessionRepositoryTest {
         assertFalse(sessions.state.value.recoveryKeyUndelivered)
     }
 
+    /** TL (PR #287): the ambiguously registered username stays in runtime memory only. */
+    @Test fun theAmbiguouslyRegisteredUsernameNeverReachesSessionStateOrTheVault() = runTest {
+        anonymous(); registrationReady()
+        server.enqueue(json("""{"error":{"code":"server_error","message":"x"}}""", 503))
+        sessions.register("Zelda", "fixture-password", null); server.takeRequest(5, TimeUnit.SECONDS)
+        assertFalse("Not in session state (or any debug string of it)", sessions.state.value.toString().contains("Zelda"))
+        assertNull("Nothing was saved", vault.saved)
+        server.enqueue(json(bootstrapBody())); sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS)
+        clock.now += 31_000
+        server.enqueue(json("""{"csrf_token":"$b","user":$keyedUser,"mfa_required":false}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.signIn("Alice", "fixture-password"); server.takeRequest(5, TimeUnit.SECONDS)
+        assertFalse(sessions.state.value.toString().contains("Zelda"))
+        assertFalse("The saved session never holds it", vault.saved.toString().contains("Zelda"))
+        assertFalse(vault.saved!!.cookies.any { it.contains("Zelda") })
+    }
+
     @Test fun aPlainSignInCarriesTheStatusButNoKeyAndNoMarker() = runTest {
         anonymous()
         server.enqueue(json("""{"csrf_token":"$b","user":$keyedUser,"mfa_required":false,"recovery_key":"$fixtureKey"}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))

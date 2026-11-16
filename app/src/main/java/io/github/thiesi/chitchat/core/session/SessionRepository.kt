@@ -468,7 +468,9 @@ class SessionRepository internal constructor(
                 // registration, may have left a key that never reached this phone.
                 recoveryKeyUndelivered = (registration && reply.registrationRecoveryKey == null) ||
                     (!registration && active.signInMayFollowUncertainRegistration))
-            if (registration || active.signInMayFollowUncertainRegistration) active.uncertainRegistration = null
+            // Runtime memory only: cleared by this (or any) completed authentication, by sign-out (the runtime is
+            // replaced) and by process death. Never in session state, saved state, the vault or a log.
+            active.uncertainRegistration = null
             active.signInMayFollowUncertainRegistration = false
             persist(active, reply.user)
         }
