@@ -159,7 +159,7 @@ class RulesUpdatePresentationTest {
                         error = io.github.thiesi.chitchat.core.network.ApiFailure(io.github.thiesi.chitchat.core.network.FailureKind.TLS)) }
                     compose.waitUntil(5_000) { compose.onAllNodesWithTag("rules_banner").fetchSemanticsNodes().isEmpty() }
                     compose.runOnIdle { api.refuse = true; assertTrue(model.updateDraft(sessions.state.value, 42, "Hello rules")) }
-                    compose.onNodeWithTag("conversation_send").performScrollTo().performClick()
+                    compose.onNodeWithTag("conversation_send").assertIsDisplayed().performClick() // Pinned outside any scroller.
                     compose.waitUntil(5_000) { compose.onAllNodesWithTag("rules_updated").fetchSemanticsNodes().isNotEmpty() }
                     compose.runOnIdle { assertEquals(1, api.sends.get()); assertEquals("Hello rules", model.state.value.draft) }
                 }
