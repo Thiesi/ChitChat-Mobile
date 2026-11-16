@@ -54,6 +54,10 @@ server can reset a password. The copy says this plainly and never suggests anoth
   and later, which hides the clipboard preview. The confirmation is the level-1 line "Copied.
   Paste it into your password manager." The app doesn't clear the clipboard later, matching
   the existing Copy rule.
+  - **API 26–32** have no sensitive flag, so keyboards may keep the key in their clipboard
+    history. Copy stays, and a `textMuted` line is always visible there (never on 33+):
+    "Your keyboard may keep a copy in its clipboard history. Delete it there once it's in your
+    password manager." (technical lead ruling, 2026-11-16).
 - **Save to a file:** an explicit choice that opens the system document picker
   (`ACTION_CREATE_DOCUMENT`, `text/plain`, suggested name
   `ChitChat recovery key - {host}.txt`).
@@ -80,7 +84,8 @@ Full screen, no bottom bar, Back handled as below.
   truncated. TalkBack reads it group by group, spelling out each character ("Group 1 of 6: A,
   7, K, 2").
 - **Actions:** **Copy** and **Save to a file** as outlined buttons, side by side, stacking when
-  narrow. The unencrypted-file line sits under them.
+  narrow. The caveat lines sit under them in button order: the clipboard line (API 26–32 only),
+  then the unencrypted-file line. When the buttons stack, each line sits under its own button.
 - **Continue** (primary, persimmon-filled) opens the confirmation:
   - a decision dialog, "**Saved your recovery key?**", with the body "You won't see it again.
     This isn't one of your sign-in recovery codes.";
