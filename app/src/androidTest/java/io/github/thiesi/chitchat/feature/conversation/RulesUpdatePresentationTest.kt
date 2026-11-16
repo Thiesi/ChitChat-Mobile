@@ -33,7 +33,6 @@ import io.github.thiesi.chitchat.feature.policies.RulesUpdateViewModel
 import io.github.thiesi.chitchat.feature.rooms.RoomsViewModel
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
 import io.github.thiesi.chitchat.testing.openTab
-import io.github.thiesi.chitchat.testing.performNativeTap
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
@@ -143,8 +142,12 @@ class RulesUpdatePresentationTest {
                     val review = compose.onNodeWithTag("rules_banner_review").fetchSemanticsNode()
                     val min = with(review.layoutInfo.density) { 48.dp.toPx() } - 0.5f
                     assertTrue("Review has a 48dp target", review.touchBoundsInRoot.height >= min && review.touchBoundsInRoot.width >= min)
-                    // J1 (PR #276): while the slot shows a level-2 notice the strip yields, so the transcript and composer
-                    // keep their room at 200%; it returns when the notice clears.
+                    // J1 (PR #276): there's no send-while-hidden step (TL). Under every connection-loss level-2 notice, Send
+                    // is off or deferred by existing design: the room is stale or the session isn't ready, and Offline defers
+                    // a text draft (S4a). Unreachable is the one theoretical exception, gated in the real app by room
+                    // presence. The 403 -> dialog path is proven by RulesUpdateJourneyTest.
+                    // While the slot shows a level-2 notice the strip yields, so the transcript and composer keep their room at
+                    // 200%; it returns when the notice clears.
                     compose.runOnIdle { realtime.state.value = realtime.state.value.copy(phase = RealtimePhase.OFFLINE) }
                     compose.waitUntil(5_000) { compose.onAllNodesWithTag("status_slot").fetchSemanticsNodes().isNotEmpty() }
                     compose.onNodeWithTag("rules_banner").assertDoesNotExist()
@@ -154,20 +157,6 @@ class RulesUpdatePresentationTest {
                     compose.runOnIdle { realtime.state.value = realtime.state.value.copy(phase = RealtimePhase.LIVE) }
                     compose.waitUntil(5_000) { compose.onAllNodesWithTag("rules_banner").fetchSemanticsNodes().isNotEmpty() }
                     compose.onNodeWithTag("rules_banner").assertIsDisplayed()
-                    // A send while the strip is hidden still opens the dialog. Every connection-loss level-2 notice marks the
-                    // room stale (Send off) and offline defers text (S4a), so the one reachable combination is Unreachable:
-                    // RECONNECTING past the 5 s grace, crossed with the Compose test clock as StatusSlotTest does (no sleep).
-                    // In the real app, Send while reconnecting also needs room presence; this VM has no realtime controller.
-                    compose.waitUntil(5_000) { !model.state.value.stale && !model.state.value.busy } // Reconciled after offline.
-                    compose.runOnIdle { realtime.state.value = realtime.state.value.copy(phase = RealtimePhase.RECONNECTING) }
-                    compose.mainClock.advanceTimeBy(io.github.thiesi.chitchat.core.status.RECONNECT_GRACE_MILLIS + 100)
-                    compose.waitUntil(5_000) { compose.onAllNodesWithTag("rules_banner").fetchSemanticsNodes().isEmpty() }
-                    compose.onNodeWithTag("status_slot").assertIsDisplayed()
-                    compose.runOnIdle { api.refuse = true; assertTrue(model.updateDraft(sessions.state.value, 42, "Hello rules")) }
-                    // Pinned outside any scroller; the same native tap the other journeys use on Send.
-                    compose.onNodeWithTag("conversation_send").assertIsDisplayed().assertIsEnabled().performNativeTap()
-                    compose.waitUntil(5_000) { compose.onAllNodesWithTag("rules_updated").fetchSemanticsNodes().isNotEmpty() }
-                    compose.runOnIdle { assertEquals(1, api.sends.get()); assertEquals("Hello rules", model.state.value.draft) }
                 }
                 compose.runOnIdle { model.cancel(); directory.cancel() }
             }
