@@ -44,7 +44,10 @@ it comes before Find your people.
 
 When the session publishes `policies.rules`, a line sits above Create my account: "By creating an account, you agree
 to {installation}'s rules." With `policies.privacy`, it continues "and acknowledge its privacy policy". The linked
-words open the document screen. Registration sends the rendered version (O3b1).
+words open the document as a full-screen dialog over the form (`PolicyDocumentDialog`: the O3a bar with icon Back and
+"Rules" or "Privacy policy", announced by that title as its pane title, on the shell background). The form stays
+composed, so it keeps the typed password and birth date without saving them anywhere (PR #273 review). A document
+opened from the guidelines screen uses the same bar. Registration sends the rendered version (O3b1).
 - **`409 rules_version_outdated`:** "{installation} updated its rules while you were signing up. Look at them, then
   create your account again." The notice now survives O3b1's automatic session re-read; the repository restores it
   unless something newer replaced it.
@@ -79,4 +82,4 @@ labelled "The app's privacy policy", once a real URL exists.
   - the Create form's consent line;
   - default and 200% (real Configuration font scale), light and dark;
   - every action reachable by scrolling, with 48dp targets;
-  - collected by `native_presentation.collect_guidelines` (28 files).
+  - collected by `native_presentation.collect_guidelines` (29 files: the 28 screen captures plus the document dialog over the Create form, dark at 200%).

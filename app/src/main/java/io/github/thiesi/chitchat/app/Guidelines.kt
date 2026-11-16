@@ -32,6 +32,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -72,12 +73,7 @@ internal fun GuidelinesScreen(session: SessionState, server: String?, model: Gui
         val open = document?.takeIf { documents != null && (if (it == PolicyDocumentName.RULES) policies?.rules else policies?.privacy) != null }
         if (open != null && documents != null) {
             BackHandler { document = null }
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
-                IconButton(onClick = { document = null }, Modifier.testTag("guidelines_document_back")) {
-                    Icon(painterResource(R.drawable.ic_back), contentDescription = stringResource(R.string.back))
-                }
-                Column(Modifier.padding(horizontal = 8.dp)) { PolicyRoute(documents, open, session, server) }
-            }
+            DocumentPane(documents, open, session, server, "guidelines_document_back") { document = null }
             return@Surface
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -157,8 +153,9 @@ private fun guidelinesFailure(failure: ApiFailure): String = stringResource(when
 })
 
 /**
- * A server document over the screen it was opened from, full screen with icon Back (system Back closes it too). The
- * screen below stays composed, so a form keeps what was typed without saving it anywhere.
+ * A server document over the screen it was opened from, full screen (system Back closes it too). The screen below
+ * stays composed, so a form keeps what was typed without saving it anywhere. It paints the shell's background and
+ * content colour (the #259 lesson) and is announced by its bar title.
  */
 @Composable
 internal fun PolicyDocumentDialog(documents: PolicyDocumentViewModel, name: PolicyDocumentName, session: SessionState,
@@ -166,12 +163,26 @@ internal fun PolicyDocumentDialog(documents: PolicyDocumentViewModel, name: Poli
     androidx.compose.ui.window.Dialog(onDismissRequest = onClose,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().testTag("policy_document_dialog"), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
-                IconButton(onClick = onClose, Modifier.testTag("policy_document_dialog_back")) {
-                    Icon(painterResource(R.drawable.ic_back), contentDescription = stringResource(R.string.back))
-                }
-                Column(Modifier.padding(horizontal = 8.dp)) { PolicyRoute(documents, name, session, server) }
+            DocumentPane(documents, name, session, server, "policy_document_dialog_back", onClose)
+        }
+    }
+}
+
+/** The O3a document screen's bar (icon Back, then "Rules" or "Privacy policy", as in the shell) over the document. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun DocumentPane(documents: PolicyDocumentViewModel, name: PolicyDocumentName, session: SessionState, server: String?,
+    backTag: String, onBack: () -> Unit) {
+    val title = stringResource(if (name == PolicyDocumentName.RULES) R.string.policy_rules_bar else R.string.policy_privacy_bar)
+    Column(Modifier.fillMaxSize().semantics { paneTitle = title }) {
+        androidx.compose.material3.TopAppBar(title = { BarTitle(if (name == PolicyDocumentName.RULES) R.string.policy_rules_bar
+            else R.string.policy_privacy_bar) }, navigationIcon = {
+            IconButton(onClick = onBack, Modifier.testTag(backTag)) {
+                Icon(painterResource(R.drawable.ic_back), contentDescription = stringResource(R.string.back))
             }
+        })
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp)) {
+            PolicyRoute(documents, name, session, server)
         }
     }
 }

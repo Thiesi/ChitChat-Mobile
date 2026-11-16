@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
@@ -149,6 +151,18 @@ class GuidelinesPresentationTest {
                 assertEquals(listOf("registration_rules_link", "registration_privacy_link"),
                     text.getLinkAnnotations(0, text.length).map { (it.item as androidx.compose.ui.text.LinkAnnotation.Clickable).tag })
                 capture("guidelines-$label-$name-create")
+                if (dark && fontScale == 2f) {
+                    // The document dialog over the Create form, dark at 200% (PL, O3b2 J).
+                    compose.onNodeWithTag("registration_rules_consent").performScrollTo().performFirstLinkClick { range ->
+                        (range.item as? androidx.compose.ui.text.LinkAnnotation.Clickable)?.tag == "registration_rules_link"
+                    }
+                    compose.waitUntil(5_000) {
+                        compose.onAllNodes(androidx.compose.ui.test.hasTestTag("policy_not_published")).fetchSemanticsNodes().isNotEmpty()
+                    }
+                    capture("guidelines-$label-$name-create-dialog", "policy_document_dialog")
+                    compose.onNodeWithTag("policy_document_dialog_back").performClick()
+                    compose.onNodeWithTag("policy_document_dialog").assertDoesNotExist()
+                }
                 if (!dark && fontScale == 1f) {
                     // Reading the rules from the consent line keeps what was typed: the document opens over the form.
                     compose.onNodeWithTag("registration_password").performScrollTo().performTextReplacement("fixture-password")
@@ -178,14 +192,43 @@ class GuidelinesPresentationTest {
         return if (touch.first >= min && touch.second >= min) null else "$tag touch=${touch.first}x${touch.second}px"
     }
 
-    private fun capture(name: String) {
+    /** J1 on PR259's lesson: in dark and Pure black the document dialog paints the ground and uses the theme's text colour. */
+    @Test fun theDocumentDialogPaintsTheShellSurfaceAndAnnouncesItsTitle() {
+        val signedOut = SessionState(server = server, generation = 1, phase = SessionPhase.ANONYMOUS, installationName = "The Common Room",
+            public = PublicSession(true, emptyList(), Lockdown(false), policies = policies))
+        for ((palette, pureBlack) in listOf(io.github.thiesi.chitchat.core.theme.Lantern.dark to false,
+            io.github.thiesi.chitchat.core.theme.Lantern.amoledBlack to true)) {
+            FontScaleTestActivity.requestedFontScale = 1f
+            ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+                scenario.onActivity { activity -> activity.setContent { ChitChatTheme(dark = true, pureBlack = pureBlack) {
+                    PolicyDocumentDialog(documents, io.github.thiesi.chitchat.core.policies.PolicyDocumentName.RULES, signedOut, server.value) {}
+                } } }
+                compose.waitUntil(5_000) {
+                    compose.onAllNodes(androidx.compose.ui.test.hasTestTag("policy_not_published")).fetchSemanticsNodes().isNotEmpty()
+                }
+                val dialog = compose.onNodeWithTag("policy_document_dialog")
+                val pixels = dialog.captureToImage().toPixelMap()
+                assertEquals("pureBlack=$pureBlack: the ground", palette.ground.toArgb(), pixels[1, pixels.height - 2].toArgb())
+                val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                compose.onNodeWithTag("policy_not_published").fetchSemanticsNode()
+                    .config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+                assertEquals("pureBlack=$pureBlack: the body's text colour", palette.text, layouts.single().layoutInput.style.color)
+                val rules = InstrumentationRegistry.getInstrumentation().targetContext.getString(io.github.thiesi.chitchat.R.string.policy_rules_bar)
+                compose.onNode(androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                    androidx.compose.ui.semantics.SemanticsProperties.PaneTitle, rules)).assertExists()
+                compose.onNodeWithTag("bar_title").assertExists()
+            }
+        }
+    }
+
+    private fun capture(name: String, node: String = "guidelines_host") {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }
             ?: checkNotNull(instrumentation.targetContext.getExternalFilesDir(null))
         val folder = java.io.File(output, "ccm-guidelines-presentation")
         check(folder.isDirectory || folder.mkdirs())
-        val bitmap = compose.onNodeWithTag("guidelines_host").captureToImage().asAndroidBitmap()
+        val bitmap = compose.onNodeWithTag(node).captureToImage().asAndroidBitmap()
         try {
             java.io.File(folder, "$name.png").outputStream().use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
         } finally { bitmap.recycle() }
