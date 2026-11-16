@@ -52,6 +52,9 @@ internal class SessionReply(
     /** The server-update facts of this body (server-update.md), attached by [SessionHttp.bootstrap]; never decoded. */
     @kotlinx.serialization.Transient
     var discovery: io.github.thiesi.chitchat.core.session.ServerDiscovery? = null
+    /** `user.rules` (policies.md), attached from the raw body; never part of the user's identity. */
+    @kotlinx.serialization.Transient
+    var rules: io.github.thiesi.chitchat.core.policies.RulesStatus? = null
 }
 
 /**
@@ -94,7 +97,11 @@ internal class AuthReply(
     @SerialName("recovery_codes_remaining") val recoveryCodesRemaining: Int? = null,
     val restored: Boolean = false,
     @SerialName("restoration_pending") val restorationPending: Boolean = false,
-)
+) {
+    /** `user.rules` on a login or registration user (policies.md), attached from the raw body. */
+    @kotlinx.serialization.Transient
+    var rules: io.github.thiesi.chitchat.core.policies.RulesStatus? = null
+}
 
 @Serializable
 internal class RegistrationChallengeReply(val challenge: RegistrationChallenge?)
@@ -110,6 +117,8 @@ internal class RegistrationRequest(
     val website: String,
     @SerialName("challenge_nonce") val nonce: String?,
     @SerialName("challenge_solution") val solution: String?,
+    /** Sent only when the rendered session publishes rules (policies.md); omitted otherwise (a null default isn't encoded). */
+    @SerialName("accepted_rules_version") val acceptedRulesVersion: Int? = null,
 )
 
 @Serializable

@@ -607,6 +607,87 @@ class SessionRepositoryTest {
         assertEquals(RegistrationPreparation.READY, sessions.state.value.registration)
     }
 
+    // Community-rules acceptance (policies.md; play-readiness.md §1, P-171). O3b1: protocol and state.
+    private val rulesUser get() = user.dropLast(1) + ""","rules":{"accepted_version":1,"accepted_at":"2026-11-08T12:00:00+00:00","acceptance_required":true}}"""
+    private val publishedRules = ""","policies":{"rules":{"url":"https://x.example/rules.php","version":4,"updated_at":"2026-11-08T12:00:00+00:00"},"privacy":null,"legal_notice":null}}"""
+    private suspend fun signedInWithAccess(person: String = rulesUser) {
+        anonymous()
+        server.enqueue(json("""{"csrf_token":"$b","user":$person,"mfa_required":false}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.signIn("Alice", "fixture-password"); server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(json(bootstrapBody(person, b))); sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertFalse(sessions.state.value.busy)
+    }
+
+    @Test fun loginAndBootstrapCarryTheRulesStatusAndAnonymousHasNone() = runTest {
+        anonymous(); assertNull(sessions.state.value.rules)
+        signedInWithAccess()
+        assertEquals(io.github.thiesi.chitchat.core.policies.RulesStatus(1, "2026-11-08T12:00:00+00:00", true), sessions.state.value.rules)
+    }
+
+    @Test fun aMissingOrMalformedRulesStatusIsUnknownNeverRequired() = runTest {
+        signedInWithAccess(user.dropLast(1) + ""","rules":{"accepted_version":"1","acceptance_required":true}}""")
+        assertNull("A quoted version is malformed, so unknown", sessions.state.value.rules)
+        val decode = io.github.thiesi.chitchat.core.policies.rulesStatus(kotlinx.serialization.json.Json.parseToJsonElement(
+            """{"accepted_version":0,"accepted_at":null,"acceptance_required":"true"}"""))
+        assertNull("A quoted Boolean is malformed", decode)
+    }
+
+    @Test fun acceptingPostsTheShownVersionOnceAndPublishesTheConfirmedStatus() = runTest {
+        signedInWithAccess()
+        server.enqueue(json("""{"rules":{"accepted_version":4,"accepted_at":"2026-11-16T10:00:00+00:00","acceptance_required":false}}"""))
+        val result = sessions.acceptRules(4)
+        val request = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("/api/v1/policies/accept.php", request.url.encodedPath)
+        assertEquals("""{"version":4}""", request.body?.utf8())
+        assertEquals(b, request.headers["X-CSRF-Token"])
+        assertTrue(result is io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Accepted)
+        assertEquals(false, sessions.state.value.rules?.acceptanceRequired)
+    }
+
+    @Test fun everyAcceptRefusalStaysTypedAndIsNeverResent() = runTest {
+        signedInWithAccess()
+        val before = server.requestCount
+        server.enqueue(error("rules_version_outdated", 409))
+        assertEquals(io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Outdated, sessions.acceptRules(4))
+        server.enqueue(error("server_error", 503))
+        assertTrue(sessions.acceptRules(4) is io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Unknown)
+        server.enqueue(error("forbidden", 403))
+        assertTrue(sessions.acceptRules(4) is io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Failed)
+        assertEquals("One POST per choice, none resent", before + 3, server.requestCount)
+        assertEquals(true, sessions.state.value.rules?.acceptanceRequired)
+    }
+
+    @Test fun registrationSendsTheRenderedRulesVersionOnlyWhenRulesArePublished() = runTest {
+        server.enqueue(json(bootstrapBody().dropLast(1) + publishedRules, cookie = "SITE=anon; Secure; HttpOnly; Path=/"))
+        sessions.connect(address()); server.takeRequest(5, TimeUnit.SECONDS)
+        registrationReady()
+        server.enqueue(json("""{"csrf_token":"$b","user":$user}""", 201, "SITE=registered; Secure; HttpOnly; Path=/"))
+        sessions.register("Alice", "fixture-password", null)
+        assertTrue(server.takeRequest(5, TimeUnit.SECONDS)!!.body!!.utf8().contains(""""accepted_rules_version":4"""))
+    }
+
+    @Test fun registrationOmitsTheRulesVersionWithoutPublishedRules() = runTest {
+        anonymous(); registrationReady()
+        server.enqueue(json("""{"csrf_token":"$b","user":$user}""", 201, "SITE=registered; Secure; HttpOnly; Path=/"))
+        sessions.register("Alice", "fixture-password", null)
+        assertFalse(server.takeRequest(5, TimeUnit.SECONDS)!!.body!!.utf8().contains("accepted_rules_version"))
+    }
+
+    /** 409: the account wasn't created; the session is re-read (no resubmission) and nothing is marked as possibly created. */
+    @Test fun anOutdatedRulesVersionAtRegistrationReReadsTheSessionAndNeverResubmits() = runTest {
+        server.enqueue(json(bootstrapBody().dropLast(1) + publishedRules, cookie = "SITE=anon; Secure; HttpOnly; Path=/"))
+        sessions.connect(address()); server.takeRequest(5, TimeUnit.SECONDS)
+        registrationReady()
+        server.enqueue(error("rules_version_outdated", 409))
+        server.enqueue(json(bootstrapBody().dropLast(1) + publishedRules.replace("\"version\":4", "\"version\":5")))
+        sessions.register("Alice", "fixture-password", null)
+        assertEquals("/api/v1/register.php", server.takeRequest(5, TimeUnit.SECONDS)!!.url.encodedPath)
+        assertEquals("/api/v1/session.php", server.takeRequest(5, TimeUnit.SECONDS)!!.url.encodedPath)
+        assertFalse(sessions.state.value.registrationMayHaveSucceeded)
+        assertEquals(5, sessions.state.value.public?.policies?.rules?.version)
+        assertEquals(SessionPhase.ANONYMOUS, sessions.state.value.phase)
+    }
+
     @Test fun registrationAdoptsServerAssignedRolesAndRotatedCredentials() = runTest {
         anonymous()
         registrationReady()

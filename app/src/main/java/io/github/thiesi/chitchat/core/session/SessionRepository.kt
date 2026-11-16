@@ -70,6 +70,8 @@ data class SessionState(
     val installationName: String? = null,
     /** The last bootstrap's server is definitely older than the minimum (server-update.md); nothing new starts. */
     val updateRequired: Boolean = false,
+    /** `user.rules` (policies.md, P-171): null when unknown (no user, an older server or a malformed status). */
+    val rules: io.github.thiesi.chitchat.core.policies.RulesStatus? = null,
     /** `application.version` as reported, for the update state's details line and note; null is unknown. */
     val reportedVersion: String? = null,
     /**
@@ -296,12 +298,15 @@ class SessionRepository internal constructor(
                 return@withLock null
             }
             mutable.value = current.copy(busy = true, error = null, registration = RegistrationPreparation.IDLE)
-            active to proof
+            // The rules version of the session the form rendered with (policies.md): sent only when rules are published.
+            Triple(active, proof, current.public?.policies?.rules?.version)
         } ?: return
+        var rulesOutdated = false
         try {
             authenticated(pending.first, pending.first.api.register(username.trim(), password, birthDate,
-                pending.second.nonce, pending.second.solution, pending.first.csrf!!))
+                pending.second.nonce, pending.second.solution, pending.first.csrf!!, acceptedRulesVersion = pending.third))
         } catch (failure: ApiFailure) {
+            rulesOutdated = failure.status == 409 && failure.code == "rules_version_outdated"
             lock.withLock {
                 if (runtime === pending.first) {
                     val uncertain = failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT,
@@ -312,6 +317,34 @@ class SessionRepository internal constructor(
                         public = if (failure.code == "registration_disabled") mutable.value.public?.copy(registrationEnabled = false)
                             else mutable.value.public)
                 }
+            }
+        }
+        // The account wasn't created; re-read the session so the form shows the new rules version. Never resubmitted.
+        if (rulesOutdated) refresh()
+    }
+
+    /**
+     * One `policies/accept.php` POST for the rules [version] that was shown (policies.md, P-171), for the rendered
+     * [expected] session. The confirmed status is published only into that same session. Never resent: an ambiguous
+     * result is Unknown (settle with a session GET), and 409 is Outdated (re-read, then a new choice).
+     */
+    internal suspend fun acceptRules(version: Int, expected: SessionState = mutable.value): io.github.thiesi.chitchat.core.policies.RulesAcceptResult {
+        val access = try { openAccess(expected) } catch (failure: ApiFailure) {
+            return io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Failed(failure)
+        }
+        return try {
+            val status = access.api.acceptRules(version, access.csrf)
+            lock.withLock {
+                ensureCurrent(access)
+                mutable.value = mutable.value.copy(rules = status)
+            }
+            io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Accepted(status)
+        } catch (failure: ApiFailure) {
+            when {
+                failure.status == 409 && failure.code == "rules_version_outdated" -> io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Outdated
+                failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT) || (failure.status ?: 0) >= 500 ->
+                    io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Unknown(failure)
+                else -> io.github.thiesi.chitchat.core.policies.RulesAcceptResult.Failed(failure)
             }
         }
     }
@@ -354,6 +387,7 @@ class SessionRepository internal constructor(
                     webPush = if (reply.user != null && !reply.user.guest) reply.webPush else io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unavailable,
                     installationName = io.github.thiesi.chitchat.core.network.installationName(reply.application),
                     updateRequired = reply.discovery?.let { needsServerUpdate(it, member = reply.user != null && !reply.user.guest) } ?: false,
+                    rules = reply.rules.takeIf { reply.user != null },
                     reportedVersion = displayedServerVersion(reply.discovery?.version),
                     bootstrapSequence = mutable.value.bootstrapSequence + 1,
                 )
@@ -393,7 +427,7 @@ class SessionRepository internal constructor(
             mutable.value = mutable.value.copy(phase = SessionPhase.AUTHENTICATED, user = reply.user,
                 busy = true, error = null, recoveryCodesRemaining = reply.recoveryCodesRemaining,
                 chatPolicy = null, privacy = null, shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown, webPush = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
-                accountRestored = reply.restored, registrationMayHaveSucceeded = false)
+                accountRestored = reply.restored, registrationMayHaveSucceeded = false, rules = reply.rules)
             persist(active, reply.user)
         }
     }
