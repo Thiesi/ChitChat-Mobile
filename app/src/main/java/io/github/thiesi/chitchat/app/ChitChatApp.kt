@@ -457,7 +457,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         else if (session.phase == SessionPhase.AUTHENTICATED && session.registrationRecoveryKey != null) {
             val server = state.settings.server?.value
             val host = server?.let { runCatching { java.net.URI(it).host }.getOrNull() }.orEmpty()
-            RecoveryKeyDisplay(RecoveryKeyView(session.registrationRecoveryKey, R.string.recovery_key_title_save,
+            // After a reset: "Your new recovery key" with "Your old key no longer works, and your other devices were signed
+            // out." (recovery-key.md, O4b). After registration: "Save your recovery key".
+            val afterReset = session.recoveryKeyOrigin == io.github.thiesi.chitchat.core.account.KeyOrigin.RESET
+            RecoveryKeyDisplay(RecoveryKeyView(session.registrationRecoveryKey,
+                if (afterReset) R.string.recovery_key_title_new else R.string.recovery_key_title_save,
+                note = if (afterReset) R.string.recovery_key_reset_note else null,
                 createdAt = (session.recoveryKey as? io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known)?.createdAt),
                 installation = session.installationName ?: breakableHost(host), host = host, username = session.user?.username.orEmpty(),
                 onSaved = { auth.recoveryKeySaved(session) })
@@ -559,9 +564,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 // "Didn't reach this phone" (O4a2b): on the Rooms root under the status slot, yielding to a level-2 slot
                 // notice like the rules strip. It lasts for this runtime and ends on Go there, Not now or a changed status.
                 if (recoveryKeys != null && entry?.destination?.route == ROOMS_ROUTE && session.phase == SessionPhase.AUTHENTICATED &&
-                    session.recoveryKeyUndelivered && (session.recoveryKey as? io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known)?.exists == true &&
+                    session.recoveryKeyUndelivered != null && (session.recoveryKey as? io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known)?.exists == true &&
                     !session.updateRequired && !compactConversation && slotLevel != io.github.thiesi.chitchat.core.status.StatusLevel.BLOCK)
-                    io.github.thiesi.chitchat.feature.account.RecoveryKeyNotice(
+                    io.github.thiesi.chitchat.feature.account.RecoveryKeyNotice(session.recoveryKeyUndelivered,
                         onGoThere = { recoveryKeys.dismissNotice(session); nav.navigate(RECOVERY_KEY_ROUTE) { launchSingleTop = true } },
                         onNotNow = { recoveryKeys.dismissNotice(session) })
                 if (state.loading) {

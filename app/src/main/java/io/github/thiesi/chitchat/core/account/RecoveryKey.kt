@@ -42,6 +42,24 @@ sealed interface RecoveryKeyResult {
     data class Failed(val failure: ApiFailure) : RecoveryKeyResult
 }
 
+/** Where a key shown once (or one that never arrived) came from: registration or a password reset (O4b). */
+enum class KeyOrigin { REGISTRATION, RESET }
+
+/**
+ * After an Unknown reset (O4b, TL): did that reset commit? It compares the server's `created_at` with [serverDate], the
+ * HTTP `Date` header of the attempt's own challenge GET, so no device clock is involved. True when the key was created at
+ * or after it (the reset committed and replaced the key), false when earlier (it didn't), null when either time is
+ * missing or unreadable (then nothing shows). `Date` has one-second resolution and precedes the POST, so a key that POST
+ * created always counts; one created in that same second before the challenge would too (accepted edge).
+ */
+internal fun resetKeyCreatedSince(status: RecoveryKeyStatus, serverDate: String?): Boolean? {
+    val created = (status as? RecoveryKeyStatus.Known)?.takeIf { it.exists }?.createdAt ?: return null
+    val since = serverDate?.let { runCatching {
+        java.time.ZonedDateTime.parse(it, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant() }.getOrNull() } ?: return null
+    val at = runCatching { java.time.OffsetDateTime.parse(created).toInstant() }.getOrNull() ?: return null
+    return !at.isBefore(since.truncatedTo(java.time.temporal.ChronoUnit.SECONDS))
+}
+
 enum class UnknownResolution {
     /** A new key was created but never reached this phone: the old one no longer works. */
     CREATED_ELSEWHERE,

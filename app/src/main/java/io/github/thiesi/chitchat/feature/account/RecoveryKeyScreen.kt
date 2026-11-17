@@ -186,14 +186,16 @@ private fun CreateAgain(enabled: Boolean, onClick: () -> Unit) =
  * outside resolveStatus, on `presenceWash` with the honey `warning` glyph; Go there and Not now. Announced once.
  */
 @Composable
-internal fun RecoveryKeyNotice(onGoThere: () -> Unit, onNotNow: () -> Unit) {
+internal fun RecoveryKeyNotice(origin: io.github.thiesi.chitchat.core.account.KeyOrigin = io.github.thiesi.chitchat.core.account.KeyOrigin.REGISTRATION, onGoThere: () -> Unit, onNotNow: () -> Unit) {
     val colors = ChitChatTheme.colors
     Column(Modifier.fillMaxWidth().background(colors.presenceWash).padding(horizontal = 16.dp, vertical = 8.dp).testTag("recovery_key_notice")) {
         Row(Modifier.padding(vertical = 4.dp).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
             Icon(painterResource(R.drawable.ic_warning), contentDescription = null, Modifier.size(20.dp), tint = colors.warning)
-            val lead = stringResource(R.string.recovery_key_undelivered_lead)
-            val body = stringResource(R.string.recovery_key_undelivered_body)
+            // After a reset the old key is gone too, so its variant says so (PL, O4b).
+            val reset = origin == io.github.thiesi.chitchat.core.account.KeyOrigin.RESET
+            val lead = stringResource(if (reset) R.string.recovery_key_undelivered_reset_lead else R.string.recovery_key_undelivered_lead)
+            val body = stringResource(if (reset) R.string.recovery_key_undelivered_reset_body else R.string.recovery_key_undelivered_body)
             Text(buildAnnotatedString { withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(lead) }; append(" "); append(body) },
                 color = colors.text)
         }

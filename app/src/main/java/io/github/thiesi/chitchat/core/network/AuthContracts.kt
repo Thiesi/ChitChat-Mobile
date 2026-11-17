@@ -115,6 +115,36 @@ internal class AuthReply(
 @Serializable
 internal class RegistrationChallengeReply(val challenge: RegistrationChallenge?)
 
+/** `POST password-reset.php` (password-recovery.md). The key is sent as typed after trimming; the server normalizes. */
+@Serializable
+internal class PasswordResetRequest(
+    val username: String,
+    @SerialName("recovery_key") val recoveryKey: String,
+    @SerialName("new_password") val newPassword: String,
+    @SerialName("challenge_nonce") val challengeNonce: String,
+    @SerialName("challenge_solution") val challengeSolution: String,
+) {
+    override fun toString() = "PasswordResetRequest(redacted)"
+}
+
+/** The 202 `pending_mfa` reply of a reset: not signed in, only MFA or cancel can follow. */
+@Serializable
+internal class PendingResetReply(
+    val status: String,
+    @SerialName("mfa_required") val mfaRequired: Boolean = false,
+    @SerialName("csrf_token") val csrfToken: String,
+    val methods: List<String> = emptyList(),
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
+@Serializable
+internal class ResetCodeRequest(val code: String) {
+    override fun toString() = "ResetCodeRequest(redacted)"
+}
+
+@Serializable
+internal class ResetCancelReply(val status: String, @SerialName("csrf_token") val csrfToken: String)
+
 @Serializable
 internal class RegistrationChallenge(val nonce: String, val bits: Int)
 

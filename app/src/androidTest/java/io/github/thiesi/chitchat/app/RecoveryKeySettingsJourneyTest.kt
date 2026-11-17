@@ -62,12 +62,12 @@ class RecoveryKeySettingsJourneyTest {
             override suspend fun verifyRecovery(code: String) = error("No recovery code here")
             override suspend fun createRecoveryKey(): CreatedRecoveryKey {
                 posts++
-                sessions.state.value = sessions.state.value.copy(recoveryKey = RecoveryKeyStatus.Known(true, newDate), recoveryKeyUndelivered = false)
+                sessions.state.value = sessions.state.value.copy(recoveryKey = RecoveryKeyStatus.Known(true, newDate), recoveryKeyUndelivered = null)
                 return CreatedRecoveryKey(RecoveryKey("A7K2-B9QX-C4MZ-D8RT-E2WN-F6HP"), newDate)
             }
         }
         override suspend fun dismissRecoveryKeyNotice(expected: SessionState) {
-            sessions.state.value = sessions.state.value.copy(recoveryKeyUndelivered = false)
+            sessions.state.value = sessions.state.value.copy(recoveryKeyUndelivered = null)
         }
     }
     private val keys = RecoveryKeyViewModel(accounts)
@@ -79,7 +79,7 @@ class RecoveryKeySettingsJourneyTest {
         compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.ANONYMOUS }
         compose.runOnIdle {
             runBlocking { sessions.signIn("Viewer", "fixture-password") }
-            sessions.state.value = sessions.state.value.copy(recoveryKey = status, recoveryKeyUndelivered = undelivered)
+            sessions.state.value = sessions.state.value.copy(recoveryKey = status, recoveryKeyUndelivered = io.github.thiesi.chitchat.core.account.KeyOrigin.REGISTRATION.takeIf { undelivered })
         }
         compose.waitUntil(5_000) { exists("nav_tab_rooms") }
     }
@@ -165,7 +165,7 @@ class RecoveryKeySettingsJourneyTest {
         compose.waitUntil(5_000) { exists("recovery_key_notice") }
         compose.onNodeWithTag("recovery_key_notice_go_there").performClick()
         compose.waitUntil(5_000) { exists("recovery_key_screen") }
-        compose.runOnIdle { assertFalse("It ends on Go there", sessions.state.value.recoveryKeyUndelivered) }
+        compose.runOnIdle { assertNull("It ends on Go there", sessions.state.value.recoveryKeyUndelivered) }
     }
 
     @Test fun notNowEndsTheNotice() {

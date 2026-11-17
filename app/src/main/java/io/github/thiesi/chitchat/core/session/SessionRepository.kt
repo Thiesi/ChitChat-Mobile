@@ -30,8 +30,37 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 enum class SessionPhase { NO_SERVER, CONNECTING, ANONYMOUS, PENDING_MFA, AUTHENTICATED, GUEST, INVALIDATED, SIGNED_OUT }
-enum class AuthFlow { SIGN_IN, REGISTER, RESTORE }
+enum class AuthFlow { SIGN_IN, REGISTER, RESTORE, RESET }
 enum class RegistrationPreparation { IDLE, PREPARING, READY, FAILED }
+
+/** Self-service reset support, from the documented discovery (one challenge GET per step-4a visit, O4b). */
+enum class ResetSupport { UNKNOWN, CHECKING, SUPPORTED, UNSUPPORTED }
+
+/** How a reset attempt ended without signing in; refusals with a code stay in `SessionState.error` (O4b). */
+enum class ResetOutcome {
+    /** The POST may have committed (connection lost after sending): the password may have changed. Never resent. */
+    UNCERTAIN,
+    /** `cancel.php` acknowledged: nothing changed. */
+    CANCELLED,
+    /** Cancel failed, was lost or found no pending reset: whether the password changed is unknown. */
+    CANCEL_UNCERTAIN,
+    /** The pending reset expired or became invalid: start again with the recovery key. */
+    EXPIRED,
+}
+
+/** A reset challenge or proof is used within four minutes; the server expires it after five (password-recovery.md). */
+private const val RESET_CHALLENGE_REUSE_MS = 4 * 60 * 1000L
+
+/** A pending reset waiting for MFA: not signed in (password-recovery.md). [methods] as the server listed them. */
+data class PendingReset(val methods: List<String>, val expiresAt: String?)
+
+/** The reset flow's state inside the ANONYMOUS phase (TL: no new phase; a pending reset is not signed in). */
+data class ResetState(
+    val support: ResetSupport = ResetSupport.UNKNOWN,
+    val preparation: RegistrationPreparation = RegistrationPreparation.IDLE,
+    val pending: PendingReset? = null,
+    val outcome: ResetOutcome? = null,
+)
 
 data class PublicSession(
     val registrationEnabled: Boolean,
@@ -86,12 +115,17 @@ data class SessionState(
      * state (sign-out, another account) drops it. Its `toString` is redacted.
      */
     val registrationRecoveryKey: io.github.thiesi.chitchat.core.account.RecoveryKey? = null,
+    /** Where [registrationRecoveryKey] came from: registration or a completed password reset (O4b). */
+    val recoveryKeyOrigin: io.github.thiesi.chitchat.core.account.KeyOrigin = io.github.thiesi.chitchat.core.account.KeyOrigin.REGISTRATION,
+    /** The password-reset flow while signed out (O4b). */
+    val reset: ResetState = ResetState(),
     /**
-     * This account was created in this session but its key never reached the phone: the registration reply carried
-     * none, or registration was ambiguous and the person then signed in. With `recoveryKey` exists = true, the app
-     * shows "didn't reach this phone" (TL, O4a).
+     * A key never reached the phone, and where it came from (TL, O4a and O4b). REGISTRATION: the registration reply carried
+     * none, or registration was ambiguous and the person then signed in. RESET: a completed reset carried none, or a reset
+     * was Unknown and the next sign-in to that username found the key created at or after that attempt's server time.
+     * With `recoveryKey` exists = true, the app shows "didn't reach this phone".
      */
-    val recoveryKeyUndelivered: Boolean = false,
+    val recoveryKeyUndelivered: io.github.thiesi.chitchat.core.account.KeyOrigin? = null,
     /** `application.version` as reported, for the update state's details line and note; null is unknown. */
     val reportedVersion: String? = null,
     /**
@@ -115,6 +149,16 @@ interface SessionController {
     suspend fun register(username: String, password: String, birthDate: String?)
     /** The key display confirmed "I've saved it": the registration key leaves memory (recovery-key.md, P-184). */
     suspend fun dropRegistrationRecoveryKey(expected: SessionState) {}
+    /** Step 4a opened: one challenge GET, the documented discovery of self-service reset (O4b). Never on recomposition. */
+    suspend fun discoverPasswordReset() {}
+    /** A fresh challenge and proof for the next reset attempt; every attempt needs its own (O4b). */
+    suspend fun prepareReset() {}
+    /** One reset POST with the prepared proof; never resent (O4b). */
+    suspend fun resetPassword(username: String, recoveryKey: String, newPassword: String) {}
+    /** The pending reset's sign-in recovery code (O4b). */
+    suspend fun completeResetRecovery(code: String) {}
+    /** Cancel reset: `cancel.php`; only an acknowledged cancel means nothing changed (O4b). */
+    suspend fun cancelReset() {}
 }
 
 /** Local transitions and vault writes are serialized; network calls never hold the lock. */
@@ -240,6 +284,8 @@ class SessionRepository internal constructor(
                         registration = RegistrationPreparation.IDLE)
                     active.signInMayFollowUncertainRegistration =
                         active.uncertainRegistration?.equals(username.trim(), ignoreCase = true) == true
+                    active.signInMayFollowUncertainReset =
+                        active.uncertainReset?.takeIf { it.username.equals(username.trim(), ignoreCase = true) }
                 }
             }
             val result = active.api.password(username.trim(), password, active.csrf!!, restore)
@@ -260,12 +306,15 @@ class SessionRepository internal constructor(
     override suspend fun selectAuthFlow(flow: AuthFlow) = lock.withLock {
         val current = mutable.value
         val active = runtime ?: return@withLock
-        if (current.phase != SessionPhase.ANONYMOUS || current.busy ||
-            (flow == AuthFlow.REGISTER && (current.public?.registrationEnabled != true || current.public.lockdown.enabled))) return@withLock
+        if (current.phase != SessionPhase.ANONYMOUS || current.busy || current.reset.pending != null ||
+            (flow == AuthFlow.REGISTER && (current.public?.registrationEnabled != true || current.public.lockdown.enabled)) ||
+            (flow == AuthFlow.RESET && current.reset.support != ResetSupport.SUPPORTED)) return@withLock
         active.preparation++
         active.proof = null
+        active.resetProof = null
         mutable.value = current.copy(authFlow = flow, registration = RegistrationPreparation.IDLE,
-            error = null, registrationMayHaveSucceeded = false)
+            error = null, registrationMayHaveSucceeded = false,
+            reset = current.reset.copy(preparation = RegistrationPreparation.IDLE, outcome = null))
     }
 
     override suspend fun prepareRegistration() {
@@ -306,6 +355,184 @@ class SessionRepository internal constructor(
                 }
             }
         }
+    }
+
+    override suspend fun discoverPasswordReset() {
+        val active = lock.withLock {
+            val active = runtime ?: return@withLock null
+            val current = mutable.value
+            if (current.phase != SessionPhase.ANONYMOUS || current.busy || current.reset.support == ResetSupport.CHECKING ||
+                current.reset.pending != null) return@withLock null
+            mutable.value = current.copy(reset = current.reset.copy(support = ResetSupport.CHECKING))
+            active
+        } ?: return
+        var support = ResetSupport.UNSUPPORTED
+        try {
+            val challenge = active.api.passwordResetChallenge()
+            // The fresh challenge serves the first attempt while it's young; any later attempt fetches its own.
+            lock.withLock { if (runtime === active) { active.resetChallenge = challenge; active.resetChallengeAt = clock.millis() } }
+            support = ResetSupport.SUPPORTED
+        } catch (_: ApiFailure) {
+            // A 404 (older server) or any failure keeps the static line; not a session error.
+        } finally {
+            withContext(NonCancellable) {
+                lock.withLock {
+                    if (runtime === active && mutable.value.reset.support == ResetSupport.CHECKING)
+                        mutable.value = mutable.value.copy(reset = mutable.value.reset.copy(support = support))
+                }
+            }
+        }
+    }
+
+    override suspend fun prepareReset() {
+        val pending = lock.withLock {
+            val active = runtime ?: return@withLock null
+            val current = mutable.value
+            if (current.phase != SessionPhase.ANONYMOUS || current.authFlow != AuthFlow.RESET || current.busy ||
+                current.refreshRequired || current.reset.pending != null || current.reset.support != ResetSupport.SUPPORTED ||
+                clock.millis() < current.retryAtMillis) return@withLock null
+            active.resetProof = null
+            val attempt = ++active.preparation
+            // The discovery challenge once, while young (the server expires it after five minutes); never twice.
+            val fresh = active.resetChallenge?.takeIf { clock.millis() - active.resetChallengeAt in 0 until RESET_CHALLENGE_REUSE_MS }
+            active.resetChallenge = null
+            mutable.value = current.copy(error = null, reset = current.reset.copy(preparation = RegistrationPreparation.PREPARING))
+            Triple(active, attempt, fresh)
+        } ?: return
+        val (active, attempt, fresh) = pending
+        try {
+            val challenge = fresh ?: active.api.passwordResetChallenge()
+            val issuedAt = if (fresh != null) active.resetChallengeAt else clock.millis()
+            val proof = solveRegistration(challenge.challenge)
+            lock.withLock {
+                if (runtime === active && active.preparation == attempt) {
+                    active.resetProof = proof
+                    active.resetProofDate = challenge.serverDate
+                    active.resetProofAt = issuedAt
+                    mutable.value = mutable.value.copy(reset = mutable.value.reset.copy(preparation = RegistrationPreparation.READY))
+                }
+            }
+        } catch (failure: ApiFailure) {
+            lock.withLock {
+                if (runtime === active && active.preparation == attempt) {
+                    failLocked(active, failure)
+                    mutable.value = mutable.value.copy(reset = mutable.value.reset.copy(preparation = RegistrationPreparation.FAILED))
+                }
+            }
+        } finally {
+            withContext(NonCancellable) {
+                lock.withLock {
+                    if (runtime === active && active.preparation == attempt &&
+                        mutable.value.reset.preparation == RegistrationPreparation.PREPARING)
+                        mutable.value = mutable.value.copy(reset = mutable.value.reset.copy(preparation = RegistrationPreparation.IDLE))
+                }
+            }
+        }
+    }
+
+    override suspend fun resetPassword(username: String, recoveryKey: String, newPassword: String) {
+        val pending = lock.withLock {
+            val active = runtime ?: return@withLock null
+            val current = mutable.value
+            if (current.phase != SessionPhase.ANONYMOUS || current.authFlow != AuthFlow.RESET || current.busy ||
+                current.refreshRequired || current.reset.preparation != RegistrationPreparation.READY ||
+                current.reset.pending != null || clock.millis() < current.retryAtMillis) return@withLock null
+            val proof = active.resetProof ?: return@withLock null
+            active.resetProof = null // Consumed even when refused (password-recovery.md); the next attempt prepares anew.
+            if (clock.millis() - active.resetProofAt !in 0 until RESET_CHALLENGE_REUSE_MS) {
+                mutable.value = current.copy(reset = current.reset.copy(preparation = RegistrationPreparation.IDLE),
+                    error = ApiFailure(FailureKind.HTTP, 400, "reset_challenge_expired"))
+                return@withLock null
+            }
+            mutable.value = current.copy(busy = true, error = null,
+                reset = current.reset.copy(preparation = RegistrationPreparation.IDLE, outcome = null))
+            Triple(active, proof, UncertainReset(username.trim(), active.resetProofDate))
+        } ?: return
+        val (active, proof, attempt) = pending
+        try {
+            when (val reply = active.api.resetPassword(username.trim(), recoveryKey.trim(), newPassword,
+                proof.nonce!!, proof.solution!!, active.csrf!!)) {
+                is SessionHttp.ResetReply.Complete -> authenticated(active, reply.auth, reset = true)
+                is SessionHttp.ResetReply.PendingMfa -> lock.withLock {
+                    if (runtime === active) {
+                        active.csrf = reply.csrf
+                        active.pendingReset = attempt
+                        mutable.value = mutable.value.copy(busy = false,
+                            reset = mutable.value.reset.copy(pending = PendingReset(reply.methods, reply.expiresAt)))
+                    }
+                }
+            }
+        } catch (failure: ApiFailure) { resetFailed(active, failure, attempt, keepPending = false) }
+    }
+
+    override suspend fun completeResetRecovery(code: String) {
+        val pending = lock.withLock {
+            val active = runtime ?: return@withLock null
+            val current = mutable.value
+            if (current.phase != SessionPhase.ANONYMOUS || current.busy || current.reset.pending == null ||
+                "recovery_code" !in current.reset.pending.methods || active.csrf == null || current.refreshRequired ||
+                clock.millis() < current.retryAtMillis) return@withLock null
+            mutable.value = current.copy(busy = true, error = null)
+            active to active.pendingReset
+        } ?: return
+        val (active, attempt) = pending
+        try { authenticated(active, active.api.resetMfaRecovery(code.trim(), active.csrf!!), reset = true) }
+        catch (failure: ApiFailure) {
+            if (failure.status == 409 && failure.code == "reset_not_pending") lock.withLock {
+                // Nothing was retried, so no completion committed: the pending reset expired or became invalid.
+                if (runtime === active) {
+                    active.pendingReset = null
+                    mutable.value = mutable.value.copy(busy = false, error = null,
+                        reset = mutable.value.reset.copy(pending = null, outcome = ResetOutcome.EXPIRED))
+                }
+            } else resetFailed(active, failure, attempt, keepPending = true)
+        }
+    }
+
+    override suspend fun cancelReset() {
+        val pending = lock.withLock {
+            val active = runtime ?: return@withLock null
+            val current = mutable.value
+            if (current.phase != SessionPhase.ANONYMOUS || current.busy || current.reset.pending == null || active.csrf == null)
+                return@withLock null
+            mutable.value = current.copy(busy = true, error = null)
+            active to active.pendingReset
+        } ?: return
+        val (active, attempt) = pending
+        val outcome = try {
+            val csrf = active.api.cancelReset(active.csrf!!)
+            lock.withLock { if (runtime === active) active.csrf = csrf }
+            ResetOutcome.CANCELLED
+        } catch (_: ApiFailure) { ResetOutcome.CANCEL_UNCERTAIN }
+        lock.withLock {
+            if (runtime !== active) return@withLock
+            // An uncertain cancel may follow a completion that committed: the conditional marker decides later.
+            if (outcome == ResetOutcome.CANCEL_UNCERTAIN) attempt?.let { active.uncertainReset = it }
+            active.pendingReset = null
+            if (outcome == ResetOutcome.CANCEL_UNCERTAIN) active.csrf = null
+            mutable.value = mutable.value.copy(busy = false, authFlow = AuthFlow.SIGN_IN,
+                refreshRequired = mutable.value.refreshRequired || outcome == ResetOutcome.CANCEL_UNCERTAIN,
+                reset = mutable.value.reset.copy(pending = null, preparation = RegistrationPreparation.IDLE, outcome = outcome))
+        }
+    }
+
+    /**
+     * A reset POST that didn't sign in. Ambiguous means it may have committed: the Unknown outcome, never a resend. The
+     * contract's refusals are definite and set no marker: 400s, 429 and `503 maintenance_lockdown` (password-recovery.md).
+     * Any other 5xx, a lost connection, a timeout, a malformed reply or a redirect is ambiguous.
+     */
+    private suspend fun resetFailed(active: Runtime, failure: ApiFailure, attempt: UncertainReset?, keepPending: Boolean) = lock.withLock {
+        if (runtime !== active) return@withLock
+        val lockdown = failure.status == 503 && failure.code == "maintenance_lockdown"
+        val uncertain = failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.INCOMPATIBLE,
+            FailureKind.REDIRECT) || ((failure.status ?: 0) >= 500 && !lockdown)
+        if (uncertain) attempt?.let { active.uncertainReset = it }
+        failLocked(active, failure)
+        if (runtime !== active) return@withLock
+        if (uncertain) active.pendingReset = null
+        mutable.value = mutable.value.copy(reset = mutable.value.reset.copy(
+            pending = if (keepPending && !uncertain) mutable.value.reset.pending else null,
+            outcome = if (uncertain) ResetOutcome.UNCERTAIN else null))
     }
 
     override suspend fun register(username: String, password: String, birthDate: String?) {
@@ -449,7 +676,7 @@ class SessionRepository internal constructor(
         }
     }
 
-    private suspend fun authenticated(active: Runtime, reply: AuthReply, registration: Boolean = false) = lock.withLock {
+    private suspend fun authenticated(active: Runtime, reply: AuthReply, registration: Boolean = false, reset: Boolean = false) = lock.withLock {
         if (runtime !== active) return@withLock
         active.csrf = reply.csrfToken
         if (reply.mfaRequired) {
@@ -465,15 +692,28 @@ class SessionRepository internal constructor(
                 chatPolicy = null, privacy = null, shareTyping = null, attachmentPolicy = AttachmentPolicy.Unknown, webPush = io.github.thiesi.chitchat.core.push.WebPushDiscovery.Unknown,
                 accountRestored = reply.restored, registrationMayHaveSucceeded = false, rules = reply.rules,
                 recoveryKey = reply.recoveryKeyStatus,
-                registrationRecoveryKey = reply.registrationRecoveryKey.takeIf { registration },
-                // The key display is the only way to see it: a registration without one, or a sign-in after an ambiguous
-                // registration, may have left a key that never reached this phone.
-                recoveryKeyUndelivered = (registration && reply.registrationRecoveryKey == null) ||
-                    (!registration && active.signInMayFollowUncertainRegistration))
+                registrationRecoveryKey = reply.registrationRecoveryKey.takeIf { registration || reset },
+                recoveryKeyOrigin = if (reset) io.github.thiesi.chitchat.core.account.KeyOrigin.RESET else io.github.thiesi.chitchat.core.account.KeyOrigin.REGISTRATION,
+                reset = ResetState(),
+                // The key display is the only way to see it: a registration or reset without one, or a sign-in after an
+                // ambiguous registration, may have left a key that never reached this phone. After an Unknown reset, only
+                // a key created at or after that attempt's server time counts (TL, O4b); an earlier one means the reset
+                // never committed, and unknown times show nothing.
+                recoveryKeyUndelivered = when {
+                    registration -> io.github.thiesi.chitchat.core.account.KeyOrigin.REGISTRATION.takeIf { reply.registrationRecoveryKey == null }
+                    reset -> io.github.thiesi.chitchat.core.account.KeyOrigin.RESET.takeIf { reply.registrationRecoveryKey == null }
+                    active.signInMayFollowUncertainRegistration -> io.github.thiesi.chitchat.core.account.KeyOrigin.REGISTRATION
+                    active.signInMayFollowUncertainReset?.let {
+                        io.github.thiesi.chitchat.core.account.resetKeyCreatedSince(reply.recoveryKeyStatus, it.serverDate) } == true -> io.github.thiesi.chitchat.core.account.KeyOrigin.RESET
+                    else -> null
+                })
             // Runtime memory only: cleared by this (or any) completed authentication, by sign-out (the runtime is
             // replaced) and by process death. Never in session state, saved state, the vault or a log.
             active.uncertainRegistration = null
             active.signInMayFollowUncertainRegistration = false
+            active.uncertainReset = null
+            active.signInMayFollowUncertainReset = null
+            active.pendingReset = null
             persist(active, reply.user)
         }
     }
@@ -627,7 +867,7 @@ class SessionRepository internal constructor(
     internal suspend fun clearRecoveryKeyUndelivered(expected: SessionState) = lock.withLock {
         val current = mutable.value
         if (current.generation == expected.generation && current.user?.id == expected.user?.id)
-            mutable.value = current.copy(recoveryKeyUndelivered = false)
+            mutable.value = current.copy(recoveryKeyUndelivered = null)
     }
 
     /** See [io.github.thiesi.chitchat.core.account.AccountAccess.recoveryKeyAfterRefresh]. */
@@ -643,7 +883,7 @@ class SessionRepository internal constructor(
     internal suspend fun recoveryKeyCreated(access: SessionAccess, createdAt: String) = lock.withLock {
         ensureCurrent(access)
         mutable.value = mutable.value.copy(recoveryKey = io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known(true, createdAt),
-            recoveryKeyUndelivered = false)
+            recoveryKeyUndelivered = null)
     }
 
     internal suspend fun recoveryConsumed(access: SessionAccess, remaining: Int) = lock.withLock {
@@ -708,7 +948,7 @@ class SessionRepository internal constructor(
             return
         }
         val needsRefresh = failure.code == "csrf_failed" || failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT) ||
-            (current.authFlow == AuthFlow.REGISTER && current.busy && (failure.status ?: 0) >= 500)
+            ((current.authFlow == AuthFlow.REGISTER || current.authFlow == AuthFlow.RESET) && current.busy && (failure.status ?: 0) >= 500)
         if (needsRefresh) active.csrf = null
         mutable.value = current.copy(
             phase = if (current.phase == SessionPhase.CONNECTING) SessionPhase.INVALIDATED else current.phase,
@@ -808,6 +1048,9 @@ class SessionRepository internal constructor(
         }
     }
 
+    /** An Unknown reset attempt: the username and the server's `Date` from its challenge GET. No string form. */
+    private class UncertainReset(val username: String, val serverDate: String?)
+
     private class Runtime(val server: ServerAddress, val api: SessionHttp) {
         var csrf: String? = null
         /**
@@ -818,6 +1061,17 @@ class SessionRepository internal constructor(
         var uncertainRegistration: String? = null
         /** A sign-in to [uncertainRegistration]'s username is in progress (it may finish through MFA). */
         var signInMayFollowUncertainRegistration = false
+        /** An Unknown reset (O4b): its username and server time. Memory only; cleared by any completed authentication. */
+        var uncertainReset: UncertainReset? = null
+        /** A sign-in to [uncertainReset]'s username is in progress. */
+        var signInMayFollowUncertainReset: UncertainReset? = null
+        /** The attempt behind a pending reset, so an uncertain MFA or cancel can mark it. */
+        var pendingReset: UncertainReset? = null
+        var resetChallenge: SessionHttp.ResetChallenge? = null
+        var resetChallengeAt = 0L
+        var resetProof: RegistrationProof? = null
+        var resetProofDate: String? = null
+        var resetProofAt = 0L
         var signedInAt: Long? = null
         var lastValidatedAt: Long? = null
         var expectedUserId: Long? = null
