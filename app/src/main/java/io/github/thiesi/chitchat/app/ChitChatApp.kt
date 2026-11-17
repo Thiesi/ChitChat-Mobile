@@ -74,6 +74,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
@@ -158,6 +159,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     pushTaps: io.github.thiesi.chitchat.core.push.PendingPushTap? = null,
     policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel? = null,
     guidelines: io.github.thiesi.chitchat.feature.policies.GuidelinesViewModel? = null,
+    recoveryKeys: io.github.thiesi.chitchat.feature.account.RecoveryKeyViewModel? = null,
     rulesUpdate: io.github.thiesi.chitchat.feature.policies.RulesUpdateViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
@@ -431,7 +433,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             if (session.phase != SessionPhase.AUTHENTICATED && inShell()) leaveShell()
         }
         val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+        // A key from Replace or Create (O4a2b) shows over the composed shell; meanwhile the shell is out of TalkBack's reach.
+        val recoveryUi = recoveryKeys?.state?.collectAsStateWithLifecycle()?.value
+        val keyOverlay = recoveryUi?.shown?.takeIf { session.phase == SessionPhase.AUTHENTICATED && !session.updateRequired &&
+            session.registrationRecoveryKey == null }
+        BoxWithConstraints(Modifier.fillMaxSize().imePadding()
+            .then(if (keyOverlay != null) Modifier.clearAndSetSemantics {} else Modifier)) {
         // A toolbar can consume the entire keyboard-visible landscape viewport. Keep editing
         // controls usable; system Back dismisses the IME and restores the ordinary navigation bar.
         val conversationRoute = entry?.destination?.route?.let { it.startsWith("direct") || it.startsWith("conversation/") ||
@@ -470,6 +477,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         R.string.rooms_conversation else when (entry?.destination?.route) {
                         "settings" -> R.string.settings
                         "account", NOTIFICATION_ACCOUNT_ROUTE -> R.string.account
+                        RECOVERY_KEY_ROUTE -> R.string.recovery_key_row
                         "notification_settings" -> R.string.notification_settings_title
                         FIND_PEOPLE_ROUTE -> R.string.find_people_title
                         LICENCES_ROUTE, LICENCE_ROUTE -> R.string.oss_licences_title
@@ -548,6 +556,14 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                     if (rulesRequired != null && rulesRequired != rulesUi.dismissed)
                         RulesUpdatedDialog(session, state.settings.server?.value, rulesUpdate, policies)
                 }
+                // "Didn't reach this phone" (O4a2b): on the Rooms root under the status slot, yielding to a level-2 slot
+                // notice like the rules strip. It lasts for this runtime and ends on Go there, Not now or a changed status.
+                if (recoveryKeys != null && entry?.destination?.route == ROOMS_ROUTE && session.phase == SessionPhase.AUTHENTICATED &&
+                    session.recoveryKeyUndelivered && (session.recoveryKey as? io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known)?.exists == true &&
+                    !session.updateRequired && !compactConversation && slotLevel != io.github.thiesi.chitchat.core.status.StatusLevel.BLOCK)
+                    io.github.thiesi.chitchat.feature.account.RecoveryKeyNotice(
+                        onGoThere = { recoveryKeys.dismissNotice(session); nav.navigate(RECOVERY_KEY_ROUTE) { launchSingleTop = true } },
+                        onNotNow = { recoveryKeys.dismissNotice(session) })
                 if (state.loading) {
                     CircularProgressIndicator()
                     Text(stringResource(R.string.loading_settings), Modifier.padding(top = 16.dp))
@@ -665,7 +681,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         }
                         composable("account") {
                             if (session.phase == SessionPhase.AUTHENTICATED) ScreenContent {
-                                AccountScreen(account, session, auth::refresh)
+                                AccountScreen(account, session, auth::refresh, installation = installationLabel(session, state.settings.server?.value),
+                                    onRecoveryKey = recoveryKeys?.let { { nav.navigate(RECOVERY_KEY_ROUTE) { launchSingleTop = true } } })
                                 typingPreferences?.let { TypingPreferenceCard(it, session, auth::refresh) }
                             }
                         }
@@ -673,6 +690,12 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             SHELL_POLICY_PRIVACY_ROUTE to io.github.thiesi.chitchat.core.policies.PolicyDocumentName.PRIVACY)) composable(route) {
                             if (session.phase == SessionPhase.AUTHENTICATED && policies != null) ScreenContent {
                                 PolicyRoute(policies, name, session, state.settings.server?.value)
+                            }
+                        }
+                        composable(RECOVERY_KEY_ROUTE) {
+                            if (session.phase == SessionPhase.AUTHENTICATED && recoveryKeys != null) ScreenContent {
+                                io.github.thiesi.chitchat.feature.account.RecoveryKeyScreen(recoveryKeys, session,
+                                    installationLabel(session, state.settings.server?.value))
                             }
                         }
                         composable(LICENCES_ROUTE) {
@@ -882,10 +905,23 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                     directThread?.targetDenied(request, failure)
                 }, refreshSession = auth::refresh, entryId = entry?.id, actualEntryId = { nav.currentBackStackEntry?.id })
         }
+        // Composed last, so its Back handler wins over the shell's; the same window, so FLAG_SECURE applies (O4a2b).
+        if (keyOverlay != null && recoveryKeys != null) Box(Modifier.fillMaxSize()) {
+            val server = state.settings.server?.value
+            RecoveryKeyDisplay(RecoveryKeyView(keyOverlay.key,
+                if (keyOverlay.replaced) R.string.recovery_key_title_new else R.string.recovery_key_title_save,
+                note = if (keyOverlay.replaced) R.string.recovery_key_replaced_note else null, createdAt = keyOverlay.createdAt),
+                installation = installationLabel(session, server), host = server?.let { runCatching { java.net.URI(it).host }.getOrNull() }.orEmpty(),
+                username = session.user?.username.orEmpty(), onSaved = recoveryKeys::saved)
+        }
     } }
 }
 
+private fun installationLabel(session: io.github.thiesi.chitchat.core.session.SessionState, server: String?): String = session.installationName
+    ?: breakableHost(server?.let { runCatching { java.net.URI(it).host }.getOrNull() }.orEmpty())
+
 private const val LICENCES_ROUTE = "licences"
+private const val RECOVERY_KEY_ROUTE = "recovery-key"
 private const val SERVER_NEW_ROUTE = "server_new"
 private const val FIND_PEOPLE_ROUTE = "find_people"
 // Server documents (O3a2): signed out from Server found, signed in from You (inside the shell).

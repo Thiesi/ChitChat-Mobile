@@ -92,6 +92,13 @@ internal fun createdRecoveryKey(root: JsonObject?): CreatedRecoveryKey {
     return CreatedRecoveryKey(key, createdAt)
 }
 
+/** The `created_at` comparison after a request that may have committed; a status that couldn't be read is unresolved. */
+internal fun unknownResolution(now: RecoveryKeyStatus?, before: String?): UnknownResolution = when (now) {
+    is RecoveryKeyStatus.Known -> if (now.exists && now.createdAt != before) UnknownResolution.CREATED_ELSEWHERE
+        else UnknownResolution.UNCHANGED
+    else -> UnknownResolution.UNRESOLVED
+}
+
 private fun ApiFailure.ambiguous() = kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.INCOMPATIBLE,
     FailureKind.REDIRECT) || (status ?: 0) >= 500
 
@@ -106,11 +113,7 @@ internal suspend fun requestRecoveryKey(create: suspend () -> CreatedRecoveryKey
     when {
         failure.status == 409 && failure.code == "password_account_required" -> RecoveryKeyResult.PasswordAccountRequired
         failure.status == 429 -> RecoveryKeyResult.RateLimited(failure.retryAfterSeconds?.takeIf { it > 0 })
-        failure.ambiguous() -> RecoveryKeyResult.Unknown(when (val now = reread()) {
-            is RecoveryKeyStatus.Known -> if (now.exists && now.createdAt != before) UnknownResolution.CREATED_ELSEWHERE
-                else UnknownResolution.UNCHANGED
-            else -> UnknownResolution.UNRESOLVED
-        })
+        failure.ambiguous() -> RecoveryKeyResult.Unknown(unknownResolution(reread(), before))
         else -> RecoveryKeyResult.Failed(failure)
     }
 }

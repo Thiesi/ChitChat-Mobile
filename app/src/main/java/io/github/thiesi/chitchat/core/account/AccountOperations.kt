@@ -17,11 +17,18 @@ interface AccountAccess {
     suspend fun verifyRecovery(code: String): Int
     /** One `account/recovery-key.php` POST; the confirmed date reaches the session state, the key only the caller. */
     suspend fun createRecoveryKey(): CreatedRecoveryKey
+    /**
+     * The Unknown re-read: one ordinary, generation-fenced session refresh, then the adopted status. Null when the refresh
+     * was skipped (busy) or failed, which means unresolved; never a raw GET whose CSRF the session doesn't adopt.
+     */
+    suspend fun recoveryKeyAfterRefresh(): RecoveryKeyStatus? = null
 }
 
 interface AccountOperations {
     val session: StateFlow<SessionState>
     suspend fun open(): AccountAccess
+    /** Go there or Not now on "didn't reach this phone": the notice ends for this runtime (PL O4a2b). */
+    suspend fun dismissRecoveryKeyNotice(expected: SessionState) {}
 }
 
 /** Only a definite server step-up rejection permits one retry, never an ambiguous write. */

@@ -321,15 +321,17 @@ class PresentationGateTests(unittest.TestCase):
     def test_recovery_captures_are_copied_and_keep_the_original_status(self):
         self.results(5)
         files = [Path("recovery-light-default-display-api32.png"), Path("recovery-dark-font200-display.png"),
-            Path("recovery-dark-default-dialog.png"), Path("recovery-light-font200-display-end.png")]
+            Path("recovery-dark-default-dialog.png"), Path("recovery-light-font200-display-end.png"),
+            Path("recovery-light-font200-display-api32-end.png"), Path("recovery-dark-default-notset.png"),
+            Path("recovery-light-font200-notice.png")]
         self.recovery_files(files)
         self.assertEqual(5, runner.main()); self.assert_once()
         for path in files: self.copy.assert_any_call(path, runner.RECOVERY_DESTINATION / path.name)
-        self.assertEqual(5, self.copy.call_count)
+        self.assertEqual(8, self.copy.call_count)
 
     def test_excess_ambiguous_or_foreign_recovery_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"recovery-light-default-display-{n}.png") for n in range(13)],
+        for files in ([Path(f"recovery-light-default-display-{n}.png") for n in range(23)],
             [Path("a/recovery-dark-default-dialog.png"), Path("b/recovery-dark-default-dialog.png")],
             [Path("recovery-dark-default-dialog-api32.png")], [Path("other.png")]):
             self.copy.reset_mock(); self.mkdir.reset_mock(); self.recovery_files(files)
