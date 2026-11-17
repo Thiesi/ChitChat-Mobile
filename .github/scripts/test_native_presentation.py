@@ -329,7 +329,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_excess_ambiguous_or_foreign_recovery_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"recovery-light-default-display-{n}.png") for n in range(11)],
+        for files in ([Path(f"recovery-light-default-display-{n}.png") for n in range(13)],
             [Path("a/recovery-dark-default-dialog.png"), Path("b/recovery-dark-default-dialog.png")],
             [Path("recovery-dark-default-dialog-api32.png")], [Path("other.png")]):
             self.copy.reset_mock(); self.mkdir.reset_mock(); self.recovery_files(files)

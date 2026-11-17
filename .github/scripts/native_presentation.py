@@ -241,15 +241,15 @@ def collect_auth():
 
 
 def collect_recovery():
-    # O4a2a: the key display (top and end), the API 32 clipboard line and the confirmation dialog; light and dark.
-    files = list(islice(SOURCE.rglob("ccm-recovery-presentation/*"), 11))
-    if (not files or len(files) > 10 or len({p.name for p in files}) != len(files)
+    # O4a2a: the key display (top and end) and the confirmation dialog at default and 200%; light and dark.
+    files = list(islice(SOURCE.rglob("ccm-recovery-presentation/*"), 13))
+    if (not files or len(files) > 12 or len({p.name for p in files}) != len(files)
         or any(RECOVERY_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous recovery presentation output")
     RECOVERY_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, RECOVERY_DESTINATION / path.name)
-    print(f"Recovery presentation captures collected: {len(files)} of 10.")
+    print(f"Recovery presentation captures collected: {len(files)} of 12.")
 
 
 def collect_onboarding():

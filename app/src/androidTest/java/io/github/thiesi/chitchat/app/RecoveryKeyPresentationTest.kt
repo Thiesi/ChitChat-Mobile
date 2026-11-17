@@ -79,11 +79,11 @@ class RecoveryKeyPresentationTest {
                 }
                 compose.onNodeWithTag("recovery_key_continue").performScrollTo().assertIsDisplayed() // Reachable by scrolling (A-04).
                 capture("recovery-$label-$name-display-end", "recovery_host")
-                if (fontScale == 1f) {
-                    compose.onNodeWithTag("recovery_key_continue").performClick()
-                    compose.onNodeWithTag("recovery_key_saved").assertExists()
-                    capture("recovery-$label-$name-dialog", null)
-                }
+                // The dialog at both scales: its body scrolls (P-220), so both actions stay displayed.
+                compose.onNodeWithTag("recovery_key_continue").performClick()
+                compose.onNodeWithTag("recovery_key_saved").assertIsDisplayed()
+                compose.onNodeWithTag("recovery_key_go_back").assertIsDisplayed()
+                capture("recovery-$label-$name-dialog", null)
             }
         }
     }
