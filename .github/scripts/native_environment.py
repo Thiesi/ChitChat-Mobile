@@ -1,5 +1,6 @@
 """One suite-level fingerprint/precondition check on the dedicated CI emulator."""
 
+import collections
 import json
 import os
 from pathlib import Path
@@ -63,9 +64,13 @@ def keep_boot_window(dump: str | None):
     import early_logcat
     try:
         early_logcat.OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+        # Filter first, then keep the last MAX_LINES markers: boot logs verbosely (androidboot.logcat=*:V), so capping raw
+        # lines first kept only about half a second of boot (PR #291's first run).
+        kept = collections.deque((marker for marker in map(early_logcat.keep, dump.splitlines()) if marker is not None),
+                                 maxlen=early_logcat.MAX_LINES)
         with early_logcat.OUTPUT.open("w", encoding="utf-8") as sink:
             window = early_logcat.Window(sink)
-            for line in dump.splitlines()[-early_logcat.MAX_LINES:]: window.logcat(line)
+            for marker in kept: window.write(marker)
     except OSError:
         pass
 

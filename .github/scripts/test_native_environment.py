@@ -58,6 +58,22 @@ class EnvironmentTests(unittest.TestCase):
         self.assertLess(dump, commands.index(["adb", "logcat", "-G", "16M"]))
         self.assertLess(dump, commands.index(["adb", "logcat", "-c"]))
 
+    def test_the_boot_window_keeps_early_markers_through_verbose_boot_noise(self):
+        # Boot logs verbosely: capping raw lines before the allowlist kept only the last half second (PR #291).
+        import contextlib, io
+        noise = [f"11-17 04:09:2{i % 10}.000 V/Chatty( 3): verbose noise {i}" for i in range(3000)]
+        early = "11-17 04:09:00.100 I/ActivityManager( 1): Start proc 512:com.android.systemui"
+        late = "11-17 04:09:23.352 I/ActivityManager( 1): Start proc 3098:com.google.android.apps.messaging"
+        device = Device("\n".join([early] + noise + [late]))
+        sink = io.StringIO()
+        with patch.object(env, "read", side_effect=device.read), patch.object(env, "fingerprint", return_value=ready()), \
+                patch.object(Path, "mkdir"), patch.object(Path, "write_text"), \
+                patch.object(Path, "open", return_value=contextlib.nullcontext(sink)):
+            self.assertEqual(0, env.main(sleep=self.sleeps.append))
+        self.assertIn("Start proc 512:com.android.systemui", sink.getvalue())
+        self.assertIn("Start proc 3098:com.google.android.apps.messaging", sink.getvalue())
+        self.assertNotIn("verbose noise", sink.getvalue())
+
     def test_the_single_read_follows_one_fixed_settle_and_is_never_repeated(self):
         device = Device("")
         with patch.object(env, "read", side_effect=device.read), \

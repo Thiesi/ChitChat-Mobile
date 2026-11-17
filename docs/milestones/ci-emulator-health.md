@@ -24,6 +24,10 @@ to `anr` / `app_error` / `other`, and never stored as raw window text.
   `Emulator booted`: FallbackHome on main run 43938459454 and on PR #287's run 43949708112, then a null focus on PR
   #289's run 44000691076. So the single read now follows one fixed 15-second delay. It's a delay, never a poll: no loop,
   no re-read, no wait until healthy. 15s is small against 20 to 30 minute runs.
+- **The settle is only for transient boot homes** (FallbackHome, a null focus). An ANR or error dialog persists until it's
+  dismissed, so the settle doesn't clear it, and it stays a true-positive unhealthy verdict. PR #290's rerun record had
+  `anr_dialog_has_focus` about 9s after boot, very likely the same focus-stealing behind the earlier 30-minute API35
+  collapses at test 4. Never "fix" an ANR verdict away: no dismissing, no waiting it out, no allowlisting.
 - **On unhealthy:** the job ends with `Native emulator unhealthy (reasons); instrumentation not started.`, and
   `device/environment.json` records `classification: emulator_unhealthy` and its reasons. Before exiting, the check
   appends focus samples to `device/early-logcat.txt` every 2 seconds for a fixed 10 seconds (`focus <class> at=+Ns
@@ -39,7 +43,10 @@ The boot window comes first: after the settle, the environment check makes **one
 into `device/early-logcat.txt`, **before** its resize (`-G`) and its clear. That happens before the health verdict, so an
 `emulator_unhealthy` run still keeps its boot markers. The dump used to come after the resize. On these images the
 resize discards the ring, so run 44000691076's file was empty, and healthy runs kept only the second after the resize.
-A unit test with a fake device whose resize discards the ring pins the order. `early_logcat.py` then starts in the background **after** the
+A unit test with a fake device whose resize discards the ring pins the order. The dump is filtered to allowlisted markers
+first and then capped at the last 2,000 markers. Capping raw lines first kept only about half a second of the verbose
+boot log (PR #291's first run), and a test with 3,000 noise lines pins that the early markers survive.
+`early_logcat.py` then starts in the background **after** the
 check and appends through the first five instrumentation tests. Nothing reads logcat during the check's resize or clear:
 a concurrent reader made API36's setup fail on PR #282's first head, so the order is pinned by a unit test.
 - **What's kept:** only allowlisted markers (test start, finish and failure; ANR, fatal and force-finish markers;
