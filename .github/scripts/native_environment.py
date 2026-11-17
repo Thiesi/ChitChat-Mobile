@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 
 from pin_journey_image import EMULATOR_BUILD, EMULATOR_VERSION, IMAGE_REVISION, IMAGE_PINS, requested_api
 
@@ -22,6 +23,14 @@ LAUNCHERS = ("com.google.android.apps.nexuslauncher", "com.android.launcher3")
 # obstruction: main run 43938459454 recorded it with boot completed and the IME selected, while launcher processes were
 # still starting (TL ruling: allowlist this exact component, no settle wait).
 BOOT_HOME = "com.android.settings/com.android.settings.FallbackHome"
+# A fixed settle after the runner reports boot completed, then the single read as before (TL ruling, #245): three
+# boot-state verdicts (two FallbackHome, one null focus) were all read about 2s after boot. A fixed delay, never a poll,
+# a re-read or a wait until healthy.
+SETTLE_SECONDS = 15
+# Evidence only, on the unhealthy path: focus samples for a fixed window after the verdict, so the record shows whether a
+# launcher took focus moments later. The verdict, the read and the no-retry rule are unchanged.
+EVIDENCE_SECONDS = 10
+EVIDENCE_EVERY_SECONDS = 2
 FOCUS = re.compile(r"mCurrentFocus=Window\{[0-9a-f]+ u\d+ ([^}]*)\}")
 
 
@@ -57,6 +66,21 @@ def keep_boot_window(dump: str | None):
         with early_logcat.OUTPUT.open("w", encoding="utf-8") as sink:
             window = early_logcat.Window(sink)
             for line in dump.splitlines()[-early_logcat.MAX_LINES:]: window.logcat(line)
+    except OSError:
+        pass
+
+
+def keep_focus_after_verdict(sleep=None):
+    """Appends scalar focus samples for EVIDENCE_SECONDS after an unhealthy verdict; never changes the outcome."""
+    sleep = sleep or time.sleep
+    import early_logcat
+    try:
+        early_logcat.OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+        with early_logcat.OUTPUT.open("a", encoding="utf-8") as sink:
+            for elapsed in range(0, EVIDENCE_SECONDS + 1, EVIDENCE_EVERY_SECONDS):
+                if elapsed: sleep(EVIDENCE_EVERY_SECONDS)
+                focus = focus_class(read(["adb", "shell", "dumpsys", "window"])) or "none"
+                sink.write(f"focus {focus} at=+{elapsed}s after verdict\n"); sink.flush()
     except OSError:
         pass
 
@@ -141,14 +165,18 @@ def preconditions(data: dict, *, image_revision: str = IMAGE_REVISION, image_api
     return failures
 
 
-def main() -> int:
+def main(sleep=None) -> int:
+    sleep = sleep or time.sleep  # Resolved at call time, so tests can patch time.sleep.
     api = requested_api()
+    sleep(SETTLE_SECONDS)
+    # The boot buffer is read first: resizing the ring (-G) discards it on these images, which left run 44000691076's
+    # early logcat empty (#245). One allowlisted read, written before the resize, the clear and any verdict.
+    keep_boot_window(read(["adb", "logcat", "-d", "-v", "time"]))
     # Enlarging/clearing the ring is suite setup, never a replay of instrumentation. Nothing else reads logcat during
     # it: the early-logcat helper starts only after this check (a concurrent reader made API36's setup fail, PR #282).
     if read(["adb", "logcat", "-G", "16M"]) is None:
         print("Native environment setup failed; instrumentation not started.", file=sys.stderr)
         return 1
-    keep_boot_window(read(["adb", "logcat", "-d", "-v", "time"]))  # One allowlisted read of the boot buffer, before the clear.
     if read(["adb", "logcat", "-c"]) is None:
         print("Native environment setup failed; instrumentation not started.", file=sys.stderr)
         return 1
@@ -163,6 +191,7 @@ def main() -> int:
     if unhealthy:
         # A distinct, fast setup collapse (record it on #245). Never retried, waited out or repaired here.
         print(f"Native emulator unhealthy ({', '.join(unhealthy)}); instrumentation not started.", file=sys.stderr)
+        keep_focus_after_verdict(sleep)  # The workflow stops on this exit, so the early-logcat helper never starts.
         return 1
     if failures:
         print("Native environment precondition failed; instrumentation not started.", file=sys.stderr)
