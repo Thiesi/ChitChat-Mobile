@@ -57,13 +57,14 @@ class RecoveryKeySettingsPresentationTest {
             for ((state, status) in listOf("exists" to RecoveryKeyStatus.Known(true, "2026-11-17T10:00:00+00:00"),
                 "notset" to RecoveryKeyStatus.Known(false, null))) {
                 val current = session(status)
-                launch(fontScale, dark) {
-                    // The app's ScreenContent scrolls; so does this host, so the screen is captured as it lives there.
+                launch(fontScale, dark) { androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.background) {
+                    // The app's ScreenContent scrolls inside the Scaffold, which provides the content colour; so does
+                    // this host, so the screen is captured as it lives there.
                     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
                         .verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp).testTag("recovery_host")) {
                         RecoveryKeyScreen(model(current), current, "The Common Room")
                     }
-                }
+                } }
                 compose.onNodeWithTag("recovery_key_screen").assertExists()
                 capture("recovery-$label-$name-$state")
                 if (state == "exists") {
@@ -74,11 +75,11 @@ class RecoveryKeySettingsPresentationTest {
                 }
             }
             if (fontScale == 2f) {
-                launch(fontScale, dark) {
+                launch(fontScale, dark) { androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.background) {
                     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).testTag("recovery_host")) {
                         RecoveryKeyNotice(onGoThere = {}, onNotNow = {})
                     }
-                }
+                } }
                 compose.onNodeWithTag("recovery_key_notice").assertExists()
                 compose.onNodeWithTag("recovery_key_notice_go_there").assertHeightIsAtLeast(48.dp)
                 capture("recovery-$label-$name-notice")

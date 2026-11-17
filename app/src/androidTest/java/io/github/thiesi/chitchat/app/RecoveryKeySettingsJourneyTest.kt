@@ -43,12 +43,13 @@ class RecoveryKeySettingsJourneyTest {
     private val server = (ServerAddress.parse("chat.example.test") as AddressResult.Valid).address
     private val sessions = TestSessions()
     private val auth = AuthViewModel(sessions)
-    private val settings = SettingsViewModel(object : SettingsStore {
+    private val store = object : SettingsStore {
         override val settings = MutableStateFlow(AppSettings(server = server))
         override suspend fun saveServer(server: ServerAddress?) { settings.value = settings.value.copy(server = server) }
         override suspend fun savePureBlack(enabled: Boolean) = Unit
         override suspend fun saveTheme(theme: ThemePreference) = Unit
-    })
+    }
+    private val settings = SettingsViewModel(store)
     private val newDate = "2026-11-17T10:00:00+00:00"
     private val accounts = object : AccountOperations {
         override val session get() = sessions.state
@@ -127,6 +128,29 @@ class RecoveryKeySettingsJourneyTest {
         compose.waitUntil(5_000) { exists("recovery_key_display") }
         compose.onNodeWithText(compose.activity.getString(io.github.thiesi.chitchat.R.string.recovery_key_title_save)).assertExists()
         assertFalse(exists("recovery_key_replace_confirm"))
+    }
+
+    /** The colour Text actually resolved, from its layout result (the merged style, including LocalContentColor). */
+    private fun resolvedColour(tag: String): androidx.compose.ui.graphics.Color {
+        val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithTag(tag).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult]
+            .action?.invoke(results)
+        return results.single().layoutInput.style.color
+    }
+
+    @Test fun theRealScreenResolvesItsPlainTextToOnBackgroundInDarkTheme() {
+        // Not just the capture host: O1's revalidation screen once drew black on dark (TL). Both key states, real root.
+        store.settings.value = store.settings.value.copy(theme = ThemePreference.DARK)
+        val onBackground = io.github.thiesi.chitchat.core.theme.Lantern.dark.text
+        signedIn(RecoveryKeyStatus.Known(true, "2026-11-01T10:00:00+00:00"))
+        openPrivacy()
+        compose.onNodeWithTag("recovery_key_row").performClick()
+        compose.waitUntil(5_000) { exists("recovery_key_screen") }
+        assertEquals(onBackground, resolvedColour("recovery_key_explanation"))
+        assertEquals(onBackground, resolvedColour("recovery_key_replace_explanation"))
+        compose.runOnIdle { sessions.state.value = sessions.state.value.copy(recoveryKey = RecoveryKeyStatus.Known(false, null)) }
+        compose.waitUntil(5_000) { exists("recovery_key_create") }
+        assertEquals(onBackground, resolvedColour("recovery_key_explanation"))
     }
 
     @Test fun aProviderOnlyAccountHasNoRow() {

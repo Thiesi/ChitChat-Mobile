@@ -115,8 +115,9 @@ fun RecoveryKeyScreen(model: RecoveryKeyViewModel, session: SessionState, instal
             Text(stringResource(R.string.recovery_key_created, it), Modifier.testTag("recovery_key_created"), color = ChitChatTheme.colors.textMuted)
         }
         if (status?.exists == false) NotSetUpLine(installation, "recovery_key_not_set_up")
-        Text(stringResource(R.string.recovery_key_explanation, installation))
-        if (status?.exists == true) Text(stringResource(R.string.recovery_key_replace_explanation))
+        Text(stringResource(R.string.recovery_key_explanation, installation), Modifier.testTag("recovery_key_explanation"))
+        if (status?.exists == true) Text(stringResource(R.string.recovery_key_replace_explanation),
+            Modifier.testTag("recovery_key_replace_explanation"))
         if (!idle) CircularProgressIndicator(Modifier.testTag("recovery_key_busy"))
         state.outcome?.let { Outcome(it, enabled, model::request) }
         when (status?.exists) {
