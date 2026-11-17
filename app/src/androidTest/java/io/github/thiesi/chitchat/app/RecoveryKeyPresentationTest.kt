@@ -59,7 +59,10 @@ class RecoveryKeyPresentationTest {
                 val save = compose.onNodeWithTag("recovery_key_save_file").getUnclippedBoundsInRoot()
                 val file = compose.onNodeWithTag("recovery_key_file_line").getUnclippedBoundsInRoot()
                 val clip = if (!dark) compose.onNodeWithTag("recovery_key_clipboard_line").getUnclippedBoundsInRoot() else null
-                org.junit.Assert.assertTrue("48dp targets", copy.height >= 48.dp && save.height >= 48.dp)
+                // The 48dp floor is the touch target (Material's minimumInteractiveComponentSize), not the drawn height.
+                val copyTouch = touchHeight("recovery_key_copy"); val saveTouch = touchHeight("recovery_key_save_file")
+                org.junit.Assert.assertTrue("48dp touch targets: copy layout=${copy.height} touch=$copyTouch, " +
+                    "save layout=${save.height} touch=$saveTouch", copyTouch >= 48.dp && saveTouch >= 48.dp)
                 if (fontScale == 1f) {
                     assertEquals("Copy and Save share a row at default", copy.top, save.top)
                     // Both lines under the row, in button order.
@@ -82,6 +85,11 @@ class RecoveryKeyPresentationTest {
                 }
             }
         }
+    }
+
+    private fun touchHeight(tag: String): androidx.compose.ui.unit.Dp {
+        val node = compose.onNodeWithTag(tag).fetchSemanticsNode()
+        return with(node.layoutInfo.density) { node.touchBoundsInRoot.height.toDp() }
     }
 
     private fun capture(name: String, node: String?) {
