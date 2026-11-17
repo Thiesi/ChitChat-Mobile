@@ -16,7 +16,90 @@ def ready():
                 showImeWithHardKeyboard="1", animations={"window": "0", "transition": "0.0", "animator": "0"})
 
 
+class Device:
+    """A fake emulator whose logcat ring behaves as on the CI images: resizing it (-G) discards the buffer."""
+
+    def __init__(self, buffer: str, focus: str = "com.google.android.apps.nexuslauncher/.NexusLauncherActivity"):
+        self.buffer, self.focus, self.commands = buffer, focus, []
+
+    def read(self, command):
+        self.commands.append(command)
+        if command[:3] == ["adb", "logcat", "-G"] or command[:3] == ["adb", "logcat", "-c"]:
+            self.buffer = ""; return ""
+        if command[:3] == ["adb", "logcat", "-d"]: return self.buffer
+        if command[:4] == ["adb", "shell", "dumpsys", "window"]:
+            return f"  mCurrentFocus=Window{{a1b2 u0 {self.focus}}}"
+        return ""
+
+
 class EnvironmentTests(unittest.TestCase):
+    def setUp(self):
+        # A fake clock: the fixed settle and evidence delays cost no wall time and their durations are asserted. Tests
+        # that don't pass one still never wait for real (the guard below records them too).
+        self.sleeps = []
+        guard = patch.object(env.time, "sleep", side_effect=self.sleeps.append)
+        guard.start(); self.addCleanup(guard.stop)
+
+    def test_an_unhealthy_verdict_keeps_the_boot_dump_although_the_resize_discards_the_ring(self):
+        # Run 44000691076: the dump came after -G, which discards the buffer, so the file was empty (#245).
+        import contextlib, io
+        device = Device("11-17 02:09:14.000 I/ActivityManager( 1): Start proc 905:com.android.systemui\n"
+                        "11-17 02:09:15.000 I/ActivityTaskManager( 1): Displayed com.android.settings/.FallbackHome")
+        sink = io.StringIO()
+        with patch.object(env, "read", side_effect=device.read), \
+                patch.object(env, "fingerprint", return_value=dict(ready(), currentFocus=None)), patch.object(Path, "mkdir"), \
+                patch.object(Path, "write_text") as write, patch.object(Path, "open", return_value=contextlib.nullcontext(sink)):
+            self.assertEqual(1, env.main(sleep=self.sleeps.append))
+        self.assertIn('"classification": "emulator_unhealthy"', write.call_args.args[0])
+        self.assertIn("Start proc 905:com.android.systemui", sink.getvalue())
+        self.assertIn("Displayed com.android.settings/.FallbackHome", sink.getvalue())
+        commands = device.commands
+        dump = commands.index(["adb", "logcat", "-d", "-v", "time"])
+        self.assertLess(dump, commands.index(["adb", "logcat", "-G", "16M"]))
+        self.assertLess(dump, commands.index(["adb", "logcat", "-c"]))
+
+    def test_the_boot_window_keeps_early_markers_through_verbose_boot_noise(self):
+        # Boot logs verbosely: capping raw lines before the allowlist kept only the last half second (PR #291).
+        import contextlib, io
+        noise = [f"11-17 04:09:2{i % 10}.000 V/Chatty( 3): verbose noise {i}" for i in range(3000)]
+        early = "11-17 04:09:00.100 I/ActivityManager( 1): Start proc 512:com.android.systemui"
+        late = "11-17 04:09:23.352 I/ActivityManager( 1): Start proc 3098:com.google.android.apps.messaging"
+        device = Device("\n".join([early] + noise + [late]))
+        sink = io.StringIO()
+        with patch.object(env, "read", side_effect=device.read), patch.object(env, "fingerprint", return_value=ready()), \
+                patch.object(Path, "mkdir"), patch.object(Path, "write_text"), \
+                patch.object(Path, "open", return_value=contextlib.nullcontext(sink)):
+            self.assertEqual(0, env.main(sleep=self.sleeps.append))
+        self.assertIn("Start proc 512:com.android.systemui", sink.getvalue())
+        self.assertIn("Start proc 3098:com.google.android.apps.messaging", sink.getvalue())
+        self.assertNotIn("verbose noise", sink.getvalue())
+
+    def test_the_single_read_follows_one_fixed_settle_and_is_never_repeated(self):
+        device = Device("")
+        with patch.object(env, "read", side_effect=device.read), \
+                patch.object(env, "fingerprint", return_value=ready()) as fingerprint, \
+                patch.object(Path, "mkdir"), patch.object(Path, "write_text"):
+            self.assertEqual(0, env.main(sleep=self.sleeps.append))
+        self.assertEqual([env.SETTLE_SECONDS], self.sleeps)
+        self.assertEqual(15, env.SETTLE_SECONDS)
+        fingerprint.assert_called_once()
+        self.assertNotIn(["adb", "shell", "dumpsys", "window"], device.commands)  # No evidence samples when healthy.
+
+    def test_an_unhealthy_verdict_samples_focus_for_a_fixed_window_without_changing_the_outcome(self):
+        import contextlib, io
+        device = Device("", focus="com.google.android.apps.nexuslauncher/.NexusLauncherActivity")
+        sink = io.StringIO()
+        with patch.object(env, "read", side_effect=device.read), \
+                patch.object(env, "fingerprint", return_value=dict(ready(), currentFocus=None)) as fingerprint, \
+                patch.object(Path, "mkdir"), patch.object(Path, "write_text"), \
+                patch.object(Path, "open", return_value=contextlib.nullcontext(sink)):
+            self.assertEqual(1, env.main(sleep=self.sleeps.append))  # A launcher arriving later never rescues the verdict.
+        fingerprint.assert_called_once()
+        samples = [line for line in sink.getvalue().splitlines() if line.startswith("focus ")]
+        self.assertEqual([f"focus com.google.android.apps.nexuslauncher/.NexusLauncherActivity at=+{s}s after verdict"
+                          for s in range(0, 11, 2)], samples)
+        self.assertEqual([env.SETTLE_SECONDS] + [env.EVIDENCE_EVERY_SECONDS] * 5, self.sleeps)
+
     def test_preconditions_reject_each_missing_wrong_or_unknown_value(self):
         self.assertEqual([], env.preconditions(ready()))
         for key, value in (("defaultIme", None), ("defaultIme", "other/.Ime"),
@@ -78,6 +161,7 @@ class EnvironmentTests(unittest.TestCase):
                 patch.object(Path, "write_text"), patch.object(Path, "open", return_value=__import__("contextlib").nullcontext(sink)):
             self.assertEqual(0, env.main())
         calls = [call.args[0] for call in read.call_args_list]
+        self.assertLess(calls.index(["adb", "logcat", "-d", "-v", "time"]), calls.index(["adb", "logcat", "-G", "16M"]))
         self.assertLess(calls.index(["adb", "logcat", "-d", "-v", "time"]), calls.index(["adb", "logcat", "-c"]))
         self.assertIn("Start proc 905:com.android.systemui", sink.getvalue()); self.assertNotIn("private", sink.getvalue())
         with patch.object(env, "read", side_effect=lambda c: None if c[:3] == ["adb", "logcat", "-d"] else ""), \
@@ -98,7 +182,9 @@ class EnvironmentTests(unittest.TestCase):
     def test_setup_failure_stops_without_fingerprint_or_second_command(self):
         with patch.object(env, "read", return_value=None) as read, patch.object(env, "fingerprint") as fingerprint:
             self.assertEqual(1, env.main())
-            read.assert_called_once_with(["adb", "logcat", "-G", "16M"])
+            # The evidence-only boot dump, then the failed resize; nothing after it.
+            self.assertEqual([["adb", "logcat", "-d", "-v", "time"], ["adb", "logcat", "-G", "16M"]],
+                             [call.args[0] for call in read.call_args_list])
             fingerprint.assert_not_called()
 
     def test_one_fingerprint_and_report_before_any_possible_instrumentation(self):
@@ -109,7 +195,8 @@ class EnvironmentTests(unittest.TestCase):
                     patch.object(env, "fingerprint", return_value=data) as fingerprint, \
                     patch.object(Path, "mkdir"), patch.object(Path, "write_text") as write:
                 self.assertEqual(int(wrong), env.main())
-                self.assertEqual([["adb", "logcat", "-G", "16M"], ["adb", "logcat", "-d", "-v", "time"], ["adb", "logcat", "-c"]],
+                # The boot dump first: the resize discards the ring (#245).
+                self.assertEqual([["adb", "logcat", "-d", "-v", "time"], ["adb", "logcat", "-G", "16M"], ["adb", "logcat", "-c"]],
                                  [call.args[0] for call in read.call_args_list])
                 fingerprint.assert_called_once_with(image_api=36); write.assert_called_once()
                 self.assertIn('"failedPreconditions"', write.call_args.args[0])
