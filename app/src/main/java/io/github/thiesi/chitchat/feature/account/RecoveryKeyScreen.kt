@@ -129,7 +129,10 @@ fun RecoveryKeyScreen(model: RecoveryKeyViewModel, session: SessionState, instal
     }
     if (confirmingReplace) AlertDialog(onDismissRequest = { confirmingReplace = false },
         title = { Text(stringResource(R.string.recovery_key_replace_title)) },
-        text = { Text(stringResource(R.string.recovery_key_replace_body)) },
+        // P-220: the body scrolls, so Cancel and Replace stay reachable at large text on a short window.
+        text = { io.github.thiesi.chitchat.core.ui.DialogScrollBody(Modifier.testTag("recovery_key_replace_body")) {
+            Text(stringResource(R.string.recovery_key_replace_body))
+        } },
         dismissButton = { TextButton(onClick = { confirmingReplace = false }, Modifier.testTag("recovery_key_replace_cancel")) {
             Text(stringResource(R.string.cancel))
         } },

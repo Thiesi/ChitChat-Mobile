@@ -63,6 +63,12 @@ class RecoveryKeySettingsPresentationTest {
                 }
                 compose.onNodeWithTag("recovery_key_screen").assertExists()
                 capture("recovery-$label-$name-$state")
+                if (state == "exists") {
+                    // P-220: the Replace dialog's body scrolls, so both actions stay displayed at either scale.
+                    compose.onNodeWithTag("recovery_key_replace").performScrollTo().performClick()
+                    compose.onNodeWithTag("recovery_key_replace_confirm").assertIsDisplayed()
+                    compose.onNodeWithTag("recovery_key_replace_cancel").assertIsDisplayed()
+                }
             }
             if (fontScale == 2f) {
                 launch(fontScale, dark) {
