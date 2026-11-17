@@ -93,6 +93,42 @@ class RecoveryKeyViewModelTest {
         assertEquals(1, fake.posts)
     }
 
+    @Test fun leavingDuringTheCheckAfterAnAmbiguousResponseChecksAgainOnReturn() = runTest(dispatcher) {
+        advanceUntilIdle()
+        fake.failure = ApiFailure(FailureKind.TIMEOUT)
+        fake.rereadHold = CompletableDeferred()
+        model.request(); advanceUntilIdle()
+        assertEquals(RecoveryKeyStage.CHECKING, model.state.value.stage)
+        assertEquals(1, fake.rereads)
+        model.leave(); advanceUntilIdle()
+        assertEquals(RecoveryKeyStage.IDLE, model.state.value.stage)
+        assertNull("No outcome yet: the check didn't finish", model.state.value.outcome)
+        fake.rereadHold = null
+        fake.reread = RecoveryKeyStatus.Known(true, after)
+        model.foreground(); advanceUntilIdle()
+        assertEquals("The check runs again on return", 2, fake.rereads)
+        assertEquals(RecoveryKeyOutcome.Unknown(UnknownResolution.CREATED_ELSEWHERE), model.state.value.outcome)
+        assertEquals("Never resent", 1, fake.posts)
+    }
+
+    @Test fun leavingDuringTheForegroundCheckChecksAgainOnTheNextReturn() = runTest(dispatcher) {
+        advanceUntilIdle()
+        fake.hold = CompletableDeferred()
+        model.request(); advanceUntilIdle()
+        model.leave(); advanceUntilIdle()
+        fake.rereadHold = CompletableDeferred()
+        model.foreground(); advanceUntilIdle()
+        assertEquals(RecoveryKeyStage.CHECKING, model.state.value.stage)
+        model.leave(); advanceUntilIdle()
+        fake.rereadHold = null
+        fake.reread = RecoveryKeyStatus.Known(true, before)
+        model.foreground(); advanceUntilIdle()
+        assertEquals(2, fake.rereads)
+        assertEquals("The check still compares with the date before the request",
+            RecoveryKeyOutcome.Unknown(UnknownResolution.UNCHANGED), model.state.value.outcome)
+        assertEquals(1, fake.posts)
+    }
+
     @Test fun leavingDuringStepUpIsNotUncertain() = runTest(dispatcher) {
         fake.stepUp = true; advanceUntilIdle()
         model.request(); advanceUntilIdle()
@@ -156,6 +192,7 @@ class RecoveryKeyViewModelTest {
         var verified = false
         var failure: ApiFailure? = null
         var reread: RecoveryKeyStatus? = null
+        var rereadHold: CompletableDeferred<Unit>? = null
         override suspend fun open(): AccountAccess = object : AccountAccess {
             override fun ensureCurrent() = Unit
             override suspend fun export() = error("No export here")
@@ -169,7 +206,7 @@ class RecoveryKeyViewModelTest {
                 failure?.let { failure = null; throw it }
                 return CreatedRecoveryKey(RecoveryKey("A7K2-B9QX-C4MZ-D8RT-E2WN-F6HP"), "2026-11-17T10:00:00+00:00")
             }
-            override suspend fun recoveryKeyAfterRefresh(): RecoveryKeyStatus? { rereads++; return reread }
+            override suspend fun recoveryKeyAfterRefresh(): RecoveryKeyStatus? { rereads++; rereadHold?.await(); return reread }
         }
     }
 }

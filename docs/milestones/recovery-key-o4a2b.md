@@ -32,7 +32,9 @@ lead's O4a2b design. It builds on [O4a1](recovery-key-o4a1.md) and [O4a2a](recov
 
 **Lifetime (M2b2).** The POST cancels on genuine background, navigation away from the screen, or logout, not on
 configuration change. A cancel after the POST was sent takes the Unknown path: the next time the screen starts, the one
-`created_at` check runs; nothing is read in the background. Cancelling while the step-up dialog waits is not uncertain,
+`created_at` check runs; nothing is read in the background. Leaving while that check runs (after an ambiguous
+response, or the check on return itself) keeps it pending the same way, so a committed Replace is never left without an
+outcome. Cancelling while the step-up dialog waits is not uncertain,
 because the 403 committed nothing. The shown key survives configuration change and background, and is dropped on I've
 saved it or any identity change (sign-out, another account or generation), which also drops a pending check.
 

@@ -172,14 +172,15 @@ class RecoveryKeyViewModel(private val operations: AccountOperations) : ViewMode
 
     /**
      * Genuine background or navigation away from the Recovery key screen (not configuration change). An in-flight POST
-     * is cancelled; if it had been sent, the next [foreground] checks `created_at` instead of resending.
+     * is cancelled; if it had been sent, or its `created_at` check was running (after an ambiguous response, or the
+     * check from [foreground] itself), the next [foreground] runs the one check instead of resending.
      */
     fun leave() {
-        val wasSent = sending
+        val uncertain = sending || mutable.value.stage == RecoveryKeyStage.CHECKING
         val before = sentBefore
         val active = mutable.value.stage != RecoveryKeyStage.IDLE
         retire()
-        if (wasSent) pendingCheck = PendingCheck(before)
+        if (uncertain) pendingCheck = PendingCheck(before)
         if (active) mutable.value = mutable.value.copy(stage = RecoveryKeyStage.IDLE, methods = null, verificationBusy = false, error = null)
     }
 
@@ -188,6 +189,7 @@ class RecoveryKeyViewModel(private val operations: AccountOperations) : ViewMode
         val check = pendingCheck ?: return
         if (mutable.value.stage != RecoveryKeyStage.IDLE || operations.session.value.identity() != identity) return
         pendingCheck = null
+        sentBefore = check.before
         val attempt = ++sequence
         mutable.value = RecoveryKeyUiState(stage = RecoveryKeyStage.CHECKING)
         operation = viewModelScope.launch {

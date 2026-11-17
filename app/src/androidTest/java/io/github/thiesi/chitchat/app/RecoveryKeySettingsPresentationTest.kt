@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -57,7 +58,9 @@ class RecoveryKeySettingsPresentationTest {
                 "notset" to RecoveryKeyStatus.Known(false, null))) {
                 val current = session(status)
                 launch(fontScale, dark) {
-                    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp).testTag("recovery_host")) {
+                    // The app's ScreenContent scrolls; so does this host, so the screen is captured as it lives there.
+                    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+                        .verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp).testTag("recovery_host")) {
                         RecoveryKeyScreen(model(current), current, "The Common Room")
                     }
                 }
