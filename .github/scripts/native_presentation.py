@@ -30,6 +30,8 @@ CLEANUP_MAX_BYTES = 256
 FIND_PEOPLE_DESTINATION = ROOT / "app/build/reports/androidTests/find-people-presentation"
 POLICY_DESTINATION = ROOT / "app/build/reports/androidTests/policy-presentation"
 POLICY_NAME = re.compile(r"policy-(light|dark)-(default|font200)-(hosted|external|unpublished|httpdialog|loading|failed)[.]png")
+RECOVERY_DESTINATION = ROOT / "app/build/reports/androidTests/recovery-presentation"
+RECOVERY_NAME = re.compile(r"recovery-(light|dark)-(default|font200)-(display(-api32|-end)?|dialog)[.]png")
 AUTH_DESTINATION = ROOT / "app/build/reports/androidTests/auth-presentation"
 AUTH_NAME = re.compile(r"auth-(light|dark)-((default|font200)-(signin|create)-keyboard|font200-create-block)[.]png")
 RULES_DESTINATION = ROOT / "app/build/reports/androidTests/rules-presentation"
@@ -238,6 +240,18 @@ def collect_auth():
     print(f"Auth presentation captures collected: {len(files)} of 10.")
 
 
+def collect_recovery():
+    # O4a2a: the key display (top and end) and the confirmation dialog at default and 200%; light and dark.
+    files = list(islice(SOURCE.rglob("ccm-recovery-presentation/*"), 13))
+    if (not files or len(files) > 12 or len({p.name for p in files}) != len(files)
+        or any(RECOVERY_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous recovery presentation output")
+    RECOVERY_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, RECOVERY_DESTINATION / path.name)
+    print(f"Recovery presentation captures collected: {len(files)} of 12.")
+
+
 def collect_onboarding():
     # Onboarding O2a: Welcome, Where do you chat?, Server found (top and scrolled), default and 2.0 font, light and dark,
     # plus a step 2 failure notice at 2.0.
@@ -370,6 +384,10 @@ def main() -> int:
         collect_auth()
     except Exception:
         print("Auth presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_recovery()
+    except Exception:
+        print("Recovery presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_onboarding()
     except Exception:

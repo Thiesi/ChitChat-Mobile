@@ -629,6 +629,23 @@
     <string name="registration_rules_outdated">%1$s updated its rules while you were signing up. Look at them, then create your account again.</string>
     <string name="registration_review_agreement">Review the agreement, then tap Create my account.</string>
     <string name="registration_rules_required">Something went wrong creating your account. Your details are kept; try again.</string>
+    <!-- Recovery key display (recovery-key.md, O4a2a). -->
+    <string name="recovery_key_title_save">Save your recovery key</string>
+    <string name="recovery_key_lead">If you forget your password, this key is the only way to reset it yourself. Without it, only the people who run %1$s can help. You\'ll only see it once.</string>
+    <string name="recovery_key_group">Group %1$d of 6: %2$s</string>
+    <string name="recovery_key_copy">Copy</string>
+    <string name="recovery_key_save_file">Save to a file</string>
+    <string name="recovery_key_clipboard_history">Your keyboard may keep a copy in its clipboard history. Delete it there once it\'s in your password manager.</string>
+    <string name="recovery_key_file_unencrypted">The file isn\'t encrypted. Keep it somewhere only you can open.</string>
+    <string name="recovery_key_copied">Copied. Paste it into your password manager.</string>
+    <string name="recovery_key_file_failed">The file wasn\'t saved.</string>
+    <string name="recovery_key_file_name">ChitChat recovery key - %1$s.txt</string>
+    <string name="recovery_key_file_warning">Anyone with this key and your username can reset your password.</string>
+    <string name="recovery_key_continue">Continue</string>
+    <string name="recovery_key_saved_title">Saved your recovery key?</string>
+    <string name="recovery_key_saved_body">You won\'t see it again. This isn\'t one of your sign-in recovery codes.</string>
+    <string name="recovery_key_go_back">Go back</string>
+    <string name="recovery_key_saved_confirm">I\'ve saved it</string>
     <!-- Rules re-acceptance (play-readiness.md §1, O3b3a). -->
     <string name="rules_updated_title">%1$s updated its rules</string>
     <string name="rules_updated_what_changed">What changed</string>
