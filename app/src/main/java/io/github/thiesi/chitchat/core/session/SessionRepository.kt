@@ -630,6 +630,15 @@ class SessionRepository internal constructor(
             mutable.value = current.copy(recoveryKeyUndelivered = false)
     }
 
+    /** See [io.github.thiesi.chitchat.core.account.AccountAccess.recoveryKeyAfterRefresh]. */
+    internal suspend fun recoveryKeyAfterRefresh(access: SessionAccess): io.github.thiesi.chitchat.core.account.RecoveryKeyStatus? {
+        val before = mutable.value.bootstrapSequence
+        refreshFor(access)
+        val now = mutable.value
+        return now.recoveryKey.takeIf { now.generation == access.generation && now.user?.id == access.userId &&
+            now.bootstrapSequence > before && now.error == null && !now.refreshRequired }
+    }
+
     /** A confirmed Generate or Replace: the status shows the new key's date (the key itself never enters state). */
     internal suspend fun recoveryKeyCreated(access: SessionAccess, createdAt: String) = lock.withLock {
         ensureCurrent(access)

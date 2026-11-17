@@ -37,7 +37,10 @@ import io.github.thiesi.chitchat.feature.auth.StepUpDialog
 import kotlinx.coroutines.delay
 
 @Composable
-fun AccountScreen(model: AccountViewModel, session: SessionState, onRefresh: () -> Unit) {
+fun AccountScreen(model: AccountViewModel, session: SessionState, onRefresh: () -> Unit, installation: String = "",
+    onRecoveryKey: (() -> Unit)? = null) {
+    // The sign-in group: the Recovery key row first (recovery-key.md, O4a2b). Nothing new starts under the update state.
+    if (onRecoveryKey != null && !session.updateRequired) RecoveryKeyRow(session, installation, onRecoveryKey)
     // Retire the system picker registration too, not only its network action, on account changes.
     key(session.generation, session.user?.id, session.user?.sessionVersion) { AccountContent(model, session, onRefresh) }
 }
@@ -105,7 +108,7 @@ private fun AccountContent(model: AccountViewModel, session: SessionState, onRef
 }
 
 @Composable
-private fun accountError(failure: ApiFailure) = stringResource(when {
+internal fun accountError(failure: ApiFailure) = stringResource(when {
     failure.kind == FailureKind.STORAGE -> R.string.export_save_failed
     failure.kind == FailureKind.TOO_LARGE -> R.string.export_too_large
     failure.kind == FailureKind.EXPIRED || failure.status == 401 -> R.string.session_not_available

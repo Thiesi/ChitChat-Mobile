@@ -631,6 +631,8 @@
     <string name="registration_rules_required">Something went wrong creating your account. Your details are kept; try again.</string>
     <!-- Recovery key display (recovery-key.md, O4a2a). -->
     <string name="recovery_key_title_save">Save your recovery key</string>
+    <string name="recovery_key_title_new">Your new recovery key</string>
+    <string name="recovery_key_replaced_note">Your old key no longer works.</string>
     <string name="recovery_key_lead">If you forget your password, this key is the only way to reset it yourself. Without it, only the people who run %1$s can help. You\'ll only see it once.</string>
     <string name="recovery_key_group">Group %1$d of 6: %2$s</string>
     <string name="recovery_key_copy">Copy</string>
@@ -646,7 +648,31 @@
     <string name="recovery_key_saved_body">You won\'t see it again. This isn\'t one of your sign-in recovery codes.</string>
     <string name="recovery_key_go_back">Go back</string>
     <string name="recovery_key_saved_confirm">I\'ve saved it</string>
-    <!-- Rules re-acceptance (play-readiness.md §1, O3b3a). -->
+    <!-- Privacy and security → Recovery key (recovery-key.md, O4a2b). -->
+    <string name="recovery_key_row">Recovery key</string>
+    <string name="recovery_key_created">Created %1$s</string>
+    <string name="recovery_key_not_set_up_lead">Not set up.</string>
+    <string name="recovery_key_not_set_up_body">Without one, only the people who run %1$s can reset a forgotten password.</string>
+    <string name="recovery_key_explanation">If you forget your password, this key is the only way to reset it yourself. Without it, only the people who run %1$s can help.</string>
+    <string name="recovery_key_replace_explanation">Replacing it gives you a new key, and your current one stops working right away.</string>
+    <string name="recovery_key_replace">Replace key</string>
+    <string name="recovery_key_create">Create recovery key</string>
+    <string name="recovery_key_replace_title">Replace your recovery key?</string>
+    <string name="recovery_key_replace_body">Your current key stops working right away, so save the new one before you leave the next screen.</string>
+    <string name="recovery_key_replace_confirm">Replace</string>
+    <string name="recovery_key_password_required">This account signs in through another service, so it has no password to recover.</string>
+    <string name="recovery_key_rate_limited">You\'ve changed your recovery key a lot recently. Try again in %1$s.</string>
+    <string name="recovery_key_rate_limited_unknown">You\'ve changed your recovery key a lot recently. Try again later.</string>
+    <string name="recovery_key_created_elsewhere_lead">A new key was created, but it didn\'t reach this phone.</string>
+    <string name="recovery_key_created_elsewhere_body">Your old key no longer works. Create another one now.</string>
+    <string name="recovery_key_unchanged">Nothing changed. Your current key still works.</string>
+    <string name="recovery_key_unresolved">We\'re not sure a new key was created. If it was, your old key no longer works.</string>
+    <string name="recovery_key_create_again">Create again</string>
+    <string name="recovery_key_undelivered_lead">Your recovery key didn\'t reach this phone.</string>
+    <string name="recovery_key_undelivered_body">Create a new one in Privacy and security.</string>
+    <string name="recovery_key_go_there">Go there</string>
+    <string name="recovery_key_not_now">Not now</string>
+
     <string name="rules_updated_title">%1$s updated its rules</string>
     <string name="rules_updated_what_changed">What changed</string>
     <string name="rules_updated_show_all">Show all</string>
