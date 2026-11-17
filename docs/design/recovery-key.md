@@ -113,6 +113,13 @@ Full screen, no bottom bar, Back handled as below.
        "Create a new one in Privacy and security.", and **Not now** then **Go there** as text
        buttons, announced once (polite). It lasts for the process: it ends on Go there, on Not now,
        or when the status no longer says `exists: true`.
+   - **After an unclear reset that committed** (O4b, technical lead ruling, 2026-11-17): the same
+     runtime-only marker, set on the next sign-in to that username, but only when the server's
+     recovery-key creation date proves a new key was made. A sign-in with the old password means
+     the reset didn't commit, and nothing shows. The marker carries its origin. This case uses
+     its own text: "**Your new recovery key didn't reach this phone.** Your old one no longer
+     works. Create a new one in Privacy and security." The block, precedence, lifetime, Go there
+     and Not now are the same as above.
 2. **After a completed reset** (below), before the app opens.
 3. **After Generate or Replace** in Privacy and security (below).
 
@@ -160,7 +167,7 @@ again. Nothing is ever resubmitted automatically.
 | `400 validation_error` (password) | The password policy line, as in 4b | The form stays |
 | `429` | "Too many attempts. Try again in {wait}." from `error.retry_after_seconds` (status-presentation "Waiting times"), or "… in a little while." when unknown | Reset password stays disabled until the wait ends. No automatic retry |
 | `503 maintenance_lockdown` | The level-2 maintenance notice with the server's message, as on sign-in | The form stays |
-| Unknown (connection lost after sending, timeout) | Level-2 notice: "**We're not sure your password changed.** Try signing in with your new password. If that doesn't work, use your old one." | **Sign in** returns to step 4a. Nothing is retried, and the key may have been used up |
+| Unknown (connection lost after sending, timeout) | Level-2 notice: "**We're not sure your password changed.** Sign in with your new password first. If that doesn't work, use your old one. Your recovery key may no longer work." | **Sign in** returns to step 4a. Nothing is retried, and the key may have been used up. If the reset did commit, the server rotated the key and the old one no longer works; see "didn't reach this phone" below |
 
 ### Reset MFA (pending reset, not signed in)
 
