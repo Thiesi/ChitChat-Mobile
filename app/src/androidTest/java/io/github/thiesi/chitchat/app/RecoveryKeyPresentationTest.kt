@@ -54,6 +54,8 @@ class RecoveryKeyPresentationTest {
                     } } }
                 }
                 compose.onNodeWithTag("recovery_key_group_6").assertExists()
+                // The top of the display first: measuring the touch targets below scrolls them on screen.
+                capture(if (!dark) "recovery-$label-$name-display-api32" else "recovery-$label-$name-display", "recovery_host")
                 // J1: side by side at default (both fit), stacked at 200% (they don't). Deterministic for this window.
                 val copy = compose.onNodeWithTag("recovery_key_copy").getUnclippedBoundsInRoot()
                 val save = compose.onNodeWithTag("recovery_key_save_file").getUnclippedBoundsInRoot()
@@ -75,7 +77,6 @@ class RecoveryKeyPresentationTest {
                     clip?.let { org.junit.Assert.assertTrue("Clipboard line under Copy, above Save", it.top >= copy.bottom && it.bottom <= save.top) }
                     org.junit.Assert.assertTrue("The file line sits under its own button", file.top >= save.bottom)
                 }
-                capture(if (!dark) "recovery-$label-$name-display-api32" else "recovery-$label-$name-display", "recovery_host")
                 compose.onNodeWithTag("recovery_key_continue").performScrollTo().assertIsDisplayed() // Reachable by scrolling (A-04).
                 capture("recovery-$label-$name-display-end", "recovery_host")
                 if (fontScale == 1f) {
@@ -87,8 +88,9 @@ class RecoveryKeyPresentationTest {
         }
     }
 
+    /** Touch bounds are clipped to the visible area, so the target is scrolled on screen first, as a person reaches it. */
     private fun touchHeight(tag: String): androidx.compose.ui.unit.Dp {
-        val node = compose.onNodeWithTag(tag).fetchSemanticsNode()
+        val node = compose.onNodeWithTag(tag).performScrollTo().fetchSemanticsNode()
         return with(node.layoutInfo.density) { node.touchBoundsInRoot.height.toDp() }
     }
 
