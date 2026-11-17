@@ -752,7 +752,7 @@ class SessionRepositoryTest {
         server.enqueue(json("""{"csrf_token":"$b","user":$keyedUser,"recovery_key":"$fixtureKey"}""", 201, "SITE=registered; Secure; HttpOnly; Path=/"))
         sessions.register("Alice", "fixture-password", null); server.takeRequest(5, TimeUnit.SECONDS)
         assertEquals(fixtureKey, sessions.state.value.registrationRecoveryKey?.value)
-        assertFalse(sessions.state.value.recoveryKeyUndelivered)
+        assertNull(sessions.state.value.recoveryKeyUndelivered)
         assertFalse("The key never reaches a debug string", sessions.state.value.toString().contains("A7K2"))
         assertEquals(io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known(true, "2026-11-08T12:00:00+00:00"), sessions.state.value.recoveryKey)
         sessions.dropRegistrationRecoveryKey(sessions.state.value)
@@ -764,7 +764,7 @@ class SessionRepositoryTest {
         server.enqueue(json("""{"csrf_token":"$b","user":$keyedUser}""", 201, "SITE=registered; Secure; HttpOnly; Path=/"))
         sessions.register("Alice", "fixture-password", null); server.takeRequest(5, TimeUnit.SECONDS)
         assertNull(sessions.state.value.registrationRecoveryKey)
-        assertTrue(sessions.state.value.recoveryKeyUndelivered)
+        assertEquals(io.github.thiesi.chitchat.core.account.KeyOrigin.REGISTRATION, sessions.state.value.recoveryKeyUndelivered)
     }
 
     private suspend fun ambiguousRegistrationThenSignIn(username: String) {
@@ -785,13 +785,13 @@ class SessionRepositoryTest {
 
     @Test fun aSignInToTheAmbiguouslyRegisteredUsernameIsMarkedUndeliveredEvenAfterTheFormSwitch() = runTest {
         ambiguousRegistrationThenSignIn(" alice ")
-        assertTrue(sessions.state.value.recoveryKeyUndelivered)
+        assertEquals(io.github.thiesi.chitchat.core.account.KeyOrigin.REGISTRATION, sessions.state.value.recoveryKeyUndelivered)
         assertNull(sessions.state.value.registrationRecoveryKey)
     }
 
     @Test fun aSignInToAnotherUsernameAfterAnAmbiguousRegistrationIsNotMarked() = runTest {
         ambiguousRegistrationThenSignIn("Bob")
-        assertFalse(sessions.state.value.recoveryKeyUndelivered)
+        assertNull(sessions.state.value.recoveryKeyUndelivered)
     }
 
     /** TL (PR #287): the ambiguously registered username stays in runtime memory only. */
@@ -815,7 +815,7 @@ class SessionRepositoryTest {
         server.enqueue(json("""{"csrf_token":"$b","user":$keyedUser,"mfa_required":false,"recovery_key":"$fixtureKey"}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
         sessions.signIn("Alice", "fixture-password"); server.takeRequest(5, TimeUnit.SECONDS)
         assertNull("Only registration hands over a key", sessions.state.value.registrationRecoveryKey)
-        assertFalse(sessions.state.value.recoveryKeyUndelivered)
+        assertNull(sessions.state.value.recoveryKeyUndelivered)
         assertTrue(sessions.state.value.recoveryKey is io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known)
     }
 
@@ -834,6 +834,182 @@ class SessionRepositoryTest {
         assertEquals(io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known(true, "2026-11-16T10:00:00+00:00"), sessions.state.value.recoveryKey)
         assertNull("The generated key never enters session state", sessions.state.value.registrationRecoveryKey)
     }
+
+    // --- Password reset with the recovery key (O4b1) ---
+    private val nonce = "0123456789abcdef0123456789abcdef"
+    private val serverDate = "Tue, 17 Nov 2026 10:00:00 GMT"
+    private fun challenge(date: String? = serverDate) = MockResponse.Builder().code(200)
+        .body("""{"challenge":{"nonce":"$nonce","bits":0},"csrf_token":"$a"}""").addHeader("Content-Type", "application/json")
+        .apply { date?.let { addHeader("Date", it) } }.build()
+    private val KeyOrigin = io.github.thiesi.chitchat.core.account.KeyOrigin.RESET
+    private fun userCreated(createdAt: String?) = user.dropLast(1) +
+        (if (createdAt == null) ""","recovery_key":{"exists":true,"created_at":null}}""" else ""","recovery_key":{"exists":true,"created_at":"$createdAt"}}""")
+    private suspend fun resetReady(date: String? = serverDate) {
+        server.enqueue(challenge(date)); sessions.discoverPasswordReset()
+        assertEquals("/api/v1/password-reset/challenge.php", server.takeRequest(5, TimeUnit.SECONDS)!!.url.encodedPath)
+        assertEquals(ResetSupport.SUPPORTED, sessions.state.value.reset.support)
+        sessions.selectAuthFlow(AuthFlow.RESET)
+        sessions.prepareReset()
+        assertEquals(RegistrationPreparation.READY, sessions.state.value.reset.preparation)
+    }
+
+    @Test fun discoveryIsTheChallengeGetAndA404KeepsResetHidden() = runTest {
+        anonymous()
+        server.enqueue(error("not_found", 404)); sessions.discoverPasswordReset(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(ResetSupport.UNSUPPORTED, sessions.state.value.reset.support)
+        sessions.selectAuthFlow(AuthFlow.RESET)
+        assertEquals("No reset form without a working challenge", AuthFlow.SIGN_IN, sessions.state.value.authFlow)
+        assertNull("A discovery failure isn't a session error", sessions.state.value.error)
+    }
+
+    @Test fun theDiscoveryChallengeServesTheFirstAttemptAndEveryLaterAttemptFetchesItsOwn() = runTest {
+        anonymous(); resetReady()
+        assertEquals("The discovery challenge was reused, not fetched again", 1 + 1, server.requestCount)
+        server.enqueue(error("reset_failed", 400))
+        sessions.resetPassword("Alice", " a7k2b9qxc4mzd8rte2wnf6hp ", "new fixture password")
+        val post = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("/api/v1/password-reset.php", post.url.encodedPath)
+        val body = post.body!!.utf8()
+        assertTrue(body.contains("\"recovery_key\":\"a7k2b9qxc4mzd8rte2wnf6hp\"")) // Trimmed; the server normalizes.
+        assertTrue(body.contains("\"challenge_nonce\":\"$nonce\"") && body.contains("\"challenge_solution\":\"0\""))
+        assertEquals("reset_failed", sessions.state.value.error?.code)
+        assertNull("A refusal isn't uncertain", sessions.state.value.reset.outcome)
+        // The challenge is used up: no second POST until a new one is prepared.
+        sessions.resetPassword("Alice", "a7k2b9qxc4mzd8rte2wnf6hp", "new fixture password")
+        assertEquals(3, server.requestCount)
+        server.enqueue(challenge()); sessions.prepareReset()
+        assertEquals("/api/v1/password-reset/challenge.php", server.takeRequest(5, TimeUnit.SECONDS)!!.url.encodedPath)
+        assertEquals(RegistrationPreparation.READY, sessions.state.value.reset.preparation)
+    }
+
+    @Test fun aCompletedResetSignsInAndHoldsTheReplacementKeyWithItsOrigin() = runTest {
+        anonymous(); resetReady()
+        server.enqueue(json("""{"status":"complete","user":$keyedUser,"csrf_token":"$b","recovery_key":"$fixtureKey"}""",
+            cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
+        val state = sessions.state.value
+        assertEquals(SessionPhase.AUTHENTICATED, state.phase)
+        assertEquals(fixtureKey, state.registrationRecoveryKey?.value)
+        assertEquals(KeyOrigin, state.recoveryKeyOrigin)
+        assertNull(state.recoveryKeyUndelivered)
+        assertEquals(ResetState(), state.reset)
+        assertFalse("Neither key nor password reaches a string", state.toString().contains(fixtureKey) ||
+            state.toString().contains("new fixture password"))
+    }
+
+    @Test fun aCompletedResetWithoutAKeyMarksTheResetKeyUndelivered() = runTest {
+        anonymous(); resetReady()
+        server.enqueue(json("""{"status":"complete","user":$keyedUser,"csrf_token":"$b"}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(KeyOrigin, sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    private suspend fun uncertainResetThenSignIn(createdAt: String?, date: String? = serverDate, username: String = "alice") {
+        anonymous(); resetReady(date)
+        server.enqueue(error("server_error", 503))
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(ResetOutcome.UNCERTAIN, sessions.state.value.reset.outcome)
+        assertEquals("Never resent", 3, server.requestCount)
+        server.enqueue(json(bootstrapBody())); sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS)
+        clock.now += 31_000
+        server.enqueue(json("""{"csrf_token":"$b","user":${userCreated(createdAt)},"mfa_required":false}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.signIn(username, "fixture-password"); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+    }
+
+    @Test fun anUnknownResetThatCommittedShowsTheResetNoticeAfterSignIn() = runTest {
+        uncertainResetThenSignIn("2026-11-17T10:00:03+00:00")
+        assertEquals("The key was created at or after the attempt's server time", KeyOrigin, sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    @Test fun anUnknownResetThatDidNotCommitClearsTheMarkerSilently() = runTest {
+        uncertainResetThenSignIn("2026-11-08T12:00:00+00:00")
+        assertNull("Signed in with the old password: the old key still works", sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    @Test fun anUnknownResetWithAnUnknownTimeShowsNothing() = runTest {
+        uncertainResetThenSignIn(null)
+        assertNull(sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    @Test fun anUnknownResetWithoutAServerDateShowsNothing() = runTest {
+        uncertainResetThenSignIn("2026-11-17T10:00:03+00:00", date = null)
+        assertNull("No Date header: nothing to compare with", sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    @Test fun theDeviceClockNeverDecidesTheResetNotice() = runTest {
+        // The device clock is off by days; only the server's Date and created_at count.
+        clock.now = 0
+        uncertainResetThenSignIn("2026-11-17T10:00:03+00:00")
+        assertEquals(KeyOrigin, sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    @Test fun anotherUsernameNeverInheritsTheResetMarker() = runTest {
+        uncertainResetThenSignIn("2026-11-17T10:00:03+00:00", username = "Bob")
+        assertNull(sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    @Test fun aPendingResetIsNotSignedInAndItsRecoveryCodeCompletesIt() = runTest {
+        anonymous(); resetReady()
+        server.enqueue(json("""{"status":"pending_mfa","mfa_required":true,"csrf_token":"$b","methods":["passkey","recovery_code"],"expires_at":"2026-11-17T10:05:00+00:00"}""", 202))
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
+        val pending = sessions.state.value
+        assertEquals("A pending reset is not signed in", SessionPhase.ANONYMOUS, pending.phase)
+        assertEquals(PendingReset(listOf("passkey", "recovery_code"), "2026-11-17T10:05:00+00:00"), pending.reset.pending)
+        sessions.selectAuthFlow(AuthFlow.SIGN_IN)
+        assertEquals("No other flow while a reset is pending", AuthFlow.RESET, sessions.state.value.authFlow)
+        server.enqueue(json("""{"status":"complete","user":$keyedUser,"csrf_token":"$c","recovery_key":"$fixtureKey"}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.completeResetRecovery(" code-1234 ")
+        val request = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("/api/v1/password-reset/mfa-recovery.php", request.url.encodedPath)
+        assertEquals("""{"code":"code-1234"}""", request.body!!.utf8())
+        assertEquals(b, request.headers["X-CSRF-Token"])
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertEquals(KeyOrigin, sessions.state.value.recoveryKeyOrigin)
+    }
+
+    @Test fun anExpiredPendingResetReturnsToTheFormAndAPasskeyOnlyOneOffersNoCode() = runTest {
+        anonymous(); resetReady()
+        server.enqueue(json("""{"status":"pending_mfa","mfa_required":true,"csrf_token":"$b","methods":["recovery_code"],"expires_at":null}""", 202))
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(error("reset_not_pending", 409))
+        sessions.completeResetRecovery("code-1234"); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(ResetOutcome.EXPIRED, sessions.state.value.reset.outcome)
+        assertNull(sessions.state.value.reset.pending)
+        // A pending reset that lists only a passkey: no code request is ever sent (passkey waits for B1).
+        server.enqueue(challenge()); sessions.prepareReset(); server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(json("""{"status":"pending_mfa","mfa_required":true,"csrf_token":"$c","methods":["passkey"]}""", 202))
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
+        val before = server.requestCount
+        sessions.completeResetRecovery("code-1234")
+        assertEquals(before, server.requestCount)
+    }
+
+    @Test fun onlyAnAcknowledgedCancelMeansNothingChanged() = runTest {
+        anonymous(); resetReady()
+        server.enqueue(json("""{"status":"pending_mfa","mfa_required":true,"csrf_token":"$b","methods":["recovery_code"]}""", 202))
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(json("""{"status":"cancelled","csrf_token":"$c"}"""))
+        sessions.cancelReset()
+        assertEquals("/api/v1/password-reset/cancel.php", server.takeRequest(5, TimeUnit.SECONDS)!!.url.encodedPath)
+        assertEquals(ResetOutcome.CANCELLED, sessions.state.value.reset.outcome)
+        assertEquals(AuthFlow.SIGN_IN, sessions.state.value.authFlow)
+        assertNull(sessions.state.value.reset.pending)
+    }
+
+    private suspend fun uncertainCancel(reply: mockwebserver3.MockResponse) {
+        anonymous(); resetReady()
+        server.enqueue(json("""{"status":"pending_mfa","mfa_required":true,"csrf_token":"$b","methods":["recovery_code"]}""", 202))
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
+        val before = server.requestCount
+        server.enqueue(reply); sessions.cancelReset(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(ResetOutcome.CANCEL_UNCERTAIN, sessions.state.value.reset.outcome)
+        assertEquals("One cancel, never retried", before + 1, server.requestCount)
+    }
+
+    @Test fun aCancelThatFindsNoPendingResetIsUncertain() = runTest { uncertainCancel(error("reset_not_pending", 409)) }
+
+    @Test fun aFailedCancelIsUncertainAndNeverRetried() = runTest { uncertainCancel(error("server_error", 503)) }
 
     @Test fun registrationAdoptsServerAssignedRolesAndRotatedCredentials() = runTest {
         anonymous()

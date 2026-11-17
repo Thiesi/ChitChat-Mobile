@@ -670,6 +670,9 @@
     <string name="recovery_key_create_again">Create again</string>
     <string name="recovery_key_undelivered_lead">Your recovery key didn\'t reach this phone.</string>
     <string name="recovery_key_undelivered_body">Create a new one in Privacy and security.</string>
+    <string name="recovery_key_undelivered_reset_lead">Your new recovery key didn\'t reach this phone.</string>
+    <string name="recovery_key_undelivered_reset_body">Your old one no longer works. Create a new one in Privacy and security.</string>
+    <string name="recovery_key_reset_note">Your old key no longer works, and your other devices were signed out.</string>
     <string name="recovery_key_go_there">Go there</string>
     <string name="recovery_key_not_now">Not now</string>
 

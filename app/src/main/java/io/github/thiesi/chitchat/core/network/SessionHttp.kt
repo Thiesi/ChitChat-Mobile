@@ -130,6 +130,58 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         return decode<RegistrationChallengeReply>(raw).challenge
     }
 
+    /**
+     * `GET password-reset/challenge.php` (password-recovery.md): the documented discovery of self-service reset (a 404
+     * means an older server) and the single-use, session-bound challenge an attempt needs. [ResetChallenge.serverDate] is
+     * the response's `Date` header, the server time just before the attempt (O4b: compared with `created_at` later).
+     */
+    suspend fun passwordResetChallenge(): ResetChallenge {
+        val raw = request("password-reset/challenge.php").require200()
+        val challenge = decode<RegistrationChallengeReply>(raw).challenge ?: throw ApiFailure(FailureKind.INCOMPATIBLE)
+        return ResetChallenge(challenge, raw.date)
+    }
+
+    /** One reset POST; never resent. 200 completes (signed in, a replacement key), 202 needs MFA. */
+    suspend fun resetPassword(username: String, recoveryKey: String, newPassword: String, nonce: String, solution: String,
+        csrf: String): ResetReply {
+        val raw = request("password-reset.php", apiJson.encodeToString(PasswordResetRequest(username, recoveryKey, newPassword,
+            nonce, solution)), csrf)
+        return when (raw.status) {
+            200 -> ResetReply.Complete(completedReset(raw))
+            202 -> {
+                val pending = decode<PendingResetReply>(raw)
+                if (pending.status != "pending_mfa" || !pending.mfaRequired) throw ApiFailure(FailureKind.INCOMPATIBLE)
+                requireValidCsrf(pending.csrfToken)
+                ResetReply.PendingMfa(pending.csrfToken, pending.methods, pending.expiresAt)
+            }
+            else -> throw ApiFailure(FailureKind.INCOMPATIBLE)
+        }
+    }
+
+    /** The pending reset's `mfa-recovery.php` (field `code`, unlike sign-in's `recovery_code`). Never resent. */
+    suspend fun resetMfaRecovery(code: String, csrf: String): AuthReply =
+        completedReset(request("password-reset/mfa-recovery.php", apiJson.encodeToString(ResetCodeRequest(code)), csrf).require200())
+
+    /** `cancel.php`: only an acknowledged `cancelled` means nothing changed. Returns the new CSRF token. */
+    suspend fun cancelReset(csrf: String): String {
+        val reply = decode<ResetCancelReply>(request("password-reset/cancel.php", "{}", csrf).require200())
+        if (reply.status != "cancelled") throw ApiFailure(FailureKind.INCOMPATIBLE)
+        requireValidCsrf(reply.csrfToken)
+        return reply.csrfToken
+    }
+
+    /** A completed reset: signed in like a sign-in, with the replacement key (if any) attached like registration's. */
+    private suspend fun completedReset(raw: RawReply): AuthReply {
+        val reply = decode<AuthReply>(raw)
+        reply.rules = io.github.thiesi.chitchat.core.policies.userRulesStatus(raw.body)
+        reply.recoveryKeyStatus = io.github.thiesi.chitchat.core.account.userRecoveryKeyStatus(raw.body)
+        reply.registrationRecoveryKey = io.github.thiesi.chitchat.core.account.registrationRecoveryKey(raw.body)
+        requireValidCsrf(reply.csrfToken)
+        if (raw.status != 200 || reply.mfaRequired || reply.user == null || reply.user.guest) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        requireValidUser(reply.user)
+        return reply
+    }
+
     suspend fun register(username: String, password: String, birthDate: String?, nonce: String?, solution: String?, csrf: String,
         acceptedRulesVersion: Int? = null): AuthReply =
         auth("register.php", apiJson.encodeToString(RegistrationRequest(username, password, birthDate, "", nonce, solution, acceptedRulesVersion)),
@@ -734,7 +786,7 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
                             throw httpFailure(it.code, error, it.header("Retry-After"))
                         }
                         if (it.body.contentType()?.subtype != "json") throw ApiFailure(FailureKind.INCOMPATIBLE)
-                        RawReply(it.code, body)
+                        RawReply(it.code, body, it.header("Date"))
                     }
                     if (continuation.isActive) continuation.resume(reply)
                 } catch (failure: ApiFailure) {
@@ -751,7 +803,16 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         catch (_: SerializationException) { throw ApiFailure(FailureKind.INCOMPATIBLE) }
     }
 
-    private class RawReply(val status: Int, val body: String) {
+    /** [date] is the response's HTTP `Date` header (server time), used only where a caller needs the server's clock. */
+    /** A reset challenge and the server's `Date` when it was issued; no generated string form. */
+    internal class ResetChallenge(val challenge: RegistrationChallenge, val serverDate: String?)
+
+    internal sealed interface ResetReply {
+        class Complete(val auth: AuthReply) : ResetReply
+        class PendingMfa(val csrf: String, val methods: List<String>, val expiresAt: String?) : ResetReply
+    }
+
+    private class RawReply(val status: Int, val body: String, val date: String? = null) {
         fun require200(): RawReply {
             if (status != 200) throw ApiFailure(FailureKind.INCOMPATIBLE)
             return this
