@@ -676,6 +676,38 @@
     <string name="recovery_key_go_there">Go there</string>
     <string name="recovery_key_not_now">Not now</string>
 
+    <!-- Password reset with the recovery key (recovery-key.md "Forgot your password?", O4b2). -->
+    <string name="forgot_password">Forgot password?</string>
+    <string name="forgot_password_static">Forgot your password? Ask the person who runs the server.</string>
+    <string name="reset_title">Reset your password</string>
+    <string name="reset_lead">Use the recovery key you saved when you created your account or last reset your password. No key? Only the people who run %1$s can reset it.</string>
+    <string name="reset_key_label">Recovery key</string>
+    <string name="reset_key_supporting">Upper or lower case, with or without dashes.</string>
+    <string name="reset_new_password">New password</string>
+    <string name="reset_confirm_password">Confirm new password</string>
+    <string name="reset_submit">Reset password</string>
+    <string name="reset_failed">That didn\'t work. Check your username and recovery key.</string>
+    <string name="reset_rate_limited">Too many attempts. Try again in %1$s.</string>
+    <string name="reset_rate_limited_unknown">Too many attempts. Try again in a little while.</string>
+    <string name="reset_unknown_lead">We\'re not sure your password changed.</string>
+    <string name="reset_unknown_body">Sign in with your new password first. If that doesn\'t work, use your old one. Your recovery key may no longer work.</string>
+    <string name="reset_sign_in">Sign in</string>
+    <string name="reset_expired">That took too long. Start again with your recovery key.</string>
+    <string name="reset_mfa_title">One more step</string>
+    <string name="reset_mfa_lead">Your account uses two-step sign-in. Confirm it\'s you to finish resetting your password.</string>
+    <string name="reset_mfa_deadline">Finish before %1$s</string>
+    <string name="reset_mfa_code_label">Sign-in recovery code</string>
+    <string name="reset_mfa_code_warning">A recovery code is an emergency, single-use fallback; using it consumes one code.</string>
+    <string name="reset_mfa_code_not_key">This is one of the codes you saved when you turned on two-step sign-in, not your recovery key.</string>
+    <string name="reset_mfa_passkey_only">This account needs a security key to finish, and this app can\'t use security keys yet.</string>
+    <string name="reset_cancel">Cancel reset</string>
+    <string name="reset_stop_title">Stop resetting your password?</string>
+    <string name="reset_keep_going">Keep going</string>
+    <string name="reset_stop">Stop</string>
+    <string name="reset_cancelled">Nothing changed. Your password is the same as before.</string>
+    <string name="reset_cancel_unknown_lead">We\'re not sure whether your password changed.</string>
+    <string name="reset_cancel_unknown_body">Try signing in.</string>
+
     <!-- Rules re-acceptance (play-readiness.md §1, O3b3a). -->
     <string name="rules_updated_title">%1$s updated its rules</string>
     <string name="rules_updated_what_changed">What changed</string>
