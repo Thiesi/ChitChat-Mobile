@@ -32,10 +32,10 @@ pending reset is not signed in.
   - **`202 pending_mfa`:** `ResetState.pending` holds the listed methods and `expires_at`. Only `recovery_code` is
     offered here: passkey reset (`mfa-options`/`mfa-finish`) waits for native passkeys (B1). A pending reset that lists
     only a passkey can only be cancelled.
-  - **`400 reset_failed`, `400 validation_error`, `429`, `503`:** typed in `SessionState.error` (429 and 503 set the
-    wait), and the form stays.
-  - **Ambiguous** (connection lost, timeout, a 5xx, or a malformed reply): `ResetOutcome.UNCERTAIN`. The password may
-    have changed, and nothing is resent.
+  - **`400 reset_failed`, `400 validation_error`, `429`, `503 maintenance_lockdown`:** definite refusals, typed in
+    `SessionState.error` (429 and 503 set the wait). The form stays, and they set no marker.
+  - **Ambiguous** (a lost connection, a timeout, any other 5xx, a malformed reply or a redirect): `ResetOutcome.UNCERTAIN`.
+    The password may have changed, and nothing is resent.
 - **`completeResetRecovery(code)`:** `mfa-recovery.php` with the field `code` (sign-in uses `recovery_code`). A
   rejected code keeps the step open. `409 reset_not_pending` means the pending reset expired or became invalid, since
   nothing was retried: `ResetOutcome.EXPIRED`, back to the form. Ambiguous is `UNCERTAIN`.
@@ -54,8 +54,13 @@ never the device clock:
 - it's earlier: the reset never committed (they signed in with the old password), so the marker clears silently;
 - either time is missing or unreadable: nothing shows.
 
-`Date` has one-second resolution and precedes the POST, so a key that POST created always counts. A key created before
-the challenge within that same second would count too; that edge is accepted. Like the registration marker, it's cleared
+`Date` has one-second resolution and precedes the POST, so a key that POST created always counts. The comparison can only
+be wrong one way: a key created **between the challenge and the POST** by something else would also count. That window
+runs from the challenge's issue to the POST, at most four minutes (a reused discovery challenge is used within four
+minutes; a fresh one covers only the form time), plus the one-second resolution. Within it, only the same account
+replacing its key on another signed-in device, during its own reset here, could produce a wrong reset notice, and even
+then its "your old key no longer works" is true, because the key was replaced. That edge is accepted as negligible (TL);
+the server time at the POST itself can't be recorded when that response is lost. Like the registration marker, it's cleared
 by any completed authentication, by sign-out (the runtime is replaced) and by process death, and a malformed reply that
 invalidates the runtime loses it. `recoveryKeyUndelivered` is now typed (`KeyOrigin` REGISTRATION or RESET, or null),
 and the registration path is unchanged.

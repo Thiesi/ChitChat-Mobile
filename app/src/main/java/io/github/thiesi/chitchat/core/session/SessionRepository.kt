@@ -516,11 +516,16 @@ class SessionRepository internal constructor(
         }
     }
 
-    /** A reset POST that didn't sign in. Ambiguous means it may have committed: the Unknown outcome, never a resend. */
+    /**
+     * A reset POST that didn't sign in. Ambiguous means it may have committed: the Unknown outcome, never a resend. The
+     * contract's refusals are definite and set no marker: 400s, 429 and `503 maintenance_lockdown` (password-recovery.md).
+     * Any other 5xx, a lost connection, a timeout, a malformed reply or a redirect is ambiguous.
+     */
     private suspend fun resetFailed(active: Runtime, failure: ApiFailure, attempt: UncertainReset?, keepPending: Boolean) = lock.withLock {
         if (runtime !== active) return@withLock
+        val lockdown = failure.status == 503 && failure.code == "maintenance_lockdown"
         val uncertain = failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.INCOMPATIBLE,
-            FailureKind.REDIRECT) || (failure.status ?: 0) >= 500
+            FailureKind.REDIRECT) || ((failure.status ?: 0) >= 500 && !lockdown)
         if (uncertain) attempt?.let { active.uncertainReset = it }
         failLocked(active, failure)
         if (runtime !== active) return@withLock

@@ -906,7 +906,7 @@ class SessionRepositoryTest {
 
     private suspend fun uncertainResetThenSignIn(createdAt: String?, date: String? = serverDate, username: String = "alice") {
         anonymous(); resetReady(date)
-        server.enqueue(error("server_error", 503))
+        server.enqueue(error("server_error", 500))
         sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
         assertEquals(ResetOutcome.UNCERTAIN, sessions.state.value.reset.outcome)
         assertEquals("Never resent", 3, server.requestCount)
@@ -947,6 +947,46 @@ class SessionRepositoryTest {
     @Test fun anotherUsernameNeverInheritsTheResetMarker() = runTest {
         uncertainResetThenSignIn("2026-11-17T10:00:03+00:00", username = "Bob")
         assertNull(sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    private suspend fun signInAfterwards(createdAt: String) {
+        server.enqueue(json(bootstrapBody())); sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS)
+        clock.now += 31_000
+        server.enqueue(json("""{"csrf_token":"$b","user":${userCreated(createdAt)},"mfa_required":false}""", cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.signIn("alice", "fixture-password"); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+    }
+
+    @Test fun aLockdownRefusalIsDefiniteAndSetsNoMarker() = runTest {
+        anonymous(); resetReady()
+        server.enqueue(error("maintenance_lockdown", 503))
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
+        assertNull("The contract's 503 lockdown is a refusal, not an uncertain write", sessions.state.value.reset.outcome)
+        assertEquals("maintenance_lockdown", sessions.state.value.error?.code)
+        signInAfterwards("2026-11-17T10:00:03+00:00")
+        assertNull(sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    @Test fun anUncertainRecoveryCodeMarksTheResetForTheNextSignIn() = runTest {
+        anonymous(); resetReady()
+        server.enqueue(json("""{"status":"pending_mfa","mfa_required":true,"csrf_token":"$b","methods":["recovery_code"]}""", 202))
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(error("server_error", 500))
+        sessions.completeResetRecovery("code-1234"); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(ResetOutcome.UNCERTAIN, sessions.state.value.reset.outcome)
+        assertNull(sessions.state.value.reset.pending)
+        signInAfterwards("2026-11-17T10:00:03+00:00")
+        assertEquals(KeyOrigin, sessions.state.value.recoveryKeyUndelivered)
+    }
+
+    @Test fun anUncertainCancelMarksTheResetForTheNextSignIn() = runTest {
+        anonymous(); resetReady()
+        server.enqueue(json("""{"status":"pending_mfa","mfa_required":true,"csrf_token":"$b","methods":["recovery_code"]}""", 202))
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password"); server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(error("server_error", 500)); sessions.cancelReset(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(ResetOutcome.CANCEL_UNCERTAIN, sessions.state.value.reset.outcome)
+        signInAfterwards("2026-11-17T10:00:03+00:00")
+        assertEquals(KeyOrigin, sessions.state.value.recoveryKeyUndelivered)
     }
 
     @Test fun aPendingResetIsNotSignedInAndItsRecoveryCodeCompletesIt() = runTest {
