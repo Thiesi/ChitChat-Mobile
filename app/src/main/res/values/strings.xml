@@ -673,6 +673,7 @@
     <string name="recovery_key_go_there">Go there</string>
     <string name="recovery_key_not_now">Not now</string>
 
+    <!-- Rules re-acceptance (play-readiness.md §1, O3b3a). -->
     <string name="rules_updated_title">%1$s updated its rules</string>
     <string name="rules_updated_what_changed">What changed</string>
     <string name="rules_updated_show_all">Show all</string>
