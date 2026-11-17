@@ -131,7 +131,10 @@ internal fun RecoveryKeyDisplay(view: RecoveryKeyView, installation: String, hos
     }
     if (confirming) AlertDialog(onDismissRequest = { confirming = false },
         title = { Text(stringResource(R.string.recovery_key_saved_title)) },
-        text = { Text(stringResource(R.string.recovery_key_saved_body)) },
+        // P-220: the body scrolls, so Go back and I've saved it stay reachable at large text on a short window.
+        text = { io.github.thiesi.chitchat.core.ui.DialogScrollBody(Modifier.testTag("recovery_key_saved_body")) {
+            Text(stringResource(R.string.recovery_key_saved_body))
+        } },
         dismissButton = { TextButton(onClick = { confirming = false }, Modifier.testTag("recovery_key_go_back")) {
             Text(stringResource(R.string.recovery_key_go_back))
         } },

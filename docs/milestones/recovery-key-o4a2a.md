@@ -37,8 +37,9 @@ composed. The key lives in memory only (O4a1), so a process death drops it and t
   with the unencrypted line shown beforehand. The file holds the host, username, key, creation date and the warning
   line. No URI grant is kept and the file is never deleted later. A failure shows "The file wasn't saved."
 - **Continue** is in flow at the end, reachable by scrolling at 200%. Continue and Back both open "Saved your
-  recovery key?". Go back keeps the display; I've saved it drops the key from memory (`dropRegistrationRecoveryKey`,
-  generation-fenced). Nothing records whether it was saved.
+  recovery key?" (its body scrolls, P-220, so both actions stay reachable at large text). Go back keeps the
+  display; I've saved it drops the key from memory (`dropRegistrationRecoveryKey`, generation-fenced). Nothing records
+  whether it was saved.
 
 ## Tests
 
@@ -49,7 +50,7 @@ composed. The key lives in memory only (O4a1), so a process death drops it and t
   - a push tap waits behind the display and the guidelines;
   - a recreated activity still shows the display first;
   - the clipboard-history line shows only below API 33.
-- `RecoveryKeyPresentationTest` captures the display (top and end), the API 32 line and the dialog, light and dark,
+- `RecoveryKeyPresentationTest` captures the display (top and end) and the dialog (both actions displayed), light and dark,
   at a real Configuration font scale of 1 and 2, into `recovery-presentation`. Light runs as API 32 (with the
   clipboard line), dark as API 35. It pins the row at default and the stack at 200%, where each line sits, and the 48dp
   targets. FLAG_SECURE would blank a capture, so

@@ -131,7 +131,7 @@ def collect_you():
     YOU_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, YOU_DESTINATION / path.name)
-    print(f"You presentation captures collected: {len(files)} of 20.")
+    print(f"You presentation captures collected: {len(files)} of 22.")
 
 
 def collect_a11y():
@@ -241,16 +241,16 @@ def collect_auth():
 
 
 def collect_recovery():
-    # O4a2a: the key display (top and end) and the confirmation dialog. O4a2b: the Recovery key screen with a key and not
-    # set up, and the notice. Light and dark.
-    files = list(islice(SOURCE.rglob("ccm-recovery-presentation/*"), 21))
-    if (not files or len(files) > 20 or len({p.name for p in files}) != len(files)
+    # O4a2a: the key display (top and end) and the confirmation dialog at default and 200% (12). O4a2b: the Recovery key
+    # screen with a key and not set up, and the notice (10). Light and dark.
+    files = list(islice(SOURCE.rglob("ccm-recovery-presentation/*"), 23))
+    if (not files or len(files) > 22 or len({p.name for p in files}) != len(files)
         or any(RECOVERY_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous recovery presentation output")
     RECOVERY_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, RECOVERY_DESTINATION / path.name)
-    print(f"Recovery presentation captures collected: {len(files)} of 20.")
+    print(f"Recovery presentation captures collected: {len(files)} of 22.")
 
 
 def collect_onboarding():
