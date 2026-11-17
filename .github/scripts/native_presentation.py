@@ -131,7 +131,7 @@ def collect_you():
     YOU_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, YOU_DESTINATION / path.name)
-    print(f"You presentation captures collected: {len(files)} of 22.")
+    print(f"You presentation captures collected: {len(files)} of 20.")
 
 
 def collect_a11y():
