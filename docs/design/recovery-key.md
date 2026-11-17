@@ -83,8 +83,10 @@ Full screen, no bottom bar, Back handled as below.
   (`FontFamily.Monospace`, 22sp, `text`; no new font), two rows of three groups, wrapping to more rows at large font scales, never
   truncated. TalkBack reads it group by group, spelling out each character ("Group 1 of 6: A,
   7, K, 2").
-- **Actions:** **Copy** and **Save to a file** as outlined buttons, side by side, stacking when
-  narrow. The caveat lines sit under them in button order: the clipboard line (API 26–32 only),
+- **Actions:** **Copy** and **Save to a file** as outlined buttons, side by side when both fit
+  (measured on the real button widths, 8dp gap), stacking otherwise. **Continue** sits in flow
+  at the end of the screen, reachable by scrolling at 200%. The caveat lines sit under the
+  buttons in button order: the clipboard line (API 26–32 only),
   then the unencrypted-file line. When the buttons stack, each line sits under its own button.
 - **Continue** (primary, persimmon-filled) opens the confirmation:
   - a decision dialog, "**Saved your recovery key?**", with the body "You won't see it again.
@@ -104,6 +106,13 @@ Full screen, no bottom bar, Back handled as below.
      after sign-in shows the level-2 notice "Your recovery key didn't reach this phone. Create a
      new one in Privacy and security." with **Go there**. A key that never reached the phone
      can't be shown.
+     - **Presentation (O4a2b):** a level-2 block on the Rooms root, outside `resolveStatus`,
+       directly under the status slot, hidden while the slot shows a level-2 notice (the same
+       precedence as the rules banner, play-readiness §1). It uses `presenceWash`, the `warning`
+       glyph in `warning`, the bold lead "Your recovery key didn't reach this phone." followed by
+       "Create a new one in Privacy and security.", and **Not now** then **Go there** as text
+       buttons, announced once (polite). It lasts for the process: it ends on Go there, on Not now,
+       or when the status no longer says `exists: true`.
 2. **After a completed reset** (below), before the app opens.
 3. **After Generate or Replace** in Privacy and security (below).
 
@@ -190,7 +199,17 @@ You → Privacy and security gets a **Recovery key** row in its sign-in group (n
   honey. The action is **Create recovery key**.
 - `null` (provider-only account) or a missing field: no row.
 
-The explanation screen repeats the lead from "Wording" and states what Replace does.
+The explanation screen repeats the lead from "Wording" and states what Replace does. One
+screen serves both states (O4a2b). It's pushed, with icon Back and the bar title "Recovery key":
+
+- **A key exists:** "Created {date}" (medium date) as a `textMuted` caption, the lead, then
+  "Replacing it gives you a new key, and your current one stops working right away.", and
+  **Replace key** as a full-width **outlined** button. It's not persimmon, because its only
+  effect destroys the old key; the dialog's `error` button carries the weight.
+- **Not set up:** the row's "**Not set up.** …" line with the `warning` glyph (fixed 20dp,
+  centred on the first line), the lead, and **Create recovery key** as the single persimmon
+  primary. The row opens this screen rather than starting Create directly, so the person reads
+  what the key is before step-up and the display.
 
 **Replace key** opens a decision dialog first:
 
