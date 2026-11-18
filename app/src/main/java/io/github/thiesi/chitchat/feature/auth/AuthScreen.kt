@@ -6,6 +6,8 @@ import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import io.github.thiesi.chitchat.core.ui.PrimaryButton
@@ -31,6 +33,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -62,7 +66,8 @@ fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? 
     }
     val waiting = now < state.retryAtMillis
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        state.error?.let { failure ->
+        // The reset form shows its own refusals beside its action or field (PL, O4b2).
+        state.error?.takeUnless { state.authFlow == AuthFlow.RESET && state.resetOwnsError() }?.let { failure ->
             InlineError(when (failure.code) {
                 // Rules acceptance at registration (play-readiness.md §1): the account wasn't created.
                 "rules_version_outdated" -> stringResource(R.string.registration_rules_outdated, installationOf(state))
@@ -71,7 +76,7 @@ fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? 
             })
         }
         if (state.registrationMayHaveSucceeded) Text(stringResource(R.string.registration_unknown))
-        if (waiting) {
+        if (waiting && state.authFlow != AuthFlow.RESET) {
             val seconds = ((state.retryAtMillis - now + 999) / 1000).toInt()
             Text(pluralStringResource(R.plurals.retry_after, seconds, seconds))
         }
@@ -89,7 +94,10 @@ fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? 
             }
             SessionPhase.ANONYMOUS -> {
                 // The flow was chosen on Server found (O2a); each form has its own title.
-                if (state.authFlow == AuthFlow.SIGN_IN) Text(stringResource(R.string.onboarding_sign_in_title), style = MaterialTheme.typography.titleLarge)
+                if (state.authFlow == AuthFlow.SIGN_IN) {
+                    Text(stringResource(R.string.onboarding_sign_in_title), style = MaterialTheme.typography.titleLarge)
+                    ResetCancelOutcome(state)
+                }
                 state.public?.lockdown?.takeIf { it.enabled }?.let {
                     Text(stringResource(R.string.maintenance_notice))
                     it.message?.takeIf(String::isNotBlank)?.let { message -> Text(message) }
@@ -102,20 +110,23 @@ fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? 
                     if (state.public?.registrationEnabled == true) RegistrationForm(state, model, enabled && !state.public.lockdown.enabled, onPolicy)
                     else Text(stringResource(R.string.registration_disabled))
                 }
+                else if (state.authFlow == AuthFlow.RESET) ResetPassword(state, model, enabled, now)
                 else {
                     if (state.authFlow == AuthFlow.RESTORE) {
                         Text(stringResource(R.string.restore_account), style = MaterialTheme.typography.titleLarge)
                         Text(stringResource(R.string.restoration_explanation))
                     }
-                    PasswordForm(model, enabled, state.authFlow == AuthFlow.RESTORE)
+                    PasswordForm(model, enabled, state.authFlow == AuthFlow.RESTORE,
+                        forgot = if (state.authFlow == AuthFlow.SIGN_IN) { username -> ForgotPasswordRow(state, model, username) } else null)
                 }
-                if (state.public?.providers?.isNotEmpty() == true) Text(stringResource(R.string.providers_unavailable))
-                // Flow selection moved to Server found; Back returns there (onboarding-restyle.md).
-                if (onBack != null) TextButton(onClick = onBack, enabled = !state.busy, modifier = Modifier.testTag("onboarding_back")) {
+                if (state.public?.providers?.isNotEmpty() == true && state.authFlow != AuthFlow.RESET) Text(stringResource(R.string.providers_unavailable))
+                // Flow selection moved to Server found; Back returns there (onboarding-restyle.md). The reset form has its
+                // own Back to sign in.
+                if (onBack != null && state.authFlow != AuthFlow.RESET) TextButton(onClick = onBack, enabled = !state.busy, modifier = Modifier.testTag("onboarding_back")) {
                     Text(stringResource(R.string.back))
                 }
                 // P-221: below every action on Sign in and Create account only (no other screen gains it).
-                if (state.authFlow != AuthFlow.RESTORE)
+                if (state.authFlow != AuthFlow.RESTORE && state.authFlow != AuthFlow.RESET)
                     io.github.thiesi.chitchat.core.ui.AccessibilityFeedbackLink(state.public?.accessibilityFeedback)
             }
             SessionPhase.PENDING_MFA -> {
@@ -159,7 +170,8 @@ fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? 
 }
 
 @Composable
-private fun PasswordForm(model: AuthViewModel, enabled: Boolean, restore: Boolean) {
+private fun PasswordForm(model: AuthViewModel, enabled: Boolean, restore: Boolean,
+    forgot: (@Composable (username: String) -> Unit)? = null) {
     var username by rememberSaveable { mutableStateOf("") }
     // Never put a password or recovery code in saved instance state or a ViewModel.
     var password by remember(restore) { mutableStateOf("") }
@@ -175,7 +187,7 @@ private fun PasswordForm(model: AuthViewModel, enabled: Boolean, restore: Boolea
             model.signIn(username, entered, restore)
         }
     }
-    OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().semantics { contentType = ContentType.Username },
+    OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().testTag("sign_in_username").semantics { contentType = ContentType.Username },
         label = { Text(stringResource(R.string.username)) }, enabled = enabled, singleLine = true,
         keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Next), shape = MaterialTheme.shapes.medium)
     OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().testTag("sign_in_password").semantics { contentType = ContentType.Password },
@@ -183,11 +195,58 @@ private fun PasswordForm(model: AuthViewModel, enabled: Boolean, restore: Boolea
         visualTransformation = PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Go),
         keyboardActions = KeyboardActions(onGo = { submit() }, onDone = { submit() }), shape = MaterialTheme.shapes.medium)
+    // In the scroller after the password field, before Back and the P-221 footer (PL, O4b2); the pinned block is unchanged.
+    forgot?.invoke(username)
     // Pinned above the keyboard, outside the scroller (#275, PL): it stays visible while typing.
     io.github.thiesi.chitchat.core.ui.PinnedAction {
         PrimaryButton(onClick = submit, enabled = canSubmit, modifier = Modifier.fillMaxWidth().testTag("sign_in_submit")) {
             Text(stringResource(if (restore) R.string.restore_and_sign_in else R.string.sign_in))
         }
+    }
+}
+
+/**
+ * Step 4a's reset entry (PL, O4b2). Discovery runs once per visit of step 4a (a per-visit flag survives recomposition and
+ * configuration change). While it's unknown or checking, an empty 48dp row keeps the layout still; then either the
+ * Forgot password? button or the static line. A quiet change: no semantics on the empty row and no live region.
+ */
+@Composable
+private fun ForgotPasswordRow(state: SessionState, model: AuthViewModel, username: String) {
+    var asked by rememberSaveable { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (!asked && state.reset.support != io.github.thiesi.chitchat.core.session.ResetSupport.SUPPORTED) {
+            asked = true
+            model.discoverPasswordReset()
+        }
+    }
+    when (state.reset.support) {
+        io.github.thiesi.chitchat.core.session.ResetSupport.SUPPORTED -> TextButton(onClick = { model.startReset(username) },
+            enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp).testTag("forgot_password")) {
+            Text(stringResource(R.string.forgot_password))
+        }
+        io.github.thiesi.chitchat.core.session.ResetSupport.UNSUPPORTED -> androidx.compose.foundation.layout.Box(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = androidx.compose.ui.Alignment.CenterStart) {
+            Text(stringResource(R.string.forgot_password_static), Modifier.testTag("forgot_password_static"),
+                color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.textMuted)
+        }
+        else -> androidx.compose.foundation.layout.Spacer(Modifier.fillMaxWidth().height(48.dp).testTag("forgot_password_pending"))
+    }
+}
+
+/**
+ * A cancelled reset back on step 4a (PL, O4b2): "Nothing changed" as a muted caption under the title, announced once;
+ * an uncertain cancel as the level-2 block. Both end on the next sign-in attempt or on leaving step 4a.
+ */
+@Composable
+private fun ResetCancelOutcome(state: SessionState) {
+    when (state.reset.outcome) {
+        io.github.thiesi.chitchat.core.session.ResetOutcome.CANCELLED -> Text(stringResource(R.string.reset_cancelled),
+            Modifier.testTag("reset_cancelled").semantics { liveRegion = LiveRegionMode.Polite },
+            color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.textMuted)
+        io.github.thiesi.chitchat.core.session.ResetOutcome.CANCEL_UNCERTAIN -> io.github.thiesi.chitchat.core.ui.WarningNotice(
+            stringResource(R.string.reset_cancel_unknown_lead), stringResource(R.string.reset_cancel_unknown_body),
+            Modifier.testTag("reset_cancel_unknown"))
+        else -> Unit
     }
 }
 

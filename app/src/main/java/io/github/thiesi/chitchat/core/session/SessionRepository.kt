@@ -280,8 +280,9 @@ class SessionRepository internal constructor(
                 if (runtime === active) {
                     active.preparation++
                     active.proof = null
+                    // A sign-in attempt ends any cancel outcome shown on step 4a (PL, O4b2).
                     mutable.value = mutable.value.copy(authFlow = if (restore) AuthFlow.RESTORE else AuthFlow.SIGN_IN,
-                        registration = RegistrationPreparation.IDLE)
+                        registration = RegistrationPreparation.IDLE, reset = mutable.value.reset.copy(outcome = null))
                     active.signInMayFollowUncertainRegistration =
                         active.uncertainRegistration?.equals(username.trim(), ignoreCase = true) == true
                     active.signInMayFollowUncertainReset =

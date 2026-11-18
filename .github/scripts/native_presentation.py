@@ -31,7 +31,9 @@ FIND_PEOPLE_DESTINATION = ROOT / "app/build/reports/androidTests/find-people-pre
 POLICY_DESTINATION = ROOT / "app/build/reports/androidTests/policy-presentation"
 POLICY_NAME = re.compile(r"policy-(light|dark)-(default|font200)-(hosted|external|unpublished|httpdialog|loading|failed)[.]png")
 RECOVERY_DESTINATION = ROOT / "app/build/reports/androidTests/recovery-presentation"
-RECOVERY_NAME = re.compile(r"recovery-(light|dark)-(default|font200)-(display(-api32)?(-end)?|dialog|exists|notset|notice)[.]png")
+RECOVERY_NAME = re.compile(r"recovery-(light|dark)-(default|font200)-(display(-api32|-reset)?(-end)?|dialog|exists|notset|notice)[.]png")
+RESET_DESTINATION = ROOT / "app/build/reports/androidTests/reset-presentation"
+RESET_NAME = re.compile(r"reset-(light|dark)-(default|font200)-(signin-forgot|form|mfa|stop|cancelled|passkey|failed|unknown|cancel-unknown)[.]png")
 AUTH_DESTINATION = ROOT / "app/build/reports/androidTests/auth-presentation"
 AUTH_NAME = re.compile(r"auth-(light|dark)-((default|font200)-(signin|create)-keyboard|font200-create-block)[.]png")
 RULES_DESTINATION = ROOT / "app/build/reports/androidTests/rules-presentation"
@@ -242,15 +244,27 @@ def collect_auth():
 
 def collect_recovery():
     # O4a2a: the key display (top and end) and the confirmation dialog at default and 200% (12). O4a2b: the Recovery key
-    # screen with a key and not set up, and the notice (10). Light and dark.
-    files = list(islice(SOURCE.rglob("ccm-recovery-presentation/*"), 23))
-    if (not files or len(files) > 22 or len({p.name for p in files}) != len(files)
+    # screen with a key and not set up (8), and the notice at both scales (4). O4b2: the display's reset variant (2).
+    files = list(islice(SOURCE.rglob("ccm-recovery-presentation/*"), 27))
+    if (not files or len(files) > 26 or len({p.name for p in files}) != len(files)
         or any(RECOVERY_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous recovery presentation output")
     RECOVERY_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, RECOVERY_DESTINATION / path.name)
-    print(f"Recovery presentation captures collected: {len(files)} of 22.")
+    print(f"Recovery presentation captures collected: {len(files)} of 26.")
+
+
+def collect_reset():
+    # O4b2: step 4a with Forgot password?, the reset form, the MFA step and its outcomes; light and dark.
+    files = list(islice(SOURCE.rglob("ccm-reset-presentation/*"), 25))
+    if (not files or len(files) > 24 or len({p.name for p in files}) != len(files)
+        or any(RESET_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous reset presentation output")
+    RESET_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, RESET_DESTINATION / path.name)
+    print(f"Reset presentation captures collected: {len(files)} of 24.")
 
 
 def collect_onboarding():
@@ -389,6 +403,10 @@ def main() -> int:
         collect_recovery()
     except Exception:
         print("Recovery presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_reset()
+    except Exception:
+        print("Reset presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_onboarding()
     except Exception:
