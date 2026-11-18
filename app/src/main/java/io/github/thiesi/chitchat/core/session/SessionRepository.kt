@@ -120,6 +120,11 @@ data class SessionState(
     /** The password-reset flow while signed out (O4b). */
     val reset: ResetState = ResetState(),
     /**
+     * An in-app account deletion's outcome (D1, TL C1/C4), fenced to its origin and account. Memory only; it survives the
+     * session's end that a deletion causes, and Done clears it.
+     */
+    val closure: io.github.thiesi.chitchat.core.account.ClosureState? = null,
+    /**
      * A key never reached the phone, and where it came from (TL, O4a and O4b). REGISTRATION: the registration reply carried
      * none, or registration was ambiguous and the person then signed in. RESET: a completed reset carried none, or a reset
      * was Unknown and the next sign-in to that username found the key created at or after that attempt's server time.
@@ -159,6 +164,10 @@ interface SessionController {
     suspend fun completeResetRecovery(code: String) {}
     /** Cancel reset: `cancel.php`; only an acknowledged cancel means nothing changed (O4b). */
     suspend fun cancelReset() {}
+    /** Check after an Unknown deletion: one session read, never a resend (D1, TL C2). */
+    suspend fun checkClosure() {}
+    /** Done on a deletion outcome: it leaves memory (D1, TL C4). */
+    suspend fun dismissClosure() {}
 }
 
 /** Local transitions and vault writes are serialized; network calls never hold the lock. */
@@ -187,6 +196,9 @@ class SessionRepository internal constructor(
     private val http: (ServerAddress) -> SessionHttp = { SessionHttp(it) },
 ) : SessionController, io.github.thiesi.chitchat.core.policies.PolicyReads, io.github.thiesi.chitchat.core.policies.RulesOperations {
     private val lock = Mutex()
+    private var closureMarker: ClosureMarker? = null
+    private var closureClientToClose: SessionHttp? = null
+    private var closureAttempts = 0L
     private val mutable = MutableStateFlow(SessionState())
     override val state = mutable.asStateFlow()
 
@@ -962,17 +974,146 @@ class SessionRepository internal constructor(
     }
 
     /** Also used for a server 200 whose user became null: expiry is not necessarily an HTTP 401. */
-    private suspend fun invalidate(active: Runtime, failure: ApiFailure) {
+    private suspend fun invalidate(active: Runtime, failure: ApiFailure?, closure: ClosureStateOverride? = null) {
         if (runtime !== active) return
-        active.api.close()
+        val userId = mutable.value.user?.id ?: active.expectedUserId
+        // A deletion in flight for this origin and account: its own forced_logout (or any ended session) waits for the
+        // POST's result instead of showing plain sign-in. An Unknown deletion stays Unknown (an admin can force a logout
+        // too), and every other outcome is fenced to its own origin and account (TL C1).
+        val carried = closure?.state ?: closureMarker?.takeIf { it.origin == active.server.value && it.userId == userId }
+            ?.let { io.github.thiesi.chitchat.core.account.ClosureState.Waiting(it.origin, it.userId) }
+            ?: mutable.value.closure?.takeIf { it.origin == active.server.value && it.userId == userId }
+        // Closing the client would cancel the deletion POST itself (it shares this runtime's client). While one is in
+        // flight for this origin and account, everything else on the client is retired now (jar, every other call, no
+        // new requests) and only the final shutdown waits for that POST to settle (TL C1, #296).
+        if (closureMarker?.let { it.origin == active.server.value && it.userId == userId } == true) {
+            active.api.retireExcept()
+            closureClientToClose = active.api
+        } else active.api.close()
         runtime = null
         generation++
         var storageWarning = false
         try { vault.clear() } catch (_: IOException) { storageWarning = true }
-        retirePush(active.server.value, mutable.value.user?.id ?: active.expectedUserId) // Local only: the session is gone.
+        retirePush(active.server.value, userId) // Local only: the session is gone.
         mutable.value = SessionState(active.server, generation, SessionPhase.INVALIDATED,
-            error = failure, storageWarning = storageWarning)
+            error = failure, storageWarning = storageWarning, closure = carried)
     }
+
+    /** A deletion outcome to set during teardown, replacing whatever would otherwise be carried. */
+    private class ClosureStateOverride(val state: io.github.thiesi.chitchat.core.account.ClosureState)
+
+    /**
+     * Delete account (D1; account.md "Account closure"): one POST, never resent, through `withStepUp` (a live session's
+     * `403 step_up_required` is rethrown for it). The server fires `forced_logout` before it destroys the session and
+     * before this reply arrives, so the result is applied against an app-scoped marker (origin, account, attempt), never
+     * against the generation, which may already have retired (TL C1). After a confirmed closure the ended-session teardown
+     * runs with no network: the session is already gone, and the server deleted this account's push subscriptions.
+     */
+    internal suspend fun closeAccount(access: SessionAccess): io.github.thiesi.chitchat.core.account.ClosureResult {
+        val marker = lock.withLock {
+            ensureCurrent(access)
+            val active = runtime ?: throw CancellationException("Session retired")
+            if (active.csrf != access.csrf) throw CancellationException("Session token changed")
+            if (clock.millis() < mutable.value.retryAtMillis) return io.github.thiesi.chitchat.core.account.ClosureResult.RateLimited(
+                (mutable.value.retryAtMillis - clock.millis() + 999) / 1000)
+            ClosureMarker(active.server.value, access.userId, ++closureAttempts).also { closureMarker = it }
+        }
+        var settled = false
+        try {
+            val result = try {
+                closed(access, marker, access.api.closeAccount(access.csrf))
+            } catch (failure: ApiFailure) {
+                // A reply arrived: settled, even when a live session's step-up refusal is rethrown for withStepUp
+                // (the server refused before committing, so it must never read as Unknown; review on #296).
+                try { closureFailed(access, marker, failure) } finally { settled = true }
+            }
+            settled = true
+            return result
+        } finally {
+            withContext(NonCancellable) {
+                lock.withLock {
+                    // Cancelled after sending (genuine background or navigation, M2b2): it may have committed.
+                    if (!settled) markClosureUnknown(access, marker)
+                    if (closureMarker === marker) closureMarker = null
+                    // A runtime retired meanwhile closes its client now that the POST has settled.
+                    if (closureClientToClose === access.api) { access.api.close(); closureClientToClose = null }
+                }
+            }
+        }
+    }
+
+    private suspend fun closed(access: SessionAccess, marker: ClosureMarker, finalizesAt: String) = lock.withLock {
+        val scheduled = io.github.thiesi.chitchat.core.account.ClosureState.Scheduled(marker.origin, marker.userId, finalizesAt)
+        val active = runtime
+        if (active != null && mutable.value.generation == access.generation) invalidate(active, null, ClosureStateOverride(scheduled))
+        else if (mutable.value.closure.matches(marker)) mutable.value = mutable.value.copy(closure = scheduled)
+        io.github.thiesi.chitchat.core.account.ClosureResult.Closed(finalizesAt)
+    }
+
+    private suspend fun closureFailed(access: SessionAccess, marker: ClosureMarker, failure: ApiFailure): io.github.thiesi.chitchat.core.account.ClosureResult {
+        val result = io.github.thiesi.chitchat.core.account.closureResult(failure)
+        val stepUp = failure.status == 403 && failure.code == "step_up_required"
+        lock.withLock {
+            val active = runtime
+            val live = active != null && mutable.value.generation == access.generation
+            // The same session-wide effects as any authorized request (an ended session, a wait, a stale token).
+            if (live && (failure.status == 401 || failure.status == 429 || failure.status == 503 || failure.code == "csrf_failed" ||
+                    failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT, FailureKind.REDIRECT, FailureKind.INCOMPATIBLE)))
+                failLocked(active!!, failure)
+            val current = mutable.value
+            when {
+                // The session ended meanwhile: the result lands on the waiting marker.
+                current.closure is io.github.thiesi.chitchat.core.account.ClosureState.Waiting && current.closure.matches(marker) ->
+                    mutable.value = current.copy(closure = if (result == io.github.thiesi.chitchat.core.account.ClosureResult.Unknown)
+                        io.github.thiesi.chitchat.core.account.ClosureState.Unknown(marker.origin, marker.userId)
+                        else io.github.thiesi.chitchat.core.account.ClosureState.EndedWithRefusal(marker.origin, marker.userId, result))
+                runtime != null && mutable.value.generation == access.generation && result == io.github.thiesi.chitchat.core.account.ClosureResult.Unknown ->
+                    mutable.value = current.copy(closure = io.github.thiesi.chitchat.core.account.ClosureState.Unknown(marker.origin, marker.userId))
+            }
+        }
+        if (stepUp && runtime != null && mutable.value.generation == access.generation) throw failure
+        return result
+    }
+
+    /** Under the lock: a cancelled, sent deletion is Unknown, wherever the session now is (same origin and account only). */
+    private fun markClosureUnknown(access: SessionAccess, marker: ClosureMarker) {
+        val current = mutable.value
+        val live = runtime != null && current.generation == access.generation
+        if (live || (current.closure is io.github.thiesi.chitchat.core.account.ClosureState.Waiting && current.closure.matches(marker)))
+            mutable.value = current.copy(closure = io.github.thiesi.chitchat.core.account.ClosureState.Unknown(marker.origin, marker.userId))
+    }
+
+    private fun io.github.thiesi.chitchat.core.account.ClosureState?.matches(marker: ClosureMarker) = this != null && origin == marker.origin && userId == marker.userId
+
+    override suspend fun checkClosure() {
+        val unknown = mutable.value.closure as? io.github.thiesi.chitchat.core.account.ClosureState.Unknown ?: return
+        val live = lock.withLock { runtime != null && mutable.value.phase == SessionPhase.AUTHENTICATED }
+        if (live) {
+            // The ordinary session read. Still signed in: nothing changed. An anonymous reply or a 401 ends the session
+            // (the teardown runs there) and keeps the Unknown, which becomes LikelyClosed below; a failed read stays Unknown.
+            val before = mutable.value.bootstrapSequence
+            refreshFor(null)
+            lock.withLock {
+                val now = mutable.value
+                when {
+                    now.phase == SessionPhase.AUTHENTICATED && now.user?.id == unknown.userId && now.bootstrapSequence > before &&
+                        now.error == null -> mutable.value = now.copy(closure = io.github.thiesi.chitchat.core.account.ClosureState.NotClosed(unknown.origin, unknown.userId))
+                    now.phase == SessionPhase.INVALIDATED && now.closure == unknown ->
+                        mutable.value = now.copy(closure = io.github.thiesi.chitchat.core.account.ClosureState.LikelyClosed(unknown.origin, unknown.userId))
+                }
+            }
+        } else {
+            // The session already ended: an anonymous session read for this server is what Check can still do.
+            connect(selected)
+            lock.withLock {
+                val now = mutable.value
+                mutable.value = now.copy(closure = if (now.phase == SessionPhase.ANONYMOUS && now.server?.value == unknown.origin)
+                    io.github.thiesi.chitchat.core.account.ClosureState.LikelyClosed(unknown.origin, unknown.userId) else unknown)
+            }
+        }
+    }
+
+    override suspend fun dismissClosure() = lock.withLock { mutable.value = mutable.value.copy(closure = null) }
 
     override suspend fun signOut() {
         val pending = lock.withLock {
@@ -1050,6 +1191,9 @@ class SessionRepository internal constructor(
             }
         }
     }
+
+    /** A deletion in flight: origin, account and attempt only, never a session secret (TL C1). */
+    private class ClosureMarker(val origin: String, val userId: Long, val attempt: Long)
 
     /** An Unknown reset attempt: the username and the server's `Date` from its challenge GET. No string form. */
     private class UncertainReset(val username: String, val serverDate: String?)

@@ -95,6 +95,26 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
 
     fun restoreCookies(cookies: List<String>) = jar.restore(cookies)
     fun savedCookies() = jar.export()
+    /** Set by [retireExcept]: no new request starts on this client (TL, #296). */
+    @Volatile private var retiring = false
+
+    /**
+     * Retirement that spares only an in-flight account deletion (D1, TL C1 and #296): the jar is retired (that request's
+     * cookies were attached when it was sent), every other queued and running call is cancelled at once (the event
+     * stream, GETs, sends, uploads), and no new request starts. Only the executor shutdown and the pool eviction wait for
+     * [close], which the deletion calls when it settles.
+     */
+    fun retireExcept() {
+        retiring = true
+        jar.retire()
+        (client.dispatcher.queuedCalls() + client.dispatcher.runningCalls())
+            .filter { it.request().tag(ClosureCall::class.java) == null }.forEach(Call::cancel)
+    }
+
+    /** Tags the one request [retireExcept] spares. */
+    private object ClosureCall
+
+    // Not `retiring`: sign-out sends its prepared logout and revoke after close (they carry their own cookies).
     fun close() {
         jar.retire()
         client.dispatcher.cancelAll()
@@ -128,6 +148,18 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         val raw = request("registration-challenge.php")
         if (raw.status != 200) throw ApiFailure(FailureKind.INCOMPATIBLE)
         return decode<RegistrationChallengeReply>(raw).challenge
+    }
+
+    /**
+     * `POST account/close.php` (account.md "Account closure"): one CSRF POST, never resent. A 200 is a confirmed closure only
+     * with `closure.state == "closure_pending"` and a readable `finalizes_at`; anything else may have committed and is
+     * thrown as INCOMPATIBLE, which callers treat as Unknown. The server destroys the session on success.
+     */
+    suspend fun closeAccount(csrf: String): String {
+        val request = buildRequest("account/close.php", "{}", csrf).newBuilder().tag(ClosureCall::class.java, ClosureCall).build()
+        val raw = execute(client.newCall(request)).require200()
+        if (jar.invalid) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        return io.github.thiesi.chitchat.core.account.closureDeadline(raw.body) ?: throw ApiFailure(FailureKind.INCOMPATIBLE)
     }
 
     /**
@@ -512,6 +544,7 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         require(afterId >= 0)
         // Settled resume (v3.10.0 minimum, no fallback): afterId is the last frame position, unchanged on a
         // fresh runtime (0, as before).
+        if (retiring) throw kotlinx.coroutines.CancellationException("Session retired")
         val request = buildRequest("events/stream.php?resume=settled").newBuilder()
             .header("Accept", "text/event-stream").header("Last-Event-ID", afterId.toString()).build()
         return sessionEventStream(client, request, { jar.invalid }) { cause, response ->
@@ -756,6 +789,8 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
     }
 
     private suspend fun execute(call: Call, maxBytes: Long = 1_048_576, upload: AttachmentUpload? = null): RawReply {
+        // A retired client starts nothing new (the in-flight deletion is the only call it still carries).
+        if (retiring) throw kotlinx.coroutines.CancellationException("Session retired")
         val started = requestScope()
         return try { transmit(call, maxBytes, upload) } catch (failure: ApiFailure) {
             if (failure.status == 403 && failure.code == RULES_ACCEPTANCE_REQUIRED) onRulesRefused?.invoke(started)
