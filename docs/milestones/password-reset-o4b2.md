@@ -47,6 +47,9 @@ block is unchanged.
     step 4a;
   - an expired pending reset returns here with "That took too long. Start again with your recovery key."
 
+Each reset screen (the form and the MFA step) brings its title into view when it opens. The shared scroller otherwise
+keeps its offset from step 4a, where typing a username raises the keyboard, and the screen opened past its title.
+
 ## One more step (pending reset)
 
 - The title, the lead, and "Finish before {time}" in the device's time format.

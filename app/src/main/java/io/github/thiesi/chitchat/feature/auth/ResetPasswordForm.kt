@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.feature.auth
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -116,7 +117,7 @@ private fun ResetForm(state: SessionState, model: AuthViewModel, enabled: Boolea
         }
     }
     Column(Modifier.testTag("reset_form"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(stringResource(R.string.reset_title), style = MaterialTheme.typography.titleLarge)
+        ScreenTitle(stringResource(R.string.reset_title), "reset_title")
         when (state.reset.outcome) {
             // The password may have changed: say what to do, and nothing resends (PL wording).
             ResetOutcome.UNCERTAIN -> WarningNotice(stringResource(R.string.reset_unknown_lead), stringResource(R.string.reset_unknown_body),
@@ -206,7 +207,7 @@ private fun ResetMfaStep(state: SessionState, model: AuthViewModel, enabled: Boo
     BackHandler(enabled = !stopping) { stopping = true }
     val canCode = "recovery_code" in pending.methods
     Column(Modifier.testTag("reset_mfa"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(stringResource(R.string.reset_mfa_title), style = MaterialTheme.typography.titleLarge)
+        ScreenTitle(stringResource(R.string.reset_mfa_title), "reset_mfa_title")
         Text(stringResource(R.string.reset_mfa_lead))
         resetDeadline(pending.expiresAt)?.let { Text(stringResource(R.string.reset_mfa_deadline, it), Modifier.testTag("reset_mfa_deadline")) }
         if (canCode) {
@@ -233,6 +234,17 @@ private fun ResetMfaStep(state: SessionState, model: AuthViewModel, enabled: Boo
         confirmButton = { TextButton(onClick = { stopping = false; model.cancelReset() }, Modifier.testTag("reset_stop")) {
             Text(stringResource(R.string.reset_stop))
         } })
+}
+
+/**
+ * A reset screen's title, brought into view when the screen opens: the shared scroller keeps its offset from step 4a
+ * (typing a username raises the keyboard), so without this the new screen opened scrolled past its title.
+ */
+@Composable
+private fun ScreenTitle(text: String, tag: String) {
+    val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    LaunchedEffect(Unit) { requester.bringIntoView() }
+    Text(text, androidx.compose.ui.Modifier.bringIntoViewRequester(requester).testTag(tag), style = MaterialTheme.typography.titleLarge)
 }
 
 /** "Finish before {time}" in the device's time format, from the server's `expires_at`; null when unreadable. */

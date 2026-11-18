@@ -52,8 +52,12 @@ class ResetPresentationTest {
         val label = if (dark) "dark" else "light"
         for ((name, fontScale) in listOf("default" to 1f, "font200" to 2f)) {
             scene(dark, fontScale) { capture("reset-$label-$name-signin-forgot") }
-            scene(dark, fontScale) { toForm(); capture("reset-$label-$name-form") }
+            scene(dark, fontScale) { toForm()
+                // The form opens at its title even though step 4a's username was just typed (keyboard up).
+                compose.onNodeWithTag("reset_title").assertIsDisplayed()
+                capture("reset-$label-$name-form") }
             scene(dark, fontScale, mfa = listOf("recovery_code")) { toForm(); submit(); compose.waitUntil(5_000) { exists("reset_mfa") }
+                compose.onNodeWithTag("reset_mfa_title").assertIsDisplayed()
                 capture("reset-$label-$name-mfa")
                 compose.onNodeWithTag("reset_cancel").performScrollTo().performClick()
                 // P-220: no body text, so nothing to scroll; both actions stay displayed at either scale.
