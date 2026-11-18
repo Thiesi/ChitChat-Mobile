@@ -1022,7 +1022,11 @@ class SessionRepository internal constructor(
         try {
             val result = try {
                 closed(access, marker, access.api.closeAccount(access.csrf))
-            } catch (failure: ApiFailure) { closureFailed(access, marker, failure) }
+            } catch (failure: ApiFailure) {
+                // A reply arrived: settled, even when a live session's step-up refusal is rethrown for withStepUp
+                // (the server refused before committing, so it must never read as Unknown; review on #296).
+                try { closureFailed(access, marker, failure) } finally { settled = true }
+            }
             settled = true
             return result
         } finally {

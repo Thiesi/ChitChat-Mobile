@@ -958,9 +958,35 @@ class SessionRepositoryTest {
         login()
         server.enqueue(error("step_up_required", 403)); server.enqueue(closed())
         var verified = 0
-        val result = io.github.thiesi.chitchat.core.account.requestClosure({ closure().closeAccount() }, { verified++ })
+        val result = io.github.thiesi.chitchat.core.account.requestClosure({ closure().closeAccount() }, {
+            // Between the attempts: the refused first attempt left nothing behind (TL, #296).
+            assertNull("No stale outcome from the 403", sessions.state.value.closure)
+            assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+            verified++
+        })
         assertEquals(io.github.thiesi.chitchat.core.account.ClosureResult.Closed(deadline), result)
-        assertEquals(1, verified); assertEquals(2, server.requestCount - 2)
+        assertEquals(1, verified); assertEquals("The 403 and one retry, never more", 2, server.requestCount - 2)
+        // The retry is its own attempt and lands as the confirmation.
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureState.Scheduled(address().value, 7, deadline), sessions.state.value.closure)
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+    }
+
+    @Test fun aStepUpRefusalFollowedByACancelledOrFailedVerificationChangesNothing() = runTest {
+        // Review (#296): the 403 is a refusal before commit, never an uncertain deletion.
+        login()
+        server.enqueue(error("step_up_required", 403))
+        val failed = io.github.thiesi.chitchat.core.account.requestClosure({ closure().closeAccount() },
+            { throw ApiFailure(FailureKind.HTTP, 401, "step_up_invalid_credentials") })
+        assertTrue(failed is io.github.thiesi.chitchat.core.account.ClosureResult.Failed)
+        server.takeRequest(5, TimeUnit.SECONDS)
+        assertNull("No false 'may have gone through'", sessions.state.value.closure)
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        server.enqueue(error("step_up_required", 403))
+        runCatching { io.github.thiesi.chitchat.core.account.requestClosure({ closure().closeAccount() },
+            { throw CancellationException("The person closed the step-up dialog") }) }
+        server.takeRequest(5, TimeUnit.SECONDS)
+        assertNull(sessions.state.value.closure)
+        assertEquals("One POST each, never resent", 4, server.requestCount)
     }
 
     @Test fun aTwoHundredWithoutADeadlineIsUnknownNotSuccess() = runTest {
