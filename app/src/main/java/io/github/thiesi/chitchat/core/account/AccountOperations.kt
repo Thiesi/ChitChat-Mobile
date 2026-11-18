@@ -22,6 +22,11 @@ interface AccountAccess {
      * was skipped (busy) or failed, which means unresolved; never a raw GET whose CSRF the session doesn't adopt.
      */
     suspend fun recoveryKeyAfterRefresh(): RecoveryKeyStatus? = null
+    /**
+     * Delete account: one `account/close.php` POST, never resent (D1). Returns the typed outcome; only a live session's
+     * `403 step_up_required` is thrown, for `withStepUp`.
+     */
+    suspend fun closeAccount(): ClosureResult = error("Not supported by this fixture")
 }
 
 interface AccountOperations {

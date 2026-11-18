@@ -18,6 +18,7 @@ internal class SessionAccountRepository(private val sessions: SessionRepository)
                 sessions.recoveryKeyCreated(access, created.createdAt)
                 return created
             }
+            override suspend fun closeAccount() = sessions.closeAccount(access)
             override suspend fun recoveryKeyAfterRefresh() = try { sessions.recoveryKeyAfterRefresh(access) }
                 catch (_: io.github.thiesi.chitchat.core.network.ApiFailure) { null }
             override suspend fun verifyRecovery(code: String): Int {

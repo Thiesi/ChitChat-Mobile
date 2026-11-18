@@ -131,6 +131,16 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
     }
 
     /**
+     * `POST account/close.php` (account.md "Account closure"): one CSRF POST, never resent. A 200 is a confirmed closure only
+     * with `closure.state == "closure_pending"` and a readable `finalizes_at`; anything else may have committed and is
+     * thrown as INCOMPATIBLE, which callers treat as Unknown. The server destroys the session on success.
+     */
+    suspend fun closeAccount(csrf: String): String {
+        val raw = request("account/close.php", "{}", csrf).require200()
+        return io.github.thiesi.chitchat.core.account.closureDeadline(raw.body) ?: throw ApiFailure(FailureKind.INCOMPATIBLE)
+    }
+
+    /**
      * `GET password-reset/challenge.php` (password-recovery.md): the documented discovery of self-service reset (a 404
      * means an older server) and the single-use, session-bound challenge an attempt needs. [ResetChallenge.serverDate] is
      * the response's `Date` header, the server time just before the attempt (O4b: compared with `created_at` later).

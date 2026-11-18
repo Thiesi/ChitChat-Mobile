@@ -835,6 +835,154 @@ class SessionRepositoryTest {
         assertNull("The generated key never enters session state", sessions.state.value.registrationRecoveryKey)
     }
 
+    // --- In-app account deletion (D1) ---
+    private val deadline = "2026-12-02T10:00:00+00:00"
+    private fun closed(delay: Long = 0) = MockResponse.Builder().code(200).addHeader("Content-Type", "application/json")
+        .body("""{"closure":{"state":"closure_pending","requested_at":"2026-11-18T10:00:00+00:00","finalizes_at":"$deadline","cooling_off_days":14,"session_version":4}}""")
+        .apply { if (delay > 0) bodyDelay(delay, TimeUnit.MILLISECONDS) }.build()
+    private suspend fun closure() = io.github.thiesi.chitchat.core.account.SessionAccountRepository(sessions).open()
+
+    @Test fun aConfirmedDeletionTearsDownWithoutNetworkAndSchedules() = runTest {
+        val teardown = RecordingTeardown(9, vault); sessions = repository(teardown)
+        login()
+        val access = closure()
+        server.enqueue(closed())
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureResult.Closed(deadline), access.closeAccount())
+        val post = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("/api/v1/account/close.php", post.url.encodedPath)
+        assertEquals(b, post.headers["X-CSRF-Token"])
+        val state = sessions.state.value
+        assertEquals(SessionPhase.INVALIDATED, state.phase)
+        assertNull("Not the ordinary ended-session error", state.error)
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureState.Scheduled(address().value, 7, deadline), state.closure)
+        assertNull("The vault is cleared", vault.saved)
+        assertTrue("This phone's push record is retired", teardown.calls.any { it.second == 7L })
+        assertNull("No logout POST and no revoke: the session is already gone", server.takeRequest(300, TimeUnit.MILLISECONDS))
+    }
+
+    @Test fun aForcedLogoutBeforeThe200WaitsAndThenSchedules() = runTest {
+        login()
+        val access = closure()
+        server.enqueue(closed(delay = 600))
+        val pending = async(Dispatchers.IO) { access.closeAccount() }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        // The server's own forced_logout arrives over SSE before the reply.
+        sessions.invalidateFromRealtime(sessions.openAccess())
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureState.Waiting(address().value, 7), sessions.state.value.closure)
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureResult.Closed(deadline), pending.await())
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureState.Scheduled(address().value, 7, deadline), sessions.state.value.closure)
+    }
+
+    @Test fun aParallel401BeforeThe200WaitsAndThenSchedules() = runTest {
+        login()
+        val access = closure()
+        server.enqueue(closed(delay = 600))
+        server.enqueue(error("unauthenticated", 401))
+        val pending = async(Dispatchers.IO) { access.closeAccount() }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS) // Another request meets the destroyed session.
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+        assertTrue(sessions.state.value.closure is io.github.thiesi.chitchat.core.account.ClosureState.Waiting)
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureResult.Closed(deadline), pending.await())
+        assertTrue(sessions.state.value.closure is io.github.thiesi.chitchat.core.account.ClosureState.Scheduled)
+    }
+
+    @Test fun aForcedLogoutThenALostResponseStaysUnknown() = runTest {
+        login()
+        val access = closure()
+        server.enqueue(MockResponse.Builder().code(502).addHeader("Content-Type", "text/html").body("<html>bad gateway</html>")
+            .bodyDelay(600, TimeUnit.MILLISECONDS).build())
+        val pending = async(Dispatchers.IO) { access.closeAccount() }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        sessions.invalidateFromRealtime(sessions.openAccess())
+        assertEquals("A proxy 502 may follow a commit", io.github.thiesi.chitchat.core.account.ClosureResult.Unknown, pending.await())
+        assertEquals("Unknown even though a forced_logout was seen (an admin can force one too)",
+            io.github.thiesi.chitchat.core.account.ClosureState.Unknown(address().value, 7), sessions.state.value.closure)
+        assertNull("Never resent", server.takeRequest(300, TimeUnit.MILLISECONDS))
+    }
+
+    @Test fun aDefiniteRefusalAfterTheSessionEndedShowsTheEndedOutcomeWithTheRefusal() = runTest {
+        login()
+        val access = closure()
+        server.enqueue(MockResponse.Builder().code(409).addHeader("Content-Type", "application/json")
+            .body("""{"error":{"code":"last_super_admin","message":"x"}}""").bodyDelay(600, TimeUnit.MILLISECONDS).build())
+        val pending = async(Dispatchers.IO) { access.closeAccount() }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        sessions.invalidateFromRealtime(sessions.openAccess()) // Ended for another reason (an admin, say).
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureResult.LastSuperAdmin, pending.await())
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureState.EndedWithRefusal(address().value, 7,
+            io.github.thiesi.chitchat.core.account.ClosureResult.LastSuperAdmin), sessions.state.value.closure)
+    }
+
+    @Test fun refusalsOnALiveSessionAreTypedAndChangeNothing() = runTest {
+        login()
+        for ((reply, expected) in listOf(
+            error("last_super_admin", 409) to io.github.thiesi.chitchat.core.account.ClosureResult.LastSuperAdmin,
+            error("account_not_active", 409) to io.github.thiesi.chitchat.core.account.ClosureResult.NotActive)) {
+            server.enqueue(reply)
+            assertEquals(expected, closure().closeAccount()); server.takeRequest(5, TimeUnit.SECONDS)
+            assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+            assertNull(sessions.state.value.closure)
+        }
+        // A 429 never reached PHP (close has no limiter): definite, never resent.
+        server.enqueue(json("""{"error":{"code":"rate_limited","message":"x","retry_after_seconds":30}}""", 429))
+        assertTrue(closure().closeAccount() is io.github.thiesi.chitchat.core.account.ClosureResult.RateLimited)
+        server.takeRequest(5, TimeUnit.SECONDS)
+        assertNull(sessions.state.value.closure)
+    }
+
+    @Test fun stepUpIsAskedOnlyOn403AndTheRetryHappensOnce() = runTest {
+        login()
+        server.enqueue(error("step_up_required", 403)); server.enqueue(closed())
+        var verified = 0
+        val result = io.github.thiesi.chitchat.core.account.requestClosure({ closure().closeAccount() }, { verified++ })
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureResult.Closed(deadline), result)
+        assertEquals(1, verified); assertEquals(2, server.requestCount - 2)
+    }
+
+    @Test fun aTwoHundredWithoutADeadlineIsUnknownNotSuccess() = runTest {
+        login()
+        server.enqueue(json("""{"closure":{"state":"closure_pending"}}"""))
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureResult.Unknown, closure().closeAccount())
+        assertNotEquals("Never the confirmation without the server's deadline",
+            io.github.thiesi.chitchat.core.account.ClosureState.Scheduled::class, sessions.state.value.closure?.let { it::class })
+    }
+
+    @Test fun checkStillSignedInSaysNotDeletedAndTheSessionContinues() = runTest {
+        login()
+        server.enqueue(json("", 500))
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureResult.Unknown, closure().closeAccount()); server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(json(bootstrapBody(user, b))); sessions.checkClosure(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureState.NotClosed(address().value, 7), sessions.state.value.closure)
+    }
+
+    @Test fun checkSignedOutSaysMostLikelyAndAFailedCheckStaysUnknown() = runTest {
+        login()
+        server.enqueue(json("", 500))
+        closure().closeAccount(); server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(json("", 503)); sessions.checkClosure(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertTrue("A failed Check stays Unknown", sessions.state.value.closure is io.github.thiesi.chitchat.core.account.ClosureState.Unknown)
+        clock.now += 31_000
+        server.enqueue(json(bootstrapBody())); sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS)
+        // The anonymous reply ends the session; the teardown runs; only now is it "most likely".
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureState.Unknown(address().value, 7), sessions.state.value.closure)
+        server.enqueue(json(bootstrapBody())); sessions.checkClosure(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureState.LikelyClosed(address().value, 7), sessions.state.value.closure)
+        sessions.dismissClosure()
+        assertNull("Done clears it", sessions.state.value.closure)
+    }
+
+    @Test fun aDeletionOutcomeIsFencedAndAFreshConnectionDropsIt() = runTest {
+        login()
+        server.enqueue(closed()); closure().closeAccount(); server.takeRequest(5, TimeUnit.SECONDS)
+        val outcome = sessions.state.value.closure!!
+        assertEquals(address().value, outcome.origin); assertEquals(7L, outcome.userId)
+        // Memory only and never carried into a new connection (Done, another server or process death).
+        server.enqueue(json(bootstrapBody())); sessions.connect(address()); server.takeRequest(5, TimeUnit.SECONDS)
+        assertNull(sessions.state.value.closure)
+    }
+
     // --- Password reset with the recovery key (O4b1) ---
     private val nonce = "0123456789abcdef0123456789abcdef"
     private val serverDate = "Tue, 17 Nov 2026 10:00:00 GMT"

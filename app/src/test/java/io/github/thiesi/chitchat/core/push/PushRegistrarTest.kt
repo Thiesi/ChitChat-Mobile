@@ -213,6 +213,33 @@ class PushRegistrarTest {
         assertNull(vault.record!!.pendingEndpoint)
     }
 
+    @Test fun afterADeletionAndARestoreNothingReadsOn() = runTest {
+        // TL (C3): the server deletes this account's subscriptions when the deletion is requested, so after a restore
+        // nothing is subscribed, on the server or this phone. Push reads Off until the person turns it on again.
+        login()
+        val registrar = registrar()
+        val record = local.prepare(origin(), 7)!!
+        server.enqueue(subscribed(12))
+        registrar.onNewEndpoint(record.instance, "https://push.example/endpoint", record.publicKey, record.auth)
+        registrar.status.first { it == PushPhoneStatus.On }
+        server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(json("""{"closure":{"state":"closure_pending","requested_at":"2026-11-18T10:00:00+00:00","finalizes_at":"2026-12-02T10:00:00+00:00","cooling_off_days":14,"session_version":3}}"""))
+        assertTrue(io.github.thiesi.chitchat.core.account.SessionAccountRepository(sessions).open().closeAccount()
+            is io.github.thiesi.chitchat.core.account.ClosureResult.Closed)
+        server.takeRequest(5, TimeUnit.SECONDS)
+        assertNull("The local record is destroyed", vault.record)
+        assertEquals(listOf(record.instance), connector.unregistered)
+        assertEquals(PushPhoneStatus.Off, registrar.status.value)
+        // Restore (Restore a closed account): a fresh authenticated session for the same account.
+        server.enqueue(json(bootstrap("null").replace(b, a)))
+        sessions.connect(address()); server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(json("""{"csrf_token":"$b","user":$user,"mfa_required":false,"restored":true}"""))
+        sessions.signIn("Alice", "fixture-password", restore = true); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertNull(vault.record)
+        assertNotEquals("Never On after a restore", PushPhoneStatus.On, registrar.status.value)
+    }
+
     @Test fun aDroppedHeldRotationNeverStaysOn() = runTest {
         for ((reply, expected) in listOf(
             json("""{"error":{"code":"push_subscription_limit","message":"fixture"}}""", 409) to
