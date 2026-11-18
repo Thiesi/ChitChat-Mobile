@@ -280,8 +280,9 @@ class SessionRepository internal constructor(
                 if (runtime === active) {
                     active.preparation++
                     active.proof = null
+                    // A sign-in attempt ends any cancel outcome shown on step 4a (PL, O4b2).
                     mutable.value = mutable.value.copy(authFlow = if (restore) AuthFlow.RESTORE else AuthFlow.SIGN_IN,
-                        registration = RegistrationPreparation.IDLE)
+                        registration = RegistrationPreparation.IDLE, reset = mutable.value.reset.copy(outcome = null))
                     active.signInMayFollowUncertainRegistration =
                         active.uncertainRegistration?.equals(username.trim(), ignoreCase = true) == true
                     active.signInMayFollowUncertainReset =
@@ -396,7 +397,9 @@ class SessionRepository internal constructor(
             // The discovery challenge once, while young (the server expires it after five minutes); never twice.
             val fresh = active.resetChallenge?.takeIf { clock.millis() - active.resetChallengeAt in 0 until RESET_CHALLENGE_REUSE_MS }
             active.resetChallenge = null
-            mutable.value = current.copy(error = null, reset = current.reset.copy(preparation = RegistrationPreparation.PREPARING))
+            // A stale-challenge notice stays through the automatic renewal until the next tap (review, #294).
+            mutable.value = current.copy(error = current.error?.takeIf { it.code == "reset_challenge_expired" },
+                reset = current.reset.copy(preparation = RegistrationPreparation.PREPARING))
             Triple(active, attempt, fresh)
         } ?: return
         val (active, attempt, fresh) = pending

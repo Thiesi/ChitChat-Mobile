@@ -19,6 +19,10 @@ class AuthViewModel(private val sessions: SessionController) : ViewModel() {
     private var initialized = false
     private var operation: Job? = null
     private var preparation: Job? = null
+    private var discovery: Job? = null
+    /** The username typed on step 4a, carried into the reset form (O4b2). A username, not a secret; never saved. */
+    var resetPrefill: String = ""
+        private set
 
     fun selectServer(server: ServerAddress?) {
         if (initialized && selected == server) return
@@ -46,6 +50,7 @@ class AuthViewModel(private val sessions: SessionController) : ViewModel() {
         operation = viewModelScope.launch {
             sessions.selectAuthFlow(flow)
             if (state.value.authFlow == AuthFlow.REGISTER) prepareRegistration()
+            if (state.value.authFlow == AuthFlow.RESET) prepareReset()
         }
     }
 
@@ -55,6 +60,42 @@ class AuthViewModel(private val sessions: SessionController) : ViewModel() {
     }
 
     fun pauseRegistration() { preparation?.cancel() }
+
+    /** Step 4a opened: the documented discovery GET, once per visit (the screen keeps a per-visit flag). */
+    fun discoverPasswordReset() {
+        if (discovery?.isActive == true) return
+        discovery = viewModelScope.launch { sessions.discoverPasswordReset() }
+    }
+
+    /** Forgot password?: the reset form, prefilled with what step 4a's username field held. */
+    fun startReset(username: String) {
+        resetPrefill = username.trim()
+        selectForm(AuthFlow.RESET)
+    }
+
+    /** A fresh challenge for the next attempt; every attempt needs its own. */
+    fun prepareReset() {
+        preparation?.cancel()
+        preparation = viewModelScope.launch { sessions.prepareReset() }
+    }
+
+    /** One reset POST; the screen clears the key and passwords as it calls this. Never resent. */
+    fun resetPassword(username: String, recoveryKey: String, newPassword: String) {
+        if (operation?.isActive == true) return
+        preparation?.cancel()
+        operation = viewModelScope.launch { sessions.resetPassword(username, recoveryKey, newPassword) }
+    }
+
+    fun completeResetRecovery(code: String) {
+        if (operation?.isActive == true) return
+        operation = viewModelScope.launch { sessions.completeResetRecovery(code) }
+    }
+
+    /** Stop on "Stop resetting your password?": `cancel.php` once. */
+    fun cancelReset() {
+        if (operation?.isActive == true) return
+        operation = viewModelScope.launch { sessions.cancelReset() }
+    }
 
     fun register(username: String, password: String, birthDate: String?) {
         if (operation?.isActive == true) return
@@ -74,6 +115,8 @@ class AuthViewModel(private val sessions: SessionController) : ViewModel() {
     fun foreground() {
         if (state.value.phase in setOf(SessionPhase.AUTHENTICATED, SessionPhase.GUEST)) refresh()
         else if (state.value.authFlow == AuthFlow.REGISTER && state.value.registration == RegistrationPreparation.IDLE) prepareRegistration()
+        else if (state.value.authFlow == AuthFlow.RESET && state.value.reset.pending == null &&
+            state.value.reset.preparation == RegistrationPreparation.IDLE) prepareReset()
     }
 
     /** "I've saved it" on the key display: the key is discarded; nothing records whether it was saved. */

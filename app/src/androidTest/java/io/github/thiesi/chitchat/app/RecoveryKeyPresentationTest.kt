@@ -36,6 +36,25 @@ class RecoveryKeyPresentationTest {
     private val view = RecoveryKeyView(RecoveryKey("A7K2-B9QX-C4MZ-D8RT-E2WN-F6HP"), R.string.recovery_key_title_save,
         createdAt = "2026-11-16T10:00:00+00:00")
 
+    @Test fun resetVariant() {
+        for (dark in listOf(false, true)) {
+            FontScaleTestActivity.requestedFontScale = 1f
+            ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.setContent { ChitChatTheme(dark = dark) { CompositionLocalProvider(LocalActivity provides null) {
+                        Box(Modifier.fillMaxSize().testTag("recovery_host")) {
+                            RecoveryKeyDisplay(RecoveryKeyView(RecoveryKey("A7K2-B9QX-C4MZ-D8RT-E2WN-F6HP"), R.string.recovery_key_title_new,
+                                note = R.string.recovery_key_reset_note, createdAt = "2026-11-18T10:00:00+00:00"),
+                                installation = "The Common Room", host = "chat.example.test", username = "Viewer", onSaved = {}, sdkInt = 35)
+                        }
+                    } } }
+                }
+                compose.onNodeWithTag("recovery_key_group_6").assertExists()
+                capture("recovery-${if (dark) "dark" else "light"}-default-display-reset", "recovery_host")
+            }
+        }
+    }
+
     @Test fun presentationLight() = presentation(dark = false)
     @Test fun presentationDark() = presentation(dark = true)
 

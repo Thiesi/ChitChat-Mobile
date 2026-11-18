@@ -68,14 +68,9 @@ internal fun recoveryKeyDate(createdAt: String?): String? = createdAt?.let { raw
 /** "**Not set up.** Without one, …" with the honey `warning` glyph (recovery-key.md, PL O4a2b). */
 @Composable
 private fun NotSetUpLine(installation: String, tag: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top,
-        modifier = Modifier.semantics(mergeDescendants = true) {}.testTag(tag)) {
-        Icon(painterResource(R.drawable.ic_warning), contentDescription = null, Modifier.size(20.dp), tint = ChitChatTheme.colors.warning)
-        val lead = stringResource(R.string.recovery_key_not_set_up_lead)
-        val body = stringResource(R.string.recovery_key_not_set_up_body, installation)
-        Text(buildAnnotatedString { withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(lead) }; append(" "); append(body) },
-            color = ChitChatTheme.colors.textMuted)
-    }
+    // The glyph is centred on the first line at any font scale (PL, #289 follow-up, bundled in O4b2).
+    io.github.thiesi.chitchat.core.ui.WarningLine(stringResource(R.string.recovery_key_not_set_up_lead),
+        stringResource(R.string.recovery_key_not_set_up_body, installation), Modifier.testTag(tag), color = ChitChatTheme.colors.textMuted)
 }
 
 /**
@@ -187,25 +182,17 @@ private fun CreateAgain(enabled: Boolean, onClick: () -> Unit) =
  */
 @Composable
 internal fun RecoveryKeyNotice(origin: io.github.thiesi.chitchat.core.account.KeyOrigin = io.github.thiesi.chitchat.core.account.KeyOrigin.REGISTRATION, onGoThere: () -> Unit, onNotNow: () -> Unit) {
-    val colors = ChitChatTheme.colors
-    Column(Modifier.fillMaxWidth().background(colors.presenceWash).padding(horizontal = 16.dp, vertical = 8.dp).testTag("recovery_key_notice")) {
-        Row(Modifier.padding(vertical = 4.dp).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-            Icon(painterResource(R.drawable.ic_warning), contentDescription = null, Modifier.size(20.dp), tint = colors.warning)
-            // After a reset the old key is gone too, so its variant says so (PL, O4b).
-            val reset = origin == io.github.thiesi.chitchat.core.account.KeyOrigin.RESET
-            val lead = stringResource(if (reset) R.string.recovery_key_undelivered_reset_lead else R.string.recovery_key_undelivered_lead)
-            val body = stringResource(if (reset) R.string.recovery_key_undelivered_reset_body else R.string.recovery_key_undelivered_body)
-            Text(buildAnnotatedString { withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(lead) }; append(" "); append(body) },
-                color = colors.text)
+    // After a reset the old key is gone too, so its variant says so (PL, O4b). The shared level-2 block centres the glyph.
+    val reset = origin == io.github.thiesi.chitchat.core.account.KeyOrigin.RESET
+    io.github.thiesi.chitchat.core.ui.WarningNotice(
+        stringResource(if (reset) R.string.recovery_key_undelivered_reset_lead else R.string.recovery_key_undelivered_lead),
+        stringResource(if (reset) R.string.recovery_key_undelivered_reset_body else R.string.recovery_key_undelivered_body),
+        Modifier.testTag("recovery_key_notice")) {
+        TextButton(onClick = onNotNow, Modifier.heightIn(min = 48.dp).testTag("recovery_key_notice_not_now")) {
+            Text(stringResource(R.string.recovery_key_not_now))
         }
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onNotNow, Modifier.heightIn(min = 48.dp).testTag("recovery_key_notice_not_now")) {
-                Text(stringResource(R.string.recovery_key_not_now))
-            }
-            TextButton(onClick = onGoThere, Modifier.heightIn(min = 48.dp).testTag("recovery_key_notice_go_there")) {
-                Text(stringResource(R.string.recovery_key_go_there))
-            }
+        TextButton(onClick = onGoThere, Modifier.heightIn(min = 48.dp).testTag("recovery_key_notice_go_there")) {
+            Text(stringResource(R.string.recovery_key_go_there))
         }
     }
 }

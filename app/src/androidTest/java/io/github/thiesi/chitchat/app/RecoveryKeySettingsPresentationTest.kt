@@ -74,7 +74,7 @@ class RecoveryKeySettingsPresentationTest {
                     compose.onNodeWithTag("recovery_key_replace_cancel").assertIsDisplayed()
                 }
             }
-            if (fontScale == 2f) {
+            run {
                 launch(fontScale, dark) { androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.background) {
                     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).testTag("recovery_host")) {
                         RecoveryKeyNotice(onGoThere = {}, onNotNow = {})

@@ -18,6 +18,13 @@ class RegistrationValidationTest {
         for (value in listOf("too short", "a".repeat(4097), "a sufficiently long ALICE phrase", password + '\u0000'))
             assertEquals(RegistrationProblem.PASSWORD, registrationProblem("Alice", value, value))
     }
+    @Test fun resetHintsCheckOnlyTheNewPasswordAndItsConfirmation() {
+        // The account exists: its username format isn't checked, only the new password's local hints (O4b2).
+        assertNull(resetProblem("_old.name", password, password))
+        assertEquals(ResetProblem.PASSWORD, resetProblem("Alice", "too short", "too short"))
+        assertEquals(ResetProblem.PASSWORD, resetProblem("Alice", "a sufficiently long ALICE phrase", "a sufficiently long ALICE phrase"))
+        assertEquals(ResetProblem.CONFIRMATION, resetProblem("Alice", password, password + " "))
+    }
     @Test fun passwordLengthCountsUnicodeCodePointsNotUtf16Units() {
         assertNull(registrationProblem("Alice", "😀".repeat(12), "😀".repeat(12)))
         assertEquals(RegistrationProblem.PASSWORD, registrationProblem("Alice", "😀".repeat(6), "😀".repeat(6)))

@@ -8,6 +8,8 @@ import io.github.thiesi.chitchat.core.server.ServerAddress
 import io.github.thiesi.chitchat.core.session.PublicSession
 import io.github.thiesi.chitchat.core.session.AuthFlow
 import io.github.thiesi.chitchat.core.session.RegistrationPreparation
+import io.github.thiesi.chitchat.core.session.ResetState
+import io.github.thiesi.chitchat.core.session.ResetSupport
 import io.github.thiesi.chitchat.core.session.SessionController
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
@@ -26,6 +28,18 @@ class TestSessions : SessionController {
     var failNextRegistration = false
     var registrations = 0
     var restores = 0
+    /** What the step-4a discovery GET finds (O4b2); [discoveryHold] keeps it CHECKING until completed. */
+    var resetSupport = ResetSupport.UNSUPPORTED
+    var discoveryHold: CompletableDeferred<Unit>? = null
+    @Volatile var discoveries = 0
+    @Volatile var resets = 0
+    /** The last reset submission, for assertions only (a fixture key, never a real secret). */
+    var lastReset: Triple<String, String, String>? = null
+    /** Shapes the next reset reply; by default the reset completes with a replacement key. */
+    var nextReset: ((SessionState) -> SessionState)? = null
+    var nextResetCode: ((SessionState) -> SessionState)? = null
+    var nextCancel: ((SessionState) -> SessionState)? = null
+    @Volatile var cancels = 0
     /** One-shot: shapes the next connect to a server (a failed bootstrap, an outdated server, lockdown, a public field).
      *  The app's start-up connect(null) never consumes it. */
     @Volatile var nextConnect: ((SessionState) -> SessionState)? = null
@@ -40,6 +54,7 @@ class TestSessions : SessionController {
         check(password.isNotEmpty()) { "The fixture must receive the submitted password before field clearing" }
         logins++
         if (restore) restores++
+        state.value = state.value.copy(reset = state.value.reset.copy(outcome = null))
         val completion = nextLoginCompletion
         nextLoginCompletion = null
         completion?.await()
@@ -61,7 +76,44 @@ class TestSessions : SessionController {
             user = SessionUser(7, username, listOf("member"), 1, false))
     }
     override suspend fun refresh() { state.value = state.value.copy(error = null, refreshRequired = false) }
-    override suspend fun selectAuthFlow(flow: AuthFlow) { state.value = state.value.copy(authFlow = flow, error = null) }
+    override suspend fun selectAuthFlow(flow: AuthFlow) {
+        if (state.value.reset.pending != null || (flow == AuthFlow.RESET && state.value.reset.support != ResetSupport.SUPPORTED)) return
+        state.value = state.value.copy(authFlow = flow, error = null,
+            reset = state.value.reset.copy(preparation = RegistrationPreparation.IDLE, outcome = null))
+    }
+    override suspend fun discoverPasswordReset() {
+        discoveries++
+        state.value = state.value.copy(reset = state.value.reset.copy(support = ResetSupport.CHECKING))
+        discoveryHold?.await()
+        state.value = state.value.copy(reset = state.value.reset.copy(support = resetSupport))
+    }
+    override suspend fun prepareReset() {
+        state.value = state.value.copy(reset = state.value.reset.copy(preparation = RegistrationPreparation.READY))
+    }
+    override suspend fun resetPassword(username: String, recoveryKey: String, newPassword: String) {
+        resets++
+        lastReset = Triple(username, recoveryKey, newPassword)
+        // The prepared challenge is consumed by every attempt, as in SessionRepository.
+        state.value = state.value.copy(error = null, reset = state.value.reset.copy(preparation = RegistrationPreparation.IDLE))
+        state.value = (nextReset?.also { nextReset = null } ?: ::resetCompleted)(state.value)
+    }
+    override suspend fun completeResetRecovery(code: String) {
+        recoveries++
+        state.value = (nextResetCode?.also { nextResetCode = null } ?: ::resetCompleted)(state.value)
+    }
+    override suspend fun cancelReset() {
+        cancels++
+        state.value = (nextCancel?.also { nextCancel = null } ?: { it.copy(authFlow = AuthFlow.SIGN_IN,
+            reset = it.reset.copy(pending = null, preparation = RegistrationPreparation.IDLE,
+                outcome = io.github.thiesi.chitchat.core.session.ResetOutcome.CANCELLED)) })(state.value)
+    }
+    /** A completed reset: signed in, with the replacement key in the one-shot slot (origin RESET). */
+    fun resetCompleted(current: SessionState): SessionState = current.copy(phase = SessionPhase.AUTHENTICATED, error = null,
+        user = SessionUser(7, lastReset?.first ?: "Alice", listOf("member"), 1, false),
+        registrationRecoveryKey = io.github.thiesi.chitchat.core.account.RecoveryKey("A7K2-B9QX-C4MZ-D8RT-E2WN-F6HP"),
+        recoveryKeyOrigin = io.github.thiesi.chitchat.core.account.KeyOrigin.RESET,
+        recoveryKey = io.github.thiesi.chitchat.core.account.RecoveryKeyStatus.Known(true, "2026-11-18T10:00:00+00:00"),
+        reset = ResetState(support = current.reset.support))
     override suspend fun prepareRegistration() { state.value = state.value.copy(registration = RegistrationPreparation.READY) }
     override suspend fun register(username: String, password: String, birthDate: String?) {
         check(password == "fixture-password") { "The fixture must receive the captured registration password" }
