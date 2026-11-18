@@ -111,6 +111,15 @@ play-readiness.md §1, P-221, released in v3.14.0. Welcome has none.)
   button appears only when the server supports self-service reset (ChitChat#155, merged),
   detected by a successful reset challenge. It leads to the native reset flow in
   [recovery-key.md](recovery-key.md).
+  - **Placement (O4b2, PR #294):** Sign in is pinned above the IME (#275), so "below it" means
+    the scroller: right after the password field, before Back and the P-221 footer. During
+    discovery an empty 48dp row holds the place (no static line first, no spinner, no
+    semantics). It's then the button on success, or the static line otherwise. The change isn't
+    announced.
+  - **After a cancelled reset:** "Nothing changed. Your password is the same as before." is a
+    level-1 `textMuted` caption under the title, announced once. "**We're not sure whether your
+    password changed.** Try signing in." is a level-2 block above the form. Both clear on the
+    next Sign in attempt or on leaving step 4a.
 - Existing rules stay: the password lives only in composition memory, is cleared on
   `ON_STOP` and is never saved in bundles. `contentType` hints for autofill remain.
   Rate-limit (`login_throttled` or `rate_limited`) shows as a level-1 line under the button:
