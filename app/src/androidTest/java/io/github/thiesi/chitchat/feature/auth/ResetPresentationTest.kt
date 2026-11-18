@@ -42,6 +42,7 @@ class ResetPresentationTest {
     @get:Rule val compose = createEmptyComposeRule()
     @After fun reset() { FontScaleTestActivity.requestedFontScale = 1f }
     private val key = "a7k2b9qx-c4mz-d8rt-e2wn-f6hp"
+    private lateinit var auth: AuthViewModel
 
     @Test fun presentationLight() = presentation(dark = false)
     @Test fun presentationDark() = presentation(dark = true)
@@ -73,7 +74,9 @@ class ResetPresentationTest {
                 scene(dark, fontScale, reply = { it.copy(error = ApiFailure(FailureKind.HTTP, 400, "reset_failed")) }) {
                     toForm(); submit(); compose.waitUntil(5_000) { exists("reset_failed") }; capture("reset-$label-$name-failed") }
                 scene(dark, fontScale, reply = { it.copy(reset = it.reset.copy(outcome = ResetOutcome.UNCERTAIN)) }) {
-                    toForm(); submit(); compose.waitUntil(5_000) { exists("reset_unknown") }; capture("reset-$label-$name-unknown") }
+                    toForm(); submit(); compose.waitUntil(5_000) { exists("reset_unknown") }
+                    compose.onNodeWithTag("reset_unknown").assertIsDisplayed() // Seen, not only announced.
+                    capture("reset-$label-$name-unknown") }
                 scene(dark, fontScale, mfa = listOf("recovery_code"), cancel = { it.copy(authFlow = AuthFlow.SIGN_IN,
                     reset = it.reset.copy(pending = null, outcome = ResetOutcome.CANCEL_UNCERTAIN)) }) {
                     toForm(); submit(); compose.waitUntil(5_000) { exists("reset_mfa") }
@@ -83,9 +86,14 @@ class ResetPresentationTest {
         }
     }
 
+    /**
+     * Reaches the form with step 4a's username seeded through the ViewModel, the same `startReset` call the Forgot
+     * password? button makes, rather than typed: a capture fixture shouldn't involve the keyboard, whose arrival at 200%
+     * once moved the button between scroll and click (#294, 695f2e8). Typing the username and tapping the button are
+     * covered by PasswordResetJourneyTest.aCompletedResetShowsTheNewKeyBeforeTheGuidelinesAndTheShell.
+     */
     private fun toForm() {
-        compose.onNodeWithTag("sign_in_username").performTextReplacement("Viewer")
-        compose.onNodeWithTag("forgot_password").performScrollTo().performClick()
+        compose.runOnIdle { auth.startReset("Viewer") }
         compose.waitUntil(5_000) { exists("reset_form") }
     }
 
@@ -108,7 +116,7 @@ class ResetPresentationTest {
                 s.copy(reset = s.reset.copy(pending = PendingReset(methods, "2026-11-18T10:05:00+00:00"))) } }
             nextCancel = cancel
         }
-        val auth = AuthViewModel(sessions)
+        auth = AuthViewModel(sessions)
         val settings = SettingsViewModel(object : SettingsStore {
             override val settings = MutableStateFlow(AppSettings(server = (ServerAddress.parse("chat.example.test") as AddressResult.Valid).address,
                 theme = if (dark) ThemePreference.DARK else ThemePreference.LIGHT))

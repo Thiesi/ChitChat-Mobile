@@ -163,6 +163,7 @@ class PasswordResetJourneyTest {
         sessions.nextReset = { it.copy(reset = it.reset.copy(outcome = ResetOutcome.UNCERTAIN)) }
         fillAndSubmit()
         compose.waitUntil(5_000) { exists("reset_unknown") }
+        compose.onNodeWithTag("reset_unknown").assertIsDisplayed() // Brought into view, not only announced.
         compose.onNodeWithTag("reset_unknown_sign_in").performClick()
         compose.waitUntil(5_000) { exists("sign_in_password") }
         assertEquals(1, sessions.resets)

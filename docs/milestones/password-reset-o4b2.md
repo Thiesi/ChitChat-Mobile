@@ -48,7 +48,9 @@ block is unchanged.
   - an expired pending reset returns here with "That took too long. Start again with your recovery key."
 
 Each reset screen (the form and the MFA step) brings its title into view when it opens. The shared scroller otherwise
-keeps its offset from step 4a, where typing a username raises the keyboard, and the screen opened past its title.
+keeps its offset from step 4a, where typing a username raises the keyboard, and the screen opened past its title. An
+outcome that appears at the top of the form (the Unknown notice, the expired line) is brought into view too, because the
+person is usually scrolled down at the pinned action when it appears; otherwise it was announced but off screen.
 
 ## One more step (pending reset)
 
@@ -87,6 +89,8 @@ use it too (the presentation lead's follow-up from #289).
   - stop asking first, and an acknowledged cancel's caption;
   - an uncertain cancel's block;
   - an expired pending reset.
-- `ResetPresentationTest` captures them for J (24 captures) into `reset-presentation`. `RecoveryKeyPresentationTest`
+- `ResetPresentationTest` captures them for J (24 captures) into `reset-presentation`. It reaches the form by seeding
+  step 4a's username through the ViewModel's `startReset` (the Forgot password? button's own call) rather than typing,
+  so no keyboard is involved; typing and tapping are covered by the journey test. `RecoveryKeyPresentationTest`
   adds the key display's reset variant, and `RecoveryKeySettingsPresentationTest` the notice at both scales.
 - `RegistrationValidationTest` covers the reset form's local hints.

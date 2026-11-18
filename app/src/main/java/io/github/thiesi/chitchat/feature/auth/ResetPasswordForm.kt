@@ -121,11 +121,11 @@ private fun ResetForm(state: SessionState, model: AuthViewModel, enabled: Boolea
         when (state.reset.outcome) {
             // The password may have changed: say what to do, and nothing resends (PL wording).
             ResetOutcome.UNCERTAIN -> WarningNotice(stringResource(R.string.reset_unknown_lead), stringResource(R.string.reset_unknown_body),
-                Modifier.testTag("reset_unknown")) {
+                Modifier.shownWhenItAppears().testTag("reset_unknown")) {
                 TextButton(onClick = { model.selectForm(io.github.thiesi.chitchat.core.session.AuthFlow.SIGN_IN) },
                     Modifier.heightIn(min = 48.dp).testTag("reset_unknown_sign_in")) { Text(stringResource(R.string.reset_sign_in)) }
             }
-            ResetOutcome.EXPIRED -> Text(stringResource(R.string.reset_expired), Modifier.testTag("reset_expired")
+            ResetOutcome.EXPIRED -> Text(stringResource(R.string.reset_expired), Modifier.shownWhenItAppears().testTag("reset_expired")
                 .semantics { liveRegion = LiveRegionMode.Polite }, color = ChitChatTheme.colors.textMuted)
             else -> Unit
         }
@@ -234,6 +234,17 @@ private fun ResetMfaStep(state: SessionState, model: AuthViewModel, enabled: Boo
         confirmButton = { TextButton(onClick = { stopping = false; model.cancelReset() }, Modifier.testTag("reset_stop")) {
             Text(stringResource(R.string.reset_stop))
         } })
+}
+
+/**
+ * An outcome that appears at the top of the form while the person is scrolled down at the pinned action: it's brought
+ * into view so it's seen, not only announced (seen in #294's captures).
+ */
+@Composable
+private fun Modifier.shownWhenItAppears(): Modifier {
+    val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    LaunchedEffect(Unit) { requester.bringIntoView() }
+    return bringIntoViewRequester(requester)
 }
 
 /**
