@@ -147,6 +147,17 @@ class PasswordResetJourneyTest {
         assertEquals("Never resent", 1, sessions.resets)
     }
 
+    @Test fun aStaleChallengeSaysNothingWasSentBesideTheAction() {
+        // Review (#294): the tap found an expired challenge, so nothing was sent and a fresh check runs (PL wording).
+        resetForm()
+        sessions.nextReset = { it.copy(error = ApiFailure(FailureKind.HTTP, 400, "reset_challenge_expired")) }
+        fillAndSubmit()
+        compose.waitUntil(5_000) { exists("reset_challenge_renewed") }
+        assertTrue(compose.onAllNodes(hasTestTag("reset_challenge_renewed") and hasAnyAncestor(hasTestTag("reset_action_block")))
+            .fetchSemanticsNodes().isNotEmpty())
+        text("reset_key", key)
+    }
+
     @Test fun anUnknownResetSaysWhatToDoAndSignInReturnsToStep4a() {
         resetForm()
         sessions.nextReset = { it.copy(reset = it.reset.copy(outcome = ResetOutcome.UNCERTAIN)) }
@@ -167,6 +178,22 @@ class PasswordResetJourneyTest {
         Espresso.closeSoftKeyboard()
         compose.onNodeWithTag("reset_mfa_use_code").performScrollTo().performClick()
         compose.waitUntil(5_000) { exists("recovery_key_display") }
+    }
+
+    @Test fun anErrorOnThePendingStepIsShownThere() {
+        // Review (#294): the form's own lines don't exist on the MFA step, so its refusals use the screen's error line.
+        resetForm()
+        sessions.nextReset = pending(listOf("recovery_code"))
+        sessions.nextResetCode = { it.copy(error = ApiFailure(FailureKind.HTTP, 429, "rate_limited", retryAfterSeconds = 30),
+            retryAtMillis = System.currentTimeMillis() + 30_000) }
+        fillAndSubmit()
+        compose.waitUntil(5_000) { exists("reset_mfa") }
+        compose.onNodeWithTag("reset_mfa_code").performTextReplacement("code-1234")
+        Espresso.closeSoftKeyboard()
+        compose.onNodeWithTag("reset_mfa_use_code").performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(compose.activity.getString(io.github.thiesi.chitchat.R.string.rate_limited))
+            .fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("reset_mfa").assertExists()
     }
 
     @Test fun aPasskeyOnlyPendingResetCanOnlyBeCancelled() {

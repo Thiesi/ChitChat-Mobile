@@ -67,7 +67,8 @@ fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? 
     val waiting = now < state.retryAtMillis
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // The reset form shows its own refusals beside its action or field (PL, O4b2).
-        state.error?.takeUnless { state.authFlow == AuthFlow.RESET && state.resetOwnsError() }?.let { failure ->
+        // Only on the form itself: the pending MFA step has no lines of its own, so its errors stay here (review, #294).
+        state.error?.takeUnless { state.authFlow == AuthFlow.RESET && state.reset.pending == null && state.resetOwnsError() }?.let { failure ->
             InlineError(when (failure.code) {
                 // Rules acceptance at registration (play-readiness.md §1): the account wasn't created.
                 "rules_version_outdated" -> stringResource(R.string.registration_rules_outdated, installationOf(state))
@@ -76,7 +77,7 @@ fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? 
             })
         }
         if (state.registrationMayHaveSucceeded) Text(stringResource(R.string.registration_unknown))
-        if (waiting && state.authFlow != AuthFlow.RESET) {
+        if (waiting && !(state.authFlow == AuthFlow.RESET && state.reset.pending == null)) {
             val seconds = ((state.retryAtMillis - now + 999) / 1000).toInt()
             Text(pluralStringResource(R.plurals.retry_after, seconds, seconds))
         }

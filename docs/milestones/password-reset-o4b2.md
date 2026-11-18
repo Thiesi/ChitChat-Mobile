@@ -35,7 +35,11 @@ block is unchanged.
   - pinned while the keyboard is hidden and absent while the IME is up; the Confirm field's Done hides the keyboard;
   - the `reset_failed` line ("That didn't work. Check your username and recovery key.", the same for every cause) and
     the 429 wait line sit directly above Reset password, announced politely.
-  - The screen's general error line doesn't repeat them.
+  - A tap after the prepared challenge went stale (about four minutes) sends nothing. The fresh check starts, and the
+    block says "That took a while, so the check is starting again. Nothing was sent. Tap Reset password when it's
+    ready." until the next tap (review on #294, PL wording).
+  - The screen's general error line doesn't repeat these. On the pending MFA step, which has no lines of its own,
+    refusals and waits stay on the general error line (review on #294).
 - **Outcomes:**
   - `validation_error` shows the policy line;
   - an Unknown reset shows the level-2 notice "**We're not sure your password changed.** Sign in with your new password
@@ -72,6 +76,8 @@ use it too (the presentation lead's follow-up from #289).
   - a completed reset: prefill, pinned action, one POST, the new-key display with its title and note in a secure
     window, before the guidelines and the shell;
   - a refusal keeping the fields with the line in the action block and preparing again;
+  - a stale challenge's line in the action block;
+  - an error on the pending step shown there;
   - Unknown back to step 4a;
   - the pending code step completing;
   - passkey-only;

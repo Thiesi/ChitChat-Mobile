@@ -692,6 +692,7 @@
     <string name="reset_unknown_lead">We\'re not sure your password changed.</string>
     <string name="reset_unknown_body">Sign in with your new password first. If that doesn\'t work, use your old one. Your recovery key may no longer work.</string>
     <string name="reset_sign_in">Sign in</string>
+    <string name="reset_challenge_renewed">That took a while, so the check is starting again. Nothing was sent. Tap Reset password when it\'s ready.</string>
     <string name="reset_expired">That took too long. Start again with your recovery key.</string>
     <string name="reset_mfa_title">One more step</string>
     <string name="reset_mfa_lead">Your account uses two-step sign-in. Confirm it\'s you to finish resetting your password.</string>

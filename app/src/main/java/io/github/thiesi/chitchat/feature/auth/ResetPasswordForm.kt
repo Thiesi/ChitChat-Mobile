@@ -179,6 +179,9 @@ private fun ResetForm(state: SessionState, model: AuthViewModel, enabled: Boolea
                 if (state.error?.code == "reset_failed") androidx.compose.foundation.layout.Box(Modifier.testTag("reset_failed")) {
                     InlineError(stringResource(R.string.reset_failed))
                 }
+                // The tap found a stale challenge: nothing was sent, a fresh check is running (review, #294).
+                if (state.error?.code == "reset_challenge_expired") Text(stringResource(R.string.reset_challenge_renewed),
+                    polite.testTag("reset_challenge_renewed"), color = ChitChatTheme.colors.textMuted)
                 if (state.error?.status == 429) Text(if (waiting) stringResource(R.string.reset_rate_limited,
                     waitText(Wait.of(state.retryAtMillis - now))) else stringResource(R.string.reset_rate_limited_unknown),
                     polite.testTag("reset_rate_limited"), color = MaterialTheme.colorScheme.error)

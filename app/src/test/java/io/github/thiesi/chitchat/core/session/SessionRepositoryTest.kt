@@ -882,6 +882,18 @@ class SessionRepositoryTest {
         assertEquals(RegistrationPreparation.READY, sessions.state.value.reset.preparation)
     }
 
+    @Test fun aStaleChallengeSendsNothingAndItsNoticeSurvivesTheRenewal() = runTest {
+        anonymous(); resetReady()
+        val before = server.requestCount
+        clock.now += 5 * 60 * 1000L // Past the reuse window: the prepared proof is stale.
+        sessions.resetPassword("Alice", fixtureKey, "new fixture password")
+        assertEquals("Nothing was sent", before, server.requestCount)
+        assertEquals("reset_challenge_expired", sessions.state.value.error?.code)
+        server.enqueue(challenge()); sessions.prepareReset(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(RegistrationPreparation.READY, sessions.state.value.reset.preparation)
+        assertEquals("The notice stays until the next tap", "reset_challenge_expired", sessions.state.value.error?.code)
+    }
+
     @Test fun aCompletedResetSignsInAndHoldsTheReplacementKeyWithItsOrigin() = runTest {
         anonymous(); resetReady()
         server.enqueue(json("""{"status":"complete","user":$keyedUser,"csrf_token":"$b","recovery_key":"$fixtureKey"}""",
