@@ -120,11 +120,9 @@ private fun ResetForm(state: SessionState, model: AuthViewModel, enabled: Boolea
         ScreenTitle(stringResource(R.string.reset_title), "reset_title")
         when (state.reset.outcome) {
             // The password may have changed: say what to do, and nothing resends (PL wording).
+            // Its action is the pinned Sign in below, which replaces Reset password while it shows (PL J1, #294).
             ResetOutcome.UNCERTAIN -> WarningNotice(stringResource(R.string.reset_unknown_lead), stringResource(R.string.reset_unknown_body),
-                Modifier.shownWhenItAppears().testTag("reset_unknown")) {
-                TextButton(onClick = { model.selectForm(io.github.thiesi.chitchat.core.session.AuthFlow.SIGN_IN) },
-                    Modifier.heightIn(min = 48.dp).testTag("reset_unknown_sign_in")) { Text(stringResource(R.string.reset_sign_in)) }
-            }
+                Modifier.shownWhenItAppears().testTag("reset_unknown"))
             ResetOutcome.EXPIRED -> Text(stringResource(R.string.reset_expired), Modifier.shownWhenItAppears().testTag("reset_expired")
                 .semantics { liveRegion = LiveRegionMode.Polite }, color = ChitChatTheme.colors.textMuted)
             else -> Unit
@@ -186,7 +184,13 @@ private fun ResetForm(state: SessionState, model: AuthViewModel, enabled: Boolea
                 if (state.error?.status == 429) Text(if (waiting) stringResource(R.string.reset_rate_limited,
                     waitText(Wait.of(state.retryAtMillis - now))) else stringResource(R.string.reset_rate_limited_unknown),
                     polite.testTag("reset_rate_limited"), color = MaterialTheme.colorScheme.error)
-                PrimaryButton(onClick = submit, enabled = canSubmit && !waiting, modifier = Modifier.fillMaxWidth().testTag("reset_submit")) {
+                // While the password may already have changed, the primary is Sign in, never another reset (PL J1, #294).
+                if (state.reset.outcome == ResetOutcome.UNCERTAIN) PrimaryButton(onClick = {
+                    model.selectForm(io.github.thiesi.chitchat.core.session.AuthFlow.SIGN_IN)
+                }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("reset_unknown_sign_in")) {
+                    Text(stringResource(R.string.reset_sign_in))
+                }
+                else PrimaryButton(onClick = submit, enabled = canSubmit && !waiting, modifier = Modifier.fillMaxWidth().testTag("reset_submit")) {
                     Text(stringResource(R.string.reset_submit))
                 }
             }
@@ -216,9 +220,12 @@ private fun ResetMfaStep(state: SessionState, model: AuthViewModel, enabled: Boo
                 supportingText = { Text(stringResource(R.string.reset_mfa_code_not_key)) },
                 keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Done), shape = MaterialTheme.shapes.medium)
             Text(stringResource(R.string.reset_mfa_code_warning), color = ChitChatTheme.colors.textMuted)
-            PrimaryButton(onClick = { val entered = code; code = ""; model.completeResetRecovery(entered) },
-                enabled = enabled && code.isNotBlank(), modifier = Modifier.fillMaxWidth().testTag("reset_mfa_use_code")) {
-                Text(stringResource(R.string.use_recovery_code))
+            // Pinned above the keyboard like Sign in, so it never sits under the IME at large text (PL, #294).
+            io.github.thiesi.chitchat.core.ui.PinnedAction {
+                PrimaryButton(onClick = { val entered = code; code = ""; model.completeResetRecovery(entered) },
+                    enabled = enabled && code.isNotBlank(), modifier = Modifier.fillMaxWidth().testTag("reset_mfa_use_code")) {
+                    Text(stringResource(R.string.use_recovery_code))
+                }
             }
         } else Text(stringResource(R.string.reset_mfa_passkey_only), Modifier.testTag("reset_mfa_passkey_only"))
         TextButton(onClick = { stopping = true }, enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp).testTag("reset_cancel")) {
@@ -243,7 +250,8 @@ private fun ResetMfaStep(state: SessionState, model: AuthViewModel, enabled: Boo
 @Composable
 private fun Modifier.shownWhenItAppears(): Modifier {
     val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
-    LaunchedEffect(Unit) { requester.bringIntoView() }
+    // Its top edge, so the lead is read first even when it's taller than the viewport at large text (PL J2, #294).
+    LaunchedEffect(Unit) { requester.bringIntoView(androidx.compose.ui.geometry.Rect(0f, 0f, 1f, 1f)) }
     return bringIntoViewRequester(requester)
 }
 

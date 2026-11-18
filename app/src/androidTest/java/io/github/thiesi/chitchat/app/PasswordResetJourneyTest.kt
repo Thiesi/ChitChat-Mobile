@@ -164,9 +164,18 @@ class PasswordResetJourneyTest {
         fillAndSubmit()
         compose.waitUntil(5_000) { exists("reset_unknown") }
         compose.onNodeWithTag("reset_unknown").assertIsDisplayed() // Brought into view, not only announced.
+        // The pinned primary is Sign in now, never another reset (PL J1).
+        assertFalse("No Reset password while the password may have changed", exists("reset_submit"))
+        assertTrue(compose.onAllNodes(hasTestTag("reset_unknown_sign_in") and hasAnyAncestor(hasTestTag("reset_action_block")))
+            .fetchSemanticsNodes().isNotEmpty())
+        val discoveries = sessions.discoveries
         compose.onNodeWithTag("reset_unknown_sign_in").performClick()
         compose.waitUntil(5_000) { exists("sign_in_password") }
-        assertEquals(1, sessions.resets)
+        // Only navigation (TL): no reset POST and no new discovery GET; a deliberate retry stays via Forgot password?.
+        compose.waitForIdle()
+        assertEquals("Never resent", 1, sessions.resets)
+        assertEquals("No network call on the way back", discoveries, sessions.discoveries)
+        compose.onNodeWithTag("forgot_password").assertExists()
     }
 
     @Test fun thePendingStepTakesTheCodeAndCompletes() {
@@ -177,7 +186,7 @@ class PasswordResetJourneyTest {
         compose.onNodeWithTag("reset_mfa_deadline").assertExists()
         compose.onNodeWithTag("reset_mfa_code").performTextReplacement("code-1234")
         Espresso.closeSoftKeyboard()
-        compose.onNodeWithTag("reset_mfa_use_code").performScrollTo().performClick()
+        compose.onNodeWithTag("reset_mfa_use_code").performClick()
         compose.waitUntil(5_000) { exists("recovery_key_display") }
     }
 
@@ -191,7 +200,7 @@ class PasswordResetJourneyTest {
         compose.waitUntil(5_000) { exists("reset_mfa") }
         compose.onNodeWithTag("reset_mfa_code").performTextReplacement("code-1234")
         Espresso.closeSoftKeyboard()
-        compose.onNodeWithTag("reset_mfa_use_code").performScrollTo().performClick()
+        compose.onNodeWithTag("reset_mfa_use_code").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText(compose.activity.getString(io.github.thiesi.chitchat.R.string.rate_limited))
             .fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("reset_mfa").assertExists()
@@ -243,7 +252,7 @@ class PasswordResetJourneyTest {
         compose.waitUntil(5_000) { exists("reset_mfa") }
         compose.onNodeWithTag("reset_mfa_code").performTextReplacement("code-1234")
         Espresso.closeSoftKeyboard()
-        compose.onNodeWithTag("reset_mfa_use_code").performScrollTo().performClick()
+        compose.onNodeWithTag("reset_mfa_use_code").performClick()
         compose.waitUntil(5_000) { exists("reset_expired") }
         compose.onNodeWithTag("reset_form").assertExists()
     }

@@ -43,8 +43,9 @@ block is unchanged.
 - **Outcomes:**
   - `validation_error` shows the policy line;
   - an Unknown reset shows the level-2 notice "**We're not sure your password changed.** Sign in with your new password
-    first. If that doesn't work, use your old one. Your recovery key may no longer work." with **Sign in** back to
-    step 4a;
+    first. If that doesn't work, use your old one. Your recovery key may no longer work." Its top is brought into view
+    so the lead is read first. While it shows, the pinned primary is **Sign in** (back to step 4a), replacing Reset
+    password, because another reset is what the notice warns against (PL J1 and J2 on #294);
   - an expired pending reset returns here with "That took too long. Start again with your recovery key."
 
 Each reset screen (the form and the MFA step) brings its title into view when it opens. The shared scroller otherwise
@@ -56,7 +57,7 @@ person is usually scrolled down at the pinned action when it appears; otherwise 
 
 - The title, the lead, and "Finish before {time}" in the device's time format.
 - **The recovery code:** the "Sign-in recovery code" field with the "not your recovery key" line, the finite-code
-  warning, and Use recovery code.
+  warning, and Use recovery code, pinned above the keyboard like Sign in (PL, #294).
 - **A reset listing only a passkey** says "This account needs a security key to finish, and this app can't use security
   keys yet." and offers only Cancel reset (passkey reset waits for B1).
 - **Cancel reset and Back** both ask "Stop resetting your password?" (Keep going or Stop). The dialog has no body text,
