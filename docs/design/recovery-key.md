@@ -148,6 +148,18 @@ submit a challenge.
   the reset challenge. Never a percentage.
 - **Reset password** (full-width primary). Disabled until the challenge is ready, all fields
   are filled and the passwords match.
+  - **Placement (O4b2, PR #294):** the Create pattern (#275): pinned while the keyboard is
+    hidden, absent while the IME is up, with Done on Confirm new password. The `reset_failed`,
+    `429` and stale-challenge lines sit in the pinned block directly above the button, announced
+    politely.
+  - **Stale challenge** (a tap after the prepared challenge expired, about four minutes): nothing
+    is sent, a fresh challenge prepares, and the pinned line reads "That took a while, so the
+    check is starting again. Nothing was sent. Tap Reset password when it's ready." until the
+    next tap. The fields keep their text.
+  - **Unknown state:** while the Unknown notice shows, the pinned primary is **Sign in** (to step
+    4a) instead of Reset password, and the notice has no inline action. A deliberate retry stays
+    reachable through Forgot password? (technical lead, 2026-11-18). The notice is brought into
+    view at its top, so its lead reads first at 200%.
 - Text button: **Back to sign in**.
 - The recovery key, new password and confirmation follow the existing password rules: they're
   only in composition memory, cleared on `ON_STOP`, never in bundles. A person who leaves to
@@ -179,10 +191,13 @@ The layout of step 4c ("One more step"), with reset wording:
 - Only the methods the server lists in `methods`:
   - `passkey`: **Use your security key** (the dedicated reset assertion via
     `mfa-options`/`mfa-finish`; it carries the existing passkey dependency B1, so it's omitted
-    until native passkeys exist);
+    until native passkeys exist). If `passkey` is the only method, the step shows its title and
+    lead, then "This account needs a security key to finish, and this app can't use security
+    keys yet." and only **Cancel reset** (no browser suggestion);
   - `recovery_code`: the field "Sign-in recovery code" with the existing finite-code warning
     copy verbatim, and **Use recovery code**. The line under the field reads "This is one of
-    the codes you saved when you turned on two-step sign-in, not your recovery key."
+    the codes you saved when you turned on two-step sign-in, not your recovery key." Use
+    recovery code is pinned above the IME (#275), with Cancel reset in the scroller.
 - **Cancel reset** (text button) sends `cancel.php`:
   - `200 cancelled`: "Nothing changed. Your password is the same as before." Back to 4a.
   - `409 reset_not_pending`, a lost response or any failure: "**We're not sure whether your
