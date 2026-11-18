@@ -873,6 +873,29 @@ class SessionRepositoryTest {
         assertEquals(io.github.thiesi.chitchat.core.account.ClosureState.Scheduled(address().value, 7, deadline), sessions.state.value.closure)
     }
 
+    @Test fun theForcedLogoutCancelsEveryOtherCallButTheDeletionAndRefusesNewOnes() = runTest {
+        // TL (#296): only the deletion outlives the generation. Everything else on the retired client stops at once.
+        login()
+        val access = closure()
+        server.enqueue(closed(delay = 800))
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Content-Type", "application/json")
+            .body(bootstrapBody(user, b)).bodyDelay(10, TimeUnit.SECONDS).build()) // A hanging GET on the same runtime.
+        val deletion = async(Dispatchers.IO) { access.closeAccount() }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        val raw = sessions.openAccess()
+        val parallel = async(Dispatchers.IO) { runCatching { raw.api.bootstrap() } }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        sessions.invalidateFromRealtime(sessions.openAccess())
+        val other = withContext(Dispatchers.Default) { kotlinx.coroutines.withTimeout(3_000) { parallel.await() } }
+        assertTrue("The parallel GET is cancelled at the forced_logout, not left running", other.isFailure)
+        val before = server.requestCount
+        assertTrue("A new request on the retired client is refused",
+            runCatching { raw.api.bootstrap() }.exceptionOrNull() is CancellationException)
+        assertEquals("It never reaches the server", before, server.requestCount)
+        assertEquals(io.github.thiesi.chitchat.core.account.ClosureResult.Closed(deadline), deletion.await())
+        assertTrue(sessions.state.value.closure is io.github.thiesi.chitchat.core.account.ClosureState.Scheduled)
+    }
+
     @Test fun aParallel401BeforeThe200WaitsAndThenSchedules() = runTest {
         login()
         val access = closure()

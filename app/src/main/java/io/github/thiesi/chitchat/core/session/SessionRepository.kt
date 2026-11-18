@@ -983,10 +983,13 @@ class SessionRepository internal constructor(
         val carried = closure?.state ?: closureMarker?.takeIf { it.origin == active.server.value && it.userId == userId }
             ?.let { io.github.thiesi.chitchat.core.account.ClosureState.Waiting(it.origin, it.userId) }
             ?: mutable.value.closure?.takeIf { it.origin == active.server.value && it.userId == userId }
-        // Closing the client would cancel the deletion POST itself (it shares this runtime's client): while one is in
-        // flight for this origin and account, the client closes when that POST settles instead (TL C1).
-        if (closureMarker?.let { it.origin == active.server.value && it.userId == userId } == true) closureClientToClose = active.api
-        else active.api.close()
+        // Closing the client would cancel the deletion POST itself (it shares this runtime's client). While one is in
+        // flight for this origin and account, everything else on the client is retired now (jar, every other call, no
+        // new requests) and only the final shutdown waits for that POST to settle (TL C1, #296).
+        if (closureMarker?.let { it.origin == active.server.value && it.userId == userId } == true) {
+            active.api.retireExcept()
+            closureClientToClose = active.api
+        } else active.api.close()
         runtime = null
         generation++
         var storageWarning = false

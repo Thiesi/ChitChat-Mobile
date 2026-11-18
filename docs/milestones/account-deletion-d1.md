@@ -38,8 +38,10 @@ another request meeting the destroyed session, can end the session while the POS
   on the repository, not a runtime or a generation.
 - **Waiting:** while it's set, an ended session for that origin and account carries `ClosureState.Waiting`, not plain
   sign-in.
-- **The client survives:** closing a retired runtime's HTTP client would cancel the POST itself, so that client closes
-  only after the POST settles.
+- **Only the deletion survives:** closing a retired runtime's HTTP client would cancel the POST itself. So while the
+  marker matches, `SessionHttp.retireExcept()` retires the jar, cancels every other queued and running call (the event
+  stream, GETs, sends, uploads) and refuses any new request. Only the tagged deletion call continues, and the client's
+  final shutdown (executor and pool) waits for it to settle (TL, #296).
 - **The result lands on the marker,** even after its generation retired:
   - Closed becomes `Scheduled`, the confirmation;
   - a definite refusal becomes `EndedWithRefusal`, the ordinary ended-session outcome plus the refusal line;
@@ -65,7 +67,9 @@ After a later restore, nothing is subscribed on the server or this phone, so pus
   - An anonymous reply or a 401 ends the session (the teardown runs then) and gives `LikelyClosed`.
   - A failed read (network, 5xx) stays `Unknown`, with Check still offered.
 - **When the session already ended:** an anonymous session read for that server gives `LikelyClosed`; a failure stays
-  `Unknown`.
+  `Unknown`. This path is **reachability only, not evidence of the closure**: with the session gone, an anonymous read
+  can't tell a deletion from any other ended session. That's acceptable only because the copy is hedged ("most
+  likely"), as play-readiness §2 requires (TL, #296).
 - **Dates:** the device clock is used only for D2's labelled "about" date on `LikelyClosed`.
 
 ## Memory only (TL C4)
@@ -78,6 +82,8 @@ fresh connection drops it, and process death loses it (the app then lands on onb
 - **`SessionRepositoryTest`:**
   - a confirmed deletion tearing down with no network;
   - `forced_logout` before the 200;
+  - the forced logout cancelling a parallel GET on the same runtime while the deletion lands, and refusing a new
+    request on the retired client;
   - a parallel 401 before the 200;
   - `forced_logout` followed by a lost (502) response;
   - a definite refusal after the session ended;
