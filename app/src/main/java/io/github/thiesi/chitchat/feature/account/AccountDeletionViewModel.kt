@@ -54,13 +54,19 @@ class AccountDeletionViewModel(private val operations: AccountOperations) : View
     private var check: Job? = null
     private var gate: CompletableDeferred<Unit>? = null
     private var access: AccountAccess? = null
+    /** The close POST is on the wire: the server's forced_logout may end the session before it answers (D1, TL C1). */
+    private var sending = false
+    /** The session identity that sent it; the screen may only cancel it while that session is still the live one. */
+    private var sentBy: Identity? = null
 
     init {
         viewModelScope.launch {
             operations.session.collect { session ->
                 val next = session.identity()
                 if (next != identity) {
-                    retire()
+                    // A sent deletion settles on its own: the server's forced_logout ends the session before the 200, and
+                    // D1 lands the result on its marker (review, #300). Only an unsent attempt (or its step-up) retires.
+                    if (sending) retireVerification() else retire()
                     identity = next
                     // A check in flight survives the session change it causes; everything else is per identity.
                     mutable.value = AccountDeletionUiState(checking = mutable.value.checking, checkFailed = mutable.value.checkFailed)
@@ -77,18 +83,25 @@ class AccountDeletionViewModel(private val operations: AccountOperations) : View
             session.updateRequired || (closure != null && closure !is ClosureState.NotClosed) ||
             mutable.value.stage != DeletionStage.IDLE || mutable.value.checking != null) return
         val attempt = ++sequence
+        val owner = identity
         mutable.value = AccountDeletionUiState(stage = DeletionStage.RUNNING)
         operation = viewModelScope.launch {
+            // A refusal belongs on the explanation screen of the session that asked; once that session has ended, D1's
+            // ended-session outcome shows it instead.
+            fun stillOwner() = sequence == attempt && operations.session.value.identity() == owner
             try {
                 // Starting again after "wasn't deleted" (PL): that line leaves first.
                 if (closure is ClosureState.NotClosed) operations.dismissClosure()
                 val current = operations.open()
-                val result = requestClosure({ current.closeAccount() }, { awaitVerification(current, attempt) })
-                if (sequence == attempt) mutable.value = AccountDeletionUiState(refusal = result.takeIf {
+                val result = requestClosure({
+                    sending = true; sentBy = owner
+                    try { current.closeAccount() } finally { sending = false; sentBy = null }
+                }, { awaitVerification(current, attempt) })
+                if (stillOwner()) mutable.value = AccountDeletionUiState(refusal = result.takeIf {
                     it != ClosureResult.Unknown && it !is ClosureResult.Closed })
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: ApiFailure) {
-                if (sequence == attempt) mutable.value = AccountDeletionUiState(refusal = ClosureResult.Failed(failure))
+                if (stillOwner()) mutable.value = AccountDeletionUiState(refusal = ClosureResult.Failed(failure))
             } finally {
                 if (sequence == attempt) { gate?.cancel(); gate = null; access = null }
             }
@@ -169,11 +182,13 @@ class AccountDeletionViewModel(private val operations: AccountOperations) : View
 
     /**
      * Genuine background or navigation away from the explanation screen (not configuration change): an in-flight request
-     * is cancelled, and "wasn't deleted" leaves with the screen. An Unknown stays until Check resolves it.
+     * of the still-live session is cancelled (D1 then marks it Unknown), and "wasn't deleted" leaves with the screen. When
+     * the session has already ended (the server's forced_logout, whose takeover also disposes the screen), a sent request
+     * settles on its own (review, #300). An Unknown stays until Check resolves it.
      */
     fun leave() {
         val active = mutable.value.stage != DeletionStage.IDLE
-        retire()
+        if (sending && operations.session.value.identity() != sentBy) retireVerification() else retire()
         mutable.value = mutable.value.copy(refusal = null).let {
             if (active) it.copy(stage = DeletionStage.IDLE, methods = null, verificationBusy = false, error = null) else it
         }
@@ -183,6 +198,12 @@ class AccountDeletionViewModel(private val operations: AccountOperations) : View
     private fun retire() {
         sequence++
         operation?.cancel(); verification?.cancel(); gate?.cancel()
+        gate = null; access = null
+    }
+
+    /** Ends a pending step-up only; a sent POST keeps running. */
+    private fun retireVerification() {
+        verification?.cancel(); gate?.cancel()
         gate = null; access = null
     }
 

@@ -43,15 +43,33 @@ security → Delete account" and "Restore a closed account".
     {date}" as the device clock plus 14 days, date only. Done goes to step 3.
   - **A refusal after the session ended for another reason:** the ordinary "Session not available" page with a muted
     caption under the title, "Your account wasn't deleted." followed by the reason. Reconnect clears it.
-- **Check** is D1's one session read (`AccountOperations.checkClosure`) and never a resend. While it runs, the Unknown
-  being checked holds the screen, because the read can replace the session state. **Done** clears the outcome
+- **Check** is D1's one session read (`AccountOperations.checkClosure`) and never a resend. **Done** clears the outcome
   (`dismissClosure`, TL C4).
+- **An Unknown survives its Check (TL, #300; a D1 fix):**
+  - On an ended session, Check's `connect()` replaces the session state, closure included. The repository now puts the
+    outcome back in a non-cancellable `finally`: LikelyClosed only after a completed anonymous read, otherwise the same
+    Unknown.
+  - That holds even when the Check is cancelled (process scope) or connect fails.
+  - The outcome goes back only into this server's state, never another account's, and never over an outcome set
+    meanwhile. The old code wrote the Unknown into another server's state too.
+  - The live branch never replaces the state, so a cancelled read keeps the Unknown.
+  - The root's hold of the Unknown being checked (the ViewModel's `checking`) is now **only presentation**: it keeps the
+    screen from flickering to the connecting page during the read. It's no longer load-bearing.
 - **Sign-in to a pending account:** `account_closure_pending` now reads "This account is scheduled for deletion. To keep
   it, go back and choose Restore a closed account. That works for 14 days after it was deleted." The label is a format
   argument from the button's own resource. It stays plain, because the shared sign-in error mapping renders plain
   strings.
 
 ## State
+
+**A sent request settles on its own (review, #300).** The server's `forced_logout` ends the session before it answers.
+Neither the identity change nor the signed-out takeover (which disposes the explanation screen) cancels a request that's
+on the wire; they retire only a pending step-up. D1 lands the result on its marker: Scheduled, EndedWithRefusal or
+Unknown. A refusal is shown on the explanation screen only while the session that asked is still the live one. Only a
+genuine background or navigation of the still-live session cancels a sent request, and D1 marks that Unknown (M2b2).
+**After the forced_logout, a background doesn't cancel the in-flight request**: cancelling could only lose a result the
+server has already decided. Process death meanwhile loses it, which is acceptable, since the app then lands on onboarding
+(D1, TL C4).
 
 `AccountDeletionViewModel` is app-scoped and memory only:
 - it holds the attempt, step-up, refusal and Check state;
@@ -61,7 +79,15 @@ security → Delete account" and "Restore a closed account".
 
 ## Verification
 
-- **JVM:** `AccountDeletionViewModelTest` (13).
+- **JVM, the repository** (`SessionRepositoryTest`, D1 fix):
+  - an ended Check cancelled mid-read keeps the same Unknown, with one read at most;
+  - an ended Check whose read fails stays Unknown;
+  - another server chosen during an ended Check gets nothing restored;
+  - a live Check cancelled mid-read keeps the Unknown.
+  - The first and third fail on the previous code.
+- **JVM:** `AccountDeletionViewModelTest` (15). The two forced-logout cases fail on the previous ViewModel:
+  - the session ends mid-request and the screen is disposed, yet the request isn't cancelled and no stray refusal is left;
+  - a confirmed request still completes after the forced logout.
   - **The request:** one POST per explicit delete; step-up only on 403, where Cancel sends nothing more and Verify retries
     once; definite refusals shown, Unknown and Closed not.
   - **Guards and outcomes:** "wasn't deleted" cleared before starting again and on leaving; no POST while an outcome is
@@ -70,6 +96,7 @@ security → Delete account" and "Restore a closed account".
 - **Journeys through the real root:** `AccountDeletionJourneyTest`.
   - **The happy path:** the row and explanation, with only the dialog sending; the confirmation with the server's date,
     and Done to step 3.
+  - **The server's forced_logout before the 200:** Waiting, then the confirmation. The request is never cancelled.
   - **Step-up and refusals:** step-up's own title, and Cancel sends nothing; the last Super-Administrator's refusal.
   - **Unknown:** a live Unknown with Check pinned, then "wasn't deleted"; an ended Unknown with a failed Check, then the
     hedged signed-out screen and Done.

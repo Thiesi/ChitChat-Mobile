@@ -102,6 +102,34 @@ class AccountDeletionViewModelTest {
         assertEquals(1, fake.posts)
     }
 
+    @Test fun theServersForcedLogoutDuringThePostNeitherCancelsItNorStrandsARefusal() = runTest(dispatcher) {
+        // Review (#300): the server ends the session before it answers; D1 lands the result on its marker.
+        advanceUntilIdle()
+        fake.hold = CompletableDeferred()
+        model.delete(); advanceUntilIdle()
+        assertEquals(1, fake.posts)
+        fake.session.value = fake.session.value.copy(phase = SessionPhase.INVALIDATED, user = null,
+            closure = ClosureState.Waiting(origin, 7)); advanceUntilIdle()
+        model.leave(); advanceUntilIdle() // The signed-out takeover disposes the explanation screen.
+        assertFalse("A sent POST settles on its own", fake.cancelled)
+        fake.result = ClosureResult.LastSuperAdmin
+        fake.hold!!.complete(Unit); advanceUntilIdle()
+        assertFalse(fake.cancelled)
+        assertEquals("Never resent", 1, fake.posts)
+        assertNull("The ended outcome shows it, not a stray line for a later session", model.state.value.refusal)
+    }
+
+    @Test fun aConfirmedDeletionAfterTheForcedLogoutStillCompletes() = runTest(dispatcher) {
+        advanceUntilIdle()
+        fake.hold = CompletableDeferred()
+        model.delete(); advanceUntilIdle()
+        fake.session.value = fake.session.value.copy(phase = SessionPhase.INVALIDATED, user = null,
+            closure = ClosureState.Waiting(origin, 7)); advanceUntilIdle()
+        fake.hold!!.complete(Unit); advanceUntilIdle()
+        assertFalse(fake.cancelled)
+        assertEquals("The POST returned Closed to D1", 1, fake.completed)
+    }
+
     @Test fun leavingClearsWasntDeleted() = runTest(dispatcher) {
         fake.session.value = fake.session.value.copy(closure = ClosureState.NotClosed(origin, 7)); advanceUntilIdle()
         model.leave(); advanceUntilIdle()
@@ -166,7 +194,7 @@ class AccountDeletionViewModelTest {
     private class Accounts : AccountOperations {
         override val session = MutableStateFlow(SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED,
             user = SessionUser(7, "Alice", listOf("member"), 1, false)))
-        var posts = 0; var checks = 0; var dismissals = 0
+        var posts = 0; var checks = 0; var dismissals = 0; var completed = 0
         var hold: CompletableDeferred<Unit>? = null
         var checkHold: CompletableDeferred<Unit>? = null
         var checkResolves: ClosureState? = null
@@ -191,6 +219,7 @@ class AccountDeletionViewModelTest {
                 posts++
                 hold?.let { try { it.await() } catch (cancel: kotlinx.coroutines.CancellationException) { cancelled = true; throw cancel } }
                 if (stepUp && !verified) throw ApiFailure(FailureKind.HTTP, 403, "step_up_required")
+                completed++
                 return result
             }
         }

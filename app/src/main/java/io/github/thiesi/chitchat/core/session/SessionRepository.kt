@@ -1103,12 +1103,21 @@ class SessionRepository internal constructor(
                 }
             }
         } else {
-            // The session already ended: an anonymous session read for this server is what Check can still do.
-            connect(selected)
-            lock.withLock {
-                val now = mutable.value
-                mutable.value = now.copy(closure = if (now.phase == SessionPhase.ANONYMOUS && now.server?.value == unknown.origin)
-                    io.github.thiesi.chitchat.core.account.ClosureState.LikelyClosed(unknown.origin, unknown.userId) else unknown)
+            // The session already ended: an anonymous session read for this server is what Check can still do. connect()
+            // replaces the session state (closure included), so the outcome is put back unconditionally, even when the
+            // Check is cancelled or connect fails mid-way (TL, #300): an Unknown deletion never silently disappears.
+            var read = false
+            try { connect(selected); read = true }
+            finally {
+                withContext(NonCancellable) {
+                    lock.withLock {
+                        val now = mutable.value
+                        // Only into this server's state, never another account's, and never over an outcome set meanwhile.
+                        if (now.closure == null && now.server?.value == unknown.origin && (now.user == null || now.user.id == unknown.userId))
+                            mutable.value = now.copy(closure = if (read && now.phase == SessionPhase.ANONYMOUS)
+                                io.github.thiesi.chitchat.core.account.ClosureState.LikelyClosed(unknown.origin, unknown.userId) else unknown)
+                    }
+                }
             }
         }
     }

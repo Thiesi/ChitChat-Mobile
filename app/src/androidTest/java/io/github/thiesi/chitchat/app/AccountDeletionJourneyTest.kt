@@ -115,6 +115,17 @@ class AccountDeletionJourneyTest {
         }
     }
 
+    @Test fun theServersForcedLogoutBeforeThe200ShowsWaitingThenTheConfirmation() {
+        // Review (#300): the takeover disposes the explanation screen while the POST is still on the wire; it must settle.
+        deletion.reply = TestDeletion.Reply.FORCED_LOGOUT_THEN_CONFIRMED
+        signedIn(); openDeletion(); confirm()
+        compose.waitUntil(5_000) { exists("closure_waiting") }
+        assertFalse(exists("delete_account_screen"))
+        compose.runOnIdle { deletion.answer.complete(Unit) }
+        compose.waitUntil(5_000) { exists("closure_scheduled_body") }
+        compose.runOnIdle { assertFalse("Never cancelled", deletion.cancelled); assertEquals(1, deletion.posts) }
+    }
+
     @Test fun stepUpAsksOnlyOn403WithItsOwnTitle() {
         deletion.stepUp = true
         signedIn(); openDeletion(); confirm()

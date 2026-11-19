@@ -16,10 +16,13 @@ import io.github.thiesi.chitchat.feature.auth.TestSessions
  * server's deadline; an Unknown stays on the live session or lands on the ended one; Check is a session read. Counts only.
  */
 internal class TestDeletion(private val sessions: TestSessions) : AccountOperations {
-    enum class Reply { CONFIRMED, UNKNOWN_LIVE, UNKNOWN_ENDED, LAST_SUPER_ADMIN }
+    enum class Reply { CONFIRMED, UNKNOWN_LIVE, UNKNOWN_ENDED, LAST_SUPER_ADMIN, FORCED_LOGOUT_THEN_CONFIRMED }
     override val session get() = sessions.state
     @Volatile var posts = 0
     @Volatile var checks = 0
+    @Volatile var cancelled = false
+    /** FORCED_LOGOUT_THEN_CONFIRMED: the server's forced_logout ends the session, then the 200 waits for this. */
+    val answer = kotlinx.coroutines.CompletableDeferred<Unit>()
     var stepUp = false
     var verified = false
     var reply = Reply.CONFIRMED
@@ -56,6 +59,16 @@ internal class TestDeletion(private val sessions: TestSessions) : AccountOperati
                     ClosureResult.Unknown
                 }
                 Reply.LAST_SUPER_ADMIN -> ClosureResult.LastSuperAdmin
+                Reply.FORCED_LOGOUT_THEN_CONFIRMED -> {
+                    // As D1: the ended session waits on the marker, and the 200 lands there as Scheduled.
+                    sessions.state.value = SessionState(now.server, now.generation + 1, SessionPhase.INVALIDATED,
+                        installationName = now.installationName, closure = ClosureState.Waiting(origin, user))
+                    try { answer.await() } catch (cancel: kotlinx.coroutines.CancellationException) { cancelled = true; throw cancel }
+                    val waiting = sessions.state.value
+                    if (waiting.closure == ClosureState.Waiting(origin, user))
+                        sessions.state.value = waiting.copy(closure = ClosureState.Scheduled(origin, user, deadline))
+                    ClosureResult.Closed(deadline)
+                }
             }
         }
     }
