@@ -206,6 +206,10 @@ Details trigger conditions stay as they are, because the status slice owns them.
 
 ### F1. Top-bar titles never break mid-word (A-04)
 
+> **Superseded (2026-11-19)** for every title except the wordmark: titles now wrap to at most
+> two lines and are never ellipsized. See navigation-shell.md § Top app bar, "Title fit at
+> large font scales", and P-222. The wordmark rule below still stands.
+
 - **Where:** the single `TopAppBar` in `app/ChitChatApp.kt` (title chosen by route), on every
   screen. Seen on home at 2.0: "ChitChat" splits as "ChitC / hat" next to Account and Settings.
   At 2.0 "Search messages" also wraps to two lines.

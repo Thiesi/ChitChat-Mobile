@@ -458,8 +458,9 @@ words people look for: **"Delete account"**.
    already valid, no prompt appears.
 5. **After success:** the person is signed out (the server destroyed the session) and sees a
    confirmation screen: "Your account is scheduled for deletion. You can restore it until
-   {date}." Use the server's deadline if the response provides one; otherwise "for 14 days".
-   **Done** goes to onboarding step 3 for this server.
+   {date}." The date is always the server's `finalizes_at`: a success response without a
+   valid deadline is treated as unknown, so there's no undated "for 14 days" variant of this
+   screen (TL, 2026-11-19). **Done** goes to onboarding step 3 for this server.
 
 **Errors:**
 - the last Super-Administrator gets the server's refusal in plain words: "You're the last
@@ -477,6 +478,72 @@ words people look for: **"Delete account"**.
     The person may start the flow again explicitly.
 
   **Never resend automatically.**
+
+### Presentation (D2, J-reviewed on PR #300)
+
+- **Row:** "Delete account" in `error` text, 48dp, no icon, last in Privacy and security, with
+  24dp extra space above. The pushed screen's bar title is "Privacy and security", the same as
+  the You row and the public page's path.
+- **Explanation screen:**
+  - the title follows the host dot-break rule;
+  - each block lead ("Right away:" and the rest) is SemiBold;
+  - *Restore a closed account* is italic and comes from the onboarding button's own string,
+    so the text always matches the button.
+
+  Actions: **Export my data first** (a text button) goes back to Privacy and security and
+  brings Export personal data into view; no export runs from this screen. **Continue** is an
+  `error` text button, followed by **Cancel**. The screen has no filled primary.
+- **Decision dialog:** the body is in `DialogScrollBody` (P-220), and **Delete account** is an
+  `error` text button.
+- **Step-up:** titled "Confirm it's you to delete your account". It's a form dialog, so it
+  keeps its own geometry.
+- **Dates:**
+  - the definite deadline is the localized medium date plus the short time, in the device's
+    time zone ("Dec 2, 2026, 10:00 AM");
+  - the hedged signed-out date is the date only (device clock + 14 days, "about Dec 3,
+    2026");
+  - no-break spaces keep the date together and the time together (including before AM/PM),
+    and an ordinary space between them is the only place the line breaks.
+- **Unknown (live session):**
+  - a level-2 `WarningNotice` under the title: "**We're not sure your request went
+    through.** Check with the server; nothing is sent again.";
+  - **Check** replaces Continue and Cancel as the single pinned primary, and the notice has no
+    inline action;
+  - when the notice appears, the screen scrolls back to the top so it's in view;
+  - a failed Check keeps the notice and the Check label, and shows "The check didn't get
+    through. Try again when you're connected." in the pinned block above Check (the O4b2
+    pattern), cleared on the next tap.
+- **Check results:**
+  - **still signed in:** "Your account wasn't deleted." as a `textMuted` line under the
+    title, announced once, with the screen scrolled to the top. Continue and Cancel return;
+  - **signed out:** a full onboarding-style screen titled "You've been signed out" (never
+    "scheduled") with the hedged text above, and **Done** pinned, to step 3.
+- **Confirmation:** a full onboarding-style screen titled "Account scheduled for deletion",
+  shown only after a confirmed success. It has step 5's text, plus "To restore it, sign in
+  with *Restore a closed account*.", and **Done** as the pinned persimmon primary, to step 3.
+- **Refusals on the explanation screen:**
+  - last Super-Administrator: the text above;
+  - not active: "Your account's status on this server doesn't allow deleting it right now.";
+  - rate limited: "Too many attempts; try again later."
+- **When the session has already ended** (the server's `forced_logout` race, account-deletion
+  D1):
+  - **Waiting:** while the request is still in flight, a full screen titled "Deleting your
+    account…", with the `textMuted` body "You've been signed out. Waiting for the server to
+    confirm." and an indeterminate progress indicator. It has no actions, and onboarding's
+    Settings action is hidden, because changing or forgetting the server would discard the
+    result. Back leaves the app. The result replaces this screen and is announced as a pane
+    change;
+  - **Unknown:** a full screen with the explanation screen's title and the same notice, Check
+    pinned, and the same failed-Check caption. Back goes to step 3 for this server;
+  - **Refused:** the ordinary ended-session sign-in page, with a `textMuted` line under its
+    title, cleared on the next sign-in attempt: "Your account wasn't deleted." followed by the
+    reason ("You're the last Super-Administrator. Give the role to someone else first.",
+    "Its status on this server doesn't allow that right now." or "Too many attempts; try
+    again later.").
+- **Signing in to a pending account** (`account_closure_pending`): "This account is scheduled
+  for deletion. To keep it, go back and choose Restore a closed account. That works for 14
+  days after it was deleted." The label is passed in from the button's string. It's plain
+  here, because the sign-in error line renders plain text.
 
 ## 3. Deletion web resource (content for a CCM page)
 
