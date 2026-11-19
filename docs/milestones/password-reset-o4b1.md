@@ -10,7 +10,12 @@ The released contract makes the challenge itself the discovery signal: "While si
 `/api/v1/password-reset/challenge.php` with `challenge.nonce` advertises recovery; older servers can return 404. Do not
 infer support from absent capability flags or show a reset form that submits without a challenge." `session.md` only
 links to that page. There's no session capability for reset.
-- **`discoverPasswordReset()`:** one GET when step 4a opens (O4b2 calls it once per visit, never on recomposition). The
+- **`discoverPasswordReset()`:** one GET when step 4a opens: at most one completed discovery per runtime per visit, never
+  on recomposition (#298). The repository drops an ask silently while the session is busy (not anonymous, already
+  checking, or with a pending reset), queuing nothing; step 4a asks again once the session settles, so a dropped ask
+  never leaves the row empty for the visit. A 404 or failure completes the discovery and is never retried. **A runtime
+  replacement always starts a new step-4a visit (page keyed on generation)**, which asks the new runtime once; anyone
+  changing that key reopens the question of holding the row across it. The
   challenge is rate-limited at 60 per 60 seconds by source IP. Success with a nonce makes `ResetSupport.SUPPORTED`; a
   404 or any failure is `UNSUPPORTED`, which isn't a session error. Only `SUPPORTED` lets `selectAuthFlow(RESET)`
   through.

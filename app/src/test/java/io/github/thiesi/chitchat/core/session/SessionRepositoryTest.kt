@@ -1059,6 +1059,41 @@ class SessionRepositoryTest {
         assertNull("A discovery failure isn't a session error", sessions.state.value.error)
     }
 
+    @Test fun aDiscoveryAskedWhileBusyIsDroppedWithoutAGetAndTheNextAskSendsOne() = runTest {
+        // #298: the repository drops the ask silently while busy; the screen asks again once the session settles.
+        anonymous()
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Content-Type", "application/json").body(bootstrapBody())
+            .bodyDelay(600, TimeUnit.MILLISECONDS).build())
+        val refreshing = async(Dispatchers.IO) { sessions.refresh() }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        assertTrue(sessions.state.value.busy)
+        sessions.discoverPasswordReset()
+        assertEquals("Dropped: nothing written", ResetSupport.UNKNOWN, sessions.state.value.reset.support)
+        refreshing.await()
+        assertFalse(sessions.state.value.busy)
+        assertEquals("No GET while busy", 2, server.requestCount)
+        server.enqueue(challenge(serverDate)); sessions.discoverPasswordReset()
+        assertEquals("/api/v1/password-reset/challenge.php", server.takeRequest(5, TimeUnit.SECONDS)!!.url.encodedPath)
+        assertEquals(ResetSupport.SUPPORTED, sessions.state.value.reset.support)
+        assertEquals("Exactly one GET", 3, server.requestCount)
+    }
+
+    @Test fun aRuntimeReplacedMidDiscoveryKeepsTheOldResultOutAndTheNewRuntimeAsksOnce() = runTest {
+        anonymous()
+        server.enqueue(challenge(serverDate).newBuilder().bodyDelay(600, TimeUnit.MILLISECONDS).build())
+        val old = async(Dispatchers.IO) { sessions.discoverPasswordReset() }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        assertEquals(ResetSupport.CHECKING, sessions.state.value.reset.support)
+        val before = sessions.state.value.generation
+        server.enqueue(json(bootstrapBody())); sessions.connect(address()); server.takeRequest(5, TimeUnit.SECONDS)
+        assertTrue("A new runtime", sessions.state.value.generation > before)
+        old.await()
+        assertEquals("The old runtime's result is never written into the new one", ResetSupport.UNKNOWN, sessions.state.value.reset.support)
+        server.enqueue(error("not_found", 404)); sessions.discoverPasswordReset(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals("The new runtime's own answer", ResetSupport.UNSUPPORTED, sessions.state.value.reset.support)
+        assertEquals("One GET per runtime", 4, server.requestCount)
+    }
+
     @Test fun theDiscoveryChallengeServesTheFirstAttemptAndEveryLaterAttemptFetchesItsOwn() = runTest {
         anonymous(); resetReady()
         assertEquals("The discovery challenge was reused, not fetched again", 1 + 1, server.requestCount)

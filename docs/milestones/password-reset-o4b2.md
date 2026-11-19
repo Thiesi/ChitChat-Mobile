@@ -13,7 +13,12 @@ block is unchanged.
   step 4a's.
 - **Unsupported** (a 404 or any failure): the static line "Forgot your password? Ask the person who runs the server."
 - The change is quiet (no live region), and the static line never shows first.
-- Discovery runs once per visit: a per-visit flag survives recomposition and configuration change.
+- Discovery: at most one completed discovery per runtime per visit (#298). The visit's state (`ResetDiscoveryVisit`)
+  survives recomposition and configuration change; the visit asks while it can (anonymous, not busy, not already
+  checking or supported) until an ask has taken effect, so an ask dropped during a refresh or Check again is asked again
+  once it settles, in the same reserved row (its bounds don't change, and the static line never shows in between). A
+  404 or failure is never retried. A reconnect is a new visit (the page is keyed on the generation): the empty reserved
+  row, then the new runtime's own answer.
 - **Cancel outcomes**, after a cancelled reset:
   - "Nothing changed. Your password is the same as before." is a muted caption under the title, announced once;
   - an uncertain cancel is the level-2 block "**We're not sure whether your password changed.** Try signing in.".
