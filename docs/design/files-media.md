@@ -418,8 +418,9 @@ The policy is local and read from existing system state, with no new requests:
   before handoff is silent.
 - **No app opens it** (Open with no app for that type): the copy is deleted, no chooser opens,
   and a level-1 line says "No app on this phone opens this file type. Save it instead."
-- A small first-use note, shown once for Open and Share together: "Opening or sharing copies
-  the file to the app you choose."
+- A small first-use note, shown once for Open and Share together: "Opening or sharing lets the
+  app you choose keep its own copy of the file." (It says what the person should understand:
+  the receiving app can keep the file, beyond CCM's control.)
 - For DMs, the share sheet doesn't preselect any target, and the not-end-to-end-encrypted
   disclosure stays where it is. No extra warning is invented.
 
