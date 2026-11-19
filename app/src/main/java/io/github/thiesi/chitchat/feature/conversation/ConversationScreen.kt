@@ -132,12 +132,14 @@ fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSess
     ignores: IgnorePersonViewModel? = null, targets: MessageTargetViewModel? = null, obscured: Boolean = false,
     onStopped: ((owner: Any) -> Unit)? = null, onProfile: ((Long) -> Boolean)? = null,
     completion: CompletionViewModel? = null, completionEntryId: String = "",
-    images: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel? = null, isCurrentEntry: () -> Boolean = { true }) {
+    images: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel? = null,
+    /** Identity only: this nav entry is still the current one (a departure closes its viewer, F4). */
+    isEntryCurrent: () -> Boolean = { true }, isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     key(roomId, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
         LaunchedEffect(roomId) { model.open(roomId, expected = displayedSession) }
-        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, onStopped, onProfile, completion, completionEntryId, isCurrentEntry, images)
+        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, onStopped, onProfile, completion, completionEntryId, isCurrentEntry, images, isEntryCurrent)
     }
 }
 
@@ -145,7 +147,7 @@ fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSess
 private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
     ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean,
     onStopped: ((owner: Any) -> Unit)?, onProfile: ((Long) -> Boolean)?, completion: CompletionViewModel?, completionEntryId: String,
-    isCurrentEntry: () -> Boolean, images: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel?) {
+    isCurrentEntry: () -> Boolean, images: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel?, isEntryCurrent: () -> Boolean) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session // Freeze callback origin; delegated Flow values can change before recomposition.
@@ -231,7 +233,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val placementMessages = state.messages
     var placedAnchor by remember { mutableStateOf<TimelineAnchor?>(null) }
     val paneOwner = remember { Any() } // This screen instance; a late stop can't leave a newer screen's pane.
-    val received = io.github.thiesi.chitchat.core.ui.rememberReceivedImages(images, paneOwner, completionEntryId, timeline, "message:")
+    val received = io.github.thiesi.chitchat.core.ui.rememberReceivedImages(images, paneOwner, completionEntryId, timeline, "message:", isEntryCurrent)
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground(paneOwner) }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) {
         if (onStopped == null) model.background() else onStopped(paneOwner)
@@ -544,7 +546,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 Spacer(Modifier.height(1.dp))
             }
         }
-        io.github.thiesi.chitchat.core.ui.ReceivedViewerHost(received) { id ->
+        io.github.thiesi.chitchat.core.ui.ReceivedViewerHost(received, settled = state.loaded && !state.busy) { id ->
             state.messages.firstOrNull { it.attachment?.id == id && !it.deleted }?.let { message ->
                 Triple(message.username ?: stringResource(R.string.conversation_unknown_user), displayTime(message.createdAt, state.context), message.body)
             }

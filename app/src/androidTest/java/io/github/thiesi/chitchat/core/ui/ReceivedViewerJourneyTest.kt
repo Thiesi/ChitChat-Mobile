@@ -3,6 +3,8 @@ package io.github.thiesi.chitchat.core.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -15,7 +17,6 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.isDialog
-import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -129,6 +130,21 @@ class ReceivedViewerJourneyTest {
         compose.waitUntil(5_000) { source.calls.size == 2 && compose.onAllNodesWithTag("viewer_load_full").fetchSemanticsNodes().isEmpty() }
     }
 
+    @Test fun aViewerShowingTheOriginalDescribesThePhotoNotTheFramesFailure() {
+        // TL (#313): opened from a failed frame, the loaded original is announced as the photo, not "Couldn't load".
+        source.reply(70) { DownloadResult.Failed(io.github.thiesi.chitchat.core.network.ApiFailure(io.github.thiesi.chitchat.core.network.FailureKind.NETWORK)) }
+        source.reply(70) { DownloadResult.Failed(io.github.thiesi.chitchat.core.network.ApiFailure(io.github.thiesi.chitchat.core.network.FailureKind.NETWORK)) }
+        rooms.messages = listOf(roomMessage(3, null, photo(70, size = 1_500_000)))
+        roomContent()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("attachment_retry:70").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("attachment_frame:70").performClick()
+        compose.waitUntil(5_000) { images.viewer.state.value?.original != null }
+        compose.waitForIdle()
+        val label = compose.onNodeWithTag("viewer_image").fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)
+        assertEquals(listOf(context.getString(R.string.image_description, "Bob", label!!.single().removePrefix("Photo from Bob, "))), label)
+        assertTrue(label.single(), !label.single().contains(". "))
+    }
+
     @Test fun theZoomButtonsAreLabelledAndFollowTheScale() {
         rooms.messages = listOf(roomMessage(3, null, photo(70)))
         roomContent(); loaded(70)
@@ -176,17 +192,77 @@ class ReceivedViewerJourneyTest {
         compose.onNodeWithTag("conversation_composer").assertIsNotFocused()
     }
 
-    @Test fun aRecreationKeepsTheViewerOpen() {
+    @Test fun aSessionVersionBumpKeepsTheViewerOpen() {
+        // TL (#313): a re-keyed screen (the room screen keys on sessionVersion) is a dispose, never a departure.
         rooms.messages = listOf(roomMessage(3, null, photo(70)))
-        val restore = StateRestorationTester(compose)
-        restore.setContent { MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } } }
+        roomContent(); loaded(70)
+        compose.onNodeWithTag("attachment_frame:70").performClick()
+        compose.waitUntil(5_000) { viewerShown() }
+        compose.runOnIdle { session.value = session.value.copy(user = session.value.user!!.copy(sessionVersion = 2)) }
+        compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
+        compose.waitForIdle()
+        assertEquals(70L, images.viewer.state.value?.ref?.attachment?.id)
+        compose.waitUntil(5_000) { viewerShown() }
+    }
+
+    private class Owner : androidx.lifecycle.LifecycleOwner {
+        val registry = androidx.lifecycle.LifecycleRegistry(this)
+        override val lifecycle: androidx.lifecycle.Lifecycle get() = registry
+    }
+
+    @Test fun aBackgroundKeepsTheViewerAndTheEntrysDepartureClosesIt() {
+        // TL (#313): ON_STOP with the entry still current is a background; with another entry current it's a departure.
+        var current = true
+        lateinit var owner: Owner
+        compose.runOnUiThread { owner = Owner().apply { registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED } }
+        rooms.messages = listOf(roomMessage(3, null, photo(70)))
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
+                MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) {
+                    ConversationScreen(room, 42, {}, images = images, isEntryCurrent = { current })
+                } }
+            }
+        }
         compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
         loaded(70)
         compose.onNodeWithTag("attachment_frame:70").performClick()
+        compose.waitUntil(5_000) { images.viewer.state.value != null }
+        compose.runOnIdle { owner.registry.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_STOP) }
+        compose.waitForIdle()
+        assertEquals("A background keeps the viewer", 70L, images.viewer.state.value?.ref?.attachment?.id)
+        compose.runOnIdle {
+            owner.registry.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_START)
+            owner.registry.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_RESUME)
+        }
+        current = false
+        compose.runOnIdle { owner.registry.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_STOP) }
+        compose.waitForIdle()
+        assertEquals("Navigating away closes it", null, images.viewer.state.value)
+    }
+
+    @Test fun aDisposeAfterTheEntryStopsBeingCurrentClosesTheViewerWithoutAnOnStop() {
+        // TL (#313): if Navigation disposes the leaving entry before its ON_STOP, the dispose closes the viewer.
+        var current = true
+        var shown by androidx.compose.runtime.mutableStateOf(true)
+        rooms.messages = listOf(roomMessage(3, null, photo(70)))
+        compose.setContent {
+            MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) {
+                if (shown) ConversationScreen(room, 42, {}, images = images, isEntryCurrent = { current })
+            } }
+        }
+        compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
+        loaded(70)
+        val previewOnly = source.reserved
+        compose.onNodeWithTag("attachment_frame:70").performClick()
         compose.waitUntil(5_000) { viewerShown() }
-        restore.emulateSavedInstanceStateRestore()
-        compose.waitUntil(5_000) { viewerShown() }
-        assertEquals(70L, images.viewer.state.value?.ref?.attachment?.id)
+        compose.onNodeWithTag("viewer_load_full").performClick()
+        compose.waitUntil(5_000) { images.viewer.state.value?.original != null }
+        assertTrue("The original holds a lease", source.reserved > previewOnly)
+        current = false
+        compose.runOnIdle { shown = false } // Disposed, with no ON_STOP.
+        compose.waitForIdle()
+        assertEquals(null, images.viewer.state.value)
+        assertEquals("Its lease is released", previewOnly, source.reserved)
     }
 
     @Test fun aDmFrameOpensTheViewerToo() {

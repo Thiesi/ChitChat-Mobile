@@ -67,7 +67,8 @@ class ReceivedViewerPresentationTest {
     private fun shots(): List<Shot> = listOf(
         Shot("viewer-preview", roomMessage(3, null, photo(70)), ready = { it.full == FullImage.OFFER }),
         Shot("viewer-loading", roomMessage(3, null, photo(70)), script = { serve(70); reply(70) { awaitCancellation() } },
-            ready = { it.full == FullImage.LOADING }, act = { compose.onNodeWithTag("viewer_load_full").performClick(); waitFor { it.full == FullImage.LOADING } }),
+            // Opens on the offer (3.4 MB is beyond the automatic rule); the tap then starts the load that never settles.
+            ready = { it.full == FullImage.OFFER }, act = { compose.onNodeWithTag("viewer_load_full").performClick(); waitFor { it.full == FullImage.LOADING } }),
         Shot("viewer-original", roomMessage(3, null, photo(70)), act = { compose.onNodeWithTag("viewer_load_full").performClick(); waitFor { it.original != null } }),
         Shot("viewer-failed", roomMessage(3, null, photo(70)), script = { serve(70); reply(70) { DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) } },
             act = { compose.onNodeWithTag("viewer_load_full").performClick(); waitFor { it.full == FullImage.FAILED } }),
@@ -92,8 +93,14 @@ class ReceivedViewerPresentationTest {
     )
 
     private lateinit var images: AttachmentImagesViewModel
-    private fun waitFor(condition: (ViewerState) -> Boolean) =
+    /** Evidence only, never a retry: on a timeout, say which viewer state was reached. */
+    private fun waitFor(condition: (ViewerState) -> Boolean) = try {
         compose.waitUntil(5_000) { images.viewer.state.value?.let(condition) == true }
+    } catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
+        val v = images.viewer.state.value
+        throw AssertionError("viewer state not reached: full=${v?.full} original=${v?.original != null} " +
+            "animationUnavailable=${v?.animationUnavailable}", timeout)
+    }
 
     @Test fun presentationLight() = presentation(dark = false, scales = listOf("default" to 1f, "font200" to 2f), only = null)
     @Test fun presentationDark() = presentation(dark = true, scales = listOf("default" to 1f), only = setOf("viewer-preview"))

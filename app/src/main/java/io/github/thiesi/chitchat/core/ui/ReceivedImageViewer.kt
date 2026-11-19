@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -90,9 +91,15 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
         var scale by remember(viewer.key) { mutableFloatStateOf(1f) }
         var pan by remember(viewer.key) { mutableStateOf(Offset.Zero) }
         var captionOpen by remember(viewer.key) { mutableStateOf(false) }
+        var area by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+        // Pan stays within the scaled image's bounds, so a zoomed image can't be dragged off screen (TL, #313).
+        fun bounded(offset: Offset, at: Float): Offset {
+            val x = area.width * (at - 1f) / 2f; val y = area.height * (at - 1f) / 2f
+            return Offset(offset.x.coerceIn(-x, x), offset.y.coerceIn(-y, y))
+        }
         Box(Modifier.fillMaxSize().background(Color.Black).testTag("viewer")) {
             // The image, with the frame's description (label plus state; TL condition 7).
-            Box(Modifier.fillMaxSize().semantics { contentDescription = description }.testTag("viewer_image")
+            Box(Modifier.fillMaxSize().onSizeChanged { area = it }.semantics { contentDescription = description }.testTag("viewer_image")
                 .pointerInput(viewer.key) {
                     detectTapGestures(onDoubleTap = { if (scale > 1f) { scale = 1f; pan = Offset.Zero } else scale = 2.5f })
                 }
@@ -106,7 +113,7 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                             val move = event.calculatePan()
                             if (zoom != 1f || scale > 1f) {
                                 scale = (scale * zoom).coerceIn(1f, MAX_ZOOM)
-                                pan = if (scale == 1f) Offset.Zero else pan + move
+                                pan = if (scale == 1f) Offset.Zero else bounded(pan + move, scale)
                                 event.changes.forEach { if (it.positionChanged()) it.consume() }
                             } else if (event.changes.size == 1) drag += move.y
                         } while (event.changes.any { it.pressed })
@@ -138,7 +145,7 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
                 if (showsImage) ZoomGroup(scale, Modifier.align(Alignment.End).padding(8.dp),
                     onZoomIn = { scale = (scale * 2f).coerceAtMost(MAX_ZOOM) },
-                    onZoomOut = { scale = (scale / 2f).coerceAtLeast(1f); if (scale == 1f) pan = Offset.Zero },
+                    onZoomOut = { scale = (scale / 2f).coerceAtLeast(1f); pan = if (scale == 1f) Offset.Zero else bounded(pan, scale) },
                     onReset = { scale = 1f; pan = Offset.Zero })
                 Column(Modifier.fillMaxWidth().background(Lantern.overlayScrim).windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

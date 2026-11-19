@@ -273,16 +273,25 @@ internal fun middleElided(name: String, fits: (String) -> Boolean): String {
  */
 @Composable
 internal fun rememberReceivedImages(images: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel?, owner: Any, entry: String,
-    timeline: androidx.compose.foundation.lazy.LazyListState, keyPrefix: String): ReceivedImages? = if (images == null) null else {
+    timeline: androidx.compose.foundation.lazy.LazyListState, keyPrefix: String,
+    isEntryCurrent: () -> Boolean = { true }): ReceivedImages? = if (images == null) null else {
     var pane by remember { mutableStateOf<ImagePanes.Pane?>(null) }
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) { pane = images.panes.open(owner, entry) }
-    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { pane?.release(); pane = null }
     val activity = androidx.activity.compose.LocalActivity.current
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+        pane?.release(); pane = null
+        // The entry's own departure closes a viewer opened from it (TL, #313): ON_STOP, not for a configuration change,
+        // with the entry no longer the current one (navigation, or it was popped). A genuine background keeps it, and a
+        // composition dispose (a re-keyed or re-branched screen) is never a departure.
+        if (activity?.isChangingConfigurations != true && !isEntryCurrent()) images.panes.departed(entry)
+    }
     DisposableEffect(images, entry) {
         onDispose {
             pane?.release(); pane = null
-            // Leaving the entry for good (not a configuration change) closes a viewer opened from it (F4).
-            if (activity?.isChangingConfigurations != true) images.panes.departed(entry)
+            // The same check on dispose, in case Navigation disposes the leaving entry before its ON_STOP reaches us
+            // (TL, #313): whichever comes first closes it (departed is idempotent). A dispose while the entry is still
+            // current (a re-key, a ready flip) closes nothing.
+            if (activity?.isChangingConfigurations != true && !isEntryCurrent()) images.panes.departed(entry)
         }
     }
     val states by images.images.states.collectAsStateWithLifecycle()
@@ -300,6 +309,30 @@ internal fun onScreenIds(info: androidx.compose.foundation.lazy.LazyListLayoutIn
         .filter { it.offset < info.viewportEndOffset && it.offset + it.size > info.viewportStartOffset }
         .mapNotNull { (it.key as? String)?.takeIf { key -> key.startsWith(keyPrefix) }?.removePrefix(keyPrefix)?.toLongOrNull() }
         .toSet()
+
+/**
+ * The viewer image's TalkBack description (TL, #313): what the viewer itself shows, not the transcript frame's state. Showing
+ * an image (its original, or the transcript's held one), it's the label alone; showing nothing, the label plus the viewer's
+ * own line. The full-image line below stays its own node.
+ */
+@Composable
+internal fun viewerDescription(viewer: io.github.thiesi.chitchat.core.media.ViewerState, held: ImageState?, sender: String, time: String): String {
+    val attachment = viewer.ref.attachment
+    val gif = attachment.mimeType.equals("image/gif", ignoreCase = true)
+    val label = stringResource(if (gif) R.string.image_description_gif else R.string.image_description, sender, time)
+    val shows = viewer.original != null || (held as? ImageState.Loaded)?.image?.bitmap != null
+    if (shows) return label
+    val line = when (viewer.full) {
+        io.github.thiesi.chitchat.core.media.FullImage.TOO_LARGE -> stringResource(R.string.viewer_too_large)
+        io.github.thiesi.chitchat.core.media.FullImage.GONE -> stringResource(R.string.image_gone)
+        io.github.thiesi.chitchat.core.media.FullImage.NOT_ALLOWED -> stringResource(R.string.image_not_allowed)
+        io.github.thiesi.chitchat.core.media.FullImage.FAILED -> stringResource(R.string.viewer_failed)
+        io.github.thiesi.chitchat.core.media.FullImage.NO_MEMORY -> stringResource(R.string.viewer_no_memory)
+        io.github.thiesi.chitchat.core.media.FullImage.LOADING -> stringResource(R.string.image_loading_spoken)
+        else -> null
+    }
+    return line?.let { "$label. $it" } ?: imageText(attachment, held, sender, time).description
+}
 
 /** A frame's visible state line ([shown], null when loaded) and its TalkBack [description]. */
 internal class ImageText(val shown: String?, val description: String)
@@ -337,12 +370,13 @@ internal fun imageText(attachment: MessageAttachment, state: ImageState?, sender
 
 /** The viewer over a conversation screen, for the message whose attachment it shows; it closes if that message is gone. */
 @Composable
-internal fun ReceivedViewerHost(received: ReceivedImages?, find: @Composable (Long) -> Triple<String, String, String?>?) {
+internal fun ReceivedViewerHost(received: ReceivedImages?, settled: Boolean, find: @Composable (Long) -> Triple<String, String, String?>?) {
     val viewer = received?.viewer ?: return
     val meta = find(viewer.ref.attachment.id)
-    if (meta == null) { LaunchedEffect(viewer.key) { received.pane?.closeViewer() }; return }
+    // Only a settled conversation without the message closes it; a reload (empty for a moment) never does (TL, #313).
+    if (meta == null) { if (settled) LaunchedEffect(viewer.key) { received.pane?.closeViewer() }; return }
     val (sender, time, caption) = meta
     val held = received.states[viewer.key]
-    ReceivedImageViewer(viewer, held, sender, time, caption, imageText(viewer.ref.attachment, held, sender, time).description,
+    ReceivedImageViewer(viewer, held, sender, time, caption, viewerDescription(viewer, held, sender, time),
         onClose = { received.pane?.closeViewer() }, onLoadFull = { received.pane?.loadFullImage() })
 }

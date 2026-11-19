@@ -20,15 +20,24 @@ the TL's and PL's F4 rulings of 2026-11-19.
   - The screens also count it in `composerDialog`, which gates read proof and typing.
   - Closing requests no focus and shows no keyboard (TL condition 3).
 - **Rotation:** the viewer stays open from the view model's state, and the zoom resets.
-- **Closing:**
-  - A departure from the nav entry (not a configuration change) closes it through `ImagePanes.departed`.
-  - A message that disappears closes it.
+- **Closing (TL, #313):**
+  - **The entry's own departure** closes it: ON_STOP, not during a configuration change, while the entry is no longer
+    the current one (navigation, or the entry was popped), checked by identity (`isEntryCurrent`, from ChitChatApp).
+  - A genuine background (ON_STOP with the entry still current) keeps it, and so does a configuration change.
+  - **The same check runs on dispose**, in case Navigation disposes the leaving entry before its ON_STOP arrives: whichever
+    comes first closes it (`departed` is idempotent).
+  - **A dispose while the entry is still current is never a departure:** the room screen re-keys on the session version, and the DM thread
+    re-branches on readiness, while the entry stays current.
+  - A server, account or generation change closes it through the view model's own fencing.
+  - It closes when the message is gone, but only once the conversation is settled, never during a reload.
 - **Showing the image:**
   - The transcript's held image first, then the original once it's loaded.
   - A GIF's animation starts when shown and stops on ON_STOP and when the viewer leaves.
-  - The image's TalkBack description is the frame's (label plus state), from one shared `imageText` (TL condition 7).
+  - The image's TalkBack description says what **the viewer** shows (TL condition 7, #313): the label alone while it
+    shows an image (the original or the transcript's held one), otherwise the label plus the viewer's own line (too large,
+    gone, not allowed, failed, can't show, loading). It never carries the frame's state over a visible photo.
 - **Gestures:**
-  - Pinch and double-tap zoom, and pan.
+  - Pinch and double-tap zoom, and pan, clamped to the scaled image's bounds so it can't be dragged off screen (#313).
   - Swipe down closes at fit scale only; Back and an explicit Close always work.
 - **Zoom group (PL):**
   - Three 48dp buttons, "Zoom in", "Zoom out" and "Reset zoom", on one overlay-scrim pill above the bottom scrim.
@@ -58,11 +67,18 @@ invite links." (PL).
   - too large opens the viewer with "Too large to show here." on the ground, no zoom group and nothing fetched;
   - "Load full image · 3.4 MB" loads the original, no Save or Share is shown, and the viewer image has the frame's
     description;
+  - opened from a failed frame, a loaded original is described as the photo (the label alone), never the frame's
+    failure;
   - the zoom buttons' labels, 48dp size and enabled states at fit, zoomed and reset;
   - Back closes the viewer and clears its session;
   - **no read POST and no typing publish while it's open, and none caused by closing it** (the composer isn't
     focused);
-  - a recreation keeps the viewer open;
+  - a session-version bump (the room screen re-keys) keeps the viewer open;
+  - with a driven lifecycle, a background (ON_STOP, entry current) keeps the viewer, and ON_STOP after the entry stops
+    being current closes it;
+  - a dispose after the entry stops being current, with no ON_STOP, closes the viewer and releases its original's lease;
+  - **`ReceivedViewerRecreationTest`:** a real `recreate()` (content set in onCreate, so `isChangingConfigurations` is
+    set) keeps the viewer open; a test-side recomposition alone isn't a configuration change and would count as a departure;
   - a DM frame opens the viewer, with only the transcript's preview downloaded.
 - **`ReceivedFilesJourneyTest`:** the F3 frame cases now assert the F4 tap ("Open photo", long-press actions), including
   the too-large box.

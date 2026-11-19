@@ -830,6 +830,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             if (session.phase == SessionPhase.AUTHENTICATED && id > 0)
                                 ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured,
                                     onProfile = profileOpener(destination, id), completion = completion, completionEntryId = destination.id, images = receivedImages,
+                                    isEntryCurrent = { nav.currentBackStackEntry === destination },
                                     onStopped = { owner -> if (nav.currentBackStackEntry === destination) conversations.background()
                                         else conversations.leavePane(owner) }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
@@ -842,6 +843,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                 args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
                                 ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured,
                                     onProfile = profileOpener(destination, id), completion = completion, completionEntryId = destination.id, images = receivedImages,
+                                    isEntryCurrent = { nav.currentBackStackEntry === destination },
                                     onStopped = { owner -> if (nav.currentBackStackEntry === destination) conversations.background()
                                         else conversations.leavePane(owner) }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
@@ -861,6 +863,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                 args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
                                 DirectThreadScreen(directThread, peer, auth::refresh, messageTargets, targetObscured,
                                     onProfile = profileOpener(destination), completion = completion, completionEntryId = destination.id, images = receivedImages,
+                                    isEntryCurrent = { nav.currentBackStackEntry === destination },
                                     onStopped = { owner -> if (nav.currentBackStackEntry === destination) directThread.background()
                                         else directThread.leavePane(owner) }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
