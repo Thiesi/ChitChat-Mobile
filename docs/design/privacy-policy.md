@@ -71,11 +71,11 @@ entered, and doesn't follow redirects.
 ChitChat doesn't run in the background. It uses UnifiedPush: a separate delivery app you choose
 receives notifications from your server and wakes ChitChat. The notification content is
 **encrypted** between your server and this app (Web Push encryption, RFC 8291), so the delivery
-service can't read it. If no UnifiedPush delivery app is installed, ChitChat falls back to
-Google's Firebase Cloud Messaging, and Google then transports these encrypted messages. Google
-can see that a notification was delivered to your device and when, but not what it says. The
-app doesn't include Google's Firebase software; it uses UnifiedPush's standard Web Push
-delivery.
+service can't read it. If no UnifiedPush delivery app is installed, ChitChat offers Google's
+Firebase Cloud Messaging instead, used only if you choose Use Google, and Google then transports
+these encrypted messages. Google can see that a notification was delivered to your device and
+when, but not what it says. The app doesn't include Google's Firebase software; it uses
+UnifiedPush's standard Web Push delivery.
 
 **To anyone else:** nothing. The app contains no analytics, advertising or crash-reporting
 software, and it doesn't sell or share your data.
