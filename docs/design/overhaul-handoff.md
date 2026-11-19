@@ -111,12 +111,13 @@ dialogs and other windows.
 | `onboarding` | welcome, address, found, found-top (host only); step 2 certificate failure at 200% (O2a, PR #260) | light, dark × default, 200% | black; failure at default; name-plus-host card |
 | `step-up` | the step-up dialog for export, replace key, create key, transfer room, and the recovery-code warning (PR #297) | light, dark × default, 200% | black; keyboard up; delete account (in `deletion`) |
 | `deletion` | row, explanation, explanation-actions, dialog, stepup, unknown, notdeleted, waiting, endedunknown, checkfailed, signedout, scheduled, endedrefusal; pt-BR long date at 200% (D2, PR #300) | light, dark × default, 200% | black |
+| `files` | received photo frames: notloaded, loading, failed, nomemory, toolarge, gone, notallowed, offline; normal, panorama, tall, small, nodims; panorama-show, panorama-retry (short frames); gif (badge only); file cards: card-short, card-long, card-apk; reply (no frame in the quote); DM dm-in-short, dm-out-long; the Welcome preview-sheet (F3b, PR #310) | light, dark × default, 200%; black for normal and notloaded | black for the rest; the viewer and the API 26–27 GIF (F4); card Open and Save (F5) |
 
 ### Screens and states with no capture yet
 
 Grouped by area. Each needs a fixture state, not a live server.
 
-- **Onboarding:** Welcome (with the preview disclosure sheet); Where do you chat? (empty,
+- **Onboarding:** Welcome (its preview disclosure sheet alone is in `files`); Where do you chat? (empty,
   invalid address, checking); Server found (with and without guest visits, and with the
   accessibility link, ChitChat#219, released in v3.14.0); Sign in (Forgot password button versus the
   static line, throttled); Create account (anti-bot progress, optional birth date); recovery
@@ -126,8 +127,8 @@ Grouped by area. Each needs a fixture state, not a live server.
   (empty, multi-line, reply attached, mention completion, blocked, Details marker states,
   unknown send, waiting draft in two lines per P-108).
 - **Attachments:** picker entry, preparing, ready draft with caption, photo privacy choice,
-  uploading, finishing, unknown with Check history, duplicate-risk decision, image and file
-  bubbles, the gone file.
+  uploading, finishing, unknown with Check history, duplicate-risk decision. Received image
+  and file bubbles, including the gone file, are in `files`.
 - **Lists:** Rooms directory (your rooms, other rooms, join, create dialog); room detail
   dialog states (member, owner, unknown transfer); DM inbox, including P-218 relationship
   states; Activity, including unread, read, unsupported kinds and empty.
@@ -217,7 +218,9 @@ against current main before acting.
     such as the server's role name "Super-Administrator.", breaks with its trailing period
     starting the next line (PR #300 `deletion` endedrefusal captures). The step-up form dialog
     scrolls at 200% with no scroll-edge divider, and dialog Cancel uses the action colour beside
-    an `error` action (PRs #297, #300): both belong to the modals restyle.
+    an `error` action (PRs #297, #300): both belong to the modals restyle. A file name can
+    break at its extension's dot ("chitchat-release." / "apk", PR #310 `files` card-apk at 200%);
+    the middle ellipsis keeps the extension visible, but the break still falls at the dot.
 
 ## Evidence
 
