@@ -124,7 +124,7 @@ class AccountRecreationTest {
         fake.recoveryGate = gate
         start(); verifyRecovery(); recreate()
         compose.runOnIdle { assertEquals(ExportStage.VERIFYING, account.state.value.stage) }
-        visibleAfterRecreation("Confirm personal-data export")
+        visibleAfterRecreation("Confirm it's you to export your personal data")
         compose.runOnIdle { assertTrue(account.state.value.verificationBusy); gate.complete(Unit) }
         saved()
         compose.runOnIdle { assertEquals(1, fake.recoveries); assertEquals(2, fake.exports); assertEquals(1, writes) }

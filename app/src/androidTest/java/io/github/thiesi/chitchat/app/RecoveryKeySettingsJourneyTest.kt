@@ -30,6 +30,11 @@ import io.github.thiesi.chitchat.testing.openTab
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertCountEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -54,6 +59,8 @@ class RecoveryKeySettingsJourneyTest {
     private val accounts = object : AccountOperations {
         override val session get() = sessions.state
         var posts = 0
+        /** The server asks for step-up first (403 step_up_required) while this is set. */
+        var stepUp = false
         override suspend fun open(): AccountAccess = object : AccountAccess {
             override fun ensureCurrent() = Unit
             override suspend fun export() = error("No export here")
@@ -62,6 +69,8 @@ class RecoveryKeySettingsJourneyTest {
             override suspend fun verifyRecovery(code: String) = error("No recovery code here")
             override suspend fun createRecoveryKey(): CreatedRecoveryKey {
                 posts++
+                if (stepUp) throw io.github.thiesi.chitchat.core.network.ApiFailure(
+                    io.github.thiesi.chitchat.core.network.FailureKind.HTTP, 403, "step_up_required")
                 sessions.state.value = sessions.state.value.copy(recoveryKey = RecoveryKeyStatus.Known(true, newDate), recoveryKeyUndelivered = null)
                 return CreatedRecoveryKey(RecoveryKey("A7K2-B9QX-C4MZ-D8RT-E2WN-F6HP"), newDate)
             }
@@ -128,6 +137,40 @@ class RecoveryKeySettingsJourneyTest {
         compose.waitUntil(5_000) { exists("recovery_key_display") }
         compose.onNodeWithText(compose.activity.getString(io.github.thiesi.chitchat.R.string.recovery_key_title_save)).assertExists()
         assertFalse(exists("recovery_key_replace_confirm"))
+    }
+
+    /** The step-up dialog names this request's own action; Cancel ends it with nothing committed (the 403 refused it). */
+    private fun assertStepUpTitle(title: Int, other: Int) {
+        val text = compose.activity.getString(title)
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText(text) and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithText(compose.activity.getString(other)).assertCountEquals(0)
+        compose.onAllNodesWithText("Confirm personal-data export").assertCountEquals(0)
+        compose.onNode(hasText(compose.activity.getString(io.github.thiesi.chitchat.R.string.cancel)) and hasAnyAncestor(isDialog())).performClick()
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals("The 403 only, never resent", 1, accounts.posts); assertNull(keys.state.value.shown) }
+    }
+
+    @Test fun replaceStepUpIsTitledForReplacing() {
+        accounts.stepUp = true
+        signedIn(RecoveryKeyStatus.Known(true, "2026-11-01T10:00:00+00:00"))
+        openPrivacy()
+        compose.onNodeWithTag("recovery_key_row").performClick()
+        compose.waitUntil(5_000) { exists("recovery_key_screen") }
+        compose.onNodeWithTag("recovery_key_replace").performScrollTo().performClick()
+        compose.onNodeWithTag("recovery_key_replace_confirm").performClick()
+        assertStepUpTitle(io.github.thiesi.chitchat.R.string.step_up_title_replace_recovery_key,
+            io.github.thiesi.chitchat.R.string.step_up_title_create_recovery_key)
+    }
+
+    @Test fun createStepUpIsTitledForCreating() {
+        accounts.stepUp = true
+        signedIn(RecoveryKeyStatus.Known(false, null))
+        openPrivacy()
+        compose.onNodeWithTag("recovery_key_row").performClick()
+        compose.waitUntil(5_000) { exists("recovery_key_screen") }
+        compose.onNodeWithTag("recovery_key_create").performScrollTo().performClick()
+        assertStepUpTitle(io.github.thiesi.chitchat.R.string.step_up_title_create_recovery_key,
+            io.github.thiesi.chitchat.R.string.step_up_title_replace_recovery_key)
     }
 
     /** The colour Text actually resolved, from its layout result (the merged style, including LocalContentColor). */

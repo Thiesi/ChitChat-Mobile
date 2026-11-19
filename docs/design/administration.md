@@ -139,7 +139,8 @@ The staff area (moderation.md, "Entry"), titled **Stewarding** with the subline 
     - buttons **Cancel** and **Make owner** (`signature`, not `error`: nothing is deleted).
   - **Step-up:** the request goes through `withStepUp` (only `403 step_up_required`, one
     retry after confirmation), never another retry. The step-up dialog is titled "Confirm
-    ownership transfer", following "Confirm personal-data export".
+    it's you to transfer this room" (every step-up dialog names its own action; see
+    [step-up titles](../milestones/M2b-step-up-export.md#per-flow-step-up-titles)).
   - **Outcomes** (never resent; every refusal keeps the picker's choice so the person can
     pick again):
     - success: the room is re-rendered from the returned `room`, and the picker closes back

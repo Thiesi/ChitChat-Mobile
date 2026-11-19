@@ -31,6 +31,8 @@ FIND_PEOPLE_DESTINATION = ROOT / "app/build/reports/androidTests/find-people-pre
 POLICY_DESTINATION = ROOT / "app/build/reports/androidTests/policy-presentation"
 POLICY_NAME = re.compile(r"policy-(light|dark)-(default|font200)-(hosted|external|unpublished|httpdialog|loading|failed)[.]png")
 RECOVERY_DESTINATION = ROOT / "app/build/reports/androidTests/recovery-presentation"
+STEP_UP_DESTINATION = ROOT / "app/build/reports/androidTests/step-up-presentation"
+STEP_UP_NAME = re.compile(r"stepup-(light|dark)-(default|font200)-(export|replace|create|transfer|recovery)[.]png")
 RECOVERY_NAME = re.compile(r"recovery-(light|dark)-(default|font200)-(display(-api32|-reset)?(-end)?|dialog|exists|notset|notice)[.]png")
 RESET_DESTINATION = ROOT / "app/build/reports/androidTests/reset-presentation"
 RESET_NAME = re.compile(r"reset-(light|dark)-(default|font200)-(signin-forgot|form|mfa|stop|cancelled|passkey|failed|unknown|cancel-unknown)[.]png")
@@ -255,6 +257,19 @@ def collect_recovery():
     print(f"Recovery presentation captures collected: {len(files)} of 26.")
 
 
+def collect_step_up():
+    # Each step-up caller's own title (export, Replace key, Create key, room transfer) and the recovery-code warning, at
+    # default and 200%, light and dark (20).
+    files = list(islice(SOURCE.rglob("ccm-step-up-presentation/*"), 21))
+    if (not files or len(files) > 20 or len({p.name for p in files}) != len(files)
+        or any(STEP_UP_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous step-up presentation output")
+    STEP_UP_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, STEP_UP_DESTINATION / path.name)
+    print(f"Step-up presentation captures collected: {len(files)} of 20.")
+
+
 def collect_reset():
     # O4b2: step 4a with Forgot password?, the reset form, the MFA step and its outcomes; light and dark.
     files = list(islice(SOURCE.rglob("ccm-reset-presentation/*"), 25))
@@ -403,6 +418,10 @@ def main() -> int:
         collect_recovery()
     except Exception:
         print("Recovery presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_step_up()
+    except Exception:
+        print("Step-up presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_reset()
     except Exception:

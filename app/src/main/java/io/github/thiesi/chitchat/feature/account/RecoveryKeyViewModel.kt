@@ -45,6 +45,8 @@ data class RecoveryKeyUiState(
     val error: ApiFailure? = null,
     val outcome: RecoveryKeyOutcome? = null,
     val shown: ShownRecoveryKey? = null,
+    /** Whether the request in flight replaces a key (frozen at Replace or Create), for the step-up dialog's title only. */
+    val replacing: Boolean = false,
 )
 
 /**
@@ -92,7 +94,7 @@ class RecoveryKeyViewModel(private val operations: AccountOperations) : ViewMode
         val before = known.createdAt
         val attempt = ++sequence
         pendingCheck = null
-        mutable.value = RecoveryKeyUiState(stage = RecoveryKeyStage.RUNNING)
+        mutable.value = RecoveryKeyUiState(stage = RecoveryKeyStage.RUNNING, replacing = known.exists)
         operation = viewModelScope.launch {
             try {
                 val current = operations.open()

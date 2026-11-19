@@ -137,7 +137,8 @@ fun RecoveryKeyScreen(model: RecoveryKeyViewModel, session: SessionState, instal
         } })
     val methods = state.methods
     if (state.stage == RecoveryKeyStage.VERIFYING && methods != null) StepUpDialog(
-        title = stringResource(R.string.step_up_title), methods = methods, busy = state.verificationBusy,
+        title = stringResource(if (state.replacing) R.string.step_up_title_replace_recovery_key
+            else R.string.step_up_title_create_recovery_key), methods = methods, busy = state.verificationBusy,
         errorMessage = state.error?.let { accountError(it) }, onVerify = model::verify, onCancel = model::cancelVerification)
 }
 
