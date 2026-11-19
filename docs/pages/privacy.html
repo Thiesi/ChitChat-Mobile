@@ -54,7 +54,7 @@ footer { color: var(--muted); font-size: .9rem; margin-top: 3rem; border-top: 1p
 <li><strong>Notification settings:</strong> if you turn notifications on, the delivery address and encryption keys the server needs to send you notifications.</li>
 </ul>
 <p>Before a photo is uploaded, the app <strong>removes location information</strong> (GPS data) from it by default. All connections to your server use <strong>HTTPS</strong>. The app connects only to the server address you entered, and doesn't follow redirects.</p>
-<p><strong>To the notification delivery app you choose</strong> (only if you turn notifications on): ChitChat doesn't run in the background. It uses UnifiedPush: a separate delivery app you choose receives notifications from your server and wakes ChitChat. The notification content is <strong>encrypted</strong> between your server and this app (Web Push encryption, RFC 8291), so the delivery service can't read it. If no UnifiedPush delivery app is installed, ChitChat falls back to Google's Firebase Cloud Messaging, and Google then transports these encrypted messages. Google can see that a notification was delivered to your device and when, but not what it says. The app doesn't include Google's Firebase software; it uses UnifiedPush's standard Web Push delivery.</p>
+<p><strong>To the notification delivery app you choose</strong> (only if you turn notifications on): ChitChat doesn't run in the background. It uses UnifiedPush: a separate delivery app you choose receives notifications from your server and wakes ChitChat. The notification content is <strong>encrypted</strong> between your server and this app (Web Push encryption, RFC 8291), so the delivery service can't read it. If no UnifiedPush delivery app is installed, ChitChat offers Google's Firebase Cloud Messaging instead, used only if you choose Use Google, and Google then transports these encrypted messages. Google can see that a notification was delivered to your device and when, but not what it says. The app doesn't include Google's Firebase software; it uses UnifiedPush's standard Web Push delivery.</p>
 <p><strong>To anyone else:</strong> nothing. The app contains no analytics, advertising or crash-reporting software, and it doesn't sell or share your data.</p>
 
 <h2>What the app stores on your phone</h2>
@@ -75,7 +75,7 @@ footer { color: var(--muted); font-size: .9rem; margin-top: 3rem; border-top: 1p
 
 <h2>Your choices and rights</h2>
 <ul>
-<li><strong>Export your data:</strong> <em>You → Export my data</em> saves a copy of your account data from your server to a file you choose.</li>
+<li><strong>Export your data:</strong> <em>You → Privacy and security → Export personal data</em> saves a copy of your account data from your server to a file you choose.</li>
 <li><strong>Delete your account:</strong> <em>You → Privacy and security → Delete account</em> closes your account on that server. You can restore it for 14 days. After that, your name is replaced with "Closed account" and your personal details are cleared. Messages you sent stay visible to the people who received them, under that server's retention policies. See <a href="/app/delete-account">Delete your ChitChat account</a>.</li>
 <li><strong>Notifications:</strong> turn them off at any time in <em>You → Notifications</em> or in Android's settings.</li>
 <li><strong>Other requests</strong> (access, correction, erasure beyond the above) go to <strong>your server's operator</strong>, who holds the data. The app makers can't fulfil them, because we don't have your data.</li>
