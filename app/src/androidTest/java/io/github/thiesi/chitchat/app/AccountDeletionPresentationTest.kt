@@ -78,6 +78,8 @@ class AccountDeletionPresentationTest {
             compose.onNodeWithTag("delete_account_row").performClick()
             compose.waitUntil(5_000) { exists("delete_account_screen") }
             capture("$at-explanation")
+            compose.onNodeWithTag("delete_account_cancel").performScrollTo()
+            capture("$at-explanation-actions")
             // The decision dialog: both actions shown at either scale (P-220).
             compose.onNodeWithTag("delete_account_continue").performScrollTo().performClick()
             dialogNode("delete_account_dialog_cancel").assertIsDisplayed(); dialogNode("delete_account_dialog_confirm").assertIsDisplayed()

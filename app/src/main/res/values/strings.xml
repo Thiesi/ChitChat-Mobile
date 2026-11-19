@@ -156,7 +156,6 @@
     <string name="account_not_pending">This account is not scheduled for closure. Use sign-in instead.</string>
     <string name="guest_detected">This is a guest session. Guest features are not included in this slice; ending the visit is permanent.</string>
     <string name="end_guest_visit">End guest visit</string>
-    <string name="account">Account</string>
     <string name="personal_data_title">Your personal data</string>
     <string name="export_scope">Export the retained data the server associates with your account, including your messages, visible direct messages, profile, submitted reports and account activity. File attachments are metadata only; the profile picture is included where available. The server controls retention and authorization.</string>
     <string name="export_privacy">The saved JSON is not encrypted. Your chosen documents provider may upload it to cloud storage. Anyone with access to that file can read it; signing out of ChitChat does not remove it. Choose a private location.</string>

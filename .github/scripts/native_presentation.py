@@ -33,7 +33,7 @@ POLICY_NAME = re.compile(r"policy-(light|dark)-(default|font200)-(hosted|externa
 RECOVERY_DESTINATION = ROOT / "app/build/reports/androidTests/recovery-presentation"
 STEP_UP_DESTINATION = ROOT / "app/build/reports/androidTests/step-up-presentation"
 DELETION_DESTINATION = ROOT / "app/build/reports/androidTests/deletion-presentation"
-DELETION_NAME = re.compile(r"deletion-(light|dark)-(default|font200)-(row|explanation|dialog|stepup|unknown|notdeleted|waiting|endedunknown|checkfailed|signedout|scheduled|scheduled-longdate|endedrefusal)[.]png")
+DELETION_NAME = re.compile(r"deletion-(light|dark)-(default|font200)-(row|explanation|explanation-actions|dialog|stepup|unknown|notdeleted|waiting|endedunknown|checkfailed|signedout|scheduled|scheduled-longdate|endedrefusal)[.]png")
 STEP_UP_NAME = re.compile(r"stepup-(light|dark)-(default|font200)-(export|replace|create|transfer|recovery)[.]png")
 RECOVERY_NAME = re.compile(r"recovery-(light|dark)-(default|font200)-(display(-api32|-reset)?(-end)?|dialog|exists|notset|notice)[.]png")
 RESET_DESTINATION = ROOT / "app/build/reports/androidTests/reset-presentation"
@@ -275,15 +275,15 @@ def collect_step_up():
 def collect_deletion():
     # D2: the row, the explanation screen, the decision and step-up dialogs, the live Unknown and "wasn't deleted", and the
     # ended-session screens (Waiting, Unknown, a failed Check, signed out, scheduled, the refusal caption), at default and
-    # 200%, light and dark (48), plus one long-date scheduled capture (1).
-    files = list(islice(SOURCE.rglob("ccm-deletion-presentation/*"), 50))
-    if (not files or len(files) > 49 or len({p.name for p in files}) != len(files)
+    # 200%, light and dark (52), plus one long-date scheduled capture (1).
+    files = list(islice(SOURCE.rglob("ccm-deletion-presentation/*"), 54))
+    if (not files or len(files) > 53 or len({p.name for p in files}) != len(files)
         or any(DELETION_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous deletion presentation output")
     DELETION_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, DELETION_DESTINATION / path.name)
-    print(f"Deletion presentation captures collected: {len(files)} of 49.")
+    print(f"Deletion presentation captures collected: {len(files)} of 53.")
 
 
 def collect_reset():

@@ -486,7 +486,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         else if (entry?.destination?.route?.startsWith("conversation/") == true || entry?.destination?.route == NOTIFICATION_ROOM_ROUTE)
                         R.string.rooms_conversation else when (entry?.destination?.route) {
                         "settings" -> R.string.settings
-                        "account", NOTIFICATION_ACCOUNT_ROUTE -> R.string.account
+                        "account", NOTIFICATION_ACCOUNT_ROUTE -> R.string.you_privacy_security
                         RECOVERY_KEY_ROUTE -> R.string.recovery_key_row
                         DELETE_ACCOUNT_ROUTE -> R.string.delete_account_row
                         "notification_settings" -> R.string.notification_settings_title
@@ -512,7 +512,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                 displayedSession.user?.sessionVersion ?: -1, displayedSession.server?.value))
                                 searchRoute(displayedSession)?.let { route -> focus.clearFocus(); nav.navigate(route) { launchSingleTop = true } }
                         }, modifier = Modifier.testTag("message_search_open")) { Text(stringResource(R.string.message_search_title)) }
-                        if (atHome && state.hasLoadedSettings) TextButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
+                        if (atHome && state.hasLoadedSettings && closure !is io.github.thiesi.chitchat.core.account.ClosureState.Waiting)
+                            TextButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
                             Text(stringResource(R.string.settings))
                         }
                     },

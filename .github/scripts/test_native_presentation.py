@@ -367,7 +367,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_deletion_captures_are_copied_and_keep_the_original_status(self):
         self.results(5)
-        files = [Path("deletion-light-default-row.png"), Path("deletion-dark-font200-stepup.png"),
+        files = [Path("deletion-light-default-row.png"), Path("deletion-dark-font200-explanation-actions.png"),
             Path("deletion-light-font200-scheduled-longdate.png"), Path("deletion-dark-default-checkfailed.png"),
             Path("deletion-light-default-endedrefusal.png")]
         self.deletion_files(files)
@@ -377,7 +377,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_excess_ambiguous_or_foreign_deletion_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"deletion-light-default-row-{n}.png") for n in range(50)],
+        for files in ([Path(f"deletion-light-default-row-{n}.png") for n in range(54)],
             [Path("a/deletion-dark-default-row.png"), Path("b/deletion-dark-default-row.png")],
             [Path("deletion-dark-default-restore.png")], [Path("other.png")]):
             self.copy.reset_mock(); self.mkdir.reset_mock(); self.deletion_files(files)

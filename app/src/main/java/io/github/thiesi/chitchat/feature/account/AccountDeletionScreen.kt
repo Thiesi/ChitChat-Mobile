@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -83,11 +84,17 @@ private fun Block(lead: String, body: AnnotatedString, tag: String) {
         Modifier.testTag(tag))
 }
 
-/** The server's deadline as the localized medium date and short time in the device's time zone, kept on one line (PL, D2). */
+/**
+ * The server's deadline as the localized medium date and short time in the device's time zone (PL, D2). The date and the
+ * time each stay together (no-break spaces, including before AM/PM); the line may break only between them (J2).
+ */
 internal fun closureDeadline(finalizesAt: String, zone: ZoneId = ZoneId.systemDefault()): String? = runCatching {
-    OffsetDateTime.parse(finalizesAt).atZoneSameInstant(zone)
-        .format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT))
-}.getOrNull()?.noBreak()
+    val at = OffsetDateTime.parse(finalizesAt).atZoneSameInstant(zone)
+    val whole = at.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT))
+    val date = at.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
+    val time = at.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
+    if (date in whole && time in whole) whole.replace(date, date.noBreak()).replace(time, time.noBreak()) else whole
+}.getOrNull()
 
 /** The hedged "about" date: the device clock plus 14 days, date only (§2; only on the signed-out line). */
 internal fun approximateDeadline(now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
@@ -111,16 +118,22 @@ fun DeleteAccountScreen(model: AccountDeletionViewModel, session: SessionState, 
     val restore = stringResource(R.string.onboarding_restore)
     val closure = session.closure
     val unknown = closure is ClosureState.Unknown || state.checking != null
+    // The notice and "wasn't deleted" sit under the title, while Continue was far below: bring the top into view (J1).
+    val top = androidx.compose.runtime.remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    androidx.compose.runtime.LaunchedEffect(unknown, closure is ClosureState.NotClosed) {
+        if (unknown || closure is ClosureState.NotClosed) top.bringIntoView()
+    }
     val idle = state.stage == DeletionStage.IDLE && state.checking == null
     val enabled = idle && session.phase == SessionPhase.AUTHENTICATED && !session.busy && !session.refreshRequired &&
         !session.updateRequired
     Column(Modifier.testTag("delete_account_screen"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(stringResource(R.string.delete_account_title, installation), Modifier.semantics { heading() },
+        Text(stringResource(R.string.delete_account_title, installation),
+            Modifier.semantics { heading() }.bringIntoViewRequester(top),
             style = MaterialTheme.typography.headlineSmall)
         if (closure is ClosureState.NotClosed) Text(stringResource(R.string.delete_account_not_deleted),
             Modifier.testTag("delete_account_not_deleted").semantics { liveRegion = LiveRegionMode.Polite },
             color = ChitChatTheme.colors.textMuted)
-        if (unknown) UnknownNotice(state.checkFailed)
+        if (unknown) UnknownNotice()
         val emphasis = stringResource(R.string.delete_account_scope_emphasis, installation)
         Text(buildAnnotatedString {
             val text = stringResource(R.string.delete_account_scope, emphasis)
@@ -149,10 +162,7 @@ fun DeleteAccountScreen(model: AccountDeletionViewModel, session: SessionState, 
         }
     }
     // Check is the single primary while Unknown shows (PL); pinned like the other forms' primaries.
-    if (unknown) PinnedAction {
-        PrimaryButton(onClick = model::check, enabled = state.checking == null && !session.busy,
-            modifier = Modifier.fillMaxWidth().testTag("delete_account_check")) { Text(stringResource(R.string.delete_account_check)) }
-    }
+    if (unknown) PinnedAction { CheckBlock(state.checkFailed, enabled = state.checking == null && !session.busy, onCheck = model::check) }
     if (confirming) AlertDialog(onDismissRequest = { confirming = false },
         title = { Text(stringResource(R.string.delete_account_dialog_title)) },
         // P-220: the body scrolls, so Cancel and Delete account stay reachable at large text on a short window.
@@ -174,12 +184,22 @@ fun DeleteAccountScreen(model: AccountDeletionViewModel, session: SessionState, 
 
 /** The level-2 notice for an Unknown deletion (PL): no inline action; Check is the screen's primary. */
 @Composable
-private fun UnknownNotice(checkFailed: Boolean) {
+private fun UnknownNotice() {
     WarningNotice(stringResource(R.string.delete_account_unknown_lead), stringResource(R.string.delete_account_unknown_body),
         Modifier.testTag("delete_account_unknown"))
-    if (checkFailed) Text(stringResource(R.string.delete_account_check_failed),
-        Modifier.testTag("delete_account_check_failed").semantics { liveRegion = LiveRegionMode.Polite },
-        color = ChitChatTheme.colors.textMuted)
+}
+
+/** Check, pinned, with a failed Check's caption above it (the O4b2 pattern; J3), so the caption stays in view. */
+@Composable
+private fun CheckBlock(checkFailed: Boolean, enabled: Boolean, onCheck: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (checkFailed) Text(stringResource(R.string.delete_account_check_failed),
+            Modifier.testTag("delete_account_check_failed").semantics { liveRegion = LiveRegionMode.Polite },
+            color = ChitChatTheme.colors.textMuted)
+        PrimaryButton(onClick = onCheck, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("delete_account_check")) {
+            Text(stringResource(R.string.delete_account_check))
+        }
+    }
 }
 
 /** A definite refusal on a live session (PL wording). */
@@ -248,7 +268,7 @@ fun ClosureOutcomeScreen(closure: ClosureState, installation: String, checking: 
             }
             is ClosureState.LikelyClosed -> Text(withLabel(stringResource(R.string.delete_account_signed_out_body,
                 approximateDeadline(), restore), restore), Modifier.testTag("closure_signed_out_body"))
-            else -> UnknownNotice(checkFailed)
+            else -> UnknownNotice()
         }
     }
     when (closure) {
@@ -257,11 +277,7 @@ fun ClosureOutcomeScreen(closure: ClosureState, installation: String, checking: 
                 Text(stringResource(R.string.delete_account_done))
             }
         }
-        is ClosureState.Unknown -> PinnedAction {
-            PrimaryButton(onClick = onCheck, enabled = !checking, modifier = Modifier.fillMaxWidth().testTag("delete_account_check")) {
-                Text(stringResource(R.string.delete_account_check))
-            }
-        }
+        is ClosureState.Unknown -> PinnedAction { CheckBlock(checkFailed, enabled = !checking, onCheck = onCheck) }
         else -> Unit
     }
 }

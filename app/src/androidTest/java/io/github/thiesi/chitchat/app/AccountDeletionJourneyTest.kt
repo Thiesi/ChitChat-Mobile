@@ -141,12 +141,16 @@ class AccountDeletionJourneyTest {
         deletion.reply = TestDeletion.Reply.UNKNOWN_LIVE
         signedIn(); openDeletion(); confirm()
         compose.waitUntil(5_000) { exists("delete_account_unknown") }
+        compose.waitForIdle()
+        compose.onNodeWithTag("delete_account_unknown").assertIsDisplayed() // Brought into view, not only announced (J1).
         assertFalse("Check replaces Continue and Cancel", exists("delete_account_continue") || exists("delete_account_cancel"))
         compose.onNode(hasTestTag("delete_account_check") and hasAnyAncestor(hasTestTag("pinned_action"))).assertIsDisplayed()
         // Check: still signed in, so nothing changed (one read, no POST).
         deletion.check = { it.copy(closure = ClosureState.NotClosed(it.server!!.value, it.user!!.id)) }
         compose.onNodeWithTag("delete_account_check").performClick()
         compose.waitUntil(5_000) { exists("delete_account_not_deleted") }
+        compose.waitForIdle()
+        compose.onNodeWithTag("delete_account_not_deleted").assertIsDisplayed()
         compose.onNodeWithTag("delete_account_continue").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, deletion.checks); assertEquals("Never resent", 1, deletion.posts) }
     }
@@ -159,6 +163,8 @@ class AccountDeletionJourneyTest {
         // A Check that doesn't get through keeps the notice and adds the caption.
         compose.onNodeWithTag("delete_account_check").performClick()
         compose.waitUntil(5_000) { exists("delete_account_check_failed") }
+        // In the pinned block above Check, so it stays in view (J3).
+        compose.onNode(hasTestTag("delete_account_check_failed") and hasAnyAncestor(hasTestTag("pinned_action"))).assertIsDisplayed()
         compose.onNodeWithTag("delete_account_unknown").assertExists()
         // An anonymous session read: "most likely", never the definite title.
         deletion.check = { s -> s.copy(phase = SessionPhase.ANONYMOUS,
@@ -178,6 +184,8 @@ class AccountDeletionJourneyTest {
             sessions.state.value = s.copy(phase = SessionPhase.INVALIDATED, user = null, closure = ClosureState.Waiting(s.server!!.value, s.user!!.id)) }
         compose.waitUntil(5_000) { exists("closure_waiting") }
         assertFalse(exists("closure_done") || exists("delete_account_check"))
+        // Settings could change or forget the server and drop the result still landing on D1's marker.
+        compose.onAllNodes(hasText(text(R.string.settings))).fetchSemanticsNodes().let { assertTrue("No Settings while Waiting", it.isEmpty()) }
         compose.runOnIdle { val s = sessions.state.value
             sessions.state.value = s.copy(closure = ClosureState.Scheduled((s.closure as ClosureState.Waiting).origin, 7, deletion.deadline)) }
         compose.waitUntil(5_000) { exists("closure_scheduled_body") }
@@ -214,6 +222,8 @@ class AccountDeletionJourneyTest {
         signedIn()
         compose.openTab("you").performClick()
         compose.onNodeWithTag("you_account").performScrollTo().performClick()
+        // The bar names the screen as the row, the notices and the public page do (J4).
+        compose.onNodeWithText(text(R.string.you_privacy_security)).assertIsDisplayed()
         val row = compose.onNodeWithTag("delete_account_row").performScrollTo()
         row.assertIsDisplayed()
         assertTrue(compose.onAllNodes(hasTestTag("delete_account_row") and SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion))

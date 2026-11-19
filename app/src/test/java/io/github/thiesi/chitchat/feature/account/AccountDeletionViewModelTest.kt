@@ -173,9 +173,14 @@ class AccountDeletionViewModelTest {
         try {
             Locale.setDefault(Locale.UK)
             val shown = closureDeadline("2026-12-02T10:00:00+00:00", ZoneId.of("Europe/Berlin"))!!
-            val spaced = shown.replace(' ', ' ')
-            assertTrue("Medium date and short time in the device zone: $spaced", spaced.contains("2 Dec 2026") && spaced.contains("11:00"))
-            assertFalse("Kept on one line: no breaking spaces", shown.contains(' '))
+            val nb = '\u00A0'
+            assertTrue("The date stays together: $shown", shown.contains("2${nb}Dec${nb}2026"))
+            assertTrue("The time is the device zone's: $shown", shown.contains("11:00"))
+            assertTrue("The line may break between date and time (J2): $shown", shown.contains(' '))
+            Locale.setDefault(Locale.US)
+            val us = closureDeadline("2026-12-02T22:05:00+00:00", ZoneId.of("UTC"))!!
+            assertTrue("AM/PM stays with the time: $us", us.contains("10:05${nb}PM"))
+            Locale.setDefault(Locale.UK)
             assertNull("Never a guessed date", closureDeadline("not a date"))
             val about = approximateDeadline(Instant.parse("2026-11-18T10:00:00Z"), ZoneId.of("UTC"))
             assertTrue("Fourteen days on, date only: $about", about.replace(' ', ' ').contains("2 Dec 2026") && !about.contains(":"))
