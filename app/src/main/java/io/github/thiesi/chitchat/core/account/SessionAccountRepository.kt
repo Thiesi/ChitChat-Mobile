@@ -6,6 +6,8 @@ internal class SessionAccountRepository(private val sessions: SessionRepository)
     override val session = sessions.state
     override suspend fun dismissRecoveryKeyNotice(expected: io.github.thiesi.chitchat.core.session.SessionState) =
         sessions.clearRecoveryKeyUndelivered(expected)
+    override suspend fun checkClosure() = sessions.checkClosure()
+    override suspend fun dismissClosure() = sessions.dismissClosure()
     override suspend fun open(): AccountAccess {
         val access = sessions.openAccess()
         return object : AccountAccess {

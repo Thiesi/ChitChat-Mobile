@@ -49,6 +49,8 @@ class MainActivity : ComponentActivity() {
             val account: AccountViewModel = viewModel(factory = AccountViewModel.factory((application as ChitChatApplication).accounts))
             val recoveryKeys: io.github.thiesi.chitchat.feature.account.RecoveryKeyViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.account.RecoveryKeyViewModel.factory((application as ChitChatApplication).accounts))
+            val accountDeletion: io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel = viewModel(
+                factory = io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel.factory((application as ChitChatApplication).accounts))
             val typing: TypingPreferenceViewModel = viewModel(factory = TypingPreferenceViewModel.factory(
                 (application as ChitChatApplication).typingPreferences))
             val ignores: IgnorePersonViewModel = viewModel(factory = IgnorePersonViewModel.factory(
@@ -98,6 +100,7 @@ class MainActivity : ComponentActivity() {
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
                 notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings, pushPhone = pushPhone,
                 pushTaps = pushTaps.taps, policies = policies, guidelines = guidelines, recoveryKeys = recoveryKeys, rulesUpdate = rulesUpdate,
+                accountDeletion = accountDeletion,
                 onThemeChanged = { dark ->
                 enableEdgeToEdge(
                     statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },

@@ -79,7 +79,8 @@ internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel, a
     policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel? = null,
     guidelines: io.github.thiesi.chitchat.feature.policies.GuidelinesViewModel? = null,
     rulesUpdate: io.github.thiesi.chitchat.feature.policies.RulesUpdateViewModel? = null,
-    recoveryKeys: RecoveryKeyViewModel? = null) {
+    recoveryKeys: RecoveryKeyViewModel? = null,
+    accountDeletion: AccountDeletionViewModel? = null) {
     val accountModel = account ?: remember(auth) { AccountViewModel(TestAccounts(auth.state)) }
     val rooms = roomModel ?: remember(auth) { RoomsViewModel(EmptyRoomOperations(auth.state)) }
     val conversations = conversationModel ?: remember(auth) { ConversationViewModel(EmptyConversationOperations(auth.state)) }
@@ -91,10 +92,10 @@ internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel, a
     if (traceInput) io.github.thiesi.chitchat.testing.ObserveNativeTextInput {
         ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox,
             directThread = directThread, messageTargets = messageTargets, notifications = notifications, search = search, profiles = profiles, completion = completion,
-            pushTaps = pushTaps, policies = policies, guidelines = guidelines, rulesUpdate = rulesUpdate, recoveryKeys = recoveryKeys)
+            pushTaps = pushTaps, policies = policies, guidelines = guidelines, rulesUpdate = rulesUpdate, recoveryKeys = recoveryKeys, accountDeletion = accountDeletion)
     } else {
         ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox,
             directThread = directThread, messageTargets = messageTargets, notifications = notifications, search = search, profiles = profiles, completion = completion,
-            pushTaps = pushTaps, policies = policies, guidelines = guidelines, rulesUpdate = rulesUpdate, recoveryKeys = recoveryKeys)
+            pushTaps = pushTaps, policies = policies, guidelines = guidelines, rulesUpdate = rulesUpdate, recoveryKeys = recoveryKeys, accountDeletion = accountDeletion)
     }
 }
