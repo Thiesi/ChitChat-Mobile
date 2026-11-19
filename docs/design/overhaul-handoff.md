@@ -109,6 +109,8 @@ dialogs and other windows.
 | `a11y` | Accessibility feedback link on sign-in, You and the confirm dialog (N2b, PR #258) | light, dark × default, 200% | black |
 | `update` | server needs an update: setup, session; scrolled `-actions` (O1, PR #259) | light, dark × default, 200% | black |
 | `onboarding` | welcome, address, found, found-top (host only); step 2 certificate failure at 200% (O2a, PR #260) | light, dark × default, 200% | black; failure at default; name-plus-host card |
+| `step-up` | the step-up dialog for export, replace key, create key, transfer room, and the recovery-code warning (PR #297) | light, dark × default, 200% | black; keyboard up; delete account (in `deletion`) |
+| `deletion` | row, explanation, explanation-actions, dialog, stepup, unknown, notdeleted, waiting, endedunknown, checkfailed, signedout, scheduled, endedrefusal; pt-BR long date at 200% (D2, PR #300) | light, dark × default, 200% | black |
 
 ### Screens and states with no capture yet
 
@@ -211,6 +213,11 @@ against current main before acting.
     mid-way. Pinned actions over scrolling content want the same 1dp scroll-edge divider that
     P-220 uses for dialogs, shown only while content is hidden beneath. Evidence: PR #264
     `find-people-presentation` captures.
+14. **Long words and punctuation at 200%.** On narrow windows, a word longer than the line,
+    such as the server's role name "Super-Administrator.", breaks with its trailing period
+    starting the next line (PR #300 `deletion` endedrefusal captures). The step-up form dialog
+    scrolls at 200% with no scroll-edge divider, and dialog Cancel uses the action colour beside
+    an `error` action (PRs #297, #300): both belong to the modals restyle.
 
 ## Evidence
 

@@ -195,6 +195,33 @@ summary requests.
 - **Exception: Find your people** (onboarding step 5) shows its title "Find your people"
   with **no** back icon, although it's pushed. Its only exit is Start chatting, or system Back
   that does the same (System Back above). This is deliberate, not a P-76 defect.
+- **Title fit at large font scales** (2026-11-19, TL-approved; replaces gap-audit F1's
+  ellipsis):
+  - the wordmark is unchanged: a fixed-size logotype on one line;
+  - every other title keeps its role style (`titleLarge`, `headlineSmall` on tab roots) and
+    follows the font scale. It's one line when it fits, otherwise at most two lines broken at
+    word boundaries (`LineBreak.Heading`, no hyphenation), and the bar grows from its 64dp
+    minimum to fit. A title is never ellipsized, never broken mid-word and never set smaller
+    than its role, and its full text stays the heading in semantics;
+  - the bar already hides while the IME shows, so a taller bar never competes with the input;
+  - fit is guaranteed by test, not by a fallback: `BarTitle` accepts only string resources,
+    and a contract test renders every route's title at font scale 2.0 on 360×640dp (with the
+    route's back icon and actions) and asserts at most two lines, no ellipsis and no
+    mid-word break. A string that fails gets shorter copy. Once translations ship, the test
+    runs per shipped locale.
+- **Server text in the bar: the single A-04 exception, for user-generated names.** If a room
+  name or username ever titles the bar:
+  - it wraps to at most two lines at word boundaries;
+  - an unbroken token may break mid-token, for server text only;
+  - beyond two lines it ends with an ellipsis;
+  - the full name stays the heading in semantics and is shown in full elsewhere on the same
+    screen (its header or details).
+
+  Such a title goes through a separate, explicitly named entry point (for example
+  `BarTitleName`), never `BarTitle`. Only the routes listed here may use it, and the contract
+  test fails if any other route renders a title that isn't a string resource. **Routes:**
+  none today. Conversations show "Conversation" and direct messages "Direct messages"; names
+  appear in the screen content.
 - Actions: Search on Rooms and Direct. Account and Settings actions disappear (now under You).
 - The status slot (`StatusSlot`, status-presentation.md) stays directly under the top bar
   on every signed-in destination, with at most one notice chosen by `resolveStatus` and its
@@ -234,3 +261,4 @@ Extends P-30:
 | P-76 | Pushed destinations use an icon back button described "Back". Tab roots have none. Exception: Find your people (onboarding step 5) has none, and system Back goes to the Rooms root. | C |
 | P-77 | You's About and privacy group shows only rows whose source exists (licences and app version today), never disabled placeholders. Licences move there from `account` with unchanged behaviour. The status slot stays the single notice area under the top bar on every tab. | C |
 | P-78 | Every bottom-bar label renders on one line at default and 200% on windows 272dp and wider (the tested boundary), never broken mid-word. When needed, all four share one measured size (bold-measured, floor 18sp). Narrower windows may wrap but never clip. Selected colour is `onSurface`, never `steward`. | C |
+| P-222 | Every top-bar title except the wordmark renders at most two lines at default and 200% on 360×640dp, never ellipsized, never broken mid-word, with its full text in heading semantics. The bar grows to fit. Only routes listed under Top app bar may show server text, under the name exception there. | C |
