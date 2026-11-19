@@ -338,6 +338,29 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def step_up_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-step-up-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_step_up_captures_are_copied_and_keep_the_original_status(self):
+        self.results(5)
+        files = [Path("stepup-light-default-export.png"), Path("stepup-dark-font200-replace.png"),
+            Path("stepup-light-font200-create.png"), Path("stepup-dark-default-transfer.png"),
+            Path("stepup-light-default-recovery.png")]
+        self.step_up_files(files)
+        self.assertEqual(5, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.STEP_UP_DESTINATION / path.name)
+        self.assertEqual(6, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_step_up_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"stepup-light-default-export-{n}.png") for n in range(21)],
+            [Path("a/stepup-dark-default-export.png"), Path("b/stepup-dark-default-export.png")],
+            [Path("stepup-dark-default-delete.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.step_up_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def reset_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-reset-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))

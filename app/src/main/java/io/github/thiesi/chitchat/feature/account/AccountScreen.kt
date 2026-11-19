@@ -70,7 +70,7 @@ private fun AccountContent(model: AccountViewModel, session: SessionState, onRef
         Text(stringResource(R.string.export_privacy))
         Text(stringResource(R.string.export_partial_warning))
         if (pickerMissing) InlineError(stringResource(R.string.export_picker_missing))
-        if (state.stage != ExportStage.VERIFYING) state.error?.let { InlineError(accountError(it)) }
+        if (state.stage != ExportStage.VERIFYING) state.error?.let { InlineError(exportError(it)) }
         if (state.recoveryMayBeSpent) Text(stringResource(R.string.recovery_may_be_spent))
         if (session.refreshRequired || session.storageWarning) {
             Text(stringResource(R.string.session_refresh_needed))
@@ -103,19 +103,27 @@ private fun AccountContent(model: AccountViewModel, session: SessionState, onRef
     }
     val methods = state.methods
     if (state.stage == ExportStage.VERIFYING && methods != null) StepUpDialog(
-        title = stringResource(R.string.step_up_title), methods = methods, busy = state.verificationBusy,
-        errorMessage = state.error?.let { accountError(it) }, onVerify = model::verify, onCancel = model::cancel)
+        title = stringResource(R.string.step_up_title_export), methods = methods, busy = state.verificationBusy,
+        errorMessage = state.error?.let { exportError(it) }, onVerify = model::verify, onCancel = model::cancel)
 }
 
+/** The export's errors: its own file and network wording, then the shared account errors. */
+@Composable
+internal fun exportError(failure: ApiFailure) = when (failure.kind) {
+    FailureKind.STORAGE -> stringResource(R.string.export_save_failed)
+    FailureKind.TOO_LARGE -> stringResource(R.string.export_too_large)
+    FailureKind.NETWORK, FailureKind.TIMEOUT -> stringResource(R.string.export_network_failed)
+    else -> accountError(failure)
+}
+
+/** Account actions other than the export (Replace or Create key, and later Delete account): no export wording. */
 @Composable
 internal fun accountError(failure: ApiFailure) = stringResource(when {
-    failure.kind == FailureKind.STORAGE -> R.string.export_save_failed
-    failure.kind == FailureKind.TOO_LARGE -> R.string.export_too_large
     failure.kind == FailureKind.EXPIRED || failure.status == 401 -> R.string.session_not_available
     failure.kind == FailureKind.TLS -> R.string.tls_error
     failure.kind == FailureKind.REDIRECT -> R.string.redirect_error
     failure.kind == FailureKind.INCOMPATIBLE -> R.string.incompatible_server
-    failure.kind == FailureKind.NETWORK || failure.kind == FailureKind.TIMEOUT -> R.string.export_network_failed
+    failure.kind == FailureKind.NETWORK || failure.kind == FailureKind.TIMEOUT -> R.string.network_error
     failure.status == 429 -> R.string.rate_limited
     failure.status == 503 -> R.string.server_unavailable
     failure.code == "step_up_invalid_credentials" -> R.string.step_up_wrong_password

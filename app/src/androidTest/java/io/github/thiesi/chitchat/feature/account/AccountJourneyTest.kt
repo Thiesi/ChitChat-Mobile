@@ -70,7 +70,7 @@ class AccountJourneyTest {
         fake.methods = methods
         content()
         compose.runOnIdle { assertTrue(model.chooseDestination()); model.destinationSelected(destination, 1) }
-        compose.onNodeWithText("Confirm personal-data export").assertIsDisplayed()
+        compose.onNodeWithText("Confirm it's you to export your personal data").assertIsDisplayed()
     }
     private fun awaitExport() {
         compose.waitUntil(5_000) { model.state.value.stage in setOf(ExportStage.SAVED, ExportStage.FAILED, ExportStage.CANCELLED) }
@@ -125,7 +125,7 @@ class AccountJourneyTest {
         prompt()
         compose.onNodeWithText("Current password").performTextInput("unsent-fixture-password")
         compose.onNodeWithText("Cancel").performClick()
-        compose.onNodeWithText("Confirm personal-data export").assertDoesNotExist()
+        compose.onNodeWithText("Confirm it's you to export your personal data").assertDoesNotExist()
         compose.onNodeWithText("Export cancelled. A chosen file may be empty or incomplete.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, fake.exports); assertEquals(0, fake.passwordChecks); assertEquals(0, writes) }
     }
@@ -144,7 +144,7 @@ class AccountJourneyTest {
         prompt()
         compose.onNodeWithText("Current password").performTextInput("unsent-fixture-password")
         compose.runOnIdle { session.value = SessionState(generation = 2, phase = SessionPhase.SIGNED_OUT) }
-        compose.onNodeWithText("Confirm personal-data export").assertDoesNotExist()
+        compose.onNodeWithText("Confirm it's you to export your personal data").assertDoesNotExist()
         compose.runOnIdle { model.verify("late-fixture", false); assertEquals(0, fake.passwordChecks); assertEquals(0, writes) }
     }
 
@@ -193,7 +193,7 @@ class AccountJourneyTest {
                 MaterialTheme { Column(Modifier.verticalScroll(rememberScrollState())) { FixtureScreen() } }
             } }
             compose.onNodeWithText("Export personal data").performScrollTo().performClick()
-            compose.onNodeWithText("Confirm personal-data export").assertIsDisplayed()
+            compose.onNodeWithText("Confirm it's you to export your personal data").assertIsDisplayed()
             compose.runOnIdle { assertEquals(0, resolver.openInputStream(uri)!!.use { it.readBytes().size }) }
             compose.onNodeWithText("Current password").performTextInput("fixture-password")
             compose.onNodeWithText("Verify and continue").performClick()

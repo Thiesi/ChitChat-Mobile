@@ -12,6 +12,19 @@ Android base was fetched and matched `origin/main` at `9a6f33e` before branching
 - SAF creates a new JSON destination before the private download. Old-generation picker callbacks cannot export a new account’s data. The synchronous server response has a bounded16MiB/120-second client path; larger histories receive an explicit browser-use explanation, not a partial successful export. Serialization runs off-main; provider writes check cancellation/authorization every32KiB. Buffer clearing is best effort, not a promise of zero copies in managed memory. No app-owned payload file or persisted URI grant exists.
 - The chosen export is unencrypted, may use cloud storage and survives logout. Failure/cancellation can leave an empty/incomplete document, disclosed before starting and never automatically deleted. Passwords/codes are non-saveable and cleared on submission/background. Navigation/genuine background/logout cancel pending verification/network/write; configuration recreation retains the Activity ViewModel's request without resubmission, and navigation restoration must not cancel it at its initial null route. Account changes retire the picker registration. Unsupported passkey/provider accounts receive truthful browser-separate-session guidance, not a fake native handoff.
 
+## Per-flow step-up titles
+
+The shared `StepUpDialog` once carried the export's wording into other flows (the Replace key dialog was titled "Confirm
+personal-data export"). Now every caller passes a title resource of its own, in the presentation lead's "Confirm it's you
+to …" form: export ("export your personal data"), Replace key ("replace your recovery key"), Create key ("create your
+recovery key", frozen with the request) and room transfer ("transfer this room"). The generic `step_up_title` is retired
+so nothing can fall back to it. The shared lines are neutral: `step_up_recovery_warning` says "the action" (otherwise
+word for word, a security disclosure), and `step_up_retry_rejected` ends "Start over only when you're ready to verify
+again." `accountError` (Replace or Create key, later Delete account) has no export lines; the export's file and network
+wording lives in `exportError`. `StepUpTitleContractTest` pins all of this, the Recovery key journey asserts each
+title through the real root, and `StepUpPresentationTest` captures every title and the recovery warning for J. Copy
+only: step-up logic, retry rules and the recovery-code consent are unchanged.
+
 ## Verification
 
 After Claude's timestamp/lifecycle findings were addressed, the combined source passed `:app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:assembleDebugAndroidTest :app:liveSessionTest --console=plain --max-workers=2` in1m11s (130 tasks,38 executed,92 up-to-date). **110 fixture unit tests and one real HTTP password/session regression passed**, zero failures/errors/skips; lint found no issues. Debug, shrunk unsigned release and instrumentation APKs were built. Production/test dependencies and security lint settings are unchanged.
