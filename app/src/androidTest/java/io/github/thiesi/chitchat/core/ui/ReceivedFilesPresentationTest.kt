@@ -114,20 +114,22 @@ class ReceivedFilesPresentationTest {
         shots.filter { it.name in setOf("normal", "notloaded") }, listOf("default" to 1f))
 
     private fun presentation(theme: String, dark: Boolean, black: Boolean, shots: List<Shot>, scales: List<Pair<String, Float>>) {
-        for ((scaleName, fontScale) in scales) {
+        for ((scaleName, fontScale) in scales) for (shot in shots) {
+            // Keep one ActivityScenario per shot: setContent again in the same activity reuses the composition, and with
+            // identical keys the screen's LaunchedEffect(roomId) never reruns, so the new model is never opened (#310).
             FontScaleTestActivity.requestedFontScale = fontScale
-            ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
-                for (shot in shots) {
-                    val session = ReceivedFiles.session()
-                    val source = ReceivedSource().apply(shot.script)
-                    val store = ViewModelStore()
-                    val images = ViewModelProvider.create(store, viewModelFactory {
-                        initializer { AttachmentImagesViewModel(session, FixedNetwork(shot.online, shot.metered), source, 32L * 1024 * 1024) }
-                    })[AttachmentImagesViewModel::class.java]
-                    val rooms = ReceivedRooms(session).apply { messages = shot.rooms }
-                    val directs = ReceivedDirects(session).apply { rows = shot.dms.orEmpty() }
-                    val room = ConversationViewModel(rooms)
-                    val direct = DirectThreadViewModel(directs)
+            val session = ReceivedFiles.session()
+            val source = ReceivedSource().apply(shot.script)
+            val store = ViewModelStore()
+            val images = ViewModelProvider.create(store, viewModelFactory {
+                initializer { AttachmentImagesViewModel(session, FixedNetwork(shot.online, shot.metered), source, 32L * 1024 * 1024) }
+            })[AttachmentImagesViewModel::class.java]
+            val rooms = ReceivedRooms(session).apply { messages = shot.rooms }
+            val directs = ReceivedDirects(session).apply { rows = shot.dms.orEmpty() }
+            val room = ConversationViewModel(rooms)
+            val direct = DirectThreadViewModel(directs)
+            try {
+                ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
                     scenario.onActivity { activity ->
                         assertEquals("A real Configuration font scale", fontScale, activity.resources.configuration.fontScale)
                         activity.setContent { ChitChatTheme(dark = dark, pureBlack = black) {
@@ -137,19 +139,24 @@ class ReceivedFilesPresentationTest {
                             }
                         } }
                     }
-                    compose.waitUntil(5_000) {
+                    val label = "files-$theme-$scaleName-${shot.name}"
+                    // Evidence only, never a retry: on a timeout, say which state was missing.
+                    fun await(what: String, condition: () -> Boolean) = try { compose.waitUntil(5_000, condition) }
+                    catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
+                        val r = room.state.value; val d = direct.state.value
+                        throw AssertionError("$label: $what not reached (room loaded=${r.loaded} busy=${r.busy} error=${r.error != null}; " +
+                            "dm loaded=${d.loaded} busy=${d.busy}; images=${images.images.states.value.values.map { it.javaClass.simpleName }})", timeout)
+                    }
+                    await("conversation loaded") {
                         if (shot.dms != null) direct.state.value.loaded && !direct.state.value.busy
                         else room.state.value.loaded && !room.state.value.busy
                     }
-                    compose.waitUntil(5_000) { shot.ready(images.images.states.value.values) }
-                    shot.waitText?.let { id -> compose.waitUntil(5_000) {
-                        compose.onAllNodesWithText(text(id)).fetchSemanticsNodes().isNotEmpty() } }
-                    capture("files-$theme-$scaleName-${shot.name}")
+                    await("image state") { shot.ready(images.images.states.value.values) }
+                    shot.waitText?.let { id -> await("text") { compose.onAllNodesWithText(text(id)).fetchSemanticsNodes().isNotEmpty() } }
+                    capture(label)
                     compose.runOnIdle { room.cancel(); direct.background() }
-                    scenario.onActivity { it.setContent {} }
-                    store.clear()
                 }
-            }
+            } finally { store.clear() }
         }
     }
 

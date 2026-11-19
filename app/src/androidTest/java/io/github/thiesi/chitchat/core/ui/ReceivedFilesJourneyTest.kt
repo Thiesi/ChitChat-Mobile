@@ -225,7 +225,8 @@ class ReceivedFilesJourneyTest {
         roomContent()
         compose.onNodeWithTag("attachment_card:71").assert(noClick).assert(noLongClick)
         assertEquals("notes.pdf, PDF, 2.4 MB", description("attachment_card:71"))
-        val shown = compose.onAllNodesWithTag("attachment_card_name")[1].fetchSemanticsNode().config
+        // The card is one merged TalkBack node, so its name text is only in the unmerged tree.
+        val shown = compose.onAllNodesWithTag("attachment_card_name", useUnmergedTree = true)[1].fetchSemanticsNode().config
             .getOrNull(SemanticsProperties.Text)?.joinToString("").orEmpty()
         assertTrue(shown, shown.endsWith(".pdf") && shown.contains("…"))
         compose.onNode(clickLabelled(actionsLabel) and hasAnyAncestor(hasTestTag("message:3"))).assertHeightIsAtLeast(48.dp)
