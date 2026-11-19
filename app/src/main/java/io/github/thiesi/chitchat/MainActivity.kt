@@ -49,6 +49,10 @@ class MainActivity : ComponentActivity() {
             val account: AccountViewModel = viewModel(factory = AccountViewModel.factory((application as ChitChatApplication).accounts))
             val recoveryKeys: io.github.thiesi.chitchat.feature.account.RecoveryKeyViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.account.RecoveryKeyViewModel.factory((application as ChitChatApplication).accounts))
+            val receivedImages: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel = viewModel(
+                factory = io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel.factory(application,
+                    (application as ChitChatApplication).sessions.state, (application as ChitChatApplication).attachmentDownloads,
+                    (application as ChitChatApplication).attachmentMemory))
             val accountDeletion: io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel.factory((application as ChitChatApplication).accounts))
             val typing: TypingPreferenceViewModel = viewModel(factory = TypingPreferenceViewModel.factory(
@@ -99,7 +103,7 @@ class MainActivity : ComponentActivity() {
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
                 notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings, pushPhone = pushPhone,
-                pushTaps = pushTaps.taps, policies = policies, guidelines = guidelines, recoveryKeys = recoveryKeys, rulesUpdate = rulesUpdate,
+                pushTaps = pushTaps.taps, policies = policies, guidelines = guidelines, recoveryKeys = recoveryKeys, receivedImages = receivedImages, rulesUpdate = rulesUpdate,
                 accountDeletion = accountDeletion,
                 onThemeChanged = { dark ->
                 enableEdgeToEdge(

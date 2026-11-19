@@ -27,6 +27,7 @@ import androidx.compose.ui.input.key.onPreInterceptKeyBeforeSoftKeyboard
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
@@ -191,7 +192,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
     targets: MessageTargetViewModel? = null, obscured: Boolean = false, onProfile: ((Long) -> Boolean)? = null,
     completion: io.github.thiesi.chitchat.feature.completion.CompletionViewModel? = null, completionEntryId: String = "",
     onStopped: ((owner: Any) -> Unit)? = null,
-    isCurrentEntry: () -> Boolean = { true }) {
+    images: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel? = null, isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     val connection = model.realtime?.state?.collectAsStateWithLifecycle()?.value?.takeIf { it.generation == session.generation }
@@ -206,6 +207,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             val now = rememberSessionNow(session.retryAtMillis)
             val ready = sessionReady(session, now)
             val timeline = rememberLazyListState()
+            val received = io.github.thiesi.chitchat.core.ui.rememberReceivedImages(images, paneOwner, completionEntryId, timeline, "direct:")
             var blockConfirm by remember { mutableStateOf(false) }
             var detailsOpen by remember { mutableStateOf(false) }
             var profileDetailsToken by remember { mutableStateOf<Any?>(null) }
@@ -428,7 +430,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 } }, onActions = { openActions(message) }, viewer = displayedSession.user?.id ?: 0,
                                     canReact = interactive() && actions == null && replyOptions == null &&
                                         model.canBeginReactions(displayedSession, peer, message),
-                                    onReactions = { openReactions(message) })
+                                    onReactions = { openReactions(message) }, received = received)
                             }
                         }
                         item("end") {
@@ -693,7 +695,8 @@ private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadStat
 
 @Composable
 private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, onOpenReply: ((Long) -> Unit)? = null,
-    onActions: (() -> Unit)? = null, viewer: Long = 0, canReact: Boolean = false, onReactions: (() -> Unit)? = null) {
+    onActions: (() -> Unit)? = null, viewer: Long = 0, canReact: Boolean = false, onReactions: (() -> Unit)? = null,
+    received: io.github.thiesi.chitchat.core.ui.ReceivedImages? = null) {
     val actionsLabel = stringResource(R.string.message_actions)
     val mentionHints = remember(message.mentions) { MessageMentions.direct(message.mentions) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (message.outgoing) Alignment.End else Alignment.Start) {
@@ -714,11 +717,16 @@ private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, on
                 ReplyPreview(text, onOpenReply?.takeIf { reply.available && reply.message != null }?.let { open -> { open(reply.messageId) } },
                     Modifier.testTag("direct_reply:${message.id}"))
             }
+            // A received file sits inside the actions target as its own non-clickable node (TL/PL, F3 (b)); the ripple is
+            // clipped to the frame's corners, never a square over them.
             Column(Modifier.then(if (onActions != null) Modifier.heightIn(min = 48.dp)
+                .then(if (message.attachment != null) Modifier.clip(io.github.thiesi.chitchat.core.theme.Lantern.frame) else Modifier)
                 .combinedClickable(onClickLabel = actionsLabel, onLongClickLabel = actionsLabel,
                     onClick = onActions, onLongClick = onActions) else Modifier)) {
+                message.attachment?.let { io.github.thiesi.chitchat.core.ui.ReceivedAttachment(it, direct = true, messageId = message.id,
+                    sender = message.sender.username ?: stringResource(R.string.conversation_unknown_user),
+                    time = messageTime(message.createdAt, context?.display), caption = message.body, images = received) }
                 message.body?.let { MessageBody(it, mentions = mentionHints) }
-                message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }
                 if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
             }
         }

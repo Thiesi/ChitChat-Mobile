@@ -63,6 +63,8 @@ class ChitChatApplication : Application() {
     }
     internal val pushDistributors by lazy { io.github.thiesi.chitchat.core.push.UnifiedPushDistributors(this) }
     val sessions: SessionController get() = sessionRepository
+    /** Received-file downloads on the shared memory budget (F1); the transcript's loader reads through it (F3). */
+    internal val attachmentDownloads by lazy { io.github.thiesi.chitchat.core.media.AttachmentDownloads(sessionRepository, attachmentMemory) }
     internal val policyReads: io.github.thiesi.chitchat.core.policies.PolicyReads get() = sessionRepository
     internal val rulesOperations: io.github.thiesi.chitchat.core.policies.RulesOperations get() = sessionRepository
     val accounts: AccountOperations by lazy { SessionAccountRepository(sessionRepository) }

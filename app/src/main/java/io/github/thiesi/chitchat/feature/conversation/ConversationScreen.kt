@@ -55,6 +55,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
@@ -131,12 +132,12 @@ fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSess
     ignores: IgnorePersonViewModel? = null, targets: MessageTargetViewModel? = null, obscured: Boolean = false,
     onStopped: ((owner: Any) -> Unit)? = null, onProfile: ((Long) -> Boolean)? = null,
     completion: CompletionViewModel? = null, completionEntryId: String = "",
-    isCurrentEntry: () -> Boolean = { true }) {
+    images: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel? = null, isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     key(roomId, session.server, session.generation, session.user?.id, session.user?.sessionVersion) {
         LaunchedEffect(roomId) { model.open(roomId, expected = displayedSession) }
-        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, onStopped, onProfile, completion, completionEntryId, isCurrentEntry)
+        ConversationContent(model, roomId, onRefreshSession, ignores, targets, obscured, onStopped, onProfile, completion, completionEntryId, isCurrentEntry, images)
     }
 }
 
@@ -144,7 +145,7 @@ fun ConversationScreen(model: ConversationViewModel, roomId: Long, onRefreshSess
 private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRefreshSession: () -> Unit,
     ignores: IgnorePersonViewModel?, targets: MessageTargetViewModel?, obscured: Boolean,
     onStopped: ((owner: Any) -> Unit)?, onProfile: ((Long) -> Boolean)?, completion: CompletionViewModel?, completionEntryId: String,
-    isCurrentEntry: () -> Boolean) {
+    isCurrentEntry: () -> Boolean, images: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel?) {
     val state by model.state.collectAsStateWithLifecycle()
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session // Freeze callback origin; delegated Flow values can change before recomposition.
@@ -227,6 +228,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val placementMessages = state.messages
     var placedAnchor by remember { mutableStateOf<TimelineAnchor?>(null) }
     val paneOwner = remember { Any() } // This screen instance; a late stop can't leave a newer screen's pane.
+    val received = io.github.thiesi.chitchat.core.ui.rememberReceivedImages(images, paneOwner, completionEntryId, timeline, "message:")
     LifecycleEventEffect(Lifecycle.Event.ON_START) { model.foreground(paneOwner) }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (activity?.isChangingConfigurations != true) {
         if (onStopped == null) model.background() else onStopped(paneOwner)
@@ -528,7 +530,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                         }
                         Unit
                     } }, onActions = { openActions(message) }, viewer = displayedSession.user?.id ?: 0,
-                        onReactions = { openReactions(message) }, canReact = model.canBeginReactions(displayedSession, roomId, message))
+                        onReactions = { openReactions(message) }, canReact = model.canBeginReactions(displayedSession, roomId, message),
+                        received = received)
                 }
             }
             item(key = "history_end") {
@@ -752,7 +755,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
 
 @Composable
 private fun MessageContent(message: RoomMessage, context: ConversationContext?, onOpenReply: ((Long) -> Unit)? = null,
-    onActions: (() -> Unit)? = null, viewer: Long = 0, onReactions: (() -> Unit)? = null, canReact: Boolean = false) {
+    onActions: (() -> Unit)? = null, viewer: Long = 0, onReactions: (() -> Unit)? = null, canReact: Boolean = false,
+    received: io.github.thiesi.chitchat.core.ui.ReceivedImages? = null) {
     val sender = message.username ?: stringResource(R.string.conversation_unknown_user)
     val mentionHints = remember(message.mentions) { MessageMentions.room(message.mentions) }
     val actionsLabel = stringResource(R.string.message_actions)
@@ -769,13 +773,17 @@ private fun MessageContent(message: RoomMessage, context: ConversationContext?, 
                 }
                 ReplyPreview(text, onOpenReply?.takeIf { reply.available && original != null }?.let { open -> { open(reply.messageId) } },
                     Modifier.testTag("room_reply:${message.id}")) }
+            // A received file sits inside the actions target as its own non-clickable node (TL/PL, F3 (b)); the ripple is
+            // clipped to the frame's corners, never a square over them.
             Column(Modifier.fillMaxWidth().then(if (onActions != null) Modifier.heightIn(min = 48.dp)
+                .then(if (message.attachment != null) Modifier.clip(io.github.thiesi.chitchat.core.theme.Lantern.frame) else Modifier)
                 .combinedClickable(onClickLabel = actionsLabel, onLongClickLabel = actionsLabel,
                     onClick = onActions, onLongClick = onActions) else Modifier)) {
+                message.attachment?.let { io.github.thiesi.chitchat.core.ui.ReceivedAttachment(it, direct = false, messageId = message.id,
+                    sender = sender, time = displayTime(message.createdAt, context), caption = message.body, images = received) }
                 if (message.type == "emote") MessageBody(message.body.orEmpty(),
                     emotePrefix = stringResource(R.string.conversation_emote, sender, ""), mentions = mentionHints)
                 else message.body?.let { MessageBody(it, mentions = mentionHints) }
-                message.attachment?.let { Text(stringResource(R.string.conversation_attachment, it.name, it.mimeType, it.sizeBytes.toString())) }
                 if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
             }
         }

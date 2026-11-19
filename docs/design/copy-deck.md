@@ -237,6 +237,11 @@ technical-lead sign-off, and the affected tests are listed.
 - **S2a (gap 1 honesty pass):**
   - `preview_limit` and `auth_preview_limit` become one short line naming only what's actually missing
     today: downloading, previewing and sharing files; profile pictures; guest invite links.
+  - **Received files F3** (PL, 2026-11-19): inline photo previews ship, so both read "Not in the app yet: saving,
+    opening and sharing files and photos, viewing photos full screen, profile pictures, and guest invite links."
+    (`preview_limit` keeps its "This is a development build." prefix). Updated by F4 (drop "viewing photos full
+    screen, "; the files-and-photos clause stays if the viewer has no Save or Share yet) and by F5 ("Not in the app
+    yet: profile pictures and guest invite links.").
   - `dm_no_push` no longer claims there's no background push, since push shipped in M6c–M6e. It now says
     direct-message alerts are optional and can be chosen in Account → Notifications. It shows always, because the DM screen doesn't know without a new request whether the server offers the preference (P-127).
 

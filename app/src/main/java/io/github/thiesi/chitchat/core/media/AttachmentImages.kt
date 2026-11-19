@@ -72,7 +72,7 @@ internal class AttachmentImages(
     private val capacityBytes: Long,
     private val clock: () -> Long = System::currentTimeMillis,
     private val decodeOn: CoroutineDispatcher = Dispatchers.Default,
-) {
+) : ImageFrames {
     private class Held(val image: DecodedImage, val variant: AttachmentVariant, val etag: String?, val lease: AttachmentMemoryBudget.Reservation)
 
     private class Frame(var ref: AttachmentRef, var width: Int, var height: Int) {
@@ -96,7 +96,7 @@ internal class AttachmentImages(
     private var entry = 0L
 
     /** A new visit to a room or DM: each held preview may revalidate once more (TL, #308). */
-    fun enteredConversation() { entry++ }
+    override fun enteredConversation() { entry++ }
 
     init {
         scope.launch { session.collect { onSession(it) } }
@@ -113,7 +113,7 @@ internal class AttachmentImages(
     fun key(ref: AttachmentRef): ImageKey? = scopeOf?.let { ImageKey(it.origin, it.userId, it.generation, ref.direct, ref.attachment.id) }
 
     /** The frame for [ref] is on screen, [width]×[height] px: decode no larger than that. */
-    fun visible(ref: AttachmentRef, width: Int, height: Int) {
+    override fun visible(ref: AttachmentRef, width: Int, height: Int) {
         val key = key(ref) ?: return
         val frame = frames.getOrPut(key) { Frame(ref, width, height) }
         frame.ref = ref; frame.width = width; frame.height = height
@@ -125,10 +125,10 @@ internal class AttachmentImages(
         evaluate(key, frame)
     }
 
-    fun hidden(ref: AttachmentRef) { key(ref)?.let { frames[it]?.visible = false } }
+    override fun hidden(ref: AttachmentRef) { key(ref)?.let { frames[it]?.visible = false } }
 
     /** Show (explicit): loads now when online, even over 2 MiB or on a metered network. */
-    fun show(ref: AttachmentRef) {
+    override fun show(ref: AttachmentRef) {
         val key = key(ref) ?: return
         val frame = frames.getOrPut(key) { Frame(ref, 0, 0) }
         frame.shown = true
@@ -136,7 +136,7 @@ internal class AttachmentImages(
     }
 
     /** Try again (explicit): one new GET. */
-    fun retry(ref: AttachmentRef) {
+    override fun retry(ref: AttachmentRef) {
         val key = key(ref) ?: return
         explicit(key, frames[key] ?: return)
     }
@@ -168,15 +168,16 @@ internal class AttachmentImages(
     private fun start(key: ImageKey, frame: Frame) {
         val expected = session.value
         val variant = variant(frame)
+        val sentIn = entry // The visit this request is sent in (TL, F3).
         set(key, ImageState.Loading)
         frame.job = scope.launch {
             val result = source.load(frame.ref, variant, expected, null)
             if (frames[key] !== frame) { (result as? DownloadResult.Bytes)?.release(); return@launch }
-            settle(key, frame, variant, result)
+            settle(key, frame, variant, result, sentIn)
         }
     }
 
-    private suspend fun settle(key: ImageKey, frame: Frame, variant: AttachmentVariant, result: DownloadResult) {
+    private suspend fun settle(key: ImageKey, frame: Frame, variant: AttachmentVariant, result: DownloadResult, sentIn: Long) {
         // The job stays set through the decode, so Show, Try again and revalidation can't start a second load meanwhile
         // (review, #308). Only the preview fallback, which restarts from inside this job, clears it first.
         when (result) {
@@ -202,6 +203,10 @@ internal class AttachmentImages(
                         if (frames[key] !== frame) { result.release(); return }
                         drop(frame) // Never replace a held image without closing its lease.
                         frame.held = Held(decoded.image, variant, result.etag, result.lease())
+                        // A fresh 200 is the validation for the visit it was sent in: no conditional GET on a re-show in
+                        // that visit (a rotation, a scroll back). A load that settles after a fresh entry leaves the new
+                        // visit its one conditional GET, since the server could have changed meanwhile (TL, F3).
+                        frame.revalidatedIn = sentIn
                         touch(frame)
                         set(key, ImageState.Loaded(decoded.image, variant))
                         evict(0)
@@ -236,15 +241,16 @@ internal class AttachmentImages(
     private fun revalidate(key: ImageKey, frame: Frame, held: Held) {
         if (held.variant != AttachmentVariant.PREVIEW || held.etag == null || frame.job?.isActive == true ||
             !network.value.online || waiting() || frame.revalidatedIn == entry) return
-        frame.revalidatedIn = entry
+        val sentIn = entry
+        frame.revalidatedIn = sentIn
         val expected = session.value
         frame.job = scope.launch {
             val result = source.load(frame.ref, AttachmentVariant.PREVIEW, expected, held.etag)
             if (frames[key] !== frame || frame.held !== held) { (result as? DownloadResult.Bytes)?.release(); return@launch }
             when (result) {
                 DownloadResult.NotModified -> Unit
-                is DownloadResult.Bytes -> { drop(frame); settle(key, frame, AttachmentVariant.PREVIEW, result) }
-                DownloadResult.Gone, DownloadResult.NotAllowed -> { drop(frame); settle(key, frame, AttachmentVariant.PREVIEW, result) }
+                is DownloadResult.Bytes -> { drop(frame); settle(key, frame, AttachmentVariant.PREVIEW, result, sentIn) }
+                DownloadResult.Gone, DownloadResult.NotAllowed -> { drop(frame); settle(key, frame, AttachmentVariant.PREVIEW, result, sentIn) }
                 // Anything else leaves the held preview as it was: a failed revalidation never blanks a shown image.
                 else -> Unit
             }

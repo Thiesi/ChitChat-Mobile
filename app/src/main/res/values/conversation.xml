@@ -15,7 +15,19 @@
     <string name="conversation_edited">Edited · previous versions may be retained by the server</string>
     <string name="conversation_reply_unavailable">Reply to an unavailable message</string>
     <string name="conversation_reply">Reply to %1$s: %2$s</string>
-    <string name="conversation_attachment">Attachment: %1$s · %2$s · %3$s B. Downloads arrive in a later milestone.</string>
+    <!-- Received files F3 (files-media.md "In the transcript" and "Image states"). -->
+    <string name="image_photo_size">Photo · %1$s</string>
+    <string name="image_show">Show</string>
+    <string name="image_failed">Couldn’t load the photo</string>
+    <string name="image_no_memory">Couldn’t show the photo right now</string>
+    <string name="image_too_large">Photo · %1$s · too large to show here</string>
+    <string name="image_gone">This file was deleted</string>
+    <string name="image_not_allowed">You can’t open this file anymore</string>
+    <string name="image_offline">Photo · %1$s · available when you’re back online</string>
+    <string name="image_loading">Loading the photo</string>
+    <string name="image_gif">GIF</string>
+    <string name="image_description">Photo from %1$s, %2$s</string>
+    <string name="image_description_caption">Photo from %1$s, %2$s, %3$s</string>
     <string name="conversation_author_time">%1$s · %2$s</string>
     <string name="conversation_emote">* %1$s %2$s</string>
     <string name="conversation_unknown_user">Unavailable account</string>

@@ -272,7 +272,7 @@ private fun StatusLine(text: String, tone: LineTone) {
 }
 
 @Composable
-private fun sizeText(value: AttachmentSizeText) = when (value.unit) {
+internal fun sizeText(value: AttachmentSizeText) = when (value.unit) {
     AttachmentSizeUnit.BYTES -> stringResource(R.string.attach_size_bytes, value.number)
     AttachmentSizeUnit.KB -> stringResource(R.string.attach_size_kb, value.number)
     AttachmentSizeUnit.MB -> stringResource(R.string.attach_size_mb, value.number)

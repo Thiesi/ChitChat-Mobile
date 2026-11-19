@@ -187,7 +187,10 @@ class AttachmentImagesTest {
         val source = Source(); val images = images(source); advanceUntilIdle()
         val photo = ref()
         images.visible(photo, 280, 210); advanceUntilIdle()
+        images.hidden(photo); images.visible(photo, 280, 210); advanceUntilIdle()
+        assertEquals("Fetched in this visit: already fresh, no conditional GET (F3)", 1, source.calls.size)
         images.hidden(photo)
+        images.enteredConversation() // A later visit.
         source.replies += { DownloadResult.NotModified }
         images.visible(photo, 280, 210); advanceUntilIdle()
         assertEquals("\"e\"", source.calls.last().third)
@@ -206,12 +209,15 @@ class AttachmentImagesTest {
         val photo = ref()
         images.visible(photo, 280, 210); advanceUntilIdle()
         assertEquals(1, source.calls.size)
+        repeat(3) { images.hidden(photo); images.visible(photo, 280, 210); advanceUntilIdle() }
+        assertEquals("Fetched in this visit: no conditional GET at all (F3)", 0, source.calls.count { it.third != null })
+        images.enteredConversation()
         repeat(3) {
             images.hidden(photo)
             source.replies += { DownloadResult.NotModified }
             images.visible(photo, 280, 210); advanceUntilIdle()
         }
-        assertEquals("One conditional GET at most in this visit", 1, source.calls.count { it.third != null })
+        assertEquals("One conditional GET at most in a later visit", 1, source.calls.count { it.third != null })
         images.enteredConversation()
         images.hidden(photo); images.visible(photo, 280, 210); advanceUntilIdle()
         assertEquals("A fresh visit may revalidate once more", 2, source.calls.count { it.third != null })
@@ -326,6 +332,67 @@ class AttachmentImagesTest {
         session.value = signedIn.copy(generation = 4); advanceUntilIdle()
         decodes.advanceUntilIdle(); advanceUntilIdle()
         assertEquals("Nothing held after the session changed", 0L, budget.reservedBytes)
+    }
+
+    @Test fun aLoadThatSettlesAfterAFreshEntryLeavesThatVisitItsOneConditionalGet() = runTest {
+        // TL (F3): the fresh 200 validates the visit it was sent in, not the one current when it settled.
+        val source = Source(); val images = images(source); advanceUntilIdle()
+        val photo = ref()
+        images.visible(photo, 280, 210) // Sent in visit A; not yet settled.
+        images.enteredConversation() // Visit B begins while the load is in flight.
+        advanceUntilIdle()
+        assertTrue(images.state(photo) is ImageState.Loaded)
+        repeat(3) {
+            images.hidden(photo)
+            source.replies += { DownloadResult.NotModified }
+            images.visible(photo, 280, 210); advanceUntilIdle()
+        }
+        assertEquals("Exactly one conditional GET in visit B", 1, source.calls.count { it.third != null })
+        assertEquals(2, source.calls.size)
+    }
+
+    @Test fun aRotationThroughPanesNeverDownloadsTwiceEvenMidLoad() = runTest {
+        // TL (F3): hidden/release never cancels a started load; it only makes the held image evictable.
+        val source = Source(); val images = images(source); advanceUntilIdle()
+        val panes = ImagePanes(images)
+        val before = panes.open(Any(), "entry")
+        before.visible(ref(), 280, 210)
+        before.release() // Stopped while the load is still in flight.
+        val after = panes.open(Any(), "entry")
+        after.visible(ref(), 280, 210); advanceUntilIdle()
+        assertTrue(images.state(ref()) is ImageState.Loaded)
+        after.release()
+        panes.open(Any(), "entry").visible(ref(), 280, 210); advanceUntilIdle()
+        assertEquals("One download across both rotations", 1, source.calls.size)
+    }
+
+    @Test fun onASmallBudgetTheImageCapNeverBlocksTheTransientLeaseAndABigOriginalIsAnHonestNoMemory() = runTest {
+        // TL (F3): the half-budget cap bounds held images only; the raw + decode peak comes from the shared ledger.
+        val small = AttachmentMemoryBudget(16L * 1024 * 1024)
+        val calls = mutableListOf<Long>()
+        val shared = object : AttachmentSource {
+            override suspend fun load(ref: AttachmentRef, variant: AttachmentVariant, expected: SessionState, ifNoneMatch: String?): DownloadResult {
+                calls += ref.attachment.id
+                // Like AttachmentDownloads: the raw bytes' lease from the shared ledger before allocating, else NoMemory.
+                val size = ref.attachment.sizeBytes
+                val lease = small.reserve(size) ?: return DownloadResult.NoMemory
+                return DownloadResult.Bytes(ByteArray(size.toInt()), null, lease)
+            }
+        }
+        val images = AttachmentImages(kotlinx.coroutines.CoroutineScope(StandardTestDispatcher(testScheduler) + loaderJob), session,
+            network, shared, decoder, small.capacityBytes / 2, clock = { testScheduler.currentTime }, decodeOn = StandardTestDispatcher(testScheduler))
+        advanceUntilIdle()
+        val fits = ref(id = 91, size = 10L * 1024 * 1024, preview = null)
+        images.visible(fits, 280, 210); images.show(fits); advanceUntilIdle()
+        assertTrue("10 MiB raw on a 16 MiB budget with an 8 MiB image cap still shows", images.state(fits) is ImageState.Loaded)
+        assertEquals("Only the kept bitmap stays charged", 32_000L, small.reservedBytes)
+        val big = ref(id = 92, size = 20L * 1024 * 1024, preview = null) // Within the 32 MiB display cap.
+        images.visible(big, 280, 210); images.show(big); advanceUntilIdle()
+        assertEquals(ImageState.NoMemory, images.state(big))
+        images.retry(big); advanceUntilIdle()
+        assertEquals(ImageState.NoMemory, images.state(big))
+        advanceTimeBy(60_000); advanceUntilIdle()
+        assertEquals("Try again is exactly one more attempt, never a loop", 2, calls.count { it == 92L })
     }
 
     @Test fun onlyOriginalsAreOrientedNeverPreviews() {
