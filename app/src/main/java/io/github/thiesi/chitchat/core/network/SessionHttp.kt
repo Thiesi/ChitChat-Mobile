@@ -768,6 +768,85 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         }
     }
 
+    /** A received file's reply (F1): 304 for a still-valid preview, or every byte streamed to the sink and hashed. */
+    internal class DownloadReply(val notModified: Boolean, val etag: String?, val sha256: String?)
+
+    /**
+     * One authenticated GET of a received file (received files F1; attachments.md, image-previews.md). [path] is the
+     * same-origin `/api/v1/` path and query the caller derived from the attachment's identity, never a server-supplied
+     * absolute URL. The body is streamed to [sink] in chunks as it arrives: exactly [expectedBytes], with a matching
+     * `Content-Length` (anything else is `INCOMPATIBLE`, code [LENGTH_MISMATCH]) and its SHA-256 computed on the way. A
+     * failing sink is `STORAGE`. Errors keep the ordinary typed failures (410, 403/404 with their codes, a positive 429
+     * wait). Never retried or replayed; cancellation cancels the call, and the sink then holds a partial file.
+     */
+    internal suspend fun download(path: String, expectedBytes: Long, ifNoneMatch: String? = null,
+        expectedType: String? = null, sink: (ByteArray, Int) -> Unit): DownloadReply {
+        require(expectedBytes > 0 && path.startsWith("/api/v1/")) { "Invalid download" }
+        if (retiring) throw kotlinx.coroutines.CancellationException("Session retired")
+        val request = Request.Builder().url(origin.resolve(path)!!).header("Accept", "*/*")
+            .apply { ifNoneMatch?.let { header("If-None-Match", it) } }.build()
+        // Shares this runtime's jar, dispatcher and pool (so retirement cancels it); idle-bounded rather than 25 s overall.
+        val transport = client.newBuilder().readTimeout(30, TimeUnit.SECONDS).callTimeout(10, TimeUnit.MINUTES).build()
+        val call = transport.newCall(request)
+        val started = requestScope()
+        val reply = try {
+            suspendCancellableCoroutine<DownloadReply> { continuation ->
+                continuation.invokeOnCancellation { call.cancel() }
+                call.enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        if (continuation.isActive) continuation.resumeWithException(if (e is ApiFailure) e else ApiFailure(transportKind(e)))
+                    }
+                    override fun onResponse(call: Call, response: Response) {
+                        try {
+                            val result = response.use { streamDownload(it, expectedBytes, expectedType, sink) }
+                            if (continuation.isActive) continuation.resume(result)
+                        } catch (failure: ApiFailure) {
+                            if (continuation.isActive) continuation.resumeWithException(failure)
+                        } catch (failure: IOException) {
+                            if (continuation.isActive) continuation.resumeWithException(ApiFailure(transportKind(failure)))
+                        }
+                    }
+                })
+            }
+        } catch (failure: ApiFailure) {
+            if (failure.status == 403 && failure.code == RULES_ACCEPTANCE_REQUIRED) onRulesRefused?.invoke(started)
+            throw failure
+        }
+        if (jar.invalid) throw ApiFailure(FailureKind.INCOMPATIBLE)
+        return reply
+    }
+
+    private fun streamDownload(response: Response, expectedBytes: Long, expectedType: String?, sink: (ByteArray, Int) -> Unit): DownloadReply {
+        if (response.code in 300..399 && response.code != 304) throw ApiFailure(FailureKind.REDIRECT, response.code)
+        if (response.code == 304) return DownloadReply(notModified = true, etag = response.header("ETag"), sha256 = null)
+        if (!response.isSuccessful) {
+            val source = response.body.source()
+            source.request(1_048_577)
+            if (source.buffer.size > 1_048_576) throw ApiFailure(FailureKind.INCOMPATIBLE)
+            val error = try { apiJson.decodeFromString<ErrorEnvelope>(source.buffer.readUtf8()).error } catch (_: SerializationException) { null }
+            throw httpFailure(response.code, error, response.header("Retry-After"))
+        }
+        if (response.code != 200 || response.header("Content-Length")?.toLongOrNull() != expectedBytes)
+            throw ApiFailure(FailureKind.INCOMPATIBLE, response.code, LENGTH_MISMATCH)
+        if (expectedType != null && response.body.contentType()?.let { "${it.type}/${it.subtype}" } != expectedType)
+            throw ApiFailure(FailureKind.INCOMPATIBLE, response.code)
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val chunk = ByteArray(64 * 1024)
+        val input = response.body.byteStream()
+        var total = 0L
+        while (true) {
+            val read = input.read(chunk)
+            if (read < 0) break
+            total += read
+            if (total > expectedBytes) throw ApiFailure(FailureKind.INCOMPATIBLE, response.code, LENGTH_MISMATCH)
+            digest.update(chunk, 0, read)
+            try { sink(chunk, read) } catch (_: IOException) { throw ApiFailure(FailureKind.STORAGE) }
+        }
+        if (total != expectedBytes) throw ApiFailure(FailureKind.INCOMPATIBLE, response.code, LENGTH_MISMATCH)
+        return DownloadReply(notModified = false, etag = response.header("ETag"),
+            sha256 = digest.digest().joinToString("") { "%02x".format(it) })
+    }
+
     private fun buildRequest(path: String, body: String? = null, csrf: String? = null): Request =
         Request.Builder().url(origin.resolve("api/v1/$path")!!).header("Accept", "application/json")
             .apply {
@@ -857,6 +936,8 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
     companion object {
         internal const val EXPORT_MAX_BYTES = 16L * 1024 * 1024
         internal const val RULES_ACCEPTANCE_REQUIRED = "rules_acceptance_required"
+        /** A download whose length isn't the file the metadata describes (F1): never shown, saved or shared. */
+        internal const val LENGTH_MISMATCH = "length_mismatch"
         // PHP escapes Unicode: 100 x 4000 supplementary characters plus full quoted bodies
         // can exceed 9 MiB. Only bounded history/preview/mutation batches use this allowance;
         // auth, other small JSON and every error response retain the 1 MiB limit.

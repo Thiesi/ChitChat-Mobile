@@ -1,0 +1,220 @@
+package io.github.thiesi.chitchat.core.media
+
+import io.github.thiesi.chitchat.core.conversation.MessageAttachment
+import io.github.thiesi.chitchat.core.network.FailureKind
+import io.github.thiesi.chitchat.core.network.SessionHttp
+import io.github.thiesi.chitchat.core.server.AddressResult
+import io.github.thiesi.chitchat.core.server.ServerAddress
+import io.github.thiesi.chitchat.core.session.*
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.io.OutputStream
+import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.test.runTest
+import mockwebserver3.MockResponse
+import mockwebserver3.MockWebServer
+import okhttp3.OkHttpClient
+import okhttp3.tls.HandshakeCertificates
+import okhttp3.tls.HeldCertificate
+import okio.Buffer
+import org.junit.After
+import org.junit.Assert.*
+import org.junit.Before
+import org.junit.Test
+
+/** Received files F1: one authenticated GET per request, bound to its session, verified, typed, never replayed. */
+class AttachmentDownloadsTest {
+    private lateinit var server: MockWebServer
+    private lateinit var sessions: SessionRepository
+    private val clients = mutableListOf<SessionHttp>()
+    private var budget = AttachmentMemoryBudget(8L * 1024 * 1024)
+    private val downloads get() = AttachmentDownloads(sessions, budget)
+    private val bytes = ByteArray(5_000) { (it % 251).toByte() }
+    private val preview = ByteArray(1_200) { (it % 7).toByte() }
+
+    @Before fun start() {
+        val certificate = HeldCertificate.Builder().addSubjectAlternativeName("localhost").build()
+        val tls = HandshakeCertificates.Builder().heldCertificate(certificate).build()
+        val trust = HandshakeCertificates.Builder().addTrustedCertificate(certificate.certificate).build()
+        server = MockWebServer().apply { useHttps(tls.sslSocketFactory()); start() }
+        val client = OkHttpClient.Builder().sslSocketFactory(trust.sslSocketFactory(), trust.trustManager).build()
+        sessions = SessionRepository(Vault()) { SessionHttp(it, client).also(clients::add) }
+    }
+    @After fun stop() { clients.forEach(SessionHttp::close); server.close() }
+
+    private fun sha(value: ByteArray) = MessageDigest.getInstance("SHA-256").digest(value).joinToString("") { "%02x".format(it) }
+    private fun json(body: String, status: Int = 200, cookie: String? = null) = MockResponse.Builder()
+        .code(status).addHeader("Content-Type", "application/json").body(body)
+        .apply { cookie?.let { addHeader("Set-Cookie", it) } }.build()
+    private fun file(value: ByteArray, type: String = "image/png", etag: String? = null) = MockResponse.Builder().code(200)
+        .addHeader("Content-Type", type).addHeader("Cache-Control", "private, no-store").body(Buffer().write(value))
+        .apply { etag?.let { addHeader("ETag", it) } }.build()
+    private fun error(code: String, status: Int, extra: String = "") = json("""{"error":{"code":"$code","message":"x"$extra}}""", status)
+    private fun take() = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+    private fun address() = (ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address
+
+    /** Signed in; [policy] is the bootstrap's upload-policy block (downloads must not depend on it). */
+    private suspend fun signedIn(policy: String = "null"): SessionState {
+        server.enqueue(json("""{"csrf_token":"${"a".repeat(64)}","user":null,"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}""",
+            cookie = "SITE=anon; Secure; HttpOnly; Path=/"))
+        sessions.connect(address()); take()
+        server.enqueue(json("""{"csrf_token":"${"b".repeat(64)}","user":{"id":7,"username":"Viewer","roles":["member"],"session_version":1,"guest":false},"mfa_required":false}""",
+            cookie = "SITE=auth; Secure; HttpOnly; Path=/"))
+        sessions.signIn("Viewer", "fixture-password"); take()
+        if (policy != "null") {
+            // The upload policy arrives with a bootstrap: an explicit refresh carrying it.
+            server.enqueue(json("""{"csrf_token":"${"b".repeat(64)}","user":{"id":7,"username":"Viewer","roles":["member"],"session_version":1,"guest":false},"application":{"version":"3.10.0"},"capabilities":{"schema_version":1},"attachments":$policy,"registration_enabled":false,"sign_in_providers":[],"lockdown":{"enabled":false}}"""))
+            sessions.refresh(); take()
+        }
+        assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertFalse(sessions.state.value.busy)
+        return sessions.state.value
+    }
+
+    private fun attachment(id: Long = 12, size: Long = bytes.size.toLong(), hash: String = sha(bytes), width: Int? = 400, height: Int? = 300,
+        direct: Boolean = false, withPreview: Boolean = true) = AttachmentRef(MessageAttachment(id, "diagram.png", "image/png", size, hash,
+        previewable = true, width = width, height = height,
+        preview = if (!withPreview) null else AttachmentPreview(
+            (if (direct) "/api/v1/direct-messages/attachments/download.php" else "/api/v1/attachments/download.php") + "?id=$id&variant=preview",
+            400, 300, "image/webp", preview.size.toLong(), sha(preview))), direct)
+
+    @Test fun aPreviewLoadsFromItsOwnUrlVerifiedAndChargedUntilReleased() = runTest {
+        val state = signedIn()
+        server.enqueue(file(preview, "image/webp", etag = "\"p1\""))
+        val result = downloads.load(attachment(), AttachmentVariant.PREVIEW, state) as DownloadResult.Bytes
+        val request = take()
+        assertEquals("/api/v1/attachments/download.php?id=12&variant=preview", request.target)
+        assertNull("No validator on a first load", request.headers["If-None-Match"])
+        assertArrayEquals(preview, result.bytes)
+        assertEquals("\"p1\"", result.etag)
+        assertEquals("Charged while held", preview.size.toLong(), budget.reservedBytes)
+        result.release()
+        assertEquals(0L, budget.reservedBytes)
+    }
+
+    @Test fun aHeldPreviewRevalidatesAndA304KeepsIt() = runTest {
+        val state = signedIn()
+        server.enqueue(MockResponse.Builder().code(304).addHeader("ETag", "\"p1\"").build())
+        assertEquals(DownloadResult.NotModified, downloads.load(attachment(), AttachmentVariant.PREVIEW, state, ifNoneMatch = "\"p1\""))
+        assertEquals("\"p1\"", take().headers["If-None-Match"])
+        assertEquals("Nothing stays charged", 0L, budget.reservedBytes)
+    }
+
+    @Test fun originalsUseTheirOwnNamespaceAndNoValidator() = runTest {
+        val state = signedIn()
+        server.enqueue(file(bytes)); server.enqueue(file(bytes))
+        (downloads.load(attachment(), AttachmentVariant.ORIGINAL, state, ifNoneMatch = "\"x\"") as DownloadResult.Bytes).release()
+        val room = take()
+        assertEquals("/api/v1/attachments/download.php?id=12", room.target)
+        assertNull("Originals don't use preview validators", room.headers["If-None-Match"])
+        (downloads.load(attachment(id = 14, direct = true), AttachmentVariant.ORIGINAL, state) as DownloadResult.Bytes).release()
+        assertEquals("/api/v1/direct-messages/attachments/download.php?id=14", take().target)
+    }
+
+    @Test fun aMismatchingFileIsNeverReturned() = runTest {
+        val state = signedIn()
+        val other = bytes.copyOf().also { it[0] = 99 }
+        server.enqueue(file(other))
+        assertEquals("Same length, wrong bytes", DownloadResult.IntegrityFailed, downloads.load(attachment(), AttachmentVariant.ORIGINAL, state))
+        server.enqueue(file(bytes.copyOf(bytes.size - 1)))
+        assertEquals("A different length", DownloadResult.IntegrityFailed, downloads.load(attachment(), AttachmentVariant.ORIGINAL, state))
+        assertEquals("Nothing stays charged", 0L, budget.reservedBytes)
+    }
+
+    @Test fun refusalsAreTypedAndNeverRetried() = runTest {
+        val state = signedIn()
+        val cases = listOf(
+            error("attachment_deleted", 410) to DownloadResult.Gone,
+            error("attachment_not_found", 404) to DownloadResult.NotAllowed,
+            error("forbidden", 403) to DownloadResult.NotAllowed,
+            error("attachment_preview_unavailable", 404) to DownloadResult.PreviewUnavailable)
+        for ((reply, expected) in cases) {
+            server.enqueue(reply)
+            assertEquals(expected, downloads.load(attachment(), AttachmentVariant.PREVIEW, state)); take()
+        }
+        val before = server.requestCount
+        server.enqueue(error("rate_limited", 429, ""","retry_after_seconds":30"""))
+        assertEquals(DownloadResult.RateLimited(30), downloads.load(attachment(), AttachmentVariant.PREVIEW, state)); take()
+        assertEquals("One request, never replayed", before + 1, server.requestCount)
+        assertEquals(0L, budget.reservedBytes)
+    }
+
+    @Test fun beyondTheDisplayCapsNothingIsFetched() = runTest {
+        val state = signedIn()
+        val before = server.requestCount
+        assertEquals(DownloadResult.TooLarge, downloads.load(attachment(size = 33L * 1024 * 1024), AttachmentVariant.ORIGINAL, state))
+        assertEquals(DownloadResult.TooLarge, downloads.load(attachment(width = 5000, height = 4000), AttachmentVariant.ORIGINAL, state))
+        assertEquals("Decided from metadata, before any request", before, server.requestCount)
+    }
+
+    @Test fun withoutABudgetLeaseNothingIsFetched() = runTest {
+        val state = signedIn()
+        budget = AttachmentMemoryBudget(1_000)
+        val before = server.requestCount
+        assertEquals(DownloadResult.NoMemory, downloads.load(attachment(), AttachmentVariant.ORIGINAL, state))
+        assertEquals(before, server.requestCount)
+    }
+
+    @Test fun anInvalidPreviewUrlIsNeverRequested() = runTest {
+        val state = signedIn()
+        val forged = AttachmentRef(MessageAttachment(12, "x.png", "image/png", 10, sha(bytes), true, 1, 1,
+            AttachmentPreview("https://evil.example/x?id=12&variant=preview", 1, 1, "image/webp", 10, sha(preview))), false)
+        val before = server.requestCount
+        val result = downloads.load(forged, AttachmentVariant.PREVIEW, state)
+        assertEquals(FailureKind.INCOMPATIBLE, (result as DownloadResult.Failed).failure.kind)
+        assertEquals(before, server.requestCount)
+    }
+
+    @Test fun aStaleRenderedSessionGetsNothing() = runTest {
+        val state = signedIn()
+        val before = server.requestCount
+        val stale = try { downloads.load(attachment(), AttachmentVariant.PREVIEW, state.copy(generation = state.generation - 1)); null }
+            catch (cancelled: CancellationException) { cancelled }
+        assertNotNull("Never upgraded into the current session", stale)
+        assertEquals(before, server.requestCount)
+    }
+
+    @Test fun theUploadPolicyDoesntGovernDownloads() = runTest {
+        // max_bytes 0 means uploads are unavailable here; received files stay readable.
+        val state = signedIn("""{"max_bytes":0,"allowed_mime_types":[],"previewable_mime_types":[],"rate_limits":{"room":{"maximum_attempts":10,"window_seconds":3600},"direct_message":{"maximum_attempts":10,"window_seconds":3600}}}""")
+        server.enqueue(file(preview, "image/webp"))
+        assertEquals("The upload policy really says no uploads", 0L,
+            (state.attachmentPolicy as? io.github.thiesi.chitchat.core.media.AttachmentPolicy.Known)?.maxBytes)
+        (downloads.load(attachment(), AttachmentVariant.PREVIEW, state) as DownloadResult.Bytes).release()
+    }
+
+    @Test fun streamingWritesEveryByteAndReportsAMismatch() = runTest {
+        val state = signedIn()
+        server.enqueue(file(bytes))
+        val out = ByteArrayOutputStream()
+        assertEquals(DownloadResult.Saved, downloads.stream(attachment(), state, out))
+        assertArrayEquals(bytes, out.toByteArray())
+        assertEquals("No memory charge for streaming", 0L, budget.reservedBytes)
+        server.enqueue(file(bytes.copyOf().also { it[1] = 42 }))
+        val partial = ByteArrayOutputStream()
+        assertEquals("The caller decides what to do with the written file", DownloadResult.IntegrityFailed,
+            downloads.stream(attachment(), state, partial))
+        // Beyond the display caps it still streams.
+        val big = ByteArray(40_000) { 3 }
+        server.enqueue(file(big))
+        assertEquals(DownloadResult.Saved, downloads.stream(AttachmentRef(MessageAttachment(20, "b.bin", "application/zip", big.size.toLong(),
+            sha(big), false), false), state, ByteArrayOutputStream()))
+    }
+
+    @Test fun aFailingDestinationIsAStorageFailure() = runTest {
+        val state = signedIn()
+        server.enqueue(file(bytes))
+        val broken = object : OutputStream() { override fun write(b: Int) = throw IOException("full") }
+        val result = downloads.stream(attachment(), state, broken)
+        assertEquals(FailureKind.STORAGE, (result as DownloadResult.Failed).failure.kind)
+    }
+
+    private class Vault : SessionVault {
+        var saved: SavedSession? = null
+        override suspend fun read() = saved
+        override suspend fun save(session: SavedSession) { saved = session }
+        override suspend fun clear() { saved = null }
+    }
+}
