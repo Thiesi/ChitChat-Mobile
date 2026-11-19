@@ -20,6 +20,17 @@ class AuthViewModel(private val sessions: SessionController) : ViewModel() {
     private var operation: Job? = null
     private var preparation: Job? = null
     private var discovery: Job? = null
+    /**
+     * #298's failure-only test scalars: how many Forgot password? taps reached this model and which branch each took.
+     * Counts only, read by tests; never shown, logged or saved.
+     */
+    internal class ResetEntryCounts {
+        @Volatile var taps = 0
+        @Volatile var forwarded = 0
+        @Volatile var droppedActiveOperation = 0
+    }
+    internal val resetEntry = ResetEntryCounts()
+
     /** The username typed on step 4a, carried into the reset form (O4b2). A username, not a secret; never saved. */
     var resetPrefill: String = ""
         private set
@@ -45,7 +56,11 @@ class AuthViewModel(private val sessions: SessionController) : ViewModel() {
     }
 
     fun selectForm(flow: AuthFlow) {
-        if (operation?.isActive == true) return
+        if (operation?.isActive == true) {
+            if (flow == AuthFlow.RESET) resetEntry.droppedActiveOperation++
+            return
+        }
+        if (flow == AuthFlow.RESET) resetEntry.forwarded++
         preparation?.cancel()
         operation = viewModelScope.launch {
             sessions.selectAuthFlow(flow)
@@ -69,6 +84,7 @@ class AuthViewModel(private val sessions: SessionController) : ViewModel() {
 
     /** Forgot password?: the reset form, prefilled with what step 4a's username field held. */
     fun startReset(username: String) {
+        resetEntry.taps++
         resetPrefill = username.trim()
         selectForm(AuthFlow.RESET)
     }

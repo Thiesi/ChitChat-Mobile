@@ -76,8 +76,17 @@ class TestSessions : SessionController {
             user = SessionUser(7, username, listOf("member"), 1, false))
     }
     override suspend fun refresh() { state.value = state.value.copy(error = null, refreshRequired = false) }
+    /** #298: reset-flow requests and how this fake's guards handled each (counts only). */
+    @Volatile var resetFlowRequests = 0
+    @Volatile var resetRefusedPending = 0
+    @Volatile var resetRefusedSupport = 0
+    @Volatile var resetAccepted = 0
     override suspend fun selectAuthFlow(flow: AuthFlow) {
-        if (state.value.reset.pending != null || (flow == AuthFlow.RESET && state.value.reset.support != ResetSupport.SUPPORTED)) return
+        val reset = flow == AuthFlow.RESET
+        if (reset) resetFlowRequests++
+        if (state.value.reset.pending != null) { if (reset) resetRefusedPending++; return }
+        if (reset && state.value.reset.support != ResetSupport.SUPPORTED) { resetRefusedSupport++; return }
+        if (reset) resetAccepted++
         state.value = state.value.copy(authFlow = flow, error = null,
             reset = state.value.reset.copy(preparation = RegistrationPreparation.IDLE, outcome = null))
     }

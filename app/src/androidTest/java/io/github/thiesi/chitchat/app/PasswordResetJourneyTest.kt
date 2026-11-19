@@ -84,8 +84,36 @@ class PasswordResetJourneyTest {
         signInForm()
         compose.onNodeWithTag("sign_in_username").performTextReplacement(username)
         forgotPassword()
-        compose.onNodeWithTag("forgot_password").performScrollTo().performClick()
-        compose.waitUntil(5_000) { exists("reset_form") }
+        openResetForm()
+    }
+
+    /**
+     * #298: the tap on Forgot password? and the wait for the reset form (the failing wait, :84 on main). The same tap,
+     * wait and 5s deadline, no retry, extra wait or text. The button is sampled once immediately before the tap; on
+     * timeout only scalars are added (the click path end to end), then the same failure is rethrown as the cause.
+     */
+    private fun openResetForm() {
+        compose.onNodeWithTag("forgot_password").performScrollTo()
+        val before = buttonSample()
+        compose.onNodeWithTag("forgot_password").performClick()
+        try { compose.waitUntil(5_000) { exists("reset_form") } }
+        catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            val now = sessions.state.value
+            throw AssertionError("Reset form missing after the tap (#298): sampledAt=${android.os.SystemClock.uptimeMillis()}, " +
+                "authFlow=${now.authFlow}, support=${now.reset.support}, busy=${now.busy}, pending=${now.reset.pending != null}, " +
+                "phase=${now.phase}, before={$before}, atTimeout={${buttonSample()}}, " +
+                "taps=${auth.resetEntry.taps}, forwarded=${auth.resetEntry.forwarded}, " +
+                "droppedActiveOperation=${auth.resetEntry.droppedActiveOperation}, flowRequests=${sessions.resetFlowRequests}, " +
+                "refusedPending=${sessions.resetRefusedPending}, refusedSupport=${sessions.resetRefusedSupport}, " +
+                "accepted=${sessions.resetAccepted}, form=${compose.onAllNodesWithTag("reset_form").fetchSemanticsNodes().size}", e)
+        }
+    }
+
+    /** The button's enabled state and bounds plus the native window (IME, focus), sampled once; scalars only. */
+    private fun buttonSample(): String {
+        val node = compose.onAllNodesWithTag("forgot_password").fetchSemanticsNodes().singleOrNull() ?: return "button=absent"
+        return "enabled=${SemanticsProperties.Disabled !in node.config}, bounds=${node.boundsInRoot}, at=${android.os.SystemClock.uptimeMillis()}, " +
+            "window=${io.github.thiesi.chitchat.testing.nativeInputWindow()}"
     }
     /**
      * #298: failure-only scalars for the intermittent API36 wait for Forgot password?. The same wait and 5s deadline, no
@@ -152,7 +180,7 @@ class PasswordResetJourneyTest {
         assertEquals("Exactly one discovery once settled", 1, sessions.discoveries)
         val filled = compose.onNodeWithTag("forgot_password").getUnclippedBoundsInRoot()
         assertEquals("The late result fills the reserved slot: same top", reserved.top.value, filled.top.value, 0.5f)
-        assertEquals("…and the same height, so nothing below moves", reserved.height.value, filled.height.value, 0.5f)
+        assertEquals("and the same height, so nothing below moves", reserved.height.value, filled.height.value, 0.5f)
         // Quiet (O4b2): no live region, so its late appearance is never announced.
         assertTrue(compose.onAllNodes(hasTestTag("forgot_password") and
             SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion)).fetchSemanticsNodes().isEmpty())
@@ -160,8 +188,7 @@ class PasswordResetJourneyTest {
         compose.waitForIdle()
         assertEquals("Typing never asks again", 1, sessions.discoveries)
         // The form opens only on a confirmed SUPPORTED, and the tap sends no discovery GET of its own.
-        compose.onNodeWithTag("forgot_password").performScrollTo().performClick()
-        compose.waitUntil(5_000) { exists("reset_form") }
+        openResetForm()
         compose.waitForIdle()
         assertEquals("No extra GET from the tap", 1, sessions.discoveries)
     }
