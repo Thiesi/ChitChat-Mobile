@@ -65,13 +65,16 @@ class StepUpPresentationTest {
                     scene = each; compose.waitForIdle()
                     val context = InstrumentationRegistry.getInstrumentation().targetContext
                     if (each == "recovery") compose.onNode(hasText(context.getString(R.string.choose_emergency_recovery)) and
-                        hasAnyAncestor(isDialog())).performClick()
+                        hasAnyAncestor(isDialog())).performScrollTo().performClick() // At 200% it sits below the fold.
                     val title = compose.onNode(hasText(context.getString(titles.getValue(each))) and hasAnyAncestor(isDialog()))
                     val height = title.getUnclippedBoundsInRoot().height.value
                     if (fontScale == 1f) heights[each] = height
                     else assertTrue("$label/$name/$each: the 2.0 font scale reached the dialog " +
                         "(default ${heights.getValue(each)}dp, now ${height}dp)", height > heights.getValue(each))
-                    capture("stepup-$label-$name-$each") // The capture shows the top.
+                    // The recovery scene is the chosen state, captured with its field in view (TL, #297).
+                    if (each == "recovery") compose.onNode(hasText(context.getString(R.string.recovery_code)) and
+                        hasAnyAncestor(isDialog())).performScrollTo().assertIsDisplayed()
+                    capture("stepup-$label-$name-$each") // The top; for recovery, scrolled to its field.
                     // After the capture: the body's last line (the field) scrolls into view, and both buttons stay shown.
                     val last = context.getString(if (each == "recovery") R.string.recovery_code else R.string.current_password)
                     try {
