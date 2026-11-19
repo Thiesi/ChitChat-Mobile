@@ -187,30 +187,43 @@ internal class AttachmentViewer(
         }
     }
 
+    /** What a decode produced; applied on Main only after the stale check (review, #312). */
+    private sealed interface Outcome {
+        class Shown(val image: ViewerImage) : Outcome
+        class Refused(val full: FullImage) : Outcome
+    }
+
     private suspend fun settle(opened: ViewerState, result: DownloadResult.Bytes, animate: Boolean) {
         val lease: (Long) -> Boolean = { size -> result.resize(size) }
-        val image: ViewerImage? = try {
+        // The decode is CPU-bound and runs off Main: it only returns an outcome and never touches the state, so a decode for
+        // a viewer that has since closed or moved on can't write into its successor.
+        val outcome: Outcome = try {
             withContext(decodeOn) {
                 if (animate) when (val decoded = animated!!.decode(result.bytes, width, height, lease)) {
-                    is AnimationResult.Decoded -> ViewerImage.Animated(decoded.animation)
-                    AnimationResult.TooLarge -> { set(FullImage.TOO_LARGE); null }
-                    AnimationResult.NoMemory -> { set(FullImage.NO_MEMORY); null }
-                    AnimationResult.Unreadable -> { set(FullImage.FAILED); null }
+                    is AnimationResult.Decoded -> Outcome.Shown(ViewerImage.Animated(decoded.animation))
+                    AnimationResult.TooLarge -> Outcome.Refused(FullImage.TOO_LARGE)
+                    AnimationResult.NoMemory -> Outcome.Refused(FullImage.NO_MEMORY)
+                    AnimationResult.Unreadable -> Outcome.Refused(FullImage.FAILED)
                 } else when (val decoded = decoder.decode(result.bytes, width, height, true, lease)) {
-                    is DecodeResult.Decoded -> ViewerImage.Still(decoded.image)
-                    DecodeResult.TooLarge -> { set(FullImage.TOO_LARGE); null }
-                    DecodeResult.NoMemory -> { set(FullImage.NO_MEMORY); null }
-                    DecodeResult.Unreadable -> { set(FullImage.FAILED); null }
+                    is DecodeResult.Decoded -> Outcome.Shown(ViewerImage.Still(decoded.image))
+                    DecodeResult.TooLarge -> Outcome.Refused(FullImage.TOO_LARGE)
+                    DecodeResult.NoMemory -> Outcome.Refused(FullImage.NO_MEMORY)
+                    DecodeResult.Unreadable -> Outcome.Refused(FullImage.FAILED)
                 }
             }
         } catch (cancelled: CancellationException) { result.release(); throw cancelled }
-        if (image == null) { result.release(); return }
         if (mutable.value?.key != opened.key || mutable.value?.ref !== opened.ref) {
-            (image as? ViewerImage.Animated)?.animation?.stop(); result.release(); return
+            ((outcome as? Outcome.Shown)?.image as? ViewerImage.Animated)?.animation?.stop()
+            result.release(); return
         }
-        // A still image's lease is now exactly its bitmap; an animation's keeps the source bytes it retains.
-        held = Held(result.lease(), image)
-        mutable.value = mutable.value?.copy(original = image, full = FullImage.NONE)
+        when (outcome) {
+            is Outcome.Refused -> { result.release(); set(outcome.full) }
+            is Outcome.Shown -> {
+                // A still image's lease is now exactly its bitmap; an animation's keeps the source bytes it retains.
+                held = Held(result.lease(), outcome.image)
+                mutable.value = mutable.value?.copy(original = outcome.image, full = FullImage.NONE)
+            }
+        }
     }
 
     private fun release() {

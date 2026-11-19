@@ -46,9 +46,11 @@ class AttachmentViewerTest {
     private fun bytes(size: Int = 1_000) = DownloadResult.Bytes(ByteArray(size), null, budget.reserve(size.toLong())!!)
 
     /** Like the real decoders: lease the decoded size before keeping it. Transcript frames 32 KB, viewer images 640 KB. */
+    private var viewerDecode: () -> DecodeResult? = { null }
     private val decoder = ImageDecoding { _, maxWidth, _, _, lease ->
         val size = if (maxWidth >= 1000) 640_000L else 32_000L
-        if (lease(size)) DecodeResult.Decoded(DecodedImage(null, maxWidth, maxWidth, size)) else DecodeResult.NoMemory
+        (if (maxWidth >= 1000) viewerDecode() else null)
+            ?: if (lease(size)) DecodeResult.Decoded(DecodedImage(null, maxWidth, maxWidth, size)) else DecodeResult.NoMemory
     }
     private var animatedLease = 0L
     private val stopped = mutableListOf<String>()
@@ -159,6 +161,24 @@ class AttachmentViewerTest {
         decodes.advanceUntilIdle(); advanceUntilIdle()
         assertNull(rig.viewer.state.value)
         assertEquals("Only the transcript's preview stays", 32_000L, budget.reservedBytes)
+    }
+
+    @Test fun aStaleDecodeNeverWritesIntoTheNextViewer() = runTest {
+        // Review (#312): a decode for a closed viewer finishes off Main; its outcome must not reach the successor.
+        val decodes = TestCoroutineScheduler()
+        val source = Source(); val rig = Rig(this, source, decodeOn = StandardTestDispatcher(decodes)); advanceUntilIdle()
+        val first = ref(id = 41); val second = ref(id = 42)
+        val pane = shownOnScreen(rig, first)
+        pane.visible(second, 280, 210); advanceUntilIdle()
+        decodes.advanceUntilIdle(); advanceUntilIdle()
+        viewerDecode = { DecodeResult.NoMemory }
+        pane.openViewer(first, 1080, 2000); pane.loadFullImage(); advanceUntilIdle()
+        pane.closeViewer()
+        pane.openViewer(second, 1080, 2000); advanceUntilIdle()
+        decodes.advanceUntilIdle(); advanceUntilIdle()
+        assertEquals(42L, rig.viewer.state.value!!.ref.attachment.id)
+        assertEquals("The first photo's refusal never reaches the second", FullImage.OFFER, rig.viewer.state.value!!.full)
+        assertEquals("Only the two transcript previews stay charged", 64_000L, budget.reservedBytes)
     }
 
     @Test fun closeReleasesAHeldOriginalAndASessionChangeClosesTheViewer() = runTest {

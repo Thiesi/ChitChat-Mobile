@@ -25,6 +25,8 @@ files-media.md "Full-screen viewer" and the TL's and PL's F4 rulings of 2026-11-
   - A 429 leaves it waiting, and nothing starts by itself afterwards.
   - The states are `FullImage` (offer, loading, failed, can't show right now, too large, gone, not allowed, offline,
     waiting).
+- **Main-confined state:** the decode runs off Main and only returns an outcome, which is applied on Main after the
+  stale check, so a decode for a viewer that has since closed or moved on never touches its successor.
 - **Memory:** the original decodes downsampled to the screen size, within the 16 Mpx guard, on the shared ledger with the
   lease before every allocation (F2). It's held only while the viewer is open: close, a departure, a session change or a
   cancelled load releases it. Nothing is cached.
@@ -39,13 +41,15 @@ files-media.md "Full-screen viewer" and the TL's and PL's F4 rulings of 2026-11-
 
 ## Verification
 
-- **JVM: `AttachmentViewerTest` (12):**
+- **JVM: `AttachmentViewerTest` (13):**
   - it opens on the held preview with no second download, and offers the original beyond the rule;
   - a small original loads by itself only unmetered and online (metered offers it, offline says so);
   - a failure or a mismatch keeps the preview, and nothing reloads by itself;
   - beyond the caps nothing is fetched;
   - without a preview, one original download by the viewer only;
   - **closing during an in-flight original releases its one lease** (only the transcript's preview stays charged);
+  - **a stale decode never writes into the next viewer:** a decode finishing after close and reopen leaves the new
+    photo's state alone (#312 review);
   - close releases a held original, and a session change closes the viewer and frees everything;
   - the preview under an open viewer is never evicted, and is evictable again after close;
   - a GIF's original is fetched on opening (even metered), with the source bytes plus two frame buffers leased and the
