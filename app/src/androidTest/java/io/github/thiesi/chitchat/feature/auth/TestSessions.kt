@@ -82,6 +82,10 @@ class TestSessions : SessionController {
             reset = state.value.reset.copy(preparation = RegistrationPreparation.IDLE, outcome = null))
     }
     override suspend fun discoverPasswordReset() {
+        // The real repository's guards (#298): a busy, non-anonymous or already-checking session drops the ask silently.
+        val current = state.value
+        if (current.phase != SessionPhase.ANONYMOUS || current.busy || current.reset.support == ResetSupport.CHECKING ||
+            current.reset.pending != null) return
         discoveries++
         state.value = state.value.copy(reset = state.value.reset.copy(support = ResetSupport.CHECKING))
         discoveryHold?.await()

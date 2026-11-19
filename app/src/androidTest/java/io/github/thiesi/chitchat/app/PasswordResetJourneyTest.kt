@@ -34,6 +34,10 @@ import io.github.thiesi.chitchat.testing.openTab
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.*
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.unit.height
 import org.junit.Rule
 import org.junit.Test
 
@@ -79,10 +83,30 @@ class PasswordResetJourneyTest {
     private fun resetForm(username: String = "Alice") {
         signInForm()
         compose.onNodeWithTag("sign_in_username").performTextReplacement(username)
-        compose.waitUntil(5_000) { exists("forgot_password") }
+        forgotPassword()
         compose.onNodeWithTag("forgot_password").performScrollTo().performClick()
         compose.waitUntil(5_000) { exists("reset_form") }
     }
+    /**
+     * #298: failure-only scalars for the intermittent API36 wait for Forgot password?. The same wait and 5s deadline, no
+     * retry; on timeout only scalars are added (no text), then the same failure is rethrown as the cause.
+     */
+    private fun forgotPassword() {
+        try { compose.waitUntil(5_000) { exists("forgot_password") } }
+        catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            val now = sessions.state.value
+            val count = { tag: String -> compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().size }
+            val visits = compose.onAllNodes(SemanticsMatcher.keyIsDefined(io.github.thiesi.chitchat.feature.auth.ResetVisitState),
+                useUnmergedTree = true).fetchSemanticsNodes().take(3)
+                .joinToString("|") { it.config[io.github.thiesi.chitchat.feature.auth.ResetVisitState] }.ifEmpty { "none" }
+            throw AssertionError("Forgot password? missing (#298): sampledAt=${android.os.SystemClock.uptimeMillis()}, " +
+                "support=${now.reset.support}, phase=${now.phase}, busy=${now.busy}, generation=${now.generation}, " +
+                "authFlow=${now.authFlow}, visit=$visits, button=${count("forgot_password")}, " +
+                "static=${count("forgot_password_static")}, pending=${count("forgot_password_pending")}, " +
+                "discoveries=${sessions.discoveries}", e)
+        }
+    }
+
     private fun fillAndSubmit() {
         compose.onNodeWithTag("reset_key").performScrollTo().performTextReplacement(key)
         compose.onNodeWithTag("reset_password").performScrollTo().performTextReplacement("a new fixture password")
@@ -106,6 +130,57 @@ class PasswordResetJourneyTest {
         compose.waitUntil(5_000) { exists("forgot_password") }
         compose.waitForIdle()
         assertEquals("One discovery GET per visit, never on recomposition", 1, sessions.discoveries)
+    }
+
+    @Test fun stepFourAOpenedWhileBusyAsksOnceItSettlesInTheReservedRow() {
+        // #298: a refresh or Check again (busy, one generation) while step 4a is composed. The repository drops an ask while
+        // busy; the row must not stay empty for the visit.
+        compose.runOnUiThread { compose.activity.setContent { Box(Modifier.fillMaxSize()) {
+            TestChitChatApp(settings, auth, guidelines = guidelines)
+        } } }
+        compose.waitUntil(5_000) { exists("onboarding_sign_in") }
+        compose.runOnIdle { sessions.state.value = sessions.state.value.copy(busy = true) }
+        compose.onNodeWithTag("onboarding_sign_in").performScrollTo().performClick()
+        compose.waitUntil(5_000) { exists("forgot_password_pending") }
+        compose.waitForIdle()
+        assertEquals("Nothing asked while busy", 0, sessions.discoveries)
+        assertFalse("The reserved row, never the static line", exists("forgot_password_static") || exists("forgot_password"))
+        val reserved = compose.onNodeWithTag("forgot_password_pending").getUnclippedBoundsInRoot()
+        compose.runOnIdle { sessions.state.value = sessions.state.value.copy(busy = false) }
+        compose.waitUntil(5_000) { exists("forgot_password") }
+        compose.waitForIdle()
+        assertEquals("Exactly one discovery once settled", 1, sessions.discoveries)
+        val filled = compose.onNodeWithTag("forgot_password").getUnclippedBoundsInRoot()
+        assertEquals("The late result fills the reserved slot: same top", reserved.top.value, filled.top.value, 0.5f)
+        assertEquals("…and the same height, so nothing below moves", reserved.height.value, filled.height.value, 0.5f)
+        // Quiet (O4b2): no live region, so its late appearance is never announced.
+        assertTrue(compose.onAllNodes(hasTestTag("forgot_password") and
+            SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion)).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithTag("sign_in_username").performTextReplacement("Alice")
+        compose.waitForIdle()
+        assertEquals("Typing never asks again", 1, sessions.discoveries)
+        // The form opens only on a confirmed SUPPORTED, and the tap sends no discovery GET of its own.
+        compose.onNodeWithTag("forgot_password").performScrollTo().performClick()
+        compose.waitUntil(5_000) { exists("reset_form") }
+        compose.waitForIdle()
+        assertEquals("No extra GET from the tap", 1, sessions.discoveries)
+    }
+
+    @Test fun aReconnectStartsANewVisitThatAsksTheNewRuntimeOnce() {
+        // Every runtime replacement bumps the generation, and the page is keyed on it: a new visit with one ask (#298).
+        signInForm()
+        compose.waitUntil(5_000) { exists("forgot_password") }
+        assertEquals(1, sessions.discoveries)
+        compose.runOnIdle { sessions.resetSupport = ResetSupport.UNSUPPORTED; sessions.discoveryHold = CompletableDeferred()
+            sessions.state.value = sessions.state.value.copy(generation = sessions.state.value.generation + 1,
+                reset = io.github.thiesi.chitchat.core.session.ResetState()) }
+        compose.waitUntil(5_000) { exists("forgot_password_pending") }
+        assertFalse("The empty reserved row: a new visit holds nothing over", exists("forgot_password") || exists("forgot_password_static"))
+        compose.runOnIdle { sessions.discoveryHold!!.complete(Unit) }
+        compose.waitUntil(5_000) { exists("forgot_password_static") }
+        compose.waitForIdle()
+        assertEquals("One ask of the new runtime, and its own answer", 2, sessions.discoveries)
+        assertFalse(exists("forgot_password"))
     }
 
     @Test fun anUnsupportedServerShowsTheStaticLineInstead() {
