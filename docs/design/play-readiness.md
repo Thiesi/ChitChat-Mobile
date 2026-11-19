@@ -574,9 +574,9 @@ accounts, so the page explains per-server deletion. **Text approved by the maint
 > you sent stay visible to the people who received them, under that server's retention
 > policies, as do moderation and security records.
 >
-> **What the app maker has:** nothing to delete. The app talks to the server you chose, and to
-> the notification delivery app you choose if you turn notifications on. It has no analytics
-> or advertising.
+> **What the app maker has:** nothing to delete. The app talks to the server you chose and, if
+> you turn notifications on, to the delivery service you choose: a UnifiedPush delivery app, or
+> Google's push service if you choose Use Google. It has no analytics or advertising.
 
 The last paragraph must be re-verified before publishing: no analytics or ads dependencies
 exist today, and push delivery goes through the distributor the person chooses.
