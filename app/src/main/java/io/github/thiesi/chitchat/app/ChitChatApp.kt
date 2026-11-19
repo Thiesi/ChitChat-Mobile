@@ -160,6 +160,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel? = null,
     guidelines: io.github.thiesi.chitchat.feature.policies.GuidelinesViewModel? = null,
     recoveryKeys: io.github.thiesi.chitchat.feature.account.RecoveryKeyViewModel? = null,
+    receivedImages: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel? = null,
     rulesUpdate: io.github.thiesi.chitchat.feature.policies.RulesUpdateViewModel? = null,
     accountDeletion: io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
@@ -828,7 +829,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             val id = destination.arguments?.getLong("roomId") ?: 0L
                             if (session.phase == SessionPhase.AUTHENTICATED && id > 0)
                                 ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured,
-                                    onProfile = profileOpener(destination, id), completion = completion, completionEntryId = destination.id,
+                                    onProfile = profileOpener(destination, id), completion = completion, completionEntryId = destination.id, images = receivedImages,
                                     onStopped = { owner -> if (nav.currentBackStackEntry === destination) conversations.background()
                                         else conversations.leavePane(owner) }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
@@ -840,7 +841,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             if (id > 0 && args != null && matchesNotificationScope(session, args.getLong("generation", -1),
                                 args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
                                 ConversationScreen(conversations, id, auth::refresh, ignores, messageTargets, targetObscured,
-                                    onProfile = profileOpener(destination, id), completion = completion, completionEntryId = destination.id,
+                                    onProfile = profileOpener(destination, id), completion = completion, completionEntryId = destination.id, images = receivedImages,
                                     onStopped = { owner -> if (nav.currentBackStackEntry === destination) conversations.background()
                                         else conversations.leavePane(owner) }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
@@ -859,7 +860,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             if (directThread != null && args != null && peer > 0 && peer != session.user?.id && matchesDirectScope(session,
                                 args.getLong("generation", -1), args.getLong("viewer", -1), args.getInt("version", -1), args.getString("server")))
                                 DirectThreadScreen(directThread, peer, auth::refresh, messageTargets, targetObscured,
-                                    onProfile = profileOpener(destination), completion = completion, completionEntryId = destination.id,
+                                    onProfile = profileOpener(destination), completion = completion, completionEntryId = destination.id, images = receivedImages,
                                     onStopped = { owner -> if (nav.currentBackStackEntry === destination) directThread.background()
                                         else directThread.leavePane(owner) }) {
                                     nav.currentBackStackEntry === destination && destination.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }

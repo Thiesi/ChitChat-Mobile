@@ -64,6 +64,13 @@ internal object Lantern {
     /** Composer field corners: min(height / 2, 24dp), so a tall field never turns into a circle (P-216). */
     val field = RoundedCornerShape(24.dp) // Compose clamps each corner to half the shorter side.
     val target = 48.dp
+    /** Received image frames and file cards: 14dp inner corners (files-media.md). */
+    val frame = RoundedCornerShape(14.dp)
+    /** A small label chip over an image, such as the GIF badge. */
+    val chip = RoundedCornerShape(6.dp)
+    /** Text and scrim for a chip drawn over an image: theme-independent, since the image is (PL, #310 J1). */
+    val overlayText = Color.White
+    val overlayScrim = Color.Black.copy(alpha = 0.6f)
     val badge = 24.dp
     val gap = 8.dp
     val inset = 12.dp

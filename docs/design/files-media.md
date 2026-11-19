@@ -300,9 +300,30 @@ Within the transcript spec's bubble, run and chit rules:
   | Offline | The box, "Photo · 3.4 MB · available when you're back online", with Show disabled |
 
 - **Deleted messages** keep the tombstone from the transcript spec. No file card or image.
-- **Accessibility:** the image's description is "Photo from {sender}, {time}", followed by the
-  caption if present. The API has no alt text, so don't invent descriptions. File cards read as
-  "{name}, {type}, {size}, Open, Save".
+- **Accessibility:** the image's description is "Photo from {sender}, {time}" ("GIF from
+  {sender}, {time}" for GIFs). In any state but Loaded, the state line follows after a full stop,
+  without its "Photo ·" prefix and with "·" read as a comma (for example "Photo from Ana, 10:42.
+  48 MB, too large to show here"); Loading adds "Loading". The caption isn't repeated there: it's
+  read with the message's actions node. The API has no alt text, so don't invent descriptions.
+  File cards read as "{name}, {type}, {size}, Open, Save".
+- **Placement and taps (TL/PL, 2026-11-19, F3):** the frame or card sits inside the message's
+  actions target (long-press and tap for Reply, Copy and so on) as its own TalkBack node with no
+  click or long-click action, so a pointer tap on it opens message actions, as on text.
+  - An attachment-only message keeps a separate, labelled "Message actions" node of at least 48dp.
+  - Show, Try again (and in F5, Open and Save) are their own 48dp buttons and take their own taps.
+  - The pressed ripple is clipped to the frame's corners.
+  - The frame's label is heard once, on the frame's own node.
+  - **F4 changes the tap:** a tap on the frame opens the viewer and takes precedence, with the click
+    label "Open photo"; long-press keeps the message actions.
+- **Staged in F3 (PL):**
+  - file cards have no buttons until F5 and read "{name}, {type}, {size}" (APKs too);
+  - frames have no tap action until F4, and the "Too large" box is static text;
+  - GIFs show the badge only, on every API level, until F4 adds the play glyph with the tap (and the
+    API 26–27 rule).
+- **Where frames never appear:** reply quotes (a quoted photo stays text-only), search results,
+  notification rows and push. A room row collapsed because its author is ignored shows no frame
+  and requests nothing until revealed. A blocked DM thread loads like any other; the server decides
+  access (TL).
 
 ## Image loading policy
 
