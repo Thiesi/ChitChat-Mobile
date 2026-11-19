@@ -22,6 +22,10 @@ sealed interface DownloadResult {
     class Bytes internal constructor(val bytes: ByteArray, val etag: String?, private val lease: AttachmentMemoryBudget.Reservation) :
         DownloadResult {
         fun release() = lease.close()
+        /** Grow or shrink the charge to what is actually kept (the decoded image, F2); false leaves it unchanged. */
+        internal fun resize(bytes: Long): Boolean = lease.resize(bytes)
+        /** Hands the lease to the holder of the decoded image; the raw bytes are no longer kept. */
+        internal fun lease(): AttachmentMemoryBudget.Reservation = lease
         override fun toString() = "DownloadResult.Bytes"
     }
     /** A preview revalidated with its ETag: the held bytes stay valid. */
@@ -56,10 +60,10 @@ sealed interface DownloadResult {
  * and stay in memory; [stream] writes straight to the caller's stream for Save and the share copy. The upload policy
  * (and its 413s) doesn't govern downloads: received files stay readable under every policy state.
  */
-internal class AttachmentDownloads(private val sessions: SessionRepository, private val budget: AttachmentMemoryBudget) {
+internal class AttachmentDownloads(private val sessions: SessionRepository, private val budget: AttachmentMemoryBudget) : AttachmentSource {
 
     /** The bytes for display: the preview, or an original within the display caps. */
-    suspend fun load(ref: AttachmentRef, variant: AttachmentVariant, expected: SessionState, ifNoneMatch: String? = null): DownloadResult {
+    override suspend fun load(ref: AttachmentRef, variant: AttachmentVariant, expected: SessionState, ifNoneMatch: String?): DownloadResult {
         val target = target(ref, variant) ?: return DownloadResult.Failed(ApiFailure(FailureKind.INCOMPATIBLE))
         if (target.size > DISPLAY_MAX_BYTES) return DownloadResult.TooLarge
         val dimensions = ref.attachment.displayDimensions

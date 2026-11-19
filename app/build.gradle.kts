@@ -57,6 +57,7 @@ tasks.register<org.gradle.api.tasks.testing.Test>("liveSessionTest") {
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
+    implementation(libs.androidx.exifinterface)
     implementation(libs.compose.material3)
     implementation(libs.compose.tooling.preview)
     implementation(libs.activity.compose)
