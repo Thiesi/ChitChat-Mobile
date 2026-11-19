@@ -31,6 +31,22 @@
     <string name="image_gif">GIF</string>
     <string name="image_description">Photo from %1$s, %2$s</string>
     <string name="image_description_gif">GIF from %1$s, %2$s</string>
+    <!-- Received files F4: the full-screen viewer (files-media.md "Full-screen viewer"; PL, 2026-11-19). The Save-or-share
+         clauses return in F5. -->
+    <string name="image_open">Open photo</string>
+    <string name="viewer_close">Close</string>
+    <string name="viewer_load_full">Load full image · %1$s</string>
+    <string name="viewer_loading_full">Loading the full image</string>
+    <string name="viewer_failed">Couldn’t load the full image</string>
+    <string name="viewer_no_memory">Couldn’t show the full image right now</string>
+    <string name="viewer_too_large_preview">Too large to show here at full size.</string>
+    <string name="viewer_too_large">Too large to show here.</string>
+    <string name="viewer_no_animation">Animation isn’t available on this phone.</string>
+    <string name="viewer_zoom_in">Zoom in</string>
+    <string name="viewer_zoom_out">Zoom out</string>
+    <string name="viewer_zoom_reset">Reset zoom</string>
+    <string name="viewer_more">More</string>
+    <string name="viewer_less">Less</string>
     <string name="conversation_author_time">%1$s · %2$s</string>
     <string name="conversation_emote">* %1$s %2$s</string>
     <string name="conversation_unknown_user">Unavailable account</string>

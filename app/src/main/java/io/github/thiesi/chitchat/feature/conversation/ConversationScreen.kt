@@ -173,8 +173,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val composerFocus = remember { FocusRequester() }
     val androidContext = LocalContext.current
     val attach = remember { RoomAttachmentControls() }
+    // The full-screen viewer is a modal too: no read proof and no typing while it's open (TL, F4).
+    val viewerEntry = images?.viewer?.state?.collectAsStateWithLifecycle()?.value?.entry
+    val viewerOpen = viewerEntry != null && viewerEntry == completionEntryId
     val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null ||
-        attach.modalOpen || state.attachmentReview != null
+        attach.modalOpen || state.attachmentReview != null || viewerOpen
     fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !obscured &&
         !pingsOpen && model.state.value.pingSelection == null && !detailsOpen &&
         ignores?.state?.value?.target == null && !model.state.value.draftsOpen
@@ -541,6 +544,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 Spacer(Modifier.height(1.dp))
             }
         }
+        io.github.thiesi.chitchat.core.ui.ReceivedViewerHost(received) { id ->
+            state.messages.firstOrNull { it.attachment?.id == id && !it.deleted }?.let { message ->
+                Triple(message.username ?: stringResource(R.string.conversation_unknown_user), displayTime(message.createdAt, state.context), message.body)
+            }
+        }
         TypingStatus(model.typing, session, TypingTarget.Room(roomId),
             viewing = state.loaded && !state.stale && state.context != null && !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured,
             publishing = ready && !state.busy && !composerDialog && !obscured && model.canSend())
@@ -780,7 +788,7 @@ private fun MessageContent(message: RoomMessage, context: ConversationContext?, 
                 .combinedClickable(onClickLabel = actionsLabel, onLongClickLabel = actionsLabel,
                     onClick = onActions, onLongClick = onActions) else Modifier)) {
                 message.attachment?.let { io.github.thiesi.chitchat.core.ui.ReceivedAttachment(it, direct = false, messageId = message.id,
-                    sender = sender, time = displayTime(message.createdAt, context), caption = message.body, images = received) }
+                    sender = sender, time = displayTime(message.createdAt, context), caption = message.body, images = received, onActions = onActions) }
                 if (message.type == "emote") MessageBody(message.body.orEmpty(),
                     emotePrefix = stringResource(R.string.conversation_emote, sender, ""), mentions = mentionHints)
                 else message.body?.let { MessageBody(it, mentions = mentionHints) }

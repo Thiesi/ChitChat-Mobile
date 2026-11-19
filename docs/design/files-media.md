@@ -317,9 +317,12 @@ Within the transcript spec's bubble, run and chit rules:
     label "Open photo"; long-press keeps the message actions.
 - **Staged in F3 (PL):**
   - file cards have no buttons until F5 and read "{name}, {type}, {size}" (APKs too);
-  - frames have no tap action until F4, and the "Too large" box is static text;
-  - GIFs show the badge only, on every API level, until F4 adds the play glyph with the tap (and the
-    API 26–27 rule).
+  - frames had no tap action until F4, and the "Too large" box was static text;
+  - GIFs showed the badge only until F4.
+- **From F4 (TL/PL):** a tap on the frame opens the viewer ("Open photo") and takes precedence, while
+  long-press keeps the message actions. Gone and not allowed have nothing to show, so their frame has
+  no tap. Too large and offline open the viewer with their line. GIF frames show the play glyph only
+  where the phone animates GIFs (API 28+); on API 26–27 the badge stays alone.
 - **Where frames never appear:** reply quotes (a quoted photo stays text-only), search results,
   notification rows and push. A room row collapsed because its author is ignored shows no frame
   and requests nothing until revealed. A blocked DM thread loads like any other; the server decides
@@ -387,6 +390,19 @@ The policy is local and read from existing system state, with no new requests:
   typing proof while open, as other modals do (modals spec).
 - Accessibility: zoom gestures have button alternatives (zoom in, zoom out, reset). The image
   description is as above.
+- **Staged in F4 (PL, 2026-11-19):** Save and Share are absent from the top bar until F5, with no
+  placeholder, and the lines drop their Save-or-share clauses until then: "Too large to show here at
+  full size." (with a preview), "Too large to show here." (without one, on the black ground, with no
+  zoom group), and on API 26–27 "Animation isn't available on this phone." F5 restores the full
+  sentences.
+- **Zoom group (PL):** a vertical pill on the overlay scrim at the bottom end, above the bottom
+  scrim and moving up with it, 8dp from the edge inside the system-bar insets: three 48dp buttons,
+  "Zoom in", "Zoom out", "Reset zoom". Zoom out and Reset zoom are disabled at fit scale, and Zoom in
+  at the maximum. TalkBack order: Close, sender and time, the image, the zoom group, the bottom bar.
+- **Caption (PL):** collapsed to two lines with an ellipsis and a 48dp "More" / "Less" button;
+  expanded, at most 40% of the window height, scrolling inside. The bars always show (no
+  tap-to-hide). The sender wraps to two lines and is never ellipsized (P-222). An explicit Close
+  sits in the top bar, so swipe-down is never the only way out.
 
 ## Save (download to a chosen place)
 

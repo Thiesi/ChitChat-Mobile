@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.core.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -70,6 +71,10 @@ internal class ReceivedImages(
     val states: Map<ImageKey, ImageState>,
     val key: (AttachmentRef) -> ImageKey?,
     val onScreen: Set<Long>,
+    /** The open viewer, when it was opened from this screen's nav entry (F4). */
+    val viewer: io.github.thiesi.chitchat.core.media.ViewerState? = null,
+    /** Whether GIFs animate in the viewer here; the play glyph promises exactly that (PL, F4). */
+    val animates: Boolean = false,
 ) {
     override fun toString() = "ReceivedImages"
 }
@@ -77,20 +82,21 @@ internal class ReceivedImages(
 private val FrameShape = Lantern.frame
 
 /**
- * A received file inside the message: a fixed-size image frame for a previewable image, else a file card. Either is its
- * own TalkBack node with no click or long-click action; taps on it reach the row's message actions (TL/PL, F3 (b)).
- * Only Show and Try again inside the frame are buttons. In F4 a tap on the frame opens the viewer ("Open photo").
+ * A received file inside the message: a fixed-size image frame for a previewable image, else a file card, each its own
+ * TalkBack node inside the row's message-actions target (TL/PL, F3 (b)). The card has no click semantics until F5. The
+ * frame's tap opens the viewer ("Open photo", F4) and takes precedence; long-press keeps [onActions]. Gone and not allowed
+ * have nothing to show, so their frame has no tap and taps reach the row's actions (TL, F4). Show and Try again are buttons.
  */
 @Composable
 internal fun ReceivedAttachment(attachment: MessageAttachment, direct: Boolean, messageId: Long, sender: String, time: String,
-    caption: String?, images: ReceivedImages?, modifier: Modifier = Modifier) {
-    if (attachment.previewable) ReceivedImageFrame(attachment, direct, messageId, sender, time, caption, images, modifier)
+    caption: String?, images: ReceivedImages?, modifier: Modifier = Modifier, onActions: (() -> Unit)? = null) {
+    if (attachment.previewable) ReceivedImageFrame(attachment, direct, messageId, sender, time, caption, images, modifier, onActions)
     else ReceivedFileCard(attachment, modifier)
 }
 
 @Composable
 private fun ReceivedImageFrame(attachment: MessageAttachment, direct: Boolean, messageId: Long, sender: String, time: String,
-    caption: String?, images: ReceivedImages?, modifier: Modifier) {
+    caption: String?, images: ReceivedImages?, modifier: Modifier, onActions: (() -> Unit)?) {
     val colors = ChitChatTheme.colors
     val locale = LocalConfiguration.current.locales[0]
     BoxWithConstraints(modifier) {
@@ -107,37 +113,24 @@ private fun ReceivedImageFrame(attachment: MessageAttachment, direct: Boolean, m
             DisposableEffect(pane, ref) { onDispose { pane.hidden(ref) } }
         }
         val state = images?.key?.invoke(ref)?.let { images.states[it] }
-        // The caption isn't repeated here: the message's actions node reads it right after (PL, #310).
         val gif = attachment.mimeType.equals("image/gif", ignoreCase = true)
-        val label = stringResource(if (gif) R.string.image_description_gif else R.string.image_description, sender, time)
-        val photoSize = sizeText(attachmentSizeText(attachment.sizeBytes, locale))
-        // The state line's parts. The box shows them after "Photo", joined with " · "; TalkBack reads a node's
-        // contentDescription instead of its merged text, so the description carries the same parts after the label and a
-        // full stop, joined with ", " (TL/PL, #310). Loading speaks "Loading"; a loaded image is the label alone.
-        val photo = stringResource(R.string.image_photo)
-        val parts: List<String>? = when (state) {
-            is ImageState.Loaded -> null
-            ImageState.Loading -> listOf(stringResource(R.string.image_loading_spoken))
-            is ImageState.NotLoaded -> if (state.reason == ImageState.Reason.OFFLINE)
-                listOf(photoSize, stringResource(R.string.image_offline_part)) else listOf(photoSize)
-            ImageState.Failed -> listOf(stringResource(R.string.image_failed))
-            ImageState.NoMemory -> listOf(stringResource(R.string.image_no_memory))
-            ImageState.TooLarge -> listOf(photoSize, stringResource(R.string.image_too_large_part))
-            ImageState.Gone -> listOf(stringResource(R.string.image_gone))
-            ImageState.NotAllowed -> listOf(stringResource(R.string.image_not_allowed))
-            null -> if (tooLargeForDisplay(attachment)) listOf(photoSize, stringResource(R.string.image_too_large_part)) else listOf(photoSize)
-        }
-        // Size-led lines get the "Photo" lead on screen; status sentences stand alone.
-        val sized = parts?.firstOrNull() == photoSize
-        val shown = parts?.let { (if (sized) listOf(photo) + it else it).joinToString(" · ") }
-        val description = parts?.let { "$label. ${it.joinToString(", ")}" } ?: label
+        val text = imageText(attachment, state, sender, time)
+        val shown = text.shown
+        val description = text.description
         val dashed = state == ImageState.Gone
         val outline = colors.fieldLine
+        // Nothing to show behind Gone and Not allowed: no "Open photo" there (TL condition 6).
+        val opens = state != ImageState.Gone && state != ImageState.NotAllowed
+        val openLabel = stringResource(R.string.image_open)
+        val actionsLabel = stringResource(R.string.message_actions)
+        val screen = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
         Box(Modifier.size(size.widthDp.dp, size.heightDp.dp).clip(FrameShape).background(colors.raised)
             .then(if (dashed) Modifier.drawBehind {
                 drawRoundRect(outline, cornerRadius = CornerRadius(14.dp.toPx()),
                     style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))))
             } else Modifier)
+            .then(if (opens && pane != null) Modifier.combinedClickable(onClickLabel = openLabel, onLongClickLabel = actionsLabel,
+                onClick = { pane.openViewer(ref, screen.width, screen.height) }, onLongClick = { onActions?.invoke() }) else Modifier)
             .semantics(mergeDescendants = true) { contentDescription = description }
             .testTag("attachment_frame:${attachment.id}"), contentAlignment = Alignment.Center) {
             when (state) {
@@ -155,8 +148,14 @@ private fun ReceivedImageFrame(attachment: MessageAttachment, direct: Boolean, m
                 // Too large, not allowed, and not yet evaluated (off screen, or the instant before a decision): text only.
                 ImageState.TooLarge, ImageState.NotAllowed, null -> FrameBox(shown.orEmpty())
             }
-            if (gif && state !is ImageState.Gone && state !is ImageState.NotAllowed)
+            if (gif && state !is ImageState.Gone && state !is ImageState.NotAllowed) {
                 GifBadge(Modifier.align(Alignment.TopStart))
+                // The play glyph promises the viewer's animation, so it shows only where the phone can animate (PL, F4).
+                if (state is ImageState.Loaded && images?.animates == true)
+                    Icon(painterResource(R.drawable.ic_play), contentDescription = null, tint = Lantern.overlayText,
+                        modifier = Modifier.size(Lantern.target).background(Lantern.overlayScrim, Lantern.pill).padding(12.dp)
+                            .testTag("attachment_play:${attachment.id}"))
+            }
         }
     }
 }
@@ -278,10 +277,18 @@ internal fun rememberReceivedImages(images: io.github.thiesi.chitchat.core.media
     var pane by remember { mutableStateOf<ImagePanes.Pane?>(null) }
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) { pane = images.panes.open(owner, entry) }
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { pane?.release(); pane = null }
-    DisposableEffect(images) { onDispose { pane?.release(); pane = null } }
+    val activity = androidx.activity.compose.LocalActivity.current
+    DisposableEffect(images, entry) {
+        onDispose {
+            pane?.release(); pane = null
+            // Leaving the entry for good (not a configuration change) closes a viewer opened from it (F4).
+            if (activity?.isChangingConfigurations != true) images.panes.departed(entry)
+        }
+    }
     val states by images.images.states.collectAsStateWithLifecycle()
+    val viewer by images.viewer.state.collectAsStateWithLifecycle()
     val onScreen by remember(timeline, keyPrefix) { androidx.compose.runtime.derivedStateOf { onScreenIds(timeline.layoutInfo, keyPrefix) } }
-    ReceivedImages(pane, states, images.images::key, onScreen)
+    ReceivedImages(pane, states, images.images::key, onScreen, viewer?.takeIf { it.entry == entry }, images.viewer.animates)
 }
 
 /**
@@ -293,3 +300,49 @@ internal fun onScreenIds(info: androidx.compose.foundation.lazy.LazyListLayoutIn
         .filter { it.offset < info.viewportEndOffset && it.offset + it.size > info.viewportStartOffset }
         .mapNotNull { (it.key as? String)?.takeIf { key -> key.startsWith(keyPrefix) }?.removePrefix(keyPrefix)?.toLongOrNull() }
         .toSet()
+
+/** A frame's visible state line ([shown], null when loaded) and its TalkBack [description]. */
+internal class ImageText(val shown: String?, val description: String)
+
+/**
+ * The frame's line and description, shared with the viewer's image (TL condition 7). The caption isn't repeated: the
+ * message's actions node reads it. The box shows the state's parts after "Photo", joined with " · "; TalkBack reads a
+ * node's contentDescription instead of its merged text, so the description carries the same parts after the label and a
+ * full stop, joined with ", " (TL/PL, #310). Loading speaks "Loading"; a loaded image is the label alone.
+ */
+@Composable
+internal fun imageText(attachment: MessageAttachment, state: ImageState?, sender: String, time: String): ImageText {
+    val locale = LocalConfiguration.current.locales[0]
+    val gif = attachment.mimeType.equals("image/gif", ignoreCase = true)
+    val label = stringResource(if (gif) R.string.image_description_gif else R.string.image_description, sender, time)
+    val photoSize = sizeText(attachmentSizeText(attachment.sizeBytes, locale))
+    val photo = stringResource(R.string.image_photo)
+    val parts: List<String>? = when (state) {
+        is ImageState.Loaded -> null
+        ImageState.Loading -> listOf(stringResource(R.string.image_loading_spoken))
+        is ImageState.NotLoaded -> if (state.reason == ImageState.Reason.OFFLINE)
+            listOf(photoSize, stringResource(R.string.image_offline_part)) else listOf(photoSize)
+        ImageState.Failed -> listOf(stringResource(R.string.image_failed))
+        ImageState.NoMemory -> listOf(stringResource(R.string.image_no_memory))
+        ImageState.TooLarge -> listOf(photoSize, stringResource(R.string.image_too_large_part))
+        ImageState.Gone -> listOf(stringResource(R.string.image_gone))
+        ImageState.NotAllowed -> listOf(stringResource(R.string.image_not_allowed))
+        null -> if (tooLargeForDisplay(attachment)) listOf(photoSize, stringResource(R.string.image_too_large_part)) else listOf(photoSize)
+    }
+    // Size-led lines get the "Photo" lead on screen; status sentences stand alone.
+    val sized = parts?.firstOrNull() == photoSize
+    return ImageText(parts?.let { (if (sized) listOf(photo) + it else it).joinToString(" · ") },
+        parts?.let { "$label. ${it.joinToString(", ")}" } ?: label)
+}
+
+/** The viewer over a conversation screen, for the message whose attachment it shows; it closes if that message is gone. */
+@Composable
+internal fun ReceivedViewerHost(received: ReceivedImages?, find: @Composable (Long) -> Triple<String, String, String?>?) {
+    val viewer = received?.viewer ?: return
+    val meta = find(viewer.ref.attachment.id)
+    if (meta == null) { LaunchedEffect(viewer.key) { received.pane?.closeViewer() }; return }
+    val (sender, time, caption) = meta
+    val held = received.states[viewer.key]
+    ReceivedImageViewer(viewer, held, sender, time, caption, imageText(viewer.ref.attachment, held, sender, time).description,
+        onClose = { received.pane?.closeViewer() }, onLoadFull = { received.pane?.loadFullImage() })
+}

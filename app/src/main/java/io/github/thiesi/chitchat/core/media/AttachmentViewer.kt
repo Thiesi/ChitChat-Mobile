@@ -113,6 +113,8 @@ internal class AttachmentViewer(
 
     private val mutable = MutableStateFlow<ViewerState?>(null)
     val state: StateFlow<ViewerState?> = mutable.asStateFlow()
+    /** Whether this phone animates GIFs (API 28+): the transcript's play glyph shows only then (PL, F4). */
+    val animates: Boolean get() = animated != null
     private var held: Held? = null
     private var job: Job? = null
     private var width = 1
