@@ -517,14 +517,18 @@ words people look for: **"Delete account"**.
   - **still signed in:** "Your account wasn't deleted." as a `textMuted` line under the
     title, announced once, with the screen scrolled to the top. Continue and Cancel return;
   - **signed out:** a full onboarding-style screen titled "You've been signed out" (never
-    "scheduled") with the hedged text above, and **Done** pinned, to step 3.
+    "scheduled") with the hedged text above, and **Done** pinned, to step 3. Back does the
+    same.
 - **Confirmation:** a full onboarding-style screen titled "Account scheduled for deletion",
   shown only after a confirmed success. It has step 5's text, plus "To restore it, sign in
   with *Restore a closed account*.", and **Done** as the pinned persimmon primary, to step 3.
+  Back does the same.
 - **Refusals on the explanation screen:**
   - last Super-Administrator: the text above;
   - not active: "Your account's status on this server doesn't allow deleting it right now.";
-  - rate limited: "Too many attempts; try again later."
+  - rate limited: "Too many attempts; try again later.";
+  - any other failure (network, server error): the shared account error line, such as the
+    neutral network error.
 - **When the session has already ended** (the server's `forced_logout` race, account-deletion
   D1):
   - **Waiting:** while the request is still in flight, a full screen titled "Deleting your
@@ -535,11 +539,12 @@ words people look for: **"Delete account"**.
     change;
   - **Unknown:** a full screen with the explanation screen's title and the same notice, Check
     pinned, and the same failed-Check caption. Back goes to step 3 for this server;
-  - **Refused:** the ordinary ended-session sign-in page, with a `textMuted` line under its
-    title, cleared on the next sign-in attempt: "Your account wasn't deleted." followed by the
-    reason ("You're the last Super-Administrator. Give the role to someone else first.",
-    "Its status on this server doesn't allow that right now." or "Too many attempts; try
-    again later.").
+  - **Refused:** the ordinary ended-session page ("Session not available", with Reconnect and
+    Clear local session), with a `textMuted` line under its title, cleared on Reconnect: "Your
+    account wasn't deleted." followed by the reason ("You're the last Super-Administrator.
+    Give the role to someone else first.", "Its status on this server doesn't allow that right
+    now.", "Too many attempts; try again later." or, for any other failure, the shared account
+    error line).
 - **Signing in to a pending account** (`account_closure_pending`): "This account is scheduled
   for deletion. To keep it, go back and choose Restore a closed account. That works for 14
   days after it was deleted." The label is passed in from the button's string. It's plain
