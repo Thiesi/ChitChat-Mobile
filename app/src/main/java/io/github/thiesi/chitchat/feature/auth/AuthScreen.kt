@@ -207,30 +207,34 @@ private fun PasswordForm(model: AuthViewModel, enabled: Boolean, restore: Boolea
 }
 
 /**
- * Step 4a's reset entry (PL, O4b2). Discovery runs once per visit of step 4a (a per-visit flag survives recomposition and
- * configuration change). While it's unknown or checking, an empty 48dp row keeps the layout still; then either the
- * Forgot password? button or the static line. A quiet change: no semantics on the empty row and no live region.
+ * Step 4a's reset entry (PL, O4b2; #298). At most one completed discovery per runtime per visit ([ResetDiscoveryVisit]):
+ * the visit asks while it can, so an ask the repository dropped while the session was busy is asked again once it
+ * settles. While nothing is known, an empty 48dp row keeps the layout still; then the Forgot password? button or the
+ * static line. A quiet change: no semantics on the empty row and no live region.
  */
 @Composable
 private fun ForgotPasswordRow(state: SessionState, model: AuthViewModel, username: String) {
-    var asked by rememberSaveable { mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        if (!asked && state.reset.support != io.github.thiesi.chitchat.core.session.ResetSupport.SUPPORTED) {
-            asked = true
+    var visit by rememberSaveable(stateSaver = androidx.compose.runtime.saveable.Saver<ResetDiscoveryVisit, ArrayList<String>>(
+        save = { ResetDiscoveryVisit.save(it) }, restore = { ResetDiscoveryVisit.restore(it) })) { mutableStateOf(ResetDiscoveryVisit()) }
+    androidx.compose.runtime.LaunchedEffect(state.generation, state.server, state.phase, state.busy, state.reset.support) {
+        visit = visit.observe(state)
+        if (visit.shouldAsk(state)) {
+            visit = visit.asked(state) // Before the call: a fixture may answer synchronously.
             model.discoverPasswordReset()
         }
     }
+    val observed = Modifier.semantics { this[ResetVisitState] = visit.scalars() }
     when (state.reset.support) {
         io.github.thiesi.chitchat.core.session.ResetSupport.SUPPORTED -> TextButton(onClick = { model.startReset(username) },
-            enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp).testTag("forgot_password")) {
+            enabled = !state.busy, modifier = Modifier.heightIn(min = 48.dp).testTag("forgot_password").then(observed)) {
             Text(stringResource(R.string.forgot_password))
         }
         io.github.thiesi.chitchat.core.session.ResetSupport.UNSUPPORTED -> androidx.compose.foundation.layout.Box(
-            Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = androidx.compose.ui.Alignment.CenterStart) {
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).then(observed), contentAlignment = androidx.compose.ui.Alignment.CenterStart) {
             Text(stringResource(R.string.forgot_password_static), Modifier.testTag("forgot_password_static"),
                 color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.textMuted)
         }
-        else -> androidx.compose.foundation.layout.Spacer(Modifier.fillMaxWidth().height(48.dp).testTag("forgot_password_pending"))
+        else -> androidx.compose.foundation.layout.Spacer(Modifier.fillMaxWidth().height(48.dp).testTag("forgot_password_pending").then(observed))
     }
 }
 
