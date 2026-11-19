@@ -15,6 +15,10 @@ NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9.$]{0,255}")
 SHA = re.compile(r"[0-9a-f]{40}")
 COUNTS = re.compile(r'<div class="infoBox" id="(tests|failures|skipped|ignored)">\s*<div class="counter">([0-9]+)</div>')
 TAP = re.compile(r"Tap fixture: tag=[A-Za-z_][A-Za-z_0-9]{0,127}, IME=0, focusedBefore=false, focused=true,")
+# Owner decision (issue #1, comment 7003053525): the already-focused variant counts only with the surfaceless-show dump.
+TAP_FOCUSED = re.compile(r"Tap fixture: tag=[A-Za-z_][A-Za-z_0-9]{0,127}, IME=0, focusedBefore=true, focused=true,")
+DUMP = r"NativeImeDump\(startedUptimeMillis=[0-9]{1,15}, finishedUptimeMillis=[0-9]{1,15}, flags=\[([^\[\]\n]{0,2048})\], limitReached=(true|false)\)"
+SERVER = re.compile(r"server=NativeImeServer\(inputMethod=" + DUMP + r", imeWindow=" + DUMP + r"\)")
 MINIMUM_CASES = 248  # Preserve the existing full suite; additions require no count edit.
 
 
@@ -24,12 +28,36 @@ def read_bounded(path, maximum):
     return path.read_bytes()
 
 
+def dump_flags(raw):
+    """The `name=value` items of one bounded dump; None when any item is malformed or repeated."""
+    flags = {}
+    for item in raw.split(", ") if raw else []:
+        name, separator, value = item.partition("=")
+        if not separator or not name or name in flags:
+            return None
+        flags[name] = value
+    return flags
+
+
+def surfaceless_show(text):
+    """Exactly one complete server dump: the input method shown and requested, its window without a surface, invisible."""
+    dumps = SERVER.findall(text)
+    if len(dumps) != 1:
+        return False
+    method, method_limit, window, window_limit = dumps[0]
+    method_flags, window_flags = dump_flags(method), dump_flags(window)
+    return (method_limit == "false" and window_limit == "false" and method_flags is not None and window_flags is not None
+        and method_flags.get("mInputShown") == "true" and method_flags.get("mShowInputRequested") == "true"
+        and window_flags.get("mHasSurface") == "false" and window_flags.get("isVisible") == "false")
+
+
 def known_ime(failure):
     text = failure.text or ""
+    taps, focused = len(TAP.findall(text)), len(TAP_FOCUSED.findall(text))
     # Pinned DDMLib omits type; require the explicit root stack class in either format.
     return (failure.tag == "failure" and failure.get("type") in (None, "java.lang.AssertionError")
         and text.startswith("java.lang.AssertionError: Tap fixture: ")
-        and len(TAP.findall(text)) == 1
+        and ((taps == 1 and focused == 0) or (taps == 0 and focused == 1 and surfaceless_show(text)))
         and text.count("Caused by:") == 1 and "Suppressed:" not in text
         and "Caused by: androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms" in text
         and "NativeInputKt.tapNativeInput(NativeInput.kt:20)" in text

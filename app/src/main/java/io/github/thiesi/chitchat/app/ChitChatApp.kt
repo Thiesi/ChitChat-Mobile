@@ -161,9 +161,14 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     guidelines: io.github.thiesi.chitchat.feature.policies.GuidelinesViewModel? = null,
     recoveryKeys: io.github.thiesi.chitchat.feature.account.RecoveryKeyViewModel? = null,
     rulesUpdate: io.github.thiesi.chitchat.feature.policies.RulesUpdateViewModel? = null,
+    accountDeletion: io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session = auth.state.collectAsStateWithLifecycle().value
+    // Delete account (D2): an outcome that lands after the session ended takes over the signed-out page. While Check's
+    // session read runs, the Unknown being checked holds the screen (the read can replace the session state).
+    val deletionUi = accountDeletion?.state?.collectAsStateWithLifecycle()?.value
+    val closure = session.closure ?: deletionUi?.checking
     val displayedSession = session
     val targetState = messageTargets?.state?.collectAsStateWithLifecycle()?.value
     val searchState = search?.state?.collectAsStateWithLifecycle()?.value
@@ -481,8 +486,9 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         else if (entry?.destination?.route?.startsWith("conversation/") == true || entry?.destination?.route == NOTIFICATION_ROOM_ROUTE)
                         R.string.rooms_conversation else when (entry?.destination?.route) {
                         "settings" -> R.string.settings
-                        "account", NOTIFICATION_ACCOUNT_ROUTE -> R.string.account
+                        "account", NOTIFICATION_ACCOUNT_ROUTE -> R.string.you_privacy_security
                         RECOVERY_KEY_ROUTE -> R.string.recovery_key_row
+                        DELETE_ACCOUNT_ROUTE -> R.string.delete_account_row
                         "notification_settings" -> R.string.notification_settings_title
                         FIND_PEOPLE_ROUTE -> R.string.find_people_title
                         LICENCES_ROUTE, LICENCE_ROUTE -> R.string.oss_licences_title
@@ -506,7 +512,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                 displayedSession.user?.sessionVersion ?: -1, displayedSession.server?.value))
                                 searchRoute(displayedSession)?.let { route -> focus.clearFocus(); nav.navigate(route) { launchSingleTop = true } }
                         }, modifier = Modifier.testTag("message_search_open")) { Text(stringResource(R.string.message_search_title)) }
-                        if (atHome && state.hasLoadedSettings) TextButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
+                        if (atHome && state.hasLoadedSettings && closure !is io.github.thiesi.chitchat.core.account.ClosureState.Waiting)
+                            TextButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
                             Text(stringResource(R.string.settings))
                         }
                     },
@@ -590,7 +597,19 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                             key(state.settings.server?.value, session.generation) {
                                 ScreenContent {
                                     val connecting = session.phase == SessionPhase.CONNECTING || session.phase == SessionPhase.NO_SERVER
-                                    if (state.settings.server == null) {
+                                    val outcome = closure
+                                    if (accountDeletion != null && outcome != null &&
+                                        io.github.thiesi.chitchat.feature.account.closureTakesOver(session, outcome)) {
+                                        // The full-screen deletion outcomes (PL, D2). Done, and Back except while Waiting, go to
+                                        // step 3 for this server; the outcome leaves memory (TL C4).
+                                        io.github.thiesi.chitchat.feature.account.ClosureOutcomeScreen(outcome,
+                                            installationLabel(session, state.settings.server?.value),
+                                            checking = deletionUi?.checking != null, checkFailed = deletionUi?.checkFailed == true,
+                                            onCheck = accountDeletion::check, onDone = {
+                                                accountDeletion.dismiss(); chosen = false
+                                                if (session.phase != SessionPhase.ANONYMOUS) auth.reconnect()
+                                            })
+                                    } else if (state.settings.server == null) {
                                         if (session.error?.kind == FailureKind.STORAGE || session.storageWarning) AuthScreen(session, auth)
                                         else if (!welcomed) WelcomeScreen { welcomed = true }
                                         else {
@@ -684,11 +703,28 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                     session.installationName ?: breakableHost(host), startChatting)
                             }
                         }
-                        composable("account") {
+                        composable("account") { destination ->
+                            // Export my data first (PL, D2): back here with Export personal data brought into view.
+                            val focusExport = destination.savedStateHandle.getStateFlow(FOCUS_EXPORT_KEY, false).collectAsStateWithLifecycle().value
                             if (session.phase == SessionPhase.AUTHENTICATED) ScreenContent {
                                 AccountScreen(account, session, auth::refresh, installation = installationLabel(session, state.settings.server?.value),
-                                    onRecoveryKey = recoveryKeys?.let { { nav.navigate(RECOVERY_KEY_ROUTE) { launchSingleTop = true } } })
+                                    onRecoveryKey = recoveryKeys?.let { { nav.navigate(RECOVERY_KEY_ROUTE) { launchSingleTop = true } } },
+                                    focusExport = focusExport, onExportFocused = { destination.savedStateHandle[FOCUS_EXPORT_KEY] = false })
                                 typingPreferences?.let { TypingPreferenceCard(it, session, auth::refresh) }
+                                // Last in Privacy and security (PL, D2); nothing new starts under the update state.
+                                if (accountDeletion != null && !session.updateRequired)
+                                    io.github.thiesi.chitchat.feature.account.DeleteAccountRow { nav.navigate(DELETE_ACCOUNT_ROUTE) { launchSingleTop = true } }
+                            }
+                        }
+                        composable(DELETE_ACCOUNT_ROUTE) {
+                            if (session.phase == SessionPhase.AUTHENTICATED && accountDeletion != null) ScreenContent {
+                                io.github.thiesi.chitchat.feature.account.DeleteAccountScreen(accountDeletion, session,
+                                    installationLabel(session, state.settings.server?.value),
+                                    onExportFirst = {
+                                        nav.previousBackStackEntry?.takeIf { it.destination.route == "account" }?.savedStateHandle?.set(FOCUS_EXPORT_KEY, true)
+                                        nav.popBackStack()
+                                    },
+                                    onCancel = { nav.popBackStack() })
                             }
                         }
                         for ((route, name) in listOf(SHELL_POLICY_RULES_ROUTE to io.github.thiesi.chitchat.core.policies.PolicyDocumentName.RULES,
@@ -927,6 +963,8 @@ private fun installationLabel(session: io.github.thiesi.chitchat.core.session.Se
 
 private const val LICENCES_ROUTE = "licences"
 private const val RECOVERY_KEY_ROUTE = "recovery-key"
+private const val DELETE_ACCOUNT_ROUTE = "delete-account"
+private const val FOCUS_EXPORT_KEY = "focus_export"
 private const val SERVER_NEW_ROUTE = "server_new"
 private const val FIND_PEOPLE_ROUTE = "find_people"
 // Server documents (O3a2): signed out from Server found, signed in from You (inside the shell).

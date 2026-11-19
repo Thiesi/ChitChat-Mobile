@@ -106,12 +106,56 @@
     <string name="finish_restoration">Finish account restoration</string>
     <string name="restoration_mfa_pending">The password was accepted. The account remains scheduled for closure until MFA succeeds.</string>
     <string name="account_restored">The server confirmed that your account was restored.</string>
-    <string name="account_closure_pending">This account is scheduled for closure. Choose Restore account before its deadline.</string>
+    <!-- %1$s is onboarding_restore, so the label always matches the button (PL, D2). -->
+    <string name="account_closure_pending">This account is scheduled for deletion. To keep it, go back and choose %1$s. That works for 14 days after it was deleted.</string>
+
+    <!-- In-app account deletion (play-readiness.md §2, D2; PL wording). %1$s in titles is the installation (host dot-break). -->
+    <string name="delete_account_row">Delete account</string>
+    <string name="delete_account_title">Delete your account on %1$s</string>
+    <!-- %1$s is delete_account_scope_emphasis (SemiBold). -->
+    <string name="delete_account_scope">This deletes your account %1$s. Accounts on other servers aren\'t affected.</string>
+    <string name="delete_account_scope_emphasis">on %1$s only</string>
+    <string name="delete_account_now_lead">Right away:</string>
+    <string name="delete_account_now">You\'re signed out everywhere, and you can\'t sign in normally.</string>
+    <string name="delete_account_cooling_lead">For 14 days:</string>
+    <!-- %1$s is onboarding_restore (italic). -->
+    <string name="delete_account_cooling">You can change your mind: choose %1$s when signing in.</string>
+    <string name="delete_account_after_lead">After 14 days:</string>
+    <string name="delete_account_after">Your name becomes ‘Closed account’, your personal details are cleared and your username is freed.</string>
+    <string name="delete_account_stays_lead">What stays:</string>
+    <string name="delete_account_stays">Messages and files you sent in rooms and direct messages stay visible to the people who received them, shown as ‘Closed account’, for as long as this server keeps them. Moderation and security records are kept under the server\'s policies.</string>
+    <string name="delete_account_export_first">Export my data first</string>
+    <string name="delete_account_continue">Continue</string>
+    <string name="delete_account_dialog_title">Delete your account?</string>
+    <string name="delete_account_dialog_body">You\'ll be signed out now. You can restore it for 14 days.</string>
+    <string name="delete_account_confirm">Delete account</string>
+    <string name="step_up_title_delete_account">Confirm it\'s you to delete your account</string>
+    <string name="delete_account_last_super_admin">You\'re the last Super-Administrator. Give the role to someone else first.</string>
+    <string name="delete_account_not_active">Your account\'s status on this server doesn\'t allow deleting it right now.</string>
+    <string name="delete_account_rate_limited">Too many attempts; try again later.</string>
+    <string name="delete_account_unknown_lead">We\'re not sure your request went through.</string>
+    <string name="delete_account_unknown_body">Check with the server; nothing is sent again.</string>
+    <string name="delete_account_check">Check</string>
+    <string name="delete_account_check_failed">The check didn\'t get through. Try again when you\'re connected.</string>
+    <string name="delete_account_not_deleted">Your account wasn\'t deleted.</string>
+    <string name="delete_account_scheduled_title">Account scheduled for deletion</string>
+    <!-- %1$s is the server's deadline: medium date and short time in the device time zone. -->
+    <string name="delete_account_scheduled_body">Your account is scheduled for deletion. You can restore it until %1$s.</string>
+    <!-- %1$s is onboarding_restore (italic). -->
+    <string name="delete_account_restore_line">To restore it, sign in with %1$s.</string>
+    <string name="delete_account_done">Done</string>
+    <string name="delete_account_signed_out_title">You\'ve been signed out</string>
+    <!-- %1$s is an approximate date (device clock + 14 days, date only); %2$s is onboarding_restore (italic). -->
+    <string name="delete_account_signed_out_body">You\'ve been signed out, which means the deletion most likely went through. If it did, you can restore your account until about %1$s with %2$s. If you can still sign in normally, it wasn\'t deleted.</string>
+    <string name="delete_account_waiting_title">Deleting your account…</string>
+    <string name="delete_account_waiting_body">You\'ve been signed out. Waiting for the server to confirm.</string>
+    <string name="delete_account_ended_last_super_admin">Your account wasn\'t deleted. You\'re the last Super-Administrator. Give the role to someone else first.</string>
+    <string name="delete_account_ended_not_active">Your account wasn\'t deleted. Its status on this server doesn\'t allow that right now.</string>
+    <string name="delete_account_ended_rate_limited">Your account wasn\'t deleted. Too many attempts; try again later.</string>
     <string name="account_cannot_restore">The account is permanently closed or its restoration deadline has passed.</string>
     <string name="account_not_pending">This account is not scheduled for closure. Use sign-in instead.</string>
     <string name="guest_detected">This is a guest session. Guest features are not included in this slice; ending the visit is permanent.</string>
     <string name="end_guest_visit">End guest visit</string>
-    <string name="account">Account</string>
     <string name="personal_data_title">Your personal data</string>
     <string name="export_scope">Export the retained data the server associates with your account, including your messages, visible direct messages, profile, submitted reports and account activity. File attachments are metadata only; the profile picture is included where available. The server controls retention and authorization.</string>
     <string name="export_privacy">The saved JSON is not encrypted. Your chosen documents provider may upload it to cloud storage. Anyone with access to that file can read it; signing out of ChitChat does not remove it. Choose a private location.</string>

@@ -154,6 +154,8 @@ fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? 
             }
             SessionPhase.INVALIDATED -> {
                 Text(stringResource(R.string.session_not_available), style = MaterialTheme.typography.titleLarge)
+                // A deletion refused after the session ended for another reason (PL, D2): a caption under the title.
+                io.github.thiesi.chitchat.feature.account.EndedRefusalCaption(state.closure)
                 PrimaryButton(onClick = model::reconnect, enabled = !waiting) { Text(stringResource(R.string.reconnect)) }
                 TextButton(onClick = model::signOut) { Text(stringResource(R.string.clear_local_session)) }
             }
@@ -277,8 +279,13 @@ private fun RecoveryForm(model: AuthViewModel, enabled: Boolean) {
     PrimaryButton(onClick = submit, enabled = canSubmit) { Text(stringResource(R.string.use_recovery_code)) }
 }
 
+/** account_closure_pending names the Restore a closed account button from its own resource, so they always match (PL, D2). */
 @Composable
-private fun errorText(failure: ApiFailure): String = stringResource(when {
+private fun labelled(id: Int): String =
+    if (id == R.string.account_closure_pending) stringResource(id, stringResource(R.string.onboarding_restore)) else stringResource(id)
+
+@Composable
+private fun errorText(failure: ApiFailure): String = labelled(when {
     failure.kind == FailureKind.STORAGE -> R.string.secure_storage_unavailable
     failure.kind == FailureKind.TLS -> R.string.tls_error
     failure.kind == FailureKind.REDIRECT -> R.string.redirect_error

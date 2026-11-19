@@ -361,6 +361,29 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def deletion_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-deletion-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_deletion_captures_are_copied_and_keep_the_original_status(self):
+        self.results(5)
+        files = [Path("deletion-light-default-row.png"), Path("deletion-dark-font200-explanation-actions.png"),
+            Path("deletion-light-font200-scheduled-longdate.png"), Path("deletion-dark-default-checkfailed.png"),
+            Path("deletion-light-default-endedrefusal.png")]
+        self.deletion_files(files)
+        self.assertEqual(5, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.DELETION_DESTINATION / path.name)
+        self.assertEqual(6, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_deletion_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"deletion-light-default-row-{n}.png") for n in range(54)],
+            [Path("a/deletion-dark-default-row.png"), Path("b/deletion-dark-default-row.png")],
+            [Path("deletion-dark-default-restore.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.deletion_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def reset_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-reset-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
