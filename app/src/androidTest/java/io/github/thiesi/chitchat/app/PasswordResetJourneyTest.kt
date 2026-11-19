@@ -38,6 +38,8 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.unit.height
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.onRoot
 import org.junit.Rule
 import org.junit.Test
 
@@ -88,20 +90,24 @@ class PasswordResetJourneyTest {
     }
 
     /**
-     * #298: the tap on Forgot password? and the wait for the reset form (the failing wait, :84 on main). The same tap,
-     * wait and 5s deadline, no retry, extra wait or text. The button is sampled once immediately before the tap; on
-     * timeout only scalars are added (the click path end to end), then the same failure is rethrown as the cause.
+     * #298: the tap on Forgot password? and the wait for the reset form (the failing wait, :84 on main). The same scroll,
+     * tap, wait and 5s deadline, no retry, extra wait or text. Single reads of the layout at four points (before the
+     * scroll, after it and before the tap, right after the tap, and at the timeout); on timeout only, they and the click
+     * path end to end are added as scalars, then the same failure is rethrown as the cause.
      */
     private fun openResetForm() {
+        val beforeScroll = layoutSample()
         compose.onNodeWithTag("forgot_password").performScrollTo()
-        val before = buttonSample()
+        val beforeTap = layoutSample()
         compose.onNodeWithTag("forgot_password").performClick()
+        val afterTap = layoutSample()
         try { compose.waitUntil(5_000) { exists("reset_form") } }
         catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
             val now = sessions.state.value
             throw AssertionError("Reset form missing after the tap (#298): sampledAt=${android.os.SystemClock.uptimeMillis()}, " +
                 "authFlow=${now.authFlow}, support=${now.reset.support}, busy=${now.busy}, pending=${now.reset.pending != null}, " +
-                "phase=${now.phase}, before={$before}, atTimeout={${buttonSample()}}, " +
+                "phase=${now.phase}, beforeScroll={$beforeScroll}, beforeTap={$beforeTap}, afterTap={$afterTap}, " +
+                "atTimeout={${layoutSample()}}, " +
                 "taps=${auth.resetEntry.taps}, forwarded=${auth.resetEntry.forwarded}, " +
                 "droppedActiveOperation=${auth.resetEntry.droppedActiveOperation}, flowRequests=${sessions.resetFlowRequests}, " +
                 "refusedPending=${sessions.resetRefusedPending}, refusedSupport=${sessions.resetRefusedSupport}, " +
@@ -109,10 +115,27 @@ class PasswordResetJourneyTest {
         }
     }
 
-    /** The button's enabled state and bounds plus the native window (IME, focus), sampled once; scalars only. */
-    private fun buttonSample(): String {
-        val node = compose.onAllNodesWithTag("forgot_password").fetchSemanticsNodes().singleOrNull() ?: return "button=absent"
-        return "enabled=${SemanticsProperties.Disabled !in node.config}, bounds=${node.boundsInRoot}, at=${android.os.SystemClock.uptimeMillis()}, " +
+    /**
+     * One read of step 4a's layout, scalars only: each Forgot password? node in the unmerged tree (enabled, clipped
+     * bounds, which read as zero once fully outside the scroller's viewport, and the unclipped position and size), the
+     * scroller (bounds, scroll value and max), the pinned action (present means pinned; absent means in flow), the
+     * password field and Sign in, the root size, the native window (IME and focus) and the uptime.
+     */
+    private fun layoutSample(): String {
+        val at = android.os.SystemClock.uptimeMillis()
+        fun bounds(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
+            .take(2).joinToString("|") { "${it.boundsInRoot}" }.ifEmpty { "absent" }
+        val buttons = compose.onAllNodesWithTag("forgot_password", useUnmergedTree = true).fetchSemanticsNodes()
+        val button = buttons.take(3).joinToString("|") { node ->
+            "enabled=${SemanticsProperties.Disabled !in node.config}, clipped=${node.boundsInRoot}, " +
+                "position=${node.positionInRoot}, size=${node.size}" }.ifEmpty { "absent" }
+        val scroller = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange) and
+            hasAnyDescendant(hasTestTag("sign_in_password")), useUnmergedTree = true).fetchSemanticsNodes().take(2)
+            .joinToString("|") { node -> val range = node.config[SemanticsProperties.VerticalScrollAxisRange]
+                "bounds=${node.boundsInRoot}, value=${range.value()}, max=${range.maxValue()}" }.ifEmpty { "absent" }
+        val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode().size
+        return "at=$at, buttons=${buttons.size} [$button], scroller=[$scroller], pinned=${bounds("pinned_action")}, " +
+            "password=${bounds("sign_in_password")}, signIn=${bounds("sign_in_submit")}, root=$root, " +
             "window=${io.github.thiesi.chitchat.testing.nativeInputWindow()}"
     }
     /**
