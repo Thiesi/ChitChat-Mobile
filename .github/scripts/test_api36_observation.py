@@ -14,6 +14,23 @@ IME = ("java.lang.AssertionError: Tap fixture: tag=author_edit_body, IME=0, focu
        " at io.github.thiesi.chitchat.testing.NativeInputKt.tapNativeInput(NativeInput.kt:20)")
 
 
+# PR #300's failure (run 44478217087), verbatim apart from the shortened uptimes kept in their exact shape.
+FOCUSED = ("java.lang.AssertionError: Tap fixture: tag=message_search_query, IME=0, focusedBefore=true, focused=true, "
+    "before=Rect.fromLTRB(8.0, 88.0, 216.0, 152.0), after=Rect.fromLTRB(8.0, 88.0, 216.0, 152.0), "
+    "beforeWindow=NativeInputWindow(uptimeMillis=1199524, resumedActivities=1, windowFocused=true, attached=true, viewFocused=true, "
+    "inTouchMode=true, textEditor=true, imeVisible=false, imeBottom=0, softInputMode=16, imeControllable=true), "
+    "afterWindow=NativeInputWindow(uptimeMillis=1204607, resumedActivities=1, windowFocused=true, attached=true, viewFocused=true, "
+    "inTouchMode=true, textEditor=true, imeVisible=false, imeBottom=0, softInputMode=16, imeControllable=true), inputSessions=not installed, "
+    "server=NativeImeServer(inputMethod=NativeImeDump(startedUptimeMillis=1204608, finishedUptimeMillis=1204929, flags=[mImeWindowVis=3, "
+    "mShowForced=false, mInputShown=true, mDecorViewVisible=true, mWindowVisible=true, mInShowWindow=false, mShowInputRequested=true, "
+    "mIsInputViewShown=true], limitReached=false), imeWindow=NativeImeDump(startedUptimeMillis=1204929, finishedUptimeMillis=1204957, "
+    "flags=[mGivenInsetsPending=false, mHasSurface=false, isReadyForDisplay()=false, mDrawState=NO_SURFACE, mLastHidden=false, "
+    "isOnScreen=false, isVisible=false], limitReached=false)),\n"
+    " at io.github.thiesi.chitchat.testing.NativeInputKt.tapNativeInput(NativeInput.kt:29)\n"
+    "Caused by: androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms\n"
+    " at io.github.thiesi.chitchat.testing.NativeInputKt.tapNativeInput(NativeInput.kt:20)")
+
+
 class ObservationTests(unittest.TestCase):
     def fixture(self, failures=(), skipped=0):
         root = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="ccm-api36-unit-")))
@@ -48,6 +65,33 @@ class ObservationTests(unittest.TestCase):
         self.assertEqual(248,value["tests"]);self.assertEqual(1,value["failures"])
         self.assertFalse(value["observationPass"]);self.assertEqual("failure",value["originalOutcome"])
         self.assertNotIn("canary",json.dumps(value))
+
+    def test_the_already_focused_tap_counts_only_with_the_surfaceless_show_dump(self):
+        # Owner decision, issue #1 comment 7003053525: API36 observation only.
+        results,reports,_ = self.fixture([FOCUSED])
+        self.assertEqual("known_ime", observation.analyze(results,reports,"failure")["disposition"])
+        variants = {
+            "a drawn window": FOCUSED.replace("mHasSurface=false", "mHasSurface=true"),
+            "a visible window": FOCUSED.replace("isVisible=false", "isVisible=true"),
+            "not shown": FOCUSED.replace("mInputShown=true", "mInputShown=false"),
+            "not requested": FOCUSED.replace("mShowInputRequested=true", "mShowInputRequested=false"),
+            "a truncated method dump": FOCUSED.replace("mIsInputViewShown=true], limitReached=false", "mIsInputViewShown=true], limitReached=true"),
+            "a truncated window dump": FOCUSED.replace("isVisible=false], limitReached=false", "isVisible=false], limitReached=true"),
+            "no dump": FOCUSED.split("inputSessions=")[0] + "inputSessions=not installed, server=unavailable,\n" + FOCUSED.split("\n", 1)[1],
+            "a repeated flag": FOCUSED.replace("mHasSurface=false,", "mHasSurface=false, mHasSurface=true,"),
+            "a second dump": FOCUSED.replace(")),\n", ")), server=NativeImeServer(inputMethod=NativeImeDump(startedUptimeMillis=1, "
+                "finishedUptimeMillis=2, flags=[mInputShown=true, mShowInputRequested=true], limitReached=false), imeWindow=NativeImeDump("
+                "startedUptimeMillis=2, finishedUptimeMillis=3, flags=[mHasSurface=false, isVisible=false], limitReached=false)),\n", 1),
+            "a second cause": FOCUSED + "\nCaused by: java.lang.IllegalStateException: additional fixture failure",
+            "suppressed": FOCUSED + "\nSuppressed: java.lang.IllegalStateException: cleanup",
+            "both taps": FOCUSED.replace("inputSessions=", "Tap fixture: tag=other, IME=0, focusedBefore=false, focused=true, inputSessions="),
+            "focus lost": FOCUSED.replace("focusedBefore=true, focused=true", "focusedBefore=true, focused=false"),
+            "the IME up": FOCUSED.replace("IME=0, focusedBefore=true", "IME=1, focusedBefore=true"),
+        }
+        for name, text in variants.items():
+            results,reports,_ = self.fixture([text])
+            with self.subTest(variant=name):
+                self.assertEqual("other_failure", observation.analyze(results,reports,"failure")["disposition"])
 
     def test_mixed_or_different_failures_block(self):
         variants=[IME.replace("5000 ms","5001 ms"),IME.replace("IME=0","IME=1"),

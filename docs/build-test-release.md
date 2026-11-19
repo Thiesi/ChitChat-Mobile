@@ -97,6 +97,15 @@ API36's original process/test result remains visible and failed when it fails. R
 Additional or suppressed error causes in the same failed case are not classified as only the known IME signature; they block along with mixed failures across cases.
 Pinned DDMLib emits failure stack text without an exception-type attribute. The classifier requires an explicit AssertionError root in that text and rejects contradictory type attributes; it never infers the class merely from an inner timeout.
 
+The [owner's 2026-11-19 decision](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-7003053525) widens the API36 known signature narrowly.
+- **What now counts:** a Tap-fixture failure with `IME=0, focusedBefore=true, focused=true` (focus already held before the native tap, as after a resume; first seen on PR #300, tracked in #302).
+- **Only when** every structural condition above holds (the Tap fixture root, exactly one `Caused by` with the 5000 ms ComposeTimeoutException, `NativeInput.kt:20` and `:29`, no Suppressed).
+- **And** exactly one complete bounded IME server dump in the same failure shows:
+  - the input method with `mInputShown=true` and `mShowInputRequested=true`;
+  - its window with `mHasSurface=false` and `isVisible=false`.
+- **Anything else stays `other_failure` and blocks:** a missing, repeated or truncated (`limitReached=true`) dump, a malformed or repeated flag, other values, or both tap variants at once.
+- **API36 observation only.** API35 gating, the ReplyComposer and #177 rules, and every product, privacy, security or protocol defect are unchanged, and a matching signature is no root-cause proof.
+
 The [maintainer's temporary API35 rule](https://github.com/Thiesi/ChitChat-Mobile/issues/1#issuecomment-6727888625),
 directly confirmed by the owner in the engineering thread on2026-11-09, applies to every PR.
 Its only pinned-API35 failure may be the recorded ReplyComposerJourneyTest
