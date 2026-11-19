@@ -63,7 +63,7 @@ development-build prefix; PL wording, recorded in copy-deck.md with the F4 and F
   - `ReceivedFramesTest` (9): frame geometry at every clamp (normal, content width, small, panorama, tall, very tall,
     no dimensions), the middle elision, and the viewport rule (including rows beyond both ends). The panes and the
     small-budget case are F3a's.
-- **Instrumented: `ReceivedFilesJourneyTest` (16)**, in the real room and DM screens with the real decoder:
+- **Instrumented: `ReceivedFilesJourneyTest` (18)**, in the real room and DM screens with the real decoder:
   - attachment-only room and DM rows keep a separate "Message actions" node (≥ 48dp), and the frame has no click or
     long-click action; the same for a DM file card;
   - a caption is read with the actions node, not the frame; each non-Loaded state (Not loaded, Loading before and after
@@ -71,6 +71,7 @@ development-build prefix; PL wording, recorded in copy-deck.md with the F4 and F
     Not allowed, Too large, Offline) follows the label after a full stop in the frame's description; a loaded frame is
     the label alone, and a GIF says "GIF from";
   - one tap on Try again gives exactly one retry and no actions sheet;
+  - in a 96dp panorama frame, Show and Try again lie wholly inside the frame at default and 200% font;
   - a file card's label, its middle-elided long name keeping ".pdf", and no download;
   - a too-large box is static text and nothing is fetched;
   - a frame above the viewport loads only once scrolled into view;
