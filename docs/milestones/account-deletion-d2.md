@@ -45,16 +45,8 @@ security → Delete account" and "Restore a closed account".
     caption under the title, "Your account wasn't deleted." followed by the reason. Reconnect clears it.
 - **Check** is D1's one session read (`AccountOperations.checkClosure`) and never a resend. **Done** clears the outcome
   (`dismissClosure`, TL C4).
-- **An Unknown survives its Check (TL, #300; a D1 fix):**
-  - On an ended session, Check's `connect()` replaces the session state, closure included. The repository now puts the
-    outcome back in a non-cancellable `finally`: LikelyClosed only after a completed anonymous read, otherwise the same
-    Unknown.
-  - That holds even when the Check is cancelled (process scope) or connect fails.
-  - The outcome goes back only into this server's state, never another account's, and never over an outcome set
-    meanwhile. The old code wrote the Unknown into another server's state too.
-  - The live branch never replaces the state, so a cancelled read keeps the Unknown.
-  - The root's hold of the Unknown being checked (the ViewModel's `checking`) is now **only presentation**: it keeps the
-    screen from flickering to the connecting page during the read. It's no longer load-bearing.
+- **The Unknown survives its Check** in D1's repository (see D1's correction). The root's hold of the Unknown being
+  checked (the ViewModel's `checking`) is only presentation: it stops a flicker to the connecting page during the read.
 - **Sign-in to a pending account:** `account_closure_pending` now reads "This account is scheduled for deletion. To keep
   it, go back and choose Restore a closed account. That works for 14 days after it was deleted." The label is a format
   argument from the button's own resource. It stays plain, because the shared sign-in error mapping renders plain
@@ -79,33 +71,12 @@ server has already decided. Process death meanwhile loses it, which is acceptabl
 
 ## Verification
 
-- **JVM, the repository** (`SessionRepositoryTest`, D1 fix):
-  - an ended Check cancelled mid-read keeps the same Unknown, with one read at most;
-  - an ended Check whose read fails stays Unknown;
-  - another server chosen during an ended Check gets nothing restored;
-  - a live Check cancelled mid-read keeps the Unknown.
-  - The first and third fail on the previous code.
-- **JVM:** `AccountDeletionViewModelTest` (15). The two forced-logout cases fail on the previous ViewModel:
-  - the session ends mid-request and the screen is disposed, yet the request isn't cancelled and no stray refusal is left;
-  - a confirmed request still completes after the forced logout.
-  - **The request:** one POST per explicit delete; step-up only on 403, where Cancel sends nothing more and Verify retries
-    once; definite refusals shown, Unknown and Closed not.
-  - **Guards and outcomes:** "wasn't deleted" cleared before starting again and on leaving; no POST while an outcome is
-    pending; leaving cancels; Check is one read, with the failed-Check caption cleared by the next tap; Done dismisses.
-  - **Formatting:** the deadline in the device zone on one line; the hedged date; the italic label.
-- **Journeys through the real root:** `AccountDeletionJourneyTest`.
-  - **The happy path:** the row and explanation, with only the dialog sending; the confirmation with the server's date,
-    and Done to step 3.
-  - **The server's forced_logout before the 200:** Waiting, then the confirmation. The request is never cancelled.
-  - **Step-up and refusals:** step-up's own title, and Cancel sends nothing; the last Super-Administrator's refusal.
-  - **Unknown:** a live Unknown with Check pinned, then "wasn't deleted"; an ended Unknown with a failed Check, then the
-    hedged signed-out screen and Done.
-  - **Ended-session screens and the rest:** Waiting replaced by the result; the ended refusal caption; Export my data
-    first; the row's 48dp target and quietness.
-- **J:** `AccountDeletionPresentationTest`, 49 captures in `deletion-presentation`.
-  - Each state at default and 200%, light and dark.
-  - One 200% confirmation in a long-date locale (pt-BR).
-- **Existing guards still apply:** `StepUpTitleContractTest` covers the new caller.
+- **JVM:** `AccountDeletionViewModelTest` (15), covering the request, step-up, refusals, Check, Done and formatting. Its
+  two forced-logout cases fail on the previous ViewModel.
+- **Journeys through the real root:** `AccountDeletionJourneyTest` (11), including the server's forced_logout before the
+  200 (Waiting, then the confirmation, never cancelled).
+- **J:** `AccountDeletionPresentationTest`, 49 captures in `deletion-presentation`, each state at default and 200%, light
+  and dark, plus one long-date confirmation (pt-BR).
+- `StepUpTitleContractTest` covers the new step-up caller.
 
-D1's JVM tests still cover the protocol and the `forced_logout` race. Live acceptance against a disposable account needs
-its own approval (AGENTS: live mutations), and the public deletion page (§3) is the owner's.
+Live acceptance against a disposable account needs its own approval, and the public deletion page (§3) is the owner's.
