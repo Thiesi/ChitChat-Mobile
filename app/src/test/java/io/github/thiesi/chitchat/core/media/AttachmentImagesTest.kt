@@ -40,7 +40,16 @@ class AttachmentImagesTest {
     private fun bytes(size: Int = 1_000, etag: String? = "\"e\"") = DownloadResult.Bytes(ByteArray(size), etag, budget.reserve(size.toLong())!!)
 
     private var decoded: () -> DecodeResult = { DecodeResult.Decoded(DecodedImage(null, 100, 80, 32_000)) }
-    private val decoder = ImageDecoding { _, _, _ -> decoded() }
+    /** Every decode's orient flag, in order. */
+    private val oriented = mutableListOf<Boolean>()
+    /** Like the real decoder: lease the decoded size before keeping it, and report NoMemory when refused. */
+    private val decoder = ImageDecoding { _, _, _, orient, lease ->
+        oriented += orient
+        when (val result = decoded()) {
+            is DecodeResult.Decoded -> if (lease(result.image.byteCount)) result else DecodeResult.NoMemory
+            else -> result
+        }
+    }
 
     // advanceUntilIdle() skips backgroundScope work, so the loader runs in its own scope on the test scheduler,
     // cancelled after each test (its collectors never finish on their own).
@@ -275,6 +284,38 @@ class AttachmentImagesTest {
         images.visible(ref(), 280, 210); advanceUntilIdle()
         assertEquals(ImageState.NoMemory, images.state(ref()))
         assertEquals(0L, budget.reservedBytes)
+    }
+
+    @Test fun aRefusedLeaseEvictsOnMainThenDecodesOnceMore() = runTest {
+        // The decoder leases off the main thread; eviction is main-confined, so a refusal comes back and is retried once.
+        val source = Source(); val images = images(source, capacity = 100L * 1024 * 1024); advanceUntilIdle()
+        decoded = { DecodeResult.Decoded(DecodedImage(null, 3000, 3000, 40L * 1024 * 1024)) }
+        val old = ref(id = 71); val next = ref(id = 72)
+        images.visible(old, 280, 210); advanceUntilIdle()
+        images.hidden(old)
+        oriented.clear()
+        images.visible(next, 280, 210); advanceUntilIdle()
+        assertEquals("Refused, evicted, decoded again", 2, oriented.size)
+        assertTrue(images.state(next) is ImageState.Loaded)
+        assertNull("The off-screen image made room", images.state(old))
+        assertEquals(40L * 1024 * 1024, budget.reservedBytes)
+        // With nothing off screen to drop, there's no second decode: it can't show right now.
+        val third = ref(id = 73)
+        oriented.clear()
+        images.visible(third, 280, 210); advanceUntilIdle()
+        assertEquals(1, oriented.size)
+        assertEquals(ImageState.NoMemory, images.state(third))
+        assertTrue("The image on screen is kept", images.state(next) is ImageState.Loaded)
+    }
+
+    @Test fun onlyOriginalsAreOrientedNeverPreviews() {
+        runTest {
+            // TL (#308): the server's previews are already in display orientation.
+            val source = Source(); val images = images(source); advanceUntilIdle()
+            images.visible(ref(), 280, 210); advanceUntilIdle()
+            images.visible(ref(id = 61, preview = null), 280, 210); advanceUntilIdle()
+            assertEquals(listOf(false, true), oriented)
+        }
     }
 
     @Test fun theSampleSizeNeverDecodesSmallerThanTheFrame() {

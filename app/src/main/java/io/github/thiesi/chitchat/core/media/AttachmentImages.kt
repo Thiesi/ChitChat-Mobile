@@ -181,15 +181,24 @@ internal class AttachmentImages(
         frame.job = null
         when (result) {
             is DownloadResult.Bytes -> {
-                val decoded = try {
-                    withContext(decodeOn) { decoder.decode(result.bytes, frame.width.coerceAtLeast(1), frame.height.coerceAtLeast(1)) }
+                // The decoder sets the lease before each allocation (M5g3h) and leaves it at exactly the kept bitmap. EXIF
+                // orientation applies to originals only (TL, #308). The resize is thread-safe; eviction touches main-confined
+                // state, so a refused lease comes back here: evict on main, then one more decode of the bytes still held.
+                var refused = 0L
+                val lease: (Long) -> Boolean = { size -> result.resize(size).also { if (!it) refused = size } }
+                suspend fun decode() = try {
+                    withContext(decodeOn) {
+                        decoder.decode(result.bytes, frame.width.coerceAtLeast(1), frame.height.coerceAtLeast(1),
+                            variant == AttachmentVariant.ORIGINAL, lease)
+                    }
                 } catch (cancelled: CancellationException) { result.release(); throw cancelled }
+                var decoded = decode()
+                if (decoded == DecodeResult.NoMemory && refused > 0 && frames[key] === frame && makeRoom(result, refused)) {
+                    refused = 0L
+                    decoded = decode()
+                }
                 when (decoded) {
                     is DecodeResult.Decoded -> {
-                        // The raw bytes become garbage; the lease now covers the decoded pixels (M5g3h: grow before keeping).
-                        if (!result.resize(decoded.image.byteCount) && !(evict(decoded.image.byteCount) && result.resize(decoded.image.byteCount))) {
-                            result.release(); set(key, ImageState.NoMemory); return
-                        }
                         if (frames[key] !== frame) { result.release(); return }
                         frame.held = Held(decoded.image, variant, result.etag, result.lease())
                         touch(frame)
@@ -198,6 +207,7 @@ internal class AttachmentImages(
                     }
                     DecodeResult.TooLarge -> { result.release(); set(key, ImageState.TooLarge) }
                     DecodeResult.Unreadable -> { result.release(); set(key, ImageState.Failed) }
+                    DecodeResult.NoMemory -> { result.release(); set(key, ImageState.NoMemory) }
                 }
             }
             DownloadResult.PreviewUnavailable -> {
@@ -283,6 +293,21 @@ internal class AttachmentImages(
             mutable.value = mutable.value - key
         }
         return held + needed <= capacityBytes
+    }
+
+    /**
+     * The shared memory budget refused [needed]: drop images not on screen, least recently used first, until the lease fits.
+     * Only when something was dropped and it then fits is a second decode worth it.
+     */
+    private fun makeRoom(result: DownloadResult.Bytes, needed: Long): Boolean {
+        val candidates = frames.entries.filter { it.value.held != null && !it.value.visible }.sortedBy { it.value.lastUsed }
+        for ((key, frame) in candidates) {
+            drop(frame)
+            frame.autoTried = false
+            mutable.value = mutable.value - key
+            if (result.resize(needed)) return true
+        }
+        return false
     }
 
     private fun drop(frame: Frame) { frame.held?.lease?.close(); frame.held = null }

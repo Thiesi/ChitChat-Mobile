@@ -13,7 +13,17 @@ app until F3, so the availability disclosures stay accurate. It follows
   - **Beyond 16 megapixels it's `TooLarge`** and nothing is decoded, even downsampled.
   - Otherwise the decode uses a power-of-two sample size, so it never decodes smaller than the frame and never
     allocates the full original. Unreadable bytes are `Unreadable`.
-  - The real memory cost is the bitmap's allocation.
+  - **The lease comes before every allocation** (M5g3h): the decoder sets the memory charge to the bitmap's estimated
+    size before decoding, and leaves it at exactly the kept bitmap's real allocation. A refused lease is `NoMemory` with
+    nothing allocated.
+  - **EXIF orientation (TL, #308), originals only.** The server's previews are already in display orientation and are
+    never rotated. For an original, `androidx.exifinterface` reads the orientation from the bytes already held (no
+    second fetch), and all eight values are applied with a `Matrix` (rotations, flips, transpose and transverse).
+    - It's **a hint**: missing, malformed or a throwing parse means unknown, so no rotation, and the image still shows.
+    - The downsampling target comes from the oriented frame; the 16 Mpx guard is unaffected.
+    - **The rotation briefly holds two bitmaps:** that peak is leased before the second bitmap is created, then the
+      source is recycled and the lease shrinks to the final bitmap. With no lease for the peak it's `NoMemory`.
+    - The upload privacy cleaners are untouched.
 - **`AttachmentImages`**, the loader, is main-confined and keyed by origin, account, generation, namespace and
   attachment ID.
   - **The automatic rule:** a frame that's on screen, online and unmetered, whose bytes are at most 2 MiB, loads by
@@ -32,8 +42,10 @@ app until F3, so the availability disclosures stay accurate. It follows
     may auto-load once afterwards.
   - **Back online:** frames on screen are evaluated once under the ordinary rule.
   - **Memory only** (TL 11-09; the privacy policy's "in memory only"; nothing touches disk):
-    - each held image keeps F1's memory-budget lease, **resized to the decoded size**. If it can't grow, images not on
-      screen are evicted first; otherwise it's NoMemory;
+    - each held image keeps F1's memory-budget lease, **resized to the decoded size**. Decoding runs off the main
+      thread and the lease is thread-safe, but eviction is main-confined: a refused lease comes back to the loader,
+      which drops images not on screen (least recently used first) until it fits, then decodes once more. Otherwise
+      it's NoMemory;
     - least-recently-used images not on screen are evicted beyond the loader's capacity, releasing their leases;
     - **any change of server, account, generation or phase drops every image and job.**
   - **Revalidation:** a held preview keeps its ETag and is revalidated with `If-None-Match` when it comes back on screen,
@@ -48,7 +60,7 @@ app until F3, so the availability disclosures stay accurate. It follows
 
 ## Verification
 
-- **JVM: `AttachmentImagesTest` (15),** with a fake source and decoder on virtual time:
+- **JVM: `AttachmentImagesTest` (20),** with a fake source and decoder (which leases like the real one) on virtual time:
   - **Loading rules:**
     - automatic loading, with the lease following the decoded size;
     - metered or over 2 MiB waits for Show;
@@ -66,7 +78,20 @@ app until F3, so the availability disclosures stay accurate. It follows
     - at most one conditional GET per visit however often a frame scrolls back, and one more after a fresh entry;
     - eviction freeing leases;
     - NoMemory when the decoded image can't fit;
+    - a refused lease drops an off-screen image on main and decodes once more; with nothing to drop, no second decode
+      and the image on screen is kept;
+    - only originals are oriented, never previews;
     - a session change dropping everything;
     - the sample-size arithmetic.
-- **Instrumented: `AndroidImageDecodingTest` (3):** a downsampled decode within the frame; a header-only PNG claiming
-  5000×4000 is TooLarge from its bounds; unreadable bytes.
+- **Instrumented: `AndroidImageDecodingTest` (9):**
+  - a downsampled decode within the frame;
+  - a valid 5000×4000 PNG is TooLarge from its bounds, and a truncated header is Unreadable;
+  - unreadable bytes;
+  - an orientation-6 JPEG decodes to its oriented width and height, and a horizontally flipped one is mirrored;
+  - the same JPEG as a preview isn't rotated;
+  - a malformed EXIF block shows unrotated;
+  - the rotation peak is leased before it's allocated and then shrunk to the kept bitmap, and with no lease for the
+    peak it's NoMemory.
+- **Dependency:** `androidx.exifinterface` 1.4.2, the current stable release (minSdk 21; runtime dependencies only
+  `androidx.annotation` and `org.jspecify`, both already on the classpath), with its Apache-2.0 entry in
+  `oss_licenses.json`.

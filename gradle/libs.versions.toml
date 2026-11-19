@@ -1,4 +1,5 @@
 [versions]
+exifinterface = "1.4.2"
 agp = "8.13.2"
 kotlin = "2.3.21"
 compose-bom = "2026.06.01"
@@ -26,6 +27,7 @@ tink = "1.23.0"
 unifiedpush-embedded-fcm = "3.1.0"
 
 [libraries]
+androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "exifinterface" }
 unifiedpush-connector = { module = "org.unifiedpush.android:connector", version.ref = "unifiedpush-connector" }
 tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
 unifiedpush-embedded-fcm = { module = "org.unifiedpush.android:embedded-fcm-distributor", version.ref = "unifiedpush-embedded-fcm" }
