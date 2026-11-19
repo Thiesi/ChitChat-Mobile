@@ -51,7 +51,8 @@ app until F3, so the availability disclosures stay accurate. It follows
   - **Revalidation:** a held preview keeps its ETag and is revalidated with `If-None-Match` when it comes back on screen,
     if a request may start (online, no wait), and **at most once per conversation entry** (TL, #308). Scrolling back
     and forth within one visit to a room or DM gives one conditional GET at most; `enteredConversation()` (F3) opens the
-    next visit.
+    next visit. [F3a](received-files-f3a.md) refines this: a fresh 200 validates the visit it was sent in, so the
+    fetching visit sends no conditional GET at all.
     - **A 304** keeps it.
     - **Gone or not allowed** removes it.
     - **Anything else** leaves the shown image as it was.
