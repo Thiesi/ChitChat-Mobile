@@ -205,10 +205,28 @@ class AttachmentDownloadsTest {
 
     @Test fun aFailingDestinationIsAStorageFailure() = runTest {
         val state = signedIn()
+        // Checked and unchecked failures alike end the request typed, never hanging (review, #306).
+        for (broken in listOf(object : OutputStream() { override fun write(b: Int) = throw IOException("full") },
+            object : OutputStream() { override fun write(b: Int) = throw IllegalStateException("closed") })) {
+            server.enqueue(file(bytes))
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                kotlinx.coroutines.withTimeout(10_000) { downloads.stream(attachment(), state, broken) } }
+            assertEquals(FailureKind.STORAGE, (result as DownloadResult.Failed).failure.kind)
+            take()
+        }
+    }
+
+    @Test fun downloadsAskForTheStoredBytesNotACompressedForm() = runTest {
+        val state = signedIn()
         server.enqueue(file(bytes))
-        val broken = object : OutputStream() { override fun write(b: Int) = throw IOException("full") }
-        val result = downloads.stream(attachment(), state, broken)
-        assertEquals(FailureKind.STORAGE, (result as DownloadResult.Failed).failure.kind)
+        (downloads.load(attachment(), AttachmentVariant.ORIGINAL, state) as DownloadResult.Bytes).release()
+        assertEquals("identity", take().headers["Accept-Encoding"])
+        // A server that compresses anyway can't be verified against the stored file's length and hash.
+        val gzipped = Buffer().write(ByteArrayOutputStream().also { out -> java.util.zip.GZIPOutputStream(out).use { it.write(bytes) } }.toByteArray())
+        server.enqueue(MockResponse.Builder().code(200).addHeader("Content-Type", "image/png").addHeader("Content-Encoding", "gzip")
+            .body(gzipped).build())
+        assertEquals(DownloadResult.IntegrityFailed, downloads.load(attachment(), AttachmentVariant.ORIGINAL, state))
+        assertEquals(0L, budget.reservedBytes)
     }
 
     private class Vault : SessionVault {

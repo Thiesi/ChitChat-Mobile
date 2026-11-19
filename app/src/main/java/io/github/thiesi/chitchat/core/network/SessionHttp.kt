@@ -783,7 +783,9 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         expectedType: String? = null, sink: (ByteArray, Int) -> Unit): DownloadReply {
         require(expectedBytes > 0 && path.startsWith("/api/v1/")) { "Invalid download" }
         if (retiring) throw kotlinx.coroutines.CancellationException("Session retired")
-        val request = Request.Builder().url(origin.resolve(path)!!).header("Accept", "*/*")
+        // Identity encoding: the length and SHA-256 checks apply to the stored bytes, so OkHttp must neither ask for
+        // gzip nor decompress a reply (review, #306). A server that compresses anyway fails the checks: never shown as good.
+        val request = Request.Builder().url(origin.resolve(path)!!).header("Accept", "*/*").header("Accept-Encoding", "identity")
             .apply { ifNoneMatch?.let { header("If-None-Match", it) } }.build()
         // Shares this runtime's jar, dispatcher and pool (so retirement cancels it); idle-bounded rather than 25 s overall.
         val transport = client.newBuilder().readTimeout(30, TimeUnit.SECONDS).callTimeout(10, TimeUnit.MINUTES).build()
@@ -804,6 +806,9 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
                             if (continuation.isActive) continuation.resumeWithException(failure)
                         } catch (failure: IOException) {
                             if (continuation.isActive) continuation.resumeWithException(ApiFailure(transportKind(failure)))
+                        } catch (failure: RuntimeException) {
+                            // Never leave the caller hanging on an unexpected failure (review, #306); no message is kept.
+                            if (continuation.isActive) continuation.resumeWithException(ApiFailure(FailureKind.INCOMPATIBLE))
                         }
                     }
                 })
@@ -840,7 +845,9 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
             total += read
             if (total > expectedBytes) throw ApiFailure(FailureKind.INCOMPATIBLE, response.code, LENGTH_MISMATCH)
             digest.update(chunk, 0, read)
-            try { sink(chunk, read) } catch (_: IOException) { throw ApiFailure(FailureKind.STORAGE) }
+            // Any failure of the caller's destination (an IOException, or an unchecked one from a closed stream or a
+            // provider) is STORAGE, never a hang (review, #306).
+            try { sink(chunk, read) } catch (failure: ApiFailure) { throw failure } catch (_: Exception) { throw ApiFailure(FailureKind.STORAGE) }
         }
         if (total != expectedBytes) throw ApiFailure(FailureKind.INCOMPATIBLE, response.code, LENGTH_MISMATCH)
         return DownloadReply(notModified = false, etag = response.header("ETag"),
