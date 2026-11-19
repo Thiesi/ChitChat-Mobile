@@ -41,6 +41,10 @@ availability disclosures stay accurate. The contract is the released v3.10.0 one
       (`404 attachment_preview_unavailable`, never replaced by the original);
     - `RateLimited` (the server's positive wait, never retried automatically);
     - `IntegrityFailed`, `TooLarge`, `NoMemory`, and `Failed` (everything else, typed).
+- **A download 429 is session-wide by design (TL):** like every authorized request, it sets the session's wait
+  (`retryAtMillis`), which briefly holds other session requests. A 429 is the server or its proxy telling this session
+  to slow down, and there's no documented per-endpoint scope to narrow it. F2 must therefore never let an automatic
+  preview load start or prolong that wait, and must never queue loads for a burst once it ends.
 - **Policy:** the upload policy (`attachments` block, `max_bytes: 0`, Invalid) and 413 don't govern downloads.
   Received files stay readable in every policy state.
 - **Privacy:** nothing here is persisted or logged; the bytes live only in the caller's memory. Display caching is F2,
