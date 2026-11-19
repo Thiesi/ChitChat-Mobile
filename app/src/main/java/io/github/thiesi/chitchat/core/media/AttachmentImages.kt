@@ -59,7 +59,8 @@ sealed interface ImageState {
  * - **Memory only** (TL 2026-11-09; privacy policy "in memory only"): each held image keeps its memory-budget lease,
  *   resized to the decoded size; least-recently-used images not on screen are evicted beyond [capacityBytes]. Everything
  *   is dropped on a change of server, account, generation or phase. A held preview keeps its ETag and is revalidated
- *   when shown again (a 304 keeps it); an original has no validator and is held as shown (TL).
+ *   when shown again, **at most once per conversation entry** ([enteredConversation]; TL, #308), so scrolling back and
+ *   forth never turns into a stream of requests (a 304 keeps it); an original has no validator and is held as shown (TL).
  * - **A missing preview** falls back to the original under the same rule, never retried as a preview this session.
  */
 internal class AttachmentImages(
@@ -82,6 +83,8 @@ internal class AttachmentImages(
         var held: Held? = null
         var job: Job? = null
         var lastUsed = 0L
+        /** The conversation entry in which this frame last revalidated its held preview. */
+        var revalidatedIn = -1L
     }
 
     private val frames = LinkedHashMap<ImageKey, Frame>()
@@ -90,6 +93,10 @@ internal class AttachmentImages(
     private var scopeOf: Scope? = session.value.scope()
     private var waitEnd: Job? = null
     private var use = 0L
+    private var entry = 0L
+
+    /** A new visit to a room or DM: each held preview may revalidate once more (TL, #308). */
+    fun enteredConversation() { entry++ }
 
     init {
         scope.launch { session.collect { onSession(it) } }
@@ -216,7 +223,8 @@ internal class AttachmentImages(
     /** A held preview shown again: revalidated with its ETag when a request may start; a 304 keeps it. */
     private fun revalidate(key: ImageKey, frame: Frame, held: Held) {
         if (held.variant != AttachmentVariant.PREVIEW || held.etag == null || frame.job?.isActive == true ||
-            !network.value.online || waiting()) return
+            !network.value.online || waiting() || frame.revalidatedIn == entry) return
+        frame.revalidatedIn = entry
         val expected = session.value
         frame.job = scope.launch {
             val result = source.load(frame.ref, AttachmentVariant.PREVIEW, expected, held.etag)

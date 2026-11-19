@@ -183,10 +183,29 @@ class AttachmentImagesTest {
         assertEquals("\"e\"", source.calls.last().third)
         assertTrue("A 304 keeps it", images.state(photo) is ImageState.Loaded)
         images.hidden(photo)
+        images.enteredConversation() // A fresh visit may revalidate again.
         source.replies += { DownloadResult.Gone }
         images.visible(photo, 280, 210); advanceUntilIdle()
         assertEquals("Deleted meanwhile: the held image goes", ImageState.Gone, images.state(photo))
         assertEquals(0L, budget.reservedBytes)
+    }
+
+    @Test fun scrollingBackAndForthRevalidatesAtMostOncePerVisit() = runTest {
+        // TL (#308): re-shows within one visit never become a stream of conditional GETs.
+        val source = Source(); val images = images(source); advanceUntilIdle()
+        val photo = ref()
+        images.visible(photo, 280, 210); advanceUntilIdle()
+        assertEquals(1, source.calls.size)
+        repeat(3) {
+            images.hidden(photo)
+            source.replies += { DownloadResult.NotModified }
+            images.visible(photo, 280, 210); advanceUntilIdle()
+        }
+        assertEquals("One conditional GET at most in this visit", 1, source.calls.count { it.third != null })
+        images.enteredConversation()
+        images.hidden(photo); images.visible(photo, 280, 210); advanceUntilIdle()
+        assertEquals("A fresh visit may revalidate once more", 2, source.calls.count { it.third != null })
+        assertTrue(images.state(photo) is ImageState.Loaded)
     }
 
     @Test fun imagesNotOnScreenAreEvictedBeyondCapacityAndFreeTheirLeases() = runTest {

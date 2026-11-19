@@ -37,7 +37,9 @@ app until F3, so the availability disclosures stay accurate. It follows
     - least-recently-used images not on screen are evicted beyond the loader's capacity, releasing their leases;
     - **any change of server, account, generation or phase drops every image and job.**
   - **Revalidation:** a held preview keeps its ETag and is revalidated with `If-None-Match` when it comes back on screen,
-    if a request may start (online, no wait).
+    if a request may start (online, no wait), and **at most once per conversation entry** (TL, #308). Scrolling back
+    and forth within one visit to a room or DM gives one conditional GET at most; `enteredConversation()` (F3) opens the
+    next visit.
     - **A 304** keeps it.
     - **Gone or not allowed** removes it.
     - **Anything else** leaves the shown image as it was.
@@ -46,7 +48,7 @@ app until F3, so the availability disclosures stay accurate. It follows
 
 ## Verification
 
-- **JVM: `AttachmentImagesTest` (14),** with a fake source and decoder on virtual time:
+- **JVM: `AttachmentImagesTest` (15),** with a fake source and decoder on virtual time:
   - **Loading rules:**
     - automatic loading, with the lease following the decoded size;
     - metered or over 2 MiB waits for Show;
@@ -61,6 +63,7 @@ app until F3, so the availability disclosures stay accurate. It follows
     - a rate-limited load waits and then loads once.
   - **Memory and revalidation:**
     - revalidation (a 304 keeps it, Gone removes it);
+    - at most one conditional GET per visit however often a frame scrolls back, and one more after a fresh entry;
     - eviction freeing leases;
     - NoMemory when the decoded image can't fit;
     - a session change dropping everything;
