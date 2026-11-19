@@ -71,6 +71,17 @@ After a later restore, nothing is subscribed on the server or this phone, so pus
   can't tell a deletion from any other ended session. That's acceptable only because the copy is hedged ("most
   likely"), as play-readiness §2 requires (TL, #296).
 - **Dates:** the device clock is used only for D2's labelled "about" date on `LikelyClosed`.
+- **Corrected in D2 (#300, TL):**
+  - **The ended-session read** (`connect()`) replaces the session state, closure included. The original code put the
+    outcome back only after a normal return, so a Check cancelled mid-read lost the Unknown silently. It also wrote the
+    Unknown into **another server's** state when a different server was chosen meanwhile.
+  - **Now** the outcome is restored in a non-cancellable `finally`, and only into this server's state, never another
+    account's or over an outcome set meanwhile. It's `LikelyClosed` only after a completed anonymous read, otherwise
+    the same `Unknown`.
+  - **The live branch** never replaces the state, so a cancelled read keeps the Unknown there.
+  - **Tests:** `SessionRepositoryTest` `anEndedCheckCancelledMidReadKeepsTheUnknown`,
+    `anEndedCheckWhoseReadFailsStaysUnknown`, `anotherServerChosenDuringAnEndedCheckGetsNothingRestored` and
+    `aLiveCheckCancelledMidReadKeepsTheUnknown`.
 
 ## Memory only (TL C4)
 

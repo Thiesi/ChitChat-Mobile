@@ -23,6 +23,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.CompletableDeferred
@@ -1020,6 +1021,67 @@ class SessionRepositoryTest {
         assertEquals(io.github.thiesi.chitchat.core.account.ClosureState.LikelyClosed(address().value, 7), sessions.state.value.closure)
         sessions.dismissClosure()
         assertNull("Done clears it", sessions.state.value.closure)
+    }
+
+    /** A deletion whose response was lost after the server's forced_logout: Unknown on an ended session. */
+    private suspend fun endedUnknown(): io.github.thiesi.chitchat.core.account.ClosureState.Unknown = coroutineScope {
+        login()
+        val access = closure()
+        server.enqueue(MockResponse.Builder().code(502).addHeader("Content-Type", "text/html").body("<html>bad gateway</html>")
+            .bodyDelay(600, TimeUnit.MILLISECONDS).build())
+        val pending = async(Dispatchers.IO) { access.closeAccount() }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        sessions.invalidateFromRealtime(sessions.openAccess())
+        pending.await()
+        val unknown = sessions.state.value.closure as io.github.thiesi.chitchat.core.account.ClosureState.Unknown
+        assertEquals(SessionPhase.INVALIDATED, sessions.state.value.phase)
+        unknown
+    }
+
+    @Test fun anEndedCheckCancelledMidReadKeepsTheUnknown() = runTest {
+        // TL, #300: connect() replaces the state; a cancelled Check must not make the Unknown deletion disappear.
+        val unknown = endedUnknown()
+        val before = server.requestCount
+        server.enqueue(json(bootstrapBody()).newBuilder().bodyDelay(2_000, TimeUnit.MILLISECONDS).build())
+        val check = launch(Dispatchers.IO) { sessions.checkClosure() }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        check.cancelAndJoin()
+        assertEquals("The same Unknown, with Check still available", unknown, sessions.state.value.closure)
+        assertNotEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+        assertEquals("One read at most, never a resend", before + 1, server.requestCount)
+    }
+
+    @Test fun anEndedCheckWhoseReadFailsStaysUnknown() = runTest {
+        val unknown = endedUnknown()
+        server.enqueue(json("", 503)); sessions.checkClosure(); server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals("A failed Check stays Unknown", unknown, sessions.state.value.closure)
+    }
+
+    @Test fun anotherServerChosenDuringAnEndedCheckGetsNothingRestored() = runTest {
+        endedUnknown()
+        server.enqueue(json(bootstrapBody()).newBuilder().bodyDelay(1_000, TimeUnit.MILLISECONDS).build())
+        val check = launch(Dispatchers.IO) { sessions.checkClosure() }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        val other = (ServerAddress.parse("other.example.test") as AddressResult.Valid).address
+        server.enqueue(json(bootstrapBody()))
+        sessions.connect(other)
+        check.join()
+        assertEquals(other.value, sessions.state.value.server?.value)
+        assertNull("Never into another server's state", sessions.state.value.closure)
+    }
+
+    @Test fun aLiveCheckCancelledMidReadKeepsTheUnknown() = runTest {
+        login()
+        server.enqueue(json("", 500))
+        closure().closeAccount(); server.takeRequest(5, TimeUnit.SECONDS)
+        server.enqueue(json(bootstrapBody(user, b))); sessions.refresh(); server.takeRequest(5, TimeUnit.SECONDS) // Clears the refresh need.
+        val unknown = sessions.state.value.closure as io.github.thiesi.chitchat.core.account.ClosureState.Unknown
+        clock.now += 31_000
+        server.enqueue(json(bootstrapBody(user, b)).newBuilder().bodyDelay(2_000, TimeUnit.MILLISECONDS).build())
+        val check = launch(Dispatchers.IO) { sessions.checkClosure() }
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }
+        check.cancelAndJoin()
+        assertEquals("The live read's cancellation keeps the Unknown (it never replaces the state)", unknown, sessions.state.value.closure)
     }
 
     @Test fun aDeletionOutcomeIsFencedAndAFreshConnectionDropsIt() = runTest {
