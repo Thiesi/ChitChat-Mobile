@@ -55,9 +55,10 @@ class AttachmentImagesTest {
     // cancelled after each test (its collectors never finish on their own).
     private val loaderJob = kotlinx.coroutines.SupervisorJob()
     @org.junit.After fun stop() = loaderJob.cancel()
-    private fun TestScope.images(source: Source, capacity: Long = 1_000_000) = AttachmentImages(
+    private fun TestScope.images(source: Source, capacity: Long = 1_000_000,
+        decodeOn: kotlinx.coroutines.CoroutineDispatcher = StandardTestDispatcher(testScheduler)) = AttachmentImages(
         kotlinx.coroutines.CoroutineScope(StandardTestDispatcher(testScheduler) + loaderJob), session, network, source,
-        decoder, capacity, clock = { testScheduler.currentTime }, decodeOn = StandardTestDispatcher(testScheduler))
+        decoder, capacity, clock = { testScheduler.currentTime }, decodeOn = decodeOn)
 
     private fun ref(id: Long = 12, size: Long = 50_000, preview: Long? = 20_000, width: Int? = 400, height: Int? = 300) = AttachmentRef(
         MessageAttachment(id, "photo.jpg", "image/jpeg", size, hash, previewable = true, width = width, height = height,
@@ -306,6 +307,25 @@ class AttachmentImagesTest {
         assertEquals(1, oriented.size)
         assertEquals(ImageState.NoMemory, images.state(third))
         assertTrue("The image on screen is kept", images.state(next) is ImageState.Loaded)
+    }
+
+    @Test fun showAndTryAgainDuringADecodeStartNoSecondLoad() = runTest {
+        // Review (#308): the job stays set while the decode runs, so no duplicate load and no leaked lease.
+        val decodes = kotlinx.coroutines.test.TestCoroutineScheduler()
+        val source = Source(); val images = images(source, decodeOn = StandardTestDispatcher(decodes)); advanceUntilIdle()
+        network.value = NetworkState(online = true, metered = true)
+        images.visible(ref(), 280, 210); images.show(ref()); advanceUntilIdle()
+        assertEquals("Fetched; the decode is suspended", 1, source.calls.size)
+        images.show(ref()); images.retry(ref()); advanceUntilIdle()
+        assertEquals("No second load while decoding", 1, source.calls.size)
+        decodes.advanceUntilIdle(); advanceUntilIdle()
+        assertTrue(images.state(ref()) is ImageState.Loaded)
+        assertEquals("Exactly one lease, at the decoded size", 32_000L, budget.reservedBytes)
+        // A session change during a decode cancels it and frees its lease.
+        images.visible(ref(id = 81), 280, 210); images.show(ref(id = 81)); advanceUntilIdle()
+        session.value = signedIn.copy(generation = 4); advanceUntilIdle()
+        decodes.advanceUntilIdle(); advanceUntilIdle()
+        assertEquals("Nothing held after the session changed", 0L, budget.reservedBytes)
     }
 
     @Test fun onlyOriginalsAreOrientedNeverPreviews() {

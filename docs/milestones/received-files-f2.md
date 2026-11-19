@@ -56,11 +56,14 @@ app until F3, so the availability disclosures stay accurate. It follows
     - **Gone or not allowed** removes it.
     - **Anything else** leaves the shown image as it was.
     - An original has no validator and is held as shown (TL 11-09).
+  - **One load per frame at a time:** a frame's job stays set until its decode has settled, so Show, Try again and
+    revalidation can't start a second load meanwhile, and a session change cancels the decode. A held image is never
+    replaced without closing its lease.
   - **Read proof:** the loader never touches read or typing proof (TL condition).
 
 ## Verification
 
-- **JVM: `AttachmentImagesTest` (20),** with a fake source and decoder (which leases like the real one) on virtual time:
+- **JVM: `AttachmentImagesTest` (21),** with a fake source and decoder (which leases like the real one) on virtual time:
   - **Loading rules:**
     - automatic loading, with the lease following the decoded size;
     - metered or over 2 MiB waits for Show;
@@ -81,6 +84,8 @@ app until F3, so the availability disclosures stay accurate. It follows
     - a refused lease drops an off-screen image on main and decodes once more; with nothing to drop, no second decode
       and the image on screen is kept;
     - only originals are oriented, never previews;
+    - Show and Try again while a decode runs start no second load and leave exactly one lease; a session change during a
+      decode cancels it and frees its lease (#308);
     - a session change dropping everything;
     - the sample-size arithmetic.
 - **Instrumented: `AndroidImageDecodingTest` (9):**

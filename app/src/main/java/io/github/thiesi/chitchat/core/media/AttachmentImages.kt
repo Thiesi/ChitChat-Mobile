@@ -177,8 +177,8 @@ internal class AttachmentImages(
     }
 
     private suspend fun settle(key: ImageKey, frame: Frame, variant: AttachmentVariant, result: DownloadResult) {
-        // This job is ending: a follow-up started from here (the preview fallback) must not see it as still running.
-        frame.job = null
+        // The job stays set through the decode, so Show, Try again and revalidation can't start a second load meanwhile
+        // (review, #308). Only the preview fallback, which restarts from inside this job, clears it first.
         when (result) {
             is DownloadResult.Bytes -> {
                 // The decoder sets the lease before each allocation (M5g3h) and leaves it at exactly the kept bitmap. EXIF
@@ -200,6 +200,7 @@ internal class AttachmentImages(
                 when (decoded) {
                     is DecodeResult.Decoded -> {
                         if (frames[key] !== frame) { result.release(); return }
+                        drop(frame) // Never replace a held image without closing its lease.
                         frame.held = Held(decoded.image, variant, result.etag, result.lease())
                         touch(frame)
                         set(key, ImageState.Loaded(decoded.image, variant))
@@ -213,6 +214,7 @@ internal class AttachmentImages(
             DownloadResult.PreviewUnavailable -> {
                 // Not an error: the original under the same rule, never the preview again this session.
                 frame.previewUnavailable = true
+                frame.job = null
                 mutable.value = mutable.value - key
                 if (frame.shown) start(key, frame) else { frame.autoTried = false; evaluate(key, frame) }
             }
