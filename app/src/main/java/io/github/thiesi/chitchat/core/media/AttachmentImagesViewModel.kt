@@ -16,9 +16,11 @@ import kotlinx.coroutines.flow.StateFlow
  * view models never own it. Screens reach it only through an [ImagePanes.Pane] bound to their owner token.
  */
 class AttachmentImagesViewModel internal constructor(session: StateFlow<SessionState>, network: NetworkConditions,
-    source: AttachmentSource, capacityBytes: Long) : ViewModel() {
+    source: AttachmentSource, capacityBytes: Long, animated: AnimatedDecoding? = platformAnimatedDecoding()) : ViewModel() {
     internal val images = AttachmentImages(viewModelScope, session, network.state, source, AndroidImageDecoding, capacityBytes)
-    internal val panes = ImagePanes(images)
+    /** The full-screen viewer's one session (F4), opened only through a pane. */
+    internal val viewer = AttachmentViewer(viewModelScope, session, network.state, source, images, AndroidImageDecoding, animated)
+    internal val panes = ImagePanes(images, viewer)
 
     companion object {
         /** Held decoded images may use half the shared budget, so they never crowd out upload drafts entirely (TL). */
