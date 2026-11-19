@@ -10,6 +10,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
@@ -132,8 +133,10 @@ class ReceivedFilesPresentationTest {
                 ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
                     scenario.onActivity { activity ->
                         assertEquals("A real Configuration font scale", fontScale, activity.resources.configuration.fontScale)
+                        // Like the app root's Scaffold: the theme background and its content colour (PL, #310 J2).
                         activity.setContent { ChitChatTheme(dark = dark, pureBlack = black) {
-                            Box(Modifier.fillMaxSize().testTag("files_host")) {
+                            androidx.compose.material3.Surface(Modifier.fillMaxSize().testTag("files_host"),
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
                                 if (shot.dms != null) DirectThreadScreen(direct, 8, {}, images = images)
                                 else ConversationScreen(room, 42, {}, images = images)
                             }
@@ -160,16 +163,36 @@ class ReceivedFilesPresentationTest {
         }
     }
 
+    @Test fun previewSheet() {
+        // PL (#310 J3): the disclosure as people see it before signing in, light and dark, default and 200%.
+        for (dark in listOf(false, true)) for ((scaleName, fontScale) in listOf("default" to 1f, "font200" to 2f)) {
+            FontScaleTestActivity.requestedFontScale = fontScale
+            ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.setContent { ChitChatTheme(dark = dark) {
+                        androidx.compose.material3.Surface(Modifier.fillMaxSize().testTag("files_host"),
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
+                            io.github.thiesi.chitchat.app.PreviewDisclosure()
+                        }
+                    } }
+                }
+                compose.onNodeWithTag("onboarding_preview").performClick()
+                compose.waitUntil(5_000) { compose.onAllNodesWithText(text(R.string.preview_limit)).fetchSemanticsNodes().isNotEmpty() }
+                capture("files-${if (dark) "dark" else "light"}-$scaleName-preview-sheet", "onboarding_preview_sheet")
+            }
+        }
+    }
+
     private fun text(id: Int) = InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
-    private fun capture(name: String) {
+    private fun capture(name: String, node: String = "files_host") {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }
             ?: checkNotNull(instrumentation.targetContext.getExternalFilesDir(null))
         val folder = java.io.File(output, "ccm-files-presentation")
         check(folder.isDirectory || folder.mkdirs())
-        val bitmap = compose.onNodeWithTag("files_host").captureToImage().asAndroidBitmap()
+        val bitmap = compose.onNodeWithTag(node).captureToImage().asAndroidBitmap()
         try {
             java.io.File(folder, "$name.png").outputStream().use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
         } finally { bitmap.recycle() }

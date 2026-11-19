@@ -206,10 +206,10 @@ private fun FrameLoading() {
 
 @Composable
 private fun GifBadge(modifier: Modifier) {
-    val colors = ChitChatTheme.colors
-    // A badge only in F3: the play glyph promises a tap that arrives with the viewer in F4 (PL).
-    Text(stringResource(R.string.image_gif), style = MaterialTheme.typography.labelMedium, color = colors.inverseOnSurface,
-        modifier = modifier.padding(6.dp).background(colors.scrim.copy(alpha = 0.6f), Lantern.chip)
+    // A badge only in F3: the play glyph promises a tap that arrives with the viewer in F4 (PL). It sits on the image, so
+    // its colours are theme-independent (PL, #310 J1).
+    Text(stringResource(R.string.image_gif), style = MaterialTheme.typography.labelMedium, color = Lantern.overlayText,
+        modifier = modifier.padding(6.dp).background(Lantern.overlayScrim, Lantern.chip)
             .padding(horizontal = 6.dp, vertical = 2.dp))
 }
 

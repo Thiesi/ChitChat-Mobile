@@ -38,7 +38,8 @@ loader's owner and the panes.
   about 2 seconds, P-34), Loaded, Failed and Can't show right now (Try again), Too large (static text, no Show, not
   clickable), Gone (dashed), Not allowed, Offline (Show disabled). A frame not yet evaluated shows its size with nothing
   to press. During a session 429 wait the box shows Show disabled; the status slot carries the wait.
-- **GIFs:** the "GIF" badge only, on every API level. The play glyph and the API 26–27 rule arrive with the viewer tap in
+- **GIFs:** the "GIF" badge only, on every API level, in white on a 60% black scrim in every theme, since it sits on the
+  image (PL J1). The play glyph and the API 26–27 rule arrive with the viewer tap in
   F4 (PL).
 - **File cards:** a type icon, the name (up to two lines, the middle elided so the start and the extension stay), and
   "PDF · 2.4 MB". No buttons until F5 and no click semantics; the label is "{name}, {type}, {size}", APKs included.
@@ -63,7 +64,7 @@ development-build prefix; PL wording, recorded in copy-deck.md with the F4 and F
   - `ReceivedFramesTest` (9): frame geometry at every clamp (normal, content width, small, panorama, tall, very tall,
     no dimensions), the middle elision, and the viewport rule (including rows beyond both ends). The panes and the
     small-budget case are F3a's.
-- **Instrumented: `ReceivedFilesJourneyTest` (18)**, in the real room and DM screens with the real decoder:
+- **Instrumented: `ReceivedFilesJourneyTest` (19)**, in the real room and DM screens with the real decoder:
   - attachment-only room and DM rows keep a separate "Message actions" node (≥ 48dp), and the frame has no click or
     long-click action; the same for a DM file card;
   - a caption is read with the actions node, not the frame; each non-Loaded state (Not loaded, Loading before and after
@@ -78,7 +79,8 @@ development-build prefix; PL wording, recorded in copy-deck.md with the F4 and F
   - a reply quoting a photo shows no frame in the quote;
   - an ignored author's photo loads only after Reveal;
   - a blocked DM thread loads normally and a refusal shows with no retry loop.
-- **J captures: `ReceivedFilesPresentationTest`** writes `files-presentation` (90): every state, the geometry set (with short panorama frames in Show and Try again), the
+- **J captures: `ReceivedFilesPresentationTest`** writes `files-presentation` (94): every state, the geometry set (with short panorama frames in Show and Try again), the
   GIF badge, short, long and APK cards, a reply quoting a photo, and incoming and outgoing DM bubbles with short and
   wrapping captions, light and dark at default and 200%, plus black for a loaded frame and the raised box. The
-  disclosure screens are in the existing `a11y-presentation` sign-in and You captures.
+  Welcome "What works in this preview" sheet (`preview_limit`) is captured light and dark at default and 200%; the journey
+  test pins both disclosure strings' exact text, including the signed-in `auth_preview_limit`.

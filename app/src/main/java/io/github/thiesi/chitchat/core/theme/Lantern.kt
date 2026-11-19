@@ -68,6 +68,9 @@ internal object Lantern {
     val frame = RoundedCornerShape(14.dp)
     /** A small label chip over an image, such as the GIF badge. */
     val chip = RoundedCornerShape(6.dp)
+    /** Text and scrim for a chip drawn over an image: theme-independent, since the image is (PL, #310 J1). */
+    val overlayText = Color.White
+    val overlayScrim = Color.Black.copy(alpha = 0.6f)
     val badge = 24.dp
     val gap = 8.dp
     val inset = 12.dp

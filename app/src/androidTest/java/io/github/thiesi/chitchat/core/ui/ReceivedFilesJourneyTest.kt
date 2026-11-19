@@ -207,6 +207,14 @@ class ReceivedFilesJourneyTest {
         inside("attachment_frame:71", "attachment_retry:71")
     }
 
+    @Test fun bothDisclosuresNameWhatIsStillMissing() {
+        // PL (#310 J3): the F3 wording; the signed-in form has no development prefix.
+        val missing = "Not in the app yet: saving, opening and sharing files and photos, viewing photos full screen, profile pictures, " +
+            "and guest invite links."
+        assertEquals("This is a development build. $missing", context.getString(R.string.preview_limit))
+        assertEquals(missing, context.getString(R.string.auth_preview_limit))
+    }
+
     @Test fun tryAgainRetriesOnceAndNeverOpensMessageActions() {
         source.reply(70) { DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) }
         rooms.messages = listOf(roomMessage(3, null, photo(70)))
