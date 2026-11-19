@@ -12,6 +12,7 @@ import java.io.OutputStream
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -213,6 +214,47 @@ class AttachmentDownloadsTest {
                 kotlinx.coroutines.withTimeout(10_000) { downloads.stream(attachment(), state, broken) } }
             assertEquals(FailureKind.STORAGE, (result as DownloadResult.Failed).failure.kind)
             take()
+        }
+    }
+
+    @Test fun aCancelledDownloadReturnsOnlyAfterItsProducerStops() = runTest {
+        // Review (#306): never free memory or a destination while the callback may still write into it (M5g3h).
+        val state = signedIn()
+        server.enqueue(file(bytes))
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val slow = object : OutputStream() {
+            override fun write(b: Int) = Unit
+            override fun write(b: ByteArray, off: Int, len: Int) { entered.countDown(); release.await(5, TimeUnit.SECONDS) }
+        }
+        val job = launch(kotlinx.coroutines.Dispatchers.IO) { downloads.stream(attachment(), state, slow) }
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { assertTrue(entered.await(5, TimeUnit.SECONDS)) }
+        job.cancel()
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Thread.sleep(300) }
+        assertFalse("Still waiting for the producer to stop", job.isCompleted)
+        release.countDown()
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { kotlinx.coroutines.withTimeout(5_000) { job.join() } }
+        assertTrue(job.isCompleted)
+    }
+
+    @Test fun aCancelAgainstAStalledServerReturnsPromptly() = runTest {
+        // TL (#306): the non-cancellable wait for the producer never stretches toward the call timeout.
+        val state = signedIn()
+        val stalls = listOf(
+            "before the headers" to MockResponse.Builder().code(200).addHeader("Content-Type", "image/png")
+                .body(Buffer().write(bytes)).headersDelay(60, TimeUnit.SECONDS).build(),
+            "mid-body" to MockResponse.Builder().code(200).addHeader("Content-Type", "image/png")
+                .body(Buffer().write(bytes)).bodyDelay(60, TimeUnit.SECONDS).build())
+        for ((where, stall) in stalls) {
+            server.enqueue(stall)
+            val job = launch(kotlinx.coroutines.Dispatchers.IO) { downloads.load(attachment(), AttachmentVariant.ORIGINAL, state) }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { take() }
+            val started = System.nanoTime()
+            job.cancel()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { kotlinx.coroutines.withTimeout(5_000) { job.join() } }
+            val millis = (System.nanoTime() - started) / 1_000_000
+            assertTrue("$where: returned in ${millis}ms", millis < 3_000)
+            assertEquals("$where: the lease is freed once the producer stopped", 0L, budget.reservedBytes)
         }
     }
 

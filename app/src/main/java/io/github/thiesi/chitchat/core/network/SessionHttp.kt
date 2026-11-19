@@ -791,12 +791,18 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         val transport = client.newBuilder().readTimeout(30, TimeUnit.SECONDS).callTimeout(10, TimeUnit.MINUTES).build()
         val call = transport.newCall(request)
         val started = requestScope()
+        // OkHttp calls exactly one callback per enqueued call, including after cancel. A cancelled download returns only
+        // once that callback (the producer writing into the caller's sink) has ended, so the caller never frees memory or
+        // a destination while bytes may still be written into it (memory-budget contract, M5g3h; review, #306).
+        val producerEnded = kotlinx.coroutines.CompletableDeferred<Unit>()
         val reply = try {
             suspendCancellableCoroutine<DownloadReply> { continuation ->
                 continuation.invokeOnCancellation { call.cancel() }
                 call.enqueue(object : Callback {
                     override fun onFailure(call: Call, e: IOException) {
-                        if (continuation.isActive) continuation.resumeWithException(if (e is ApiFailure) e else ApiFailure(transportKind(e)))
+                        try {
+                            if (continuation.isActive) continuation.resumeWithException(if (e is ApiFailure) e else ApiFailure(transportKind(e)))
+                        } finally { producerEnded.complete(Unit) }
                     }
                     override fun onResponse(call: Call, response: Response) {
                         try {
@@ -809,13 +815,15 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
                         } catch (failure: RuntimeException) {
                             // Never leave the caller hanging on an unexpected failure (review, #306); no message is kept.
                             if (continuation.isActive) continuation.resumeWithException(ApiFailure(FailureKind.INCOMPATIBLE))
-                        }
+                        } finally { producerEnded.complete(Unit) }
                     }
                 })
             }
         } catch (failure: ApiFailure) {
             if (failure.status == 403 && failure.code == RULES_ACCEPTANCE_REQUIRED) onRulesRefused?.invoke(started)
             throw failure
+        } finally {
+            withContext(kotlinx.coroutines.NonCancellable) { producerEnded.await() }
         }
         if (jar.invalid) throw ApiFailure(FailureKind.INCOMPATIBLE)
         return reply
