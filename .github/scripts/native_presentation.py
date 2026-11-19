@@ -51,7 +51,8 @@ UPDATE_NAME = re.compile(r"update-(light|dark)-(default|font200)-(setup|session)
 A11Y_DESTINATION = ROOT / "app/build/reports/androidTests/a11y-presentation"
 FILES_DESTINATION = ROOT / "app/build/reports/androidTests/files-presentation"
 FILES_NAME = re.compile(r"files-(?:(?:light|dark)-(?:default|font200)-"
-    r"(?:notloaded|loading|failed|nomemory|toolarge|gone|notallowed|offline|normal|panorama|tall|small|nodims|gif|"
+    r"(?:notloaded|loading|failed|nomemory|toolarge|gone|notallowed|offline|normal|panorama|panorama-show|panorama-retry|tall|small|"
+    r"nodims|gif|"
     r"card-short|card-long|card-apk|reply|dm-in-short|dm-out-long)|black-default-(?:normal|notloaded))[.]png")
 A11Y_NAME = re.compile(r"a11y-(light|dark)-(default|font200)-(signin|you|dialog)[.]png")
 YOU_DESTINATION = ROOT / "app/build/reports/androidTests/you-presentation"
@@ -291,16 +292,17 @@ def collect_deletion():
 
 
 def collect_files():
-    # Received files F3: every image state, frame geometry, the GIF badge, file cards, DM bubbles and a reply quoting a
-    # photo, light and dark at default and 200% (80), plus black for a loaded frame and the raised box (2).
-    files = list(islice(SOURCE.rglob("ccm-files-presentation/*"), 83))
-    if (not files or len(files) > 82 or len({p.name for p in files}) != len(files)
+    # Received files F3: every image state, frame geometry (and short frames in interactive states), the GIF badge, file
+    # cards, DM bubbles and a reply quoting a photo, light and dark at default and 200% (88), plus black for a loaded
+    # frame and the raised box (2).
+    files = list(islice(SOURCE.rglob("ccm-files-presentation/*"), 91))
+    if (not files or len(files) > 90 or len({p.name for p in files}) != len(files)
         or any(FILES_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous files presentation output")
     FILES_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, FILES_DESTINATION / path.name)
-    print(f"Files presentation captures collected: {len(files)} of 82.")
+    print(f"Files presentation captures collected: {len(files)} of 90.")
 
 
 def collect_reset():

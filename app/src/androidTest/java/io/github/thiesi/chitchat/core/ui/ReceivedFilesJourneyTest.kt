@@ -16,6 +16,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -44,6 +45,7 @@ import io.github.thiesi.chitchat.feature.direct.DirectThreadScreen
 import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -57,9 +59,10 @@ class ReceivedFilesJourneyTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val session = ReceivedFiles.session()
     private val source = ReceivedSource()
+    private val network = FixedNetwork()
     private val store = ViewModelStore()
     private val images: AttachmentImagesViewModel = ViewModelProvider.create(store, viewModelFactory {
-        initializer { AttachmentImagesViewModel(session, FixedNetwork(), source, 32L * 1024 * 1024) }
+        initializer { AttachmentImagesViewModel(session, network, source, 32L * 1024 * 1024) }
     })[AttachmentImagesViewModel::class.java]
     private val rooms = ReceivedRooms(session)
     private val room = ConversationViewModel(rooms)
@@ -69,8 +72,14 @@ class ReceivedFilesJourneyTest {
 
     @After fun tearDown() { compose.runOnIdle { room.cancel(); direct.background() }; store.clear() }
 
-    private fun roomContent() {
-        compose.setContent { MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } } }
+    private fun roomContent(fontScale: Float = 1f) {
+        compose.setContent {
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides
+                androidx.compose.ui.unit.Density(base.density, fontScale)) {
+                MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } }
+            }
+        }
         compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
     }
     private fun directContent() {
@@ -94,10 +103,108 @@ class ReceivedFilesJourneyTest {
         assertTrue(description("attachment_frame:70"), description("attachment_frame:70").startsWith("Photo from Bob, "))
     }
 
-    @Test fun aCaptionIsPartOfTheFrameLabel() {
+    @Test fun aCaptionIsReadWithTheActionsNodeNotTheFrame() {
+        // PL (#310): the caption is heard once, with the message's actions node.
         rooms.messages = listOf(roomMessage(3, "Sunset over the bay", photo(70)))
         roomContent()
-        assertTrue(description("attachment_frame:70"), description("attachment_frame:70").endsWith(", Sunset over the bay"))
+        assertFalse(description("attachment_frame:70"), description("attachment_frame:70").contains("Sunset"))
+        val actions = compose.onNode(clickLabelled(actionsLabel) and hasAnyAncestor(hasTestTag("message:3"))).fetchSemanticsNode().config
+        assertTrue(actions.getOrNull(SemanticsProperties.Text).orEmpty().any { "Sunset over the bay" in it.text })
+    }
+
+    @Test fun eachNonLoadedStateFollowsTheLabelInTheFramesDescription() {
+        // TL/PL (#310): TalkBack reads contentDescription instead of the merged text, so the state line is in it.
+        val cases = listOf(
+            Pair<suspend () -> DownloadResult, Int>({ DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) }, R.string.image_failed),
+            Pair<suspend () -> DownloadResult, Int>({ DownloadResult.NoMemory }, R.string.image_no_memory),
+            Pair<suspend () -> DownloadResult, Int>({ DownloadResult.Gone }, R.string.image_gone),
+            Pair<suspend () -> DownloadResult, Int>({ DownloadResult.NotAllowed }, R.string.image_not_allowed),
+        )
+        cases.forEachIndexed { index, (reply, _) -> source.reply(70L + index, reply) }
+        rooms.messages = cases.indices.map { roomMessage(3L + it, null, photo(70L + it)) } +
+            roomMessage(9, null, photo(79, size = 40_000_000, preview = false))
+        roomContent()
+        cases.forEachIndexed { index, (_, line) ->
+            val tag = "attachment_frame:${70L + index}"
+            compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag(tag))
+            compose.waitUntil(5_000) { description(tag).endsWith(". " + context.getString(line)) }
+            assertTrue(description(tag), Regex("Photo from Bob, [^.]+\\. ").containsMatchIn(description(tag)))
+        }
+        compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag("attachment_frame:79"))
+        assertTrue(description("attachment_frame:79"),
+            Regex("^Photo from Bob, [^.]+\\. 40 MB, ${Regex.escape(context.getString(R.string.image_too_large_part))}$")
+                .matches(description("attachment_frame:79")))
+    }
+
+    @Test fun notLoadedReadsTheSizeAloneWithoutPhotoOrShow() {
+        // PL (#310): the box says "Photo · 3.4 MB" with Show; TalkBack hears the size alone, and Show as its own node.
+        network.state.value = io.github.thiesi.chitchat.core.media.NetworkState(online = true, metered = true)
+        rooms.messages = listOf(roomMessage(3, null, photo(70)))
+        roomContent()
+        compose.waitUntil(5_000) { description("attachment_frame:70").contains(". ") }
+        val spoken = description("attachment_frame:70")
+        assertTrue(spoken, Regex("^Photo from Bob, [^.]+\\. 3\\.4 MB$").matches(spoken))
+        assertFalse(spoken, spoken.contains(context.getString(R.string.image_show)))
+        compose.onNodeWithTag("attachment_show:70").assertHeightIsAtLeast(48.dp)
+    }
+
+    @Test fun loadingSpeaksLoadingBeforeAndAfterTheVisibleLine() {
+        source.reply(70) { kotlinx.coroutines.awaitCancellation() }
+        rooms.messages = listOf(roomMessage(3, null, photo(70)))
+        roomContent()
+        compose.waitUntil(5_000) { description("attachment_frame:70").endsWith(". " + context.getString(R.string.image_loading_spoken)) }
+        compose.onAllNodesWithText(context.getString(R.string.image_loading)).assertCountEquals(0)
+        compose.waitUntil(5_000) { compose.onAllNodesWithText(context.getString(R.string.image_loading)).fetchSemanticsNodes().isNotEmpty() }
+        val spoken = description("attachment_frame:70")
+        assertTrue("Unchanged after the 2 s line: $spoken", spoken.endsWith(". " + context.getString(R.string.image_loading_spoken)))
+        assertFalse(spoken, spoken.contains(context.getString(R.string.image_loading)))
+    }
+
+    @Test fun offlineReadsTheSizeAndWhenItCanLoad() {
+        network.state.value = io.github.thiesi.chitchat.core.media.NetworkState(online = false, metered = true)
+        rooms.messages = listOf(roomMessage(3, null, photo(70)))
+        roomContent()
+        compose.waitUntil(5_000) { description("attachment_frame:70").contains(". ") }
+        assertTrue(description("attachment_frame:70"),
+            description("attachment_frame:70").endsWith(". 3.4 MB, " + context.getString(R.string.image_offline_part)))
+        assertTrue("Offline requests nothing", source.calls.isEmpty())
+    }
+
+    @Test fun aLoadedFrameIsTheLabelAloneAndAGifSaysGif() {
+        rooms.messages = listOf(roomMessage(3, null, photo(70)), roomMessage(4, null, photo(71, mime = "image/gif")))
+        roomContent()
+        compose.waitUntil(5_000) {
+            images.images.states.value.values.count { it is io.github.thiesi.chitchat.core.media.ImageState.Loaded } == 2
+        }
+        compose.waitForIdle()
+        assertTrue(description("attachment_frame:70"), Regex("^Photo from Bob, [^.]+$").matches(description("attachment_frame:70")))
+        assertTrue(description("attachment_frame:71"), Regex("^GIF from Bob, [^.]+$").matches(description("attachment_frame:71")))
+    }
+
+    @Test fun showAndTryAgainFitWholeInsideA96dpPanoramaFrame() = shortFrame(1f)
+    @Test fun showAndTryAgainFitWholeInsideA96dpPanoramaFrameAt200Percent() = shortFrame(2f)
+
+    /** Review (#310): a short frame never clips its button out of reach. */
+    private fun shortFrame(scale: Float) {
+        network.state.value = io.github.thiesi.chitchat.core.media.NetworkState(online = true, metered = true)
+        source.reply(71) { DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) }
+        rooms.messages = listOf(roomMessage(3, null, photo(70, width = 6000, height = 1000)),
+            roomMessage(4, null, photo(71, width = 6000, height = 1000)))
+        roomContent(scale)
+        fun inside(frame: String, button: String) {
+            compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag(frame))
+            compose.waitUntil(5_000) { compose.onAllNodesWithTag(button).fetchSemanticsNodes().isNotEmpty() }
+            val outer = compose.onNodeWithTag(frame).fetchSemanticsNode().boundsInRoot
+            val inner = compose.onNodeWithTag(button).assertHeightIsAtLeast(48.dp).fetchSemanticsNode().boundsInRoot
+            assertTrue("$button at ${scale}x: $inner inside $outer", inner.top >= outer.top - 0.5f &&
+                inner.bottom <= outer.bottom + 0.5f && inner.left >= outer.left - 0.5f && inner.right <= outer.right + 0.5f)
+            assertEquals(96f, with(compose.density) { outer.height.toDp().value }, 1f)
+        }
+        inside("attachment_frame:70", "attachment_show:70")
+        compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag("attachment_frame:71"))
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("attachment_show:71").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("attachment_show:71").performClick()
+        inside("attachment_frame:71", "attachment_retry:71")
     }
 
     @Test fun tryAgainRetriesOnceAndNeverOpensMessageActions() {
@@ -126,7 +233,7 @@ class ReceivedFilesJourneyTest {
     }
 
     @Test fun beyondTheCapsTheBoxIsStaticTextAndNothingIsFetched() {
-        rooms.messages = listOf(roomMessage(3, null, photo(70, size = 40L * 1024 * 1024)))
+        rooms.messages = listOf(roomMessage(3, null, photo(70, size = 40_000_000, preview = false)))
         roomContent()
         compose.onNodeWithTag("attachment_frame:70").assert(noClick).assert(noLongClick)
         compose.onNodeWithText("too large to show here", substring = true).assertExists()
@@ -162,7 +269,7 @@ class ReceivedFilesJourneyTest {
     }
 
     @Test fun anAttachmentOnlyDmRowKeepsItsActionsNodeAndTheFrameHasNoClick() {
-        directs.rows = listOf(dm(18, null, photo(70)))
+        directs.rows = listOf(dm(18, null, photo(70, direct = true)))
         directContent()
         compose.onNodeWithTag("attachment_frame:70").assert(noClick).assert(noLongClick)
         compose.onNode(clickLabelled(actionsLabel) and hasAnyAncestor(hasTestTag("direct:18"))).assertHeightIsAtLeast(48.dp)
@@ -179,7 +286,7 @@ class ReceivedFilesJourneyTest {
         // TL (F3): blocking governs sending, not history; the server decides file access.
         directs.blocked = true
         source.reply(70) { DownloadResult.NotAllowed }
-        directs.rows = listOf(dm(18, null, photo(70)))
+        directs.rows = listOf(dm(18, null, photo(70, direct = true)))
         directContent()
         compose.waitUntil(5_000) { 70L in source.calls }
         compose.onNodeWithText(context.getString(R.string.image_not_allowed)).assertExists()

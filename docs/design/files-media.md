@@ -300,9 +300,12 @@ Within the transcript spec's bubble, run and chit rules:
   | Offline | The box, "Photo · 3.4 MB · available when you're back online", with Show disabled |
 
 - **Deleted messages** keep the tombstone from the transcript spec. No file card or image.
-- **Accessibility:** the image's description is "Photo from {sender}, {time}", followed by the
-  caption if present. The API has no alt text, so don't invent descriptions. File cards read as
-  "{name}, {type}, {size}, Open, Save".
+- **Accessibility:** the image's description is "Photo from {sender}, {time}" ("GIF from
+  {sender}, {time}" for GIFs). In any state but Loaded, the state line follows after a full stop,
+  without its "Photo ·" prefix and with "·" read as a comma (for example "Photo from Ana, 10:42.
+  48 MB, too large to show here"); Loading adds "Loading". The caption isn't repeated there: it's
+  read with the message's actions node. The API has no alt text, so don't invent descriptions.
+  File cards read as "{name}, {type}, {size}, Open, Save".
 - **Placement and taps (TL/PL, 2026-11-19, F3):** the frame or card sits inside the message's
   actions target (long-press and tap for Reply, Copy and so on) as its own TalkBack node with no
   click or long-click action, so a pointer tap on it opens message actions, as on text.

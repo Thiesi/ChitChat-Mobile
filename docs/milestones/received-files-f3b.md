@@ -23,7 +23,11 @@ loader's owner and the panes.
   - An attachment-only message keeps a separate, labelled, focusable "Message actions" node of at least 48dp.
   - Show and Try again are their own 48dp buttons and consume their taps; they never also open message actions.
   - The pressed ripple is clipped to the frame's 14dp corners, never a square over them.
-  - The frame's label ("Photo from {sender}, {time}", then the caption) is read once, on the frame's own node.
+  - **The frame's TalkBack description (PL, #310)** is "Photo from {sender}, {time}" ("GIF from…" for GIFs). In any state
+    but Loaded the state line follows after a full stop, built from the same string parts as the visible line, without
+    "Photo" and with "·" read as a comma ("Photo from Ana, 10:42. 48 MB, too large to show here"); Loading speaks
+    "Loading". TalkBack reads a contentDescription instead of the merged text, so without this a refusal or failure
+    would be silent (TL). The caption isn't repeated in it: the actions node reads it, so it's heard once.
   - **F4 changes the tap:** a tap on the frame will open the viewer and take precedence, with the click label "Open
     photo", while long-press keeps the message actions.
 - **Frames:** sized from metadata before loading and never resized (`attachmentFrameSize`): the content width, at most
@@ -59,10 +63,13 @@ development-build prefix; PL wording, recorded in copy-deck.md with the F4 and F
   - `ReceivedFramesTest` (9): frame geometry at every clamp (normal, content width, small, panorama, tall, very tall,
     no dimensions), the middle elision, and the viewport rule (including rows beyond both ends). The panes and the
     small-budget case are F3a's.
-- **Instrumented: `ReceivedFilesJourneyTest` (11)**, in the real room and DM screens with the real decoder:
+- **Instrumented: `ReceivedFilesJourneyTest` (16)**, in the real room and DM screens with the real decoder:
   - attachment-only room and DM rows keep a separate "Message actions" node (≥ 48dp), and the frame has no click or
     long-click action; the same for a DM file card;
-  - the frame label, with and without a caption;
+  - a caption is read with the actions node, not the frame; each non-Loaded state (Not loaded, Loading before and after
+    its 2 s line, Failed, Can't show right now, Gone,
+    Not allowed, Too large, Offline) follows the label after a full stop in the frame's description; a loaded frame is
+    the label alone, and a GIF says "GIF from";
   - one tap on Try again gives exactly one retry and no actions sheet;
   - a file card's label, its middle-elided long name keeping ".pdf", and no download;
   - a too-large box is static text and nothing is fetched;
@@ -70,7 +77,7 @@ development-build prefix; PL wording, recorded in copy-deck.md with the F4 and F
   - a reply quoting a photo shows no frame in the quote;
   - an ignored author's photo loads only after Reveal;
   - a blocked DM thread loads normally and a refusal shows with no retry loop.
-- **J captures: `ReceivedFilesPresentationTest`** writes `files-presentation` (82): every state, the geometry set, the
+- **J captures: `ReceivedFilesPresentationTest`** writes `files-presentation` (90): every state, the geometry set (with short panorama frames in Show and Try again), the
   GIF badge, short, long and APK cards, a reply quoting a photo, and incoming and outgoing DM bubbles with short and
   wrapping captions, light and dark at default and 200%, plus black for a loaded frame and the raised box. The
   disclosure screens are in the existing `a11y-presentation` sign-in and You captures.

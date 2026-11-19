@@ -107,9 +107,30 @@ private fun ReceivedImageFrame(attachment: MessageAttachment, direct: Boolean, m
             DisposableEffect(pane, ref) { onDispose { pane.hidden(ref) } }
         }
         val state = images?.key?.invoke(ref)?.let { images.states[it] }
-        val label = caption?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.image_description_caption, sender, time, it) }
-            ?: stringResource(R.string.image_description, sender, time)
+        // The caption isn't repeated here: the message's actions node reads it right after (PL, #310).
+        val gif = attachment.mimeType.equals("image/gif", ignoreCase = true)
+        val label = stringResource(if (gif) R.string.image_description_gif else R.string.image_description, sender, time)
         val photoSize = sizeText(attachmentSizeText(attachment.sizeBytes, locale))
+        // The state line's parts. The box shows them after "Photo", joined with " · "; TalkBack reads a node's
+        // contentDescription instead of its merged text, so the description carries the same parts after the label and a
+        // full stop, joined with ", " (TL/PL, #310). Loading speaks "Loading"; a loaded image is the label alone.
+        val photo = stringResource(R.string.image_photo)
+        val parts: List<String>? = when (state) {
+            is ImageState.Loaded -> null
+            ImageState.Loading -> listOf(stringResource(R.string.image_loading_spoken))
+            is ImageState.NotLoaded -> if (state.reason == ImageState.Reason.OFFLINE)
+                listOf(photoSize, stringResource(R.string.image_offline_part)) else listOf(photoSize)
+            ImageState.Failed -> listOf(stringResource(R.string.image_failed))
+            ImageState.NoMemory -> listOf(stringResource(R.string.image_no_memory))
+            ImageState.TooLarge -> listOf(photoSize, stringResource(R.string.image_too_large_part))
+            ImageState.Gone -> listOf(stringResource(R.string.image_gone))
+            ImageState.NotAllowed -> listOf(stringResource(R.string.image_not_allowed))
+            null -> if (tooLargeForDisplay(attachment)) listOf(photoSize, stringResource(R.string.image_too_large_part)) else listOf(photoSize)
+        }
+        // Size-led lines get the "Photo" lead on screen; status sentences stand alone.
+        val sized = parts?.firstOrNull() == photoSize
+        val shown = parts?.let { (if (sized) listOf(photo) + it else it).joinToString(" · ") }
+        val description = parts?.let { "$label. ${it.joinToString(", ")}" } ?: label
         val dashed = state == ImageState.Gone
         val outline = colors.fieldLine
         Box(Modifier.size(size.widthDp.dp, size.heightDp.dp).clip(FrameShape).background(colors.raised)
@@ -117,7 +138,7 @@ private fun ReceivedImageFrame(attachment: MessageAttachment, direct: Boolean, m
                 drawRoundRect(outline, cornerRadius = CornerRadius(14.dp.toPx()),
                     style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))))
             } else Modifier)
-            .semantics(mergeDescendants = true) { contentDescription = label }
+            .semantics(mergeDescendants = true) { contentDescription = description }
             .testTag("attachment_frame:${attachment.id}"), contentAlignment = Alignment.Center) {
             when (state) {
                 is ImageState.Loaded -> state.image.bitmap?.let { bitmap ->
@@ -126,23 +147,15 @@ private fun ReceivedImageFrame(attachment: MessageAttachment, direct: Boolean, m
                     Image(image, contentDescription = null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                 }
                 ImageState.Loading -> FrameLoading()
-                is ImageState.NotLoaded -> FrameBox(when (state.reason) {
-                    ImageState.Reason.OFFLINE -> stringResource(R.string.image_offline, photoSize)
-                    else -> stringResource(R.string.image_photo_size, photoSize)
-                }, action = stringResource(R.string.image_show), enabled = state.reason == ImageState.Reason.POLICY,
-                    tag = "attachment_show:${attachment.id}") { pane?.show(ref) }
-                ImageState.Failed -> FrameBox(stringResource(R.string.image_failed), stringResource(R.string.retry),
+                is ImageState.NotLoaded -> FrameBox(shown.orEmpty(), action = stringResource(R.string.image_show),
+                    enabled = state.reason == ImageState.Reason.POLICY, tag = "attachment_show:${attachment.id}") { pane?.show(ref) }
+                ImageState.Failed, ImageState.NoMemory -> FrameBox(shown.orEmpty(), stringResource(R.string.retry),
                     tag = "attachment_retry:${attachment.id}") { pane?.retry(ref) }
-                ImageState.NoMemory -> FrameBox(stringResource(R.string.image_no_memory), stringResource(R.string.retry),
-                    tag = "attachment_retry:${attachment.id}") { pane?.retry(ref) }
-                ImageState.TooLarge -> FrameBox(stringResource(R.string.image_too_large, photoSize))
-                ImageState.Gone -> FrameBox(stringResource(R.string.image_gone), icon = false)
-                ImageState.NotAllowed -> FrameBox(stringResource(R.string.image_not_allowed))
-                // Not yet evaluated (off screen, or the instant before a decision): the size, nothing to press.
-                null -> FrameBox(if (tooLargeForDisplay(attachment)) stringResource(R.string.image_too_large, photoSize)
-                    else stringResource(R.string.image_photo_size, photoSize))
+                ImageState.Gone -> FrameBox(shown.orEmpty(), icon = false)
+                // Too large, not allowed, and not yet evaluated (off screen, or the instant before a decision): text only.
+                ImageState.TooLarge, ImageState.NotAllowed, null -> FrameBox(shown.orEmpty())
             }
-            if (attachment.mimeType.equals("image/gif", ignoreCase = true) && state !is ImageState.Gone && state !is ImageState.NotAllowed)
+            if (gif && state !is ImageState.Gone && state !is ImageState.NotAllowed)
                 GifBadge(Modifier.align(Alignment.TopStart))
         }
     }
@@ -157,12 +170,25 @@ private fun tooLargeForDisplay(attachment: MessageAttachment): Boolean = attachm
 private fun FrameBox(text: String, action: String? = null, enabled: Boolean = true, tag: String? = null, icon: Boolean = true,
     onAction: () -> Unit = {}) {
     val colors = ChitChatTheme.colors
-    Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (icon) Icon(painterResource(R.drawable.ic_image), contentDescription = null, Modifier.size(24.dp), tint = colors.textMuted)
-        Text(text, style = MaterialTheme.typography.bodySmall, color = colors.textMuted, textAlign = TextAlign.Center)
-        // Its own 48dp button: it takes the tap itself and never also opens message actions (TL/PL, F3).
-        if (action != null) TextButton(onClick = onAction, enabled = enabled,
-            modifier = Modifier.heightIn(min = Lantern.target).then(if (tag != null) Modifier.testTag(tag) else Modifier)) { Text(action) }
+    // A frame can be as short as 96dp (a panorama) and its height never changes, so the box lays out by priority
+    // (review, #310): the button always fits whole, the line takes what's left (ellipsized; TalkBack still hears it in
+    // full through the frame's description), and the icon shows only when there's room for all three.
+    BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
+        val line = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toDp() }
+        val button = if (action != null) Lantern.target else 0.dp
+        val roomForIcon = icon && maxHeight >= 24.dp + line + button + 8.dp
+        Column(horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
+            if (roomForIcon) Icon(painterResource(R.drawable.ic_image), contentDescription = null, Modifier.size(24.dp), tint = colors.textMuted)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = colors.textMuted, textAlign = TextAlign.Center,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            // Its own 48dp button: it takes the tap itself and never also opens message actions (TL/PL, F3).
+            if (action != null) TextButton(onClick = onAction, enabled = enabled,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                modifier = Modifier.heightIn(min = Lantern.target).then(if (tag != null) Modifier.testTag(tag) else Modifier)) {
+                Text(action, maxLines = 1)
+            }
+        }
     }
 }
 

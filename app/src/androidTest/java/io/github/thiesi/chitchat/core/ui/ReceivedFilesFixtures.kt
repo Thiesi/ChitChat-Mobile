@@ -58,10 +58,22 @@ internal object ReceivedFiles {
             .also { bitmap.recycle() }
     }
 
-    fun photo(id: Long, size: Long = 3_565_158, width: Int? = 4000, height: Int? = 3000, mime: String = "image/jpeg") =
-        MessageAttachment(id, "photo.jpg", mime, size, "0".repeat(64), previewable = true, width = width, height = height)
+    /**
+     * A received photo. Like a real one it has the server's preview by default (a small WebP within 1024 px, in the room or
+     * DM namespace), so it auto-loads; the box still shows the original's size. Without one, the original's size decides.
+     */
+    fun photo(id: Long, size: Long = 3_400_000, width: Int? = 4000, height: Int? = 3000, mime: String = "image/jpeg",
+        preview: Boolean = true, direct: Boolean = false): MessageAttachment {
+        val w = width ?: 1024; val h = height ?: 768
+        val scale = minOf(1.0, 1024.0 / maxOf(w, h))
+        val rendition = if (!preview) null else io.github.thiesi.chitchat.core.media.AttachmentPreview(
+            (if (direct) "/api/v1/direct-messages/attachments/download.php" else "/api/v1/attachments/download.php") + "?id=$id&variant=preview",
+            maxOf(1, (w * scale).toInt()), maxOf(1, (h * scale).toInt()), "image/webp", 120_000, "0".repeat(64))
+        return MessageAttachment(id, "photo.jpg", mime, size, "0".repeat(64), previewable = true, width = width, height = height,
+            preview = rendition)
+    }
 
-    fun file(id: Long, name: String, mime: String = "application/pdf", size: Long = 2_516_582) =
+    fun file(id: Long, name: String, mime: String = "application/pdf", size: Long = 2_400_000) =
         MessageAttachment(id, name, mime, size, "0".repeat(64), previewable = false)
 
     fun roomMessage(id: Long, body: String?, attachment: MessageAttachment? = null, reply: MessageReply? = null) =

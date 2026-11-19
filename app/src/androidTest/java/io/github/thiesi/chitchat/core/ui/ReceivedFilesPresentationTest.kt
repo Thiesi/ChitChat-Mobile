@@ -77,7 +77,7 @@ class ReceivedFilesPresentationTest {
         Shot("failed", one(3, attachment = photo(70)), script = { reply(70) { DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) } },
             ready = { it.contains(ImageState.Failed) }),
         Shot("nomemory", one(3, attachment = photo(70)), script = { reply(70) { DownloadResult.NoMemory } }, ready = { it.contains(ImageState.NoMemory) }),
-        Shot("toolarge", one(3, attachment = photo(70, size = 48L * 1024 * 1024)), ready = { it.contains(ImageState.TooLarge) }),
+        Shot("toolarge", one(3, attachment = photo(70, size = 48_000_000, preview = false)), ready = { it.contains(ImageState.TooLarge) }),
         Shot("gone", one(3, attachment = photo(70)), script = { reply(70) { DownloadResult.Gone } }, ready = { it.contains(ImageState.Gone) }),
         Shot("notallowed", one(3, attachment = photo(70)), script = { reply(70) { DownloadResult.NotAllowed } },
             ready = { it.contains(ImageState.NotAllowed) }),
@@ -85,6 +85,11 @@ class ReceivedFilesPresentationTest {
         // Geometry; "normal" is also the loaded state, with a caption below.
         Shot("normal", one(3, "Sunset over the bay", photo(70)), script = { bytes = { png(800, 600) } }, ready = loaded),
         Shot("panorama", one(3, attachment = photo(70, width = 6000, height = 1000)), script = { bytes = { png(1200, 200) } }, ready = loaded),
+        // Short frames in interactive states: the button always fits whole (review, #310).
+        Shot("panorama-show", one(3, attachment = photo(70, width = 6000, height = 1000)), metered = true,
+            ready = { it.contains(ImageState.NotLoaded(ImageState.Reason.POLICY)) }),
+        Shot("panorama-retry", one(3, attachment = photo(70, width = 6000, height = 1000)),
+            script = { reply(70) { DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) } }, ready = { it.contains(ImageState.Failed) }),
         Shot("tall", one(3, attachment = photo(70, width = 1000, height = 6000)), script = { bytes = { png(200, 1200) } }, ready = loaded),
         Shot("small", one(3, attachment = photo(70, width = 160, height = 120)), script = { bytes = { png(160, 120) } }, ready = loaded),
         Shot("nodims", one(3, attachment = photo(70, width = null, height = null)), script = { bytes = { png(400, 300) } }, ready = loaded),
@@ -92,15 +97,15 @@ class ReceivedFilesPresentationTest {
         // File cards: no buttons until F5.
         Shot("card-short", one(3, attachment = file(71, "notes.pdf"))),
         Shot("card-long", one(3, attachment = file(71, "quarterly-report-for-the-steering-committee-final-version-approved.pdf"))),
-        Shot("card-apk", one(3, attachment = file(71, "chitchat-release.apk", "application/vnd.android.package-archive", 18_874_368))),
+        Shot("card-apk", one(3, attachment = file(71, "chitchat-release.apk", "application/vnd.android.package-archive", 18_900_000))),
         // A reply quoting a photo: no frame in the quote.
         Shot("reply", listOf(roomMessage(2, "Look at this", photo(70)), roomMessage(3, "Nice one",
             reply = MessageReply("room", 2, true, ReplyMessage(2, MessagePerson(8, "Bob"), "text", "Look at this", false)))),
             script = { bytes = { png(800, 600) } }, ready = loaded),
         // DM bubbles: incoming with a short caption, outgoing with one that wraps.
-        Shot("dm-in-short", dms = listOf(dm(18, "Sunset", photo(70))), script = { bytes = { png(800, 600) } }, ready = loaded),
+        Shot("dm-in-short", dms = listOf(dm(18, "Sunset", photo(70, direct = true))), script = { bytes = { png(800, 600) } }, ready = loaded),
         Shot("dm-out-long", dms = listOf(dm(18, "We walked down to the harbour after dinner and stayed until the last light went out over the water.",
-            photo(70), outgoing = true)), script = { bytes = { png(800, 600) } }, ready = loaded),
+            photo(70, direct = true), outgoing = true)), script = { bytes = { png(800, 600) } }, ready = loaded),
     )
 
     @Test fun presentationLight() = presentation("light", dark = false, black = false, shots, listOf("default" to 1f, "font200" to 2f))
