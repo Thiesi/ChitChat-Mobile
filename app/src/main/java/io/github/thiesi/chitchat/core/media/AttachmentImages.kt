@@ -85,6 +85,8 @@ internal class AttachmentImages(
         var lastUsed = 0L
         /** The conversation entry in which this frame last revalidated its held preview. */
         var revalidatedIn = -1L
+        /** Open viewers showing this frame: while pinned, its held image counts as visible and is never evicted (TL, F4). */
+        var pinned = 0
     }
 
     private val frames = LinkedHashMap<ImageKey, Frame>()
@@ -264,15 +266,21 @@ internal class AttachmentImages(
         frame.ref.attachment.preview!!.sizeBytes else frame.ref.attachment.sizeBytes
 
     /** Decided from the metadata before any fetch: only an original can be beyond the caps (previews are ≤ 1024 px). */
-    private fun tooLarge(frame: Frame): Boolean {
-        if (variant(frame) != AttachmentVariant.ORIGINAL) return false
-        val attachment = frame.ref.attachment
-        val dimensions = attachment.displayDimensions
-        return attachment.sizeBytes > AttachmentDownloads.DISPLAY_MAX_BYTES ||
-            (dimensions != null && dimensions.width.toLong() * dimensions.height > AttachmentDownloads.DISPLAY_MAX_PIXELS)
-    }
+    private fun tooLarge(frame: Frame): Boolean =
+        variant(frame) == AttachmentVariant.ORIGINAL && frame.ref.attachment.originalBeyondDisplayCaps()
 
     private fun waiting() = clock() < session.value.retryAtMillis
+
+    /** The viewer (F4) shows this frame: its held image is never evicted while pinned. */
+    internal fun pin(ref: AttachmentRef) { val key = key(ref) ?: return; frames.getOrPut(key) { Frame(ref, 0, 0) }.pinned++ }
+    internal fun unpin(ref: AttachmentRef) { key(ref)?.let { frames[it] }?.let { it.pinned = (it.pinned - 1).coerceAtLeast(0) } }
+    /** A session 429 wait is running: nothing starts automatically (TL, #306). */
+    internal fun waitingNow() = waiting()
+    /** What the transcript frame loads for [ref]: the preview unless there's none, it's invalid, or it was unavailable. */
+    internal fun loadsPreview(ref: AttachmentRef): Boolean {
+        val frame = key(ref)?.let { frames[it] } ?: Frame(ref, 0, 0)
+        return variant(frame) == AttachmentVariant.PREVIEW
+    }
 
     /** One pass when the session's wait ends: frames still on screen and waiting auto-load once each. */
     private fun scheduleWaitEnd() {
@@ -291,7 +299,7 @@ internal class AttachmentImages(
     /** Frees least-recently-used held images not on screen until [needed] more bytes fit; true when they do. */
     private fun evict(needed: Long): Boolean {
         var held = frames.values.sumOf { it.held?.image?.byteCount ?: 0L }
-        val candidates = frames.entries.filter { it.value.held != null && !it.value.visible }.sortedBy { it.value.lastUsed }
+        val candidates = frames.entries.filter { it.value.held != null && !it.value.visible && it.value.pinned == 0 }.sortedBy { it.value.lastUsed }
         for ((key, frame) in candidates) {
             if (held + needed <= capacityBytes) break
             held -= frame.held!!.image.byteCount
@@ -308,7 +316,7 @@ internal class AttachmentImages(
      * Only when something was dropped and it then fits is a second decode worth it.
      */
     private fun makeRoom(result: DownloadResult.Bytes, needed: Long): Boolean {
-        val candidates = frames.entries.filter { it.value.held != null && !it.value.visible }.sortedBy { it.value.lastUsed }
+        val candidates = frames.entries.filter { it.value.held != null && !it.value.visible && it.value.pinned == 0 }.sortedBy { it.value.lastUsed }
         for ((key, frame) in candidates) {
             drop(frame)
             frame.autoTried = false
@@ -347,4 +355,11 @@ internal class AttachmentImages(
         /** The automatic rule's limit on what a frame would load (files-media.md). */
         const val AUTO_MAX_BYTES = 2L * 1024 * 1024
     }
+}
+
+/** Beyond the display caps (TL 2026-11-19: 32 MiB raw or 16 megapixels), decided from metadata before any fetch. */
+internal fun io.github.thiesi.chitchat.core.conversation.MessageAttachment.originalBeyondDisplayCaps(): Boolean {
+    val dimensions = displayDimensions
+    return sizeBytes > AttachmentDownloads.DISPLAY_MAX_BYTES ||
+        (dimensions != null && dimensions.width.toLong() * dimensions.height > AttachmentDownloads.DISPLAY_MAX_PIXELS)
 }

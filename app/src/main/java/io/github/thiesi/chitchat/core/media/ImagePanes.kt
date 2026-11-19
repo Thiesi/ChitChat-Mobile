@@ -21,7 +21,7 @@ internal interface ImageFrames {
  * - **A new visit** is a pane for a different nav entry than the last one opened: each held preview may revalidate once
  *   more. A rotation reopens the same entry and isn't a new visit.
  */
-internal class ImagePanes(private val frames: ImageFrames) {
+internal class ImagePanes(private val frames: ImageFrames, private val viewer: ImageViewer? = null) {
     private data class FrameId(val direct: Boolean, val attachmentId: Long)
     private class Mark(val ref: AttachmentRef, val panes: MutableSet<Pane> = mutableSetOf())
 
@@ -53,6 +53,14 @@ internal class ImagePanes(private val frames: ImageFrames) {
         fun show(ref: AttachmentRef) { if (live) frames.show(ref) }
         fun retry(ref: AttachmentRef) { if (live) frames.retry(ref) }
 
+        /**
+         * The full-screen viewer (F4). Only the current pane opens, drives or closes it, so a retired screen's late call
+         * can't open, close or replace a newer screen's viewer (TL). A rotation's new pane (same entry) takes it over.
+         */
+        fun openViewer(ref: AttachmentRef, width: Int, height: Int) { if (live) viewer?.open(ref, entry, width, height) }
+        fun loadFullImage() { if (live) viewer?.loadFull() }
+        fun closeViewer() { if (live) viewer?.close() }
+
         /** The screen stopped: everything it marked becomes evictable, unless another pane still shows it. */
         fun release() {
             if (released) return
@@ -69,6 +77,12 @@ internal class ImagePanes(private val frames: ImageFrames) {
 
         override fun toString() = "ImagePane"
     }
+
+    /**
+     * A screen left its nav entry for good (navigation, not a configuration change): a viewer opened from that entry closes
+     * and releases its original. A late call for an older entry never closes a newer entry's viewer.
+     */
+    fun departed(entry: String) { viewer?.closeIfFrom(entry) }
 
     private fun AttachmentRef.id() = FrameId(direct, attachment.id)
 }
