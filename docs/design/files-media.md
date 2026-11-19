@@ -273,9 +273,17 @@ Within the transcript spec's bubble, run and chit rules:
     (Label style, on a scrim in the corner) and a centered play glyph. Tapping opens the viewer,
     and that tap is the explicit request for the original, which animates there. The
     transcript never animates (battery).
+    - **On Android 8.0–8.1 (API 26–27)** GIFs can't animate. The badge stays, the play glyph
+      is left out (it would promise animation), and the viewer treats the GIF as a still
+      image (see Full-screen viewer).
 - **Other files:** a file card inside the bubble: type icon, filename (two lines max, ellipsized
   in the middle so the extension stays visible), "PDF · 2.4 MB", plus **Open** and **Save**
   (48dp each). The caption goes below.
+  - **APKs** (`application/vnd.android.package-archive`) are **Save only**: no Open button, and
+    no Share in the overflow or message actions (TL, 2026-11-19). The card reads "{name},
+    {type}, {size}, Save".
+  - **Open** hands the file to another app through the same temporary private copy as Share
+    (see Share out), with the server's declared MIME type, never a sniffed one.
 - **Image states:**
 
   | State | Shows |
@@ -283,7 +291,9 @@ Within the transcript spec's bubble, run and chit rules:
   | Not loaded (policy) | A `raised` box with a picture icon, "Photo · 3.4 MB" (the original's size) and **Show**. Show loads the preview when there is one |
   | Loading | The same box with a small static progress ring. No shimmer (P-34) |
   | Loaded | The image |
-  | Failed (network) | The box with "Couldn't load the photo" and **Try again**, an explicit GET retry |
+  | Failed (network, or the bytes don't match the server's `sha256`) | The box with "Couldn't load the photo" and **Try again**, an explicit GET retry. Mismatched bytes are discarded and never shown |
+  | Can't show right now (no memory budget available) | The box with "Couldn't show the photo right now" and **Try again**. Nothing retries by itself |
+  | Too large to show (beyond the display caps: 32 MiB raw or 16 megapixels, TL 2026-11-19) | Decided from the metadata before any fetch where possible. The box, "Photo · 48 MB · too large to show here", with no Show. Tapping opens the viewer, where Save and Share work. Only reachable without a preview, since previews are at most 1024 px |
   | Preview unavailable (`404 attachment_preview_unavailable`) | Not an error: the frame falls back to the original under the auto-load rule (loads if cheap, else **Show**). It's never retried as a preview in that session |
   | Gone (410) | A dashed box, "This file was deleted" |
   | Not allowed (403 or 404) | The box, "You can't open this file anymore" |
@@ -334,6 +344,18 @@ The policy is local and read from existing system state, with no new requests:
     straight away and animates when ready. Until then, and offline, the static preview shows
     with the GIF badge.
   - Without a preview, the viewer loads the original as before.
+  - **Integrity:** an original whose bytes don't match the server's `sha256` is a failure
+    ("Couldn't load the full image" with **Try again**); the preview stays.
+  - **Can't show right now** (no memory budget): "Couldn't show the full image right now" with
+    **Try again**, and the preview stays.
+  - **Too large to show:** with a preview, the preview stays, and **Load full image** is
+    replaced by a `textMuted` line in the bottom bar: "Too large to show here at full size. Save
+    or share it to view it in another app." Without a preview, the black ground shows "Too
+    large to show here. Save or share it to view it in another app." Level 1, never an error.
+  - **GIFs on API 26–27:** a still image: preview first, and **Load full image** under the
+    normal rule (a still first frame), with one `textMuted` line in the bottom bar: "Animation
+    isn't available on this phone. Save or share it to play it in another app." No Android
+    version is named.
 - Save and Share always use the **original**, never the preview.
 - Black ground, edge-to-edge. Pinch and double-tap zoom, pan. Swipe down or Back closes.
 - The top bar is on a scrim: back, sender and time, **Save** and **Share**. The caption shows at
@@ -355,7 +377,13 @@ The policy is local and read from existing system state, with no new requests:
 - Failure mid-way: a level-2 notice, "Saving stopped. The file may be incomplete. Delete it
   in the place you chose if you don't need it." The app **never** deletes the person's chosen
   document silently (same rule as exports).
+- **Integrity:** the hash is only known once the file is written. On a mismatch, a level-2
+  notice: "The saved file may be damaged: it doesn't match the file on the server. Delete it in
+  the place you chose if you don't need it, then save it again." No inline action; Save stays
+  where it was. The document is never deleted or overwritten.
 - Gone or forbidden: the same copy as the image states.
+- The suggested document title is the server's file name, sanitized (no path separators,
+  `..`, NUL or control characters; bounded length with the extension kept).
 
 ## Share out (to another app)
 
@@ -379,7 +407,20 @@ The policy is local and read from existing system state, with no new requests:
     accepted: a receiver still reading a file at that moment loses access, and the person
     shares it again. Privacy on sign-out wins over a slow receiver.
   - The app never promises "deleted when sharing completes", because it can't observe that.
-- A small first-use note: "Sharing copies the file to the app you choose."
+- **Open** on a file card uses the same copy, grant and lifetime rules.
+- Each copy sits in its own random subfolder under a sanitized display name (server file names
+  are never a path).
+- **Integrity:** the hash is checked before handoff. On a mismatch the copy is deleted and never
+  handed over, and the failure below shows.
+- **Failures** (network, integrity, 403, 404, 410): a level-2 notice. Gone and forbidden use the
+  image-state copy ("This file was deleted" / "You can't open this file anymore"); anything else
+  is "Couldn't get the file ready. Try again." with **Try again** (an explicit GET). Cancel
+  before handoff is silent.
+- **No app opens it** (Open with no app for that type): the copy is deleted, no chooser opens,
+  and a level-1 line says "No app on this phone opens this file type. Save it instead."
+- A small first-use note, shown once for Open and Share together: "Opening or sharing lets the
+  app you choose keep its own copy of the file." (It says what the person should understand:
+  the receiving app can keep the file, beyond CCM's control.)
 - For DMs, the share sheet doesn't preselect any target, and the not-end-to-end-encrypted
   disclosure stays where it is. No extra warning is invented.
 
@@ -436,7 +477,12 @@ The policy is local and read from existing system state, with no new requests:
     full body is written yields Unknown;
   - share copies: kept across chooser return and resume, deleted when older than 24 hours at
     start or next share, deleted at once on cancel before handoff and on sign-out or account
-    removal.
+    removal;
+  - integrity: a mismatch discards display bytes, deletes the share or open copy before
+    handoff, and on Save shows the damaged notice without deleting the document;
+  - too large versus can't show right now (decided from metadata before a fetch where
+    possible); APKs offer Save only; sanitized names for copies and the suggested title,
+    including traversal and long names.
 - **Compose:**
   - the attach sheet and pending card (Remove, Replace confirmation);
   - progress semantics;
@@ -464,3 +510,4 @@ The policy is local and read from existing system state, with no new requests:
 | P-154 | Save uses a chosen document and never silently deletes it. Share-out uses read-only FileProvider grants on copies in a private cache subfolder, never hands out authenticated URLs, never deletes on chooser return, lets copies expire after 24 hours and deletes expired copies at the next start or share (no claim of deletion at exactly 24 hours), and deletes them at once on cancel before handoff and on sign-out or account removal. | U, C, R |
 | P-155 | Share-in never sends by itself, drops items across sign-in, and supports one file. | C |
 | P-156 | The viewer suppresses read and typing proof and offers zoom alternatives. | C |
+| P-223 | Received files: an integrity mismatch is never shown or handed over, and on Save shows the damaged notice without deleting the document. "Too large to show" (level 1, Save and Share still offered) differs from "Couldn't show … right now" (Try again). GIFs on API 26–27 are still images with the badge, no play glyph and the animation line. APKs offer Save only. Open and Share share one copy mechanism and one first-use note. "No app opens this file type" opens no chooser. | U, C |
