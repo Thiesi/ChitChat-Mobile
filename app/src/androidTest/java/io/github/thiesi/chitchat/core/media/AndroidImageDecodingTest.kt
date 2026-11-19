@@ -14,13 +14,24 @@ class AndroidImageDecodingTest {
             .compress(Bitmap.CompressFormat.PNG, 100, it)
     }.toByteArray()
 
-    /** Only the signature and IHDR: enough for the bounds, with no pixels to decode. */
-    private fun headerOnly(width: Int, height: Int): ByteArray {
-        val data = ByteBuffer.allocate(13).putInt(width).putInt(height).put(8).put(6).put(0).put(0).put(0).array()
-        val type = "IHDR".toByteArray()
-        val crc = CRC32().apply { update(type); update(data) }.value.toInt()
-        return byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10) + ByteBuffer.allocate(4).putInt(13).array() + type + data +
-            ByteBuffer.allocate(4).putInt(crc).array()
+    private fun chunk(type: String, data: ByteArray): ByteArray {
+        val name = type.toByteArray()
+        val crc = CRC32().apply { update(name); update(data) }.value.toInt()
+        return ByteBuffer.allocate(4).putInt(data.size).array() + name + data + ByteBuffer.allocate(4).putInt(crc).array()
+    }
+
+    /**
+     * A valid but huge PNG that costs almost nothing to build: 1-bit grayscale, all zero, so the deflated pixels are a few
+     * KB. Skia reads its bounds; decoding it at ARGB would need about 80 MB, which the guard must prevent. (A header-only
+     * stream has no readable bounds at all: #308.)
+     */
+    private fun hugePng(width: Int, height: Int): ByteArray {
+        val header = ByteBuffer.allocate(13).putInt(width).putInt(height).put(1).put(0).put(0).put(0).put(0).array()
+        val row = ByteArray(1 + (width + 7) / 8)
+        val pixels = ByteArrayOutputStream().also { out ->
+            java.util.zip.DeflaterOutputStream(out).use { deflate -> repeat(height) { deflate.write(row) } }
+        }.toByteArray()
+        return byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10) + chunk("IHDR", header) + chunk("IDAT", pixels) + chunk("IEND", ByteArray(0))
     }
 
     @Test fun aSmallImageDecodesWithinTheFrame() {
@@ -30,7 +41,16 @@ class AndroidImageDecodingTest {
     }
 
     @Test fun beyondSixteenMegapixelsNothingIsDecoded() {
-        assertEquals(DecodeResult.TooLarge, AndroidImageDecoding.decode(headerOnly(5000, 4000), 280, 320))
+        val png = hugePng(5000, 4000)
+        assertTrue("Cheap to hold: ${png.size} bytes", png.size < 200_000)
+        assertEquals(DecodeResult.TooLarge, AndroidImageDecoding.decode(png, 280, 320))
+    }
+
+    @Test fun aTruncatedHeaderIsUnreadableNeverTooLargeOrDecoded() {
+        // TL (#308): only the signature and an IHDR claiming 5000x4000; Skia gives no bounds for it.
+        val truncated = byteArrayOf(-119, 80, 78, 71, 13, 10, 26, 10) +
+            chunk("IHDR", ByteBuffer.allocate(13).putInt(5000).putInt(4000).put(8).put(6).put(0).put(0).put(0).array())
+        assertEquals(DecodeResult.Unreadable, AndroidImageDecoding.decode(truncated, 280, 320))
     }
 
     @Test fun unreadableBytesAreUnreadable() {

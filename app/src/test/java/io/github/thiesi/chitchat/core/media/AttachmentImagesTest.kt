@@ -217,6 +217,56 @@ class AttachmentImagesTest {
         assertNull("The least recently used, not on screen, is gone", images.state(first))
         assertTrue(images.state(second) is ImageState.Loaded)
         assertEquals(32_000L, budget.reservedBytes)
+        // Back on screen, an evicted image reloads (review, #308).
+        images.hidden(second)
+        images.visible(first, 280, 210); advanceUntilIdle()
+        assertTrue(images.state(first) is ImageState.Loaded)
+        assertEquals(3, source.calls.size)
+    }
+
+    @Test fun anImageEvictedDuringASessionWaitReloadsOnlyAfterItAndOnlyIfStillOnScreen() = runTest {
+        // TL (#308): a reload after eviction is an automatic load like any other (the wait rule applies).
+        val source = Source(); val images = images(source, capacity = 50_000); advanceUntilIdle()
+        val evicted = ref(id = 51); val newer = ref(id = 52)
+        images.visible(evicted, 280, 210); advanceUntilIdle()
+        images.hidden(evicted)
+        // The newer image arrives just as the session starts waiting, and pushes the older one out.
+        source.replies += { session.value = signedIn.copy(retryAtMillis = testScheduler.currentTime + 20_000); bytes() }
+        images.visible(newer, 280, 210); advanceTimeBy(1_000)
+        assertNull("Evicted", images.state(evicted))
+        images.hidden(newer)
+        images.visible(evicted, 280, 210); advanceTimeBy(1_000)
+        assertEquals("Nothing during the wait", ImageState.NotLoaded(ImageState.Reason.WAITING), images.state(evicted))
+        assertEquals(2, source.calls.size)
+        advanceUntilIdle()
+        assertTrue("Still on screen when the wait ended: one reload", images.state(evicted) is ImageState.Loaded)
+        assertEquals(3, source.calls.size)
+    }
+
+    @Test fun anImageEvictedDuringAWaitAndScrolledAwayDoesntReload() = runTest {
+        val source = Source(); val images = images(source, capacity = 50_000); advanceUntilIdle()
+        val evicted = ref(id = 53); val newer = ref(id = 54)
+        images.visible(evicted, 280, 210); advanceUntilIdle()
+        images.hidden(evicted)
+        source.replies += { session.value = signedIn.copy(retryAtMillis = testScheduler.currentTime + 20_000); bytes() }
+        images.visible(newer, 280, 210); advanceTimeBy(1_000)
+        images.visible(evicted, 280, 210); advanceTimeBy(1_000)
+        images.hidden(evicted)
+        advanceUntilIdle()
+        assertEquals("Off screen when the wait ended: no catch-up", 2, source.calls.size)
+    }
+
+    @Test fun aShownImageEvictedReloadsEvenWhenMetered() = runTest {
+        val source = Source(); val images = images(source, capacity = 50_000); advanceUntilIdle()
+        network.value = NetworkState(online = true, metered = true)
+        val shown = ref(id = 41); val other = ref(id = 42)
+        images.visible(shown, 280, 210); images.show(shown); advanceUntilIdle()
+        images.hidden(shown)
+        images.visible(other, 280, 210); images.show(other); advanceUntilIdle()
+        assertNull("Evicted", images.state(shown))
+        images.hidden(other)
+        images.visible(shown, 280, 210); advanceUntilIdle()
+        assertTrue("Once shown, it stays shown for the session", images.state(shown) is ImageState.Loaded)
     }
 
     @Test fun withoutRoomForTheDecodedImageItCantShowRightNow() = runTest {

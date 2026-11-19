@@ -278,6 +278,8 @@ internal class AttachmentImages(
             if (held + needed <= capacityBytes) break
             held -= frame.held!!.image.byteCount
             drop(frame)
+            // Evicted, not settled: back on screen it's evaluated afresh, so it reloads (review, #308).
+            frame.autoTried = false
             mutable.value = mutable.value - key
         }
         return held + needed <= capacityBytes
