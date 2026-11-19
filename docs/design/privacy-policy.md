@@ -114,8 +114,8 @@ your server keeps that record with your account.
 
 ### Your choices and rights
 
-- **Export your data:** You → Export my data saves a copy of your account data from your server
-  to a file you choose.
+- **Export your data:** You → Privacy and security → Export personal data saves a copy of your
+  account data from your server to a file you choose.
 - **Delete your account:** You → Privacy and security → Delete account closes your account on
   that server. You can restore it for 14 days. After that, your name is replaced with "Closed
   account" and your personal details are cleared. Messages you sent stay visible to the people
