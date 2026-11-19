@@ -20,6 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.key
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -38,15 +40,19 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun AccountScreen(model: AccountViewModel, session: SessionState, onRefresh: () -> Unit, installation: String = "",
-    onRecoveryKey: (() -> Unit)? = null) {
+    onRecoveryKey: (() -> Unit)? = null, focusExport: Boolean = false, onExportFocused: () -> Unit = {}) {
     // The sign-in group: the Recovery key row first (recovery-key.md, O4a2b). Nothing new starts under the update state.
     if (onRecoveryKey != null && !session.updateRequired) RecoveryKeyRow(session, installation, onRecoveryKey)
     // Retire the system picker registration too, not only its network action, on account changes.
-    key(session.generation, session.user?.id, session.user?.sessionVersion) { AccountContent(model, session, onRefresh) }
+    key(session.generation, session.user?.id, session.user?.sessionVersion) { AccountContent(model, session, onRefresh, focusExport, onExportFocused) }
 }
 
 @Composable
-private fun AccountContent(model: AccountViewModel, session: SessionState, onRefresh: () -> Unit) {
+private fun AccountContent(model: AccountViewModel, session: SessionState, onRefresh: () -> Unit, focusExport: Boolean = false,
+    onExportFocused: () -> Unit = {}) {
+    // Export my data first (PL, D2): this screen brings Export personal data into view; nothing runs on its own.
+    val exportInView = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    LaunchedEffect(focusExport) { if (focusExport) { exportInView.bringIntoView(); onExportFocused() } }
     val state by model.state.collectAsStateWithLifecycle()
     val resolver = LocalContext.current.applicationContext.contentResolver
     val activity = LocalActivity.current
@@ -94,7 +100,8 @@ private fun AccountContent(model: AccountViewModel, session: SessionState, onRef
                 catch (_: ActivityNotFoundException) { model.cancel(); pickerMissing = true }
             }
         }, enabled = session.phase == SessionPhase.AUTHENTICATED && !session.busy && !session.refreshRequired && !session.storageWarning && now >= session.retryAtMillis &&
-            state.stage !in setOf(ExportStage.CHOOSING, ExportStage.RUNNING, ExportStage.VERIFYING), modifier = Modifier.fillMaxWidth()) {
+            state.stage !in setOf(ExportStage.CHOOSING, ExportStage.RUNNING, ExportStage.VERIFYING),
+            modifier = Modifier.fillMaxWidth().testTag("export_personal_data").bringIntoViewRequester(exportInView)) {
             Text(stringResource(R.string.export_personal_data))
         }
         if (state.stage in setOf(ExportStage.CHOOSING, ExportStage.RUNNING)) TextButton(onClick = model::cancel) {

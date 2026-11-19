@@ -34,6 +34,10 @@ interface AccountOperations {
     suspend fun open(): AccountAccess
     /** Go there or Not now on "didn't reach this phone": the notice ends for this runtime (PL O4a2b). */
     suspend fun dismissRecoveryKeyNotice(expected: SessionState) {}
+    /** Check after an Unknown deletion: one session read, never a resend (D1, TL C2). */
+    suspend fun checkClosure() {}
+    /** Done on a deletion outcome, or starting again after "wasn't deleted": it leaves memory (D1, TL C4). */
+    suspend fun dismissClosure() {}
 }
 
 /** Only a definite server step-up rejection permits one retry, never an ambiguous write. */
