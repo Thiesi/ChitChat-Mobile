@@ -55,7 +55,10 @@ keeps the dialog window type and the native input and IME rules.
 
 - **Title:** "Report this message".
 - **Context line:** a one-line excerpt of the message (plain text) and its sender, so the person
-  knows what they're reporting.
+  knows what they're reporting. Attachment-only messages can be reported, so their excerpt reads
+  **"Photo"**, **"GIF"**, or the file name. The name is bidi-stripped, isolated and middle-elided so its
+  extension stays (the received-files name rules). The sender part is unchanged. With a caption or
+  text, the excerpt is that text (PL, 2026-11-20).
 - **"What's wrong?":** a radio list of the eight categories, each row 52dp, in plain words:
 
   | Category | Label | Helper text (one line) |
@@ -74,6 +77,12 @@ keeps the dialog window type and the native input and IME rules.
   counter "0 / 1000", following the native input contracts (48dp, one tap to focus, IME). For
   `other`, the hint encourages details, but the server doesn't require them, so the field stays
   optional.
+  - **Counting (PL, 2026-11-20):** the counter counts the server's way, in code points after trimming
+    ASCII spaces, so the limit means the same on both sides.
+  - **Over the limit:** there's no hard truncation, because a paste must never be cut silently. Above
+    1,000 the counter reads **"Too long: 1012 / 1000"** in `error` (words plus colour), and Send report
+    is disabled until the text is back under. TalkBack announces the counter politely only when it
+    crosses the limit, not on every character.
 - **Who will see it**, plain text above the buttons:
   - room: "**{room}**'s owners and moderators, and the server's moderation team, will see
     this message's text, its time and your report. They won't see other messages.";
@@ -87,18 +96,40 @@ keeps the dialog window type and the native input and IME rules.
   category is chosen). Not `error`-colored: reporting isn't destructive.
 - The details text lives only in the dialog's state while it is open. It is never saved,
   logged or put in bundles (the same rule as other private text). Configuration changes keep
-  it; genuine background and navigation retire the dialog per the existing modal rules.
+  it; genuine background and navigation retire the dialog per the existing modal rules. A report
+  that's already sending is different (below).
 
 ## Outcomes
 
 | Result | Shows | Then |
 |---|---|---|
 | 201 | The dialog closes. The level-1 confirmation "Thanks. Your report was sent to {room}'s moderators and the server's moderation team." (DM: "Thanks. Your report was sent to the server's moderation team.") | A follow-up sheet offers existing actions: rooms: **Ignore {name}** (existing M4c3 ignore), DMs: **Block {name}** (existing block confirmation). Plus **Done**. Nothing applies automatically |
-| `message_already_reported` | "You've already reported this message." Treated as success (the report exists) | Same follow-up sheet |
+| `message_already_reported` | "You've already reported this message." Treated as success (the report exists): a level-1 line, never styled as an error. After **Send again** (Unknown, below) it means this flow's first attempt arrived, so it shows the 201 confirmation instead | Same follow-up sheet |
 | `message_not_reportable` | "This message can't be reported anymore. It may have been deleted." | Close |
-| `message_not_found` or `report_recipient_required` | "You can't report this message." | Close |
+| `message_not_found`, `report_recipient_required`, `report_not_allowed`, or (until guests exist, M7) `guest_not_allowed` | "You can't report this message." | Close |
 | `rate_limited` | "You've sent a lot of reports recently. Try again in {wait}." (ChitChat#157, phrased per status-presentation "Waiting times"), or "… Try again later." when the delay is unknown. The form stays open with its content, and nothing is resubmitted automatically | — |
-| Unknown (connection lost after sending, timeout) | The level-2 notice inside the dialog: "Not sure your report went through." with **Send again** | **Send again** is an explicit new submission. It's safe: if the first one arrived, the server answers `message_already_reported`, which shows as success. Never resent automatically |
+| Unknown (connection lost after sending, timeout) | The level-2 notice inside the dialog: "Not sure your report went through." with **Send again** | **Send again** is an explicit new submission of the same frozen category and details. It's safe: if the first one arrived, the server answers `message_already_reported`, which shows the 201 confirmation. Never resent automatically |
+
+**Where the lines show (PL, 2026-11-20):**
+- **Outcomes after the dialog closes** (the 201 and already-reported confirmations, and the refusals) are level-1 lines in the conversation's notice stack, like the Save and Share notices, never a second dialog. The confirmations are followed by the follow-up sheet. A line clears on the next report or when the person leaves the conversation.
+- **The Unknown state** replaces the editable form with a read-only summary inside DialogScrollBody: the context line, **"Reason: {label}"** (for example "Reason: Harassment or bullying"), the details (if any) as plain text in `textMuted`, and the "who will see it" text. Then comes the level-2 notice, which announces itself once.
+  - There are no disabled inputs: controls at 38% are hard to read and invite taps.
+  - **Send report** becomes **Send again**. **Cancel** reads **Close**, since the report may already have arrived.
+  - With no field, there's no keyboard. Configuration changes keep the summary, and the existing modal rules retire it.
+
+**Sending, leaving and background (TL, R1 review; PL, 2026-11-20).** These apply to both message and person reports.
+- **While sending:** the report can't be closed. Send report shows its progress state, Cancel is disabled and Back does nothing. TalkBack hears "Sending report".
+- **Leaving doesn't stop it.** A navigation departure (a push tap, say) takes the dialog away with the screen, and the report keeps going. Its outcome waits, in memory only, for this process, fenced to origin, account and generation, with the conversation it was started from.
+  - When the person next opens that conversation, the outcome shows once as its usual level-1 line in the notice stack. No follow-up sheet opens on return: Ignore and Block stay in their usual places.
+  - Nothing interrupts the screen they went to. If they never return, the line is dropped with the process. Nothing is lost: a repeat report answers already-reported, and a person's card shows "You've reported {name}" from the server.
+  - Back in the conversation before it settles, the stack shows a level-1 line, **"Sending your report…"**, with no actions, until the outcome replaces it. The dialog isn't recreated.
+- **A genuine background makes it Unknown.** On the next opening of that conversation, the stack shows the level-2 notice "Not sure your report went through." with **Review**.
+  - Review reopens the dialog in its read-only Unknown summary: Send again for a message, Check for a person, and Close.
+  - Close also dismisses the notice. A person report started from a profile card lands here too, since the card is gone after a background.
+- **One report at a time, but a waiting outcome never blocks (TL, PL).**
+  - An outcome waiting to be shown never blocks a new **Report…**.
+  - A pending Unknown (after a background) is dropped when the person opens Report… anywhere else, together with its Review notice. Nothing is sent: the server's one-report rule covers a report that did arrive. The new form opens normally.
+  - Only a report that's actually sending or checking blocks a new one, briefly. The Report… entry stays enabled, because a disabled row would give no reason. A tap on it closes the sheet and shows a level-1 line in the current conversation: **"Your last report is still sending. Try again in a moment."** The line clears when that report settles.
 
 The message itself is **unchanged** after a report: no badge, no hiding, no "reported" mark. The
 API exposes no per-viewer report state to drive one, and a local mark would be lost on reload.
@@ -178,14 +209,18 @@ The same form dialog as message reporting, with the native input and IME rules:
 | Result | Shows | Then |
 |---|---|---|
 | 201 | The dialog closes. The level-1 confirmation "Thanks. Your report was sent to {room}'s moderators and the server's moderation team." (global: "Thanks. Your report was sent to the server's moderation team.") | The follow-up sheet: from a room, **Ignore {name}**; from a DM, **Block {name}**; plus **Done**. Nothing applies automatically. The card then shows "You've reported {name}." |
-| `409 already_reported` | "You've already reported {name}." Treated as success (the report exists) | The same follow-up sheet |
+| `409 already_reported` | "You've already reported {name}." Treated as success (the report exists): a level-1 line, never styled as an error | The same follow-up sheet |
 | `409 report_snapshot_unavailable` | Inside the dialog, a level-2 notice: "**Nothing was sent.** The server couldn't keep a copy of {name}'s profile picture just now. Try again later." | The form stays open with its content. Send report stays available as an explicit new attempt, never automatic |
 | `400 validation_error` on the picture category | "{name} no longer has a profile picture. Choose another reason." | The form stays open, the picture category is removed and the choice is cleared |
 | Other `400 validation_error` | "Something went wrong. Nothing was sent." | The form stays open |
-| `403 report_not_allowed` | "You can't report {name} here." | Close |
+| `403 report_not_allowed`, or (until guests exist, M7) `guest_not_allowed` | "You can't report {name} here." | Close |
 | `404 user_not_found` | "This account isn't available anymore." | Close |
 | `429` | "You've sent a lot of reports recently. Try again in {wait}." from `error.retry_after_seconds` (status-presentation "Waiting times"), or "… Try again later." when unknown | The form stays open. Nothing is resubmitted automatically |
 | Unknown (connection lost after sending, timeout) | Inside the dialog, a level-2 notice: "Not sure your report went through." with **Check** | **Check** re-reads the profile with the same `room_id`. If `reported_by_me` is true, show the 201 confirmation and the follow-up sheet. If it's false, the notice reads "Your report didn't arrive." and Send report is available again as an explicit choice. A new report is never sent before that re-read, and never automatically |
+
+**Where the lines show (PL, 2026-11-20):** outcomes after the dialog closes are level-1 lines in the
+profile card, in the Report row's place, when the card is still open under the form. Otherwise they
+show in the conversation's notice stack.
 
 The person's card, name and messages are otherwise **unchanged** after a report. The only
 change is the "You've reported {name}." caption, which comes from the server's
@@ -236,3 +271,4 @@ for it.
 | P-165 | Report {name}… appears on a profile card only with `can_report: true` and `reported_by_me: false`. With `reported_by_me` it shows "You've reported {name}." Missing fields hide both. The report sends the same `room_id` as the card's profile request, or none from a DM. | U, C |
 | P-166 | Person reports offer the two person-only categories first (the picture one only with a current picture), state exactly who sees what for room and global scope, and map every error per the table. `already_reported` is success. `report_snapshot_unavailable` says nothing was sent. 429 shows the wait. | U, C |
 | P-167 | An unknown person-report result re-reads the profile (`reported_by_me`) before any new report and never resends automatically. Reporting is never gated by rules acceptance. | U |
+| P-225 | A sending report can't be closed, and leaving the conversation doesn't stop it. Its outcome shows once as a level-1 line in the conversation it came from (memory only, fenced, no follow-up sheet on return), or "Sending your report…" until it settles. A genuine background makes it Unknown, shown there as "Not sure your report went through." with Review. A waiting outcome never blocks a new report; a pending Unknown is dropped, unsent, when Report… opens elsewhere; only a report that's sending or checking blocks a new one, with "Your last report is still sending. Try again in a moment." | U, C |
