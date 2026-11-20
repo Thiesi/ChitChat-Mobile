@@ -18,6 +18,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
@@ -122,7 +123,7 @@ class ReceivedTransfersPresentationTest {
     private fun actions(messageId: Long) {
         val label = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.message_actions)
         compose.onNode(SemanticsMatcher("actions") { it.config.getOrNull(SemanticsActions.OnClick)?.label == label } and
-            hasAnyAncestor(hasTestTag("message:$messageId"))).performClick()
+            hasAnyAncestor(hasTestTag("message:$messageId"))).performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("message_actions").fetchSemanticsNodes().isNotEmpty() }
     }
 
