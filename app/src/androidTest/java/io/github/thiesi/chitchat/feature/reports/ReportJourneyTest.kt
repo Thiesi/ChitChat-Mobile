@@ -109,7 +109,18 @@ class ReportJourneyTest {
             hasAnyAncestor(hasTestTag(row))).performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(5_000) { present("message_actions") }
     }
+    /** System Back closes the sheet; it stays the default, so Back keeps its coverage on both levels (TL). */
     private fun closeActions() { Espresso.pressBack(); compose.waitUntil(5_000) { !present("message_actions") } }
+
+    /**
+     * The sheet's own Cancel, for the DM gating case only: its first system Back once didn't close the sheet on API36
+     * (run 44831339730), a one-off, since other Back closes passed in the same run. [backClosesTheMessageActionsInADm]
+     * keeps Back's own coverage in a DM (TL).
+     */
+    private fun cancelActions() {
+        compose.onNode(androidx.compose.ui.test.hasText(text(R.string.cancel)) and hasAnyAncestor(hasTestTag("message_actions"))).performClick()
+        compose.waitUntil(5_000) { !present("message_actions") }
+    }
     private fun report(messageId: Long) {
         openActions(messageId)
         compose.onNodeWithTag("message_report_action").performScrollTo().performClick()
@@ -130,9 +141,17 @@ class ReportJourneyTest {
     @Test fun reportShowsOnlyOnMessagesYouReceivedInADm() {
         directs.rows = listOf(dm(3, "hi", null), dm(4, "mine", null, outgoing = true), dm(5, null, file(71, "notes.pdf")))
         dmContent()
-        openActions(3); assertTrue(present("message_report_action")); closeActions()
-        openActions(4); assertTrue("Only the recipient reports a DM", !present("message_report_action")); closeActions()
-        openActions(5); assertTrue("An attachment-only DM", present("message_report_action")); closeActions()
+        openActions(3); assertTrue(present("message_report_action")); cancelActions()
+        openActions(4); assertTrue("Only the recipient reports a DM", !present("message_report_action")); cancelActions()
+        openActions(5); assertTrue("An attachment-only DM", present("message_report_action")); cancelActions()
+    }
+
+    @Test fun backClosesTheMessageActionsInADm() {
+        directs.rows = listOf(dm(3, "hi", null))
+        dmContent()
+        openActions(3)
+        Espresso.pressBack()
+        compose.waitUntil(5_000) { !present("message_actions") }
     }
 
     @Test fun theFormNeedsACategoryAndCountsLikeTheServer() {

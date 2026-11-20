@@ -324,10 +324,23 @@ private fun Summary(state: ReportState) {
 }
 
 @Composable
+private fun WaitLine(text: String) {
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(text) { requester.bringIntoView() }
+    Text(text, color = ChitChatTheme.colors.textMuted, style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.bringIntoViewRequester(requester).semantics { liveRegion = LiveRegionMode.Polite }.testTag("report_wait"))
+}
+
+@Composable
 private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolean) {
     when (notice) {
-        is ReportNotice.RateLimited -> InlineError(if (waitSeconds != null && waiting)
-            stringResource(R.string.report_rate_limited, waitText(Wait.of(waitSeconds * 1000))) else stringResource(R.string.report_rate_limited_unknown))
+        // Status ladder row 7: a wait is level 1, a muted line, never the person's error (PL). A known wait's line goes
+        // when it ends, as Send re-enables; "Try again later." only when the delay was unknown from the start (PL).
+        is ReportNotice.RateLimited -> when {
+            waitSeconds != null && waiting -> WaitLine(stringResource(R.string.report_rate_limited, waitText(Wait.of(waitSeconds * 1000))))
+            waitSeconds == null -> WaitLine(stringResource(R.string.report_rate_limited_unknown))
+            else -> Unit
+        }
         ReportNotice.NotSent, ReportNotice.SnapshotUnavailable, ReportNotice.PictureGone, ReportNotice.DidNotArrive ->
             InlineError(stringResource(R.string.report_not_sent))
     }
