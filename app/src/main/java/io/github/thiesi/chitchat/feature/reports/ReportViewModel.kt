@@ -40,6 +40,21 @@ sealed interface ReportOutcome {
     data class Refused(val reason: ReportRefusal) : ReportOutcome
 }
 
+/** Where a report started: its outcome waits for that conversation (PL, TL). A person card opened from a DM is Direct. */
+sealed interface ReportOrigin {
+    data class Room(val roomId: Long) : ReportOrigin
+    data class Direct(val peerId: Long) : ReportOrigin
+}
+
+/** What [ReportViewModel.open] did. */
+enum class ReportOpen {
+    OPENED,
+    /** Another report is sending or checking: "Your last report is still sending. Try again in a moment." (PL). */
+    BUSY,
+    /** No signed-in session for this model's identity. */
+    UNAVAILABLE,
+}
+
 sealed interface ReportPhase {
     /** Choosing a category and typing details. */
     data class Editing(val notice: ReportNotice? = null) : ReportPhase
@@ -58,6 +73,8 @@ sealed interface ReportPhase {
  */
 class ReportState internal constructor(
     val target: ReportTarget,
+    /** The conversation it started in, where its outcome (or an Unknown's Review notice) shows. */
+    val origin: ReportOrigin,
     val category: ReportCategory?,
     val details: String,
     val phase: ReportPhase,
@@ -73,7 +90,7 @@ class ReportState internal constructor(
 
     internal fun copy(category: ReportCategory? = this.category, details: String = this.details, phase: ReportPhase = this.phase,
         pictureAvailable: Boolean = this.pictureAvailable, afterUnknown: Boolean = this.afterUnknown) =
-        ReportState(target, category, details, phase, pictureAvailable, afterUnknown)
+        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown)
 
     override fun toString() = "ReportState(${target::class.simpleName}, phase=$phase)"
 }
@@ -81,8 +98,10 @@ class ReportState internal constructor(
 /**
  * Reporting a message or a person (reporting.md, P-160–P-167; TL conditions of 2026-11-20). App-scoped, memory only.
  * One report at a time. Each POST is one explicit request: Send again (message) and a send after Check (person) are new
- * choices, never automatic, never on foreground or reconnect. It survives configuration change; [close] (Cancel, Close,
- * genuine background, navigation away) and any session change drop everything, cancelling an attempt in flight.
+ * choices, never automatic, never on foreground or reconnect. It survives configuration change. A report in flight is
+ * never silently dropped (TL, #324): [close] is refused while sending or checking, [departed] (navigation away) lets the
+ * attempt finish and keeps its outcome, and [backgrounded] (a genuine background) cancels it into Unknown, kept. Only a
+ * session change drops an attempt in flight (the identity fence).
  */
 class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
     private val mutable = MutableStateFlow<ReportState?>(null)
@@ -99,18 +118,29 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
         viewModelScope.launch {
             operations.session.collect { session ->
                 val next = session.identity()
-                if (next != identity) { close(); identity = next }
+                if (next != identity) { drop(); identity = next }
             }
         }
     }
 
-    /** Report… or Report {name}…: a new form. [pictureAvailable] is the card's current-picture fact (person only). */
-    fun open(target: ReportTarget, pictureAvailable: Boolean = false) {
-        if (operations.session.value.identity() == null || operations.session.value.identity() != identity) return
-        if (mutable.value?.phase.let { it != null && it !is ReportPhase.Done }) return
-        job?.cancel(); attempt++
-        mutable.value = ReportState(target, null, "", ReportPhase.Editing(), pictureAvailable && target is ReportTarget.Person, false)
+    /**
+     * Report… or Report {name}…: a new form, from [origin]. [pictureAvailable] is the card's current-picture fact (person
+     * only). Only a report that's sending or checking blocks it (BUSY). A finished outcome waiting to be shown never
+     * does, and a pending Unknown for another target is dropped with nothing sent: the server's one-report-per-case
+     * rule covers one that did arrive (TL, PL). Reopening the same target's Unknown keeps it (its Review).
+     */
+    fun open(target: ReportTarget, origin: ReportOrigin, pictureAvailable: Boolean = false): ReportOpen {
+        if (operations.session.value.identity() == null || operations.session.value.identity() != identity) return ReportOpen.UNAVAILABLE
+        val current = mutable.value
+        if (inFlight) return ReportOpen.BUSY
+        if (current != null && current.phase is ReportPhase.Unknown && current.target == target) return ReportOpen.OPENED
+        drop()
+        mutable.value = ReportState(target, origin, null, "", ReportPhase.Editing(), pictureAvailable && target is ReportTarget.Person, false)
+        return ReportOpen.OPENED
     }
+
+    /** The UI showed the finished outcome's line once, in its origin conversation: it's gone now (PL). */
+    fun consume() { if (mutable.value?.phase is ReportPhase.Done) drop() }
 
     fun choose(category: ReportCategory) {
         val current = mutable.value ?: return
@@ -161,14 +191,39 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
         }
     }
 
-    /** Cancel, Close, Done, genuine background, navigation away or sign-out: everything is dropped. */
-    fun close() {
+    private val inFlight get() = mutable.value?.phase.let { it == ReportPhase.Sending || it == ReportPhase.Checking }
+
+    /** Cancel, Close or Done: everything is dropped. Refused while sending or checking (the form offers no dismiss then). */
+    fun close() { if (!inFlight) drop() }
+
+    /** Navigation away: a report in flight finishes and its outcome is kept; anything else is dropped. */
+    fun departed() { if (!inFlight) drop() }
+
+    /**
+     * Genuine background. While sending or checking the call is cancelled and the report lands in Unknown with the same
+     * frozen category and details: it may have arrived, so Send again (message) or Check (person) follows, never
+     * automatically. An open form is dropped (memory only, no draft retention); Unknown and a finished outcome stay.
+     */
+    fun backgrounded() {
+        val current = mutable.value ?: return
+        when (current.phase) {
+            ReportPhase.Sending, ReportPhase.Checking -> {
+                job?.cancel(); job = null; attempt++
+                mutable.value = current.copy(phase = ReportPhase.Unknown())
+            }
+            is ReportPhase.Editing -> drop()
+            is ReportPhase.Unknown, is ReportPhase.Done -> Unit
+        }
+    }
+
+    /** A session change: everything goes, an attempt in flight included (the identity fence). */
+    private fun drop() {
         job?.cancel(); job = null; attempt++
         mutable.value = null
     }
 
     private fun done(outcome: ReportOutcome) = mutable.value!!.let {
-        ReportState(it.target, null, "", ReportPhase.Done(outcome), false, false)
+        ReportState(it.target, it.origin, null, "", ReportPhase.Done(outcome), false, false)
     }
 
     private fun launch(sending: ReportState) {

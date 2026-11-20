@@ -38,20 +38,21 @@ class ReportViewModelTest {
     private lateinit var model: ReportViewModel
     private val room = ReportTarget.RoomMessage(148)
     private val person = ReportTarget.Person(8, 4)
+    private val origin = ReportOrigin.Room(4)
 
     @Before fun setUp() { Dispatchers.setMain(dispatcher); model = ReportViewModel(fake) }
     @After fun tearDown() { model.close(); Dispatchers.resetMain() }
 
     private fun state() = model.state.value!!
     private fun filled(target: ReportTarget = room, category: ReportCategory = ReportCategory.HARASSMENT, details: String = "private why") {
-        model.open(target, pictureAvailable = true)
+        model.open(target, origin, pictureAvailable = true)
         model.choose(category)
         model.edit(details)
     }
 
     @Test fun aCategoryIsRequiredAndA201Closes() = runTest(dispatcher) {
         advanceUntilIdle()
-        model.open(room)
+        model.open(room, origin)
         model.send(); advanceUntilIdle()
         assertEquals("No category, no send", 0, fake.sends.size)
         model.choose(ReportCategory.SPAM); model.edit("  details \n")
@@ -181,17 +182,128 @@ class ReportViewModelTest {
         assertEquals("Check never POSTs", 1, fake.sends.size)
     }
 
-    @Test fun closeAndASessionChangeDropEverythingAndCancelTheAttempt() = runTest(dispatcher) {
+    @Test fun closeIsRefusedWhileSendingAndTheAttemptKeepsRunning() = runTest(dispatcher) {
+        advanceUntilIdle()
+        val hold = CompletableDeferred<Unit>().also { fake.hold = it }
+        filled(); model.send(); advanceUntilIdle()
+        model.close(); advanceUntilIdle()
+        assertEquals("Still sending (TL, #324)", ReportPhase.Sending, state().phase)
+        assertFalse(fake.cancelled)
+        hold.complete(Unit); advanceUntilIdle()
+        assertEquals(ReportPhase.Done(ReportOutcome.Sent), state().phase)
+        model.close()
+        assertNull("Outside sending, close drops it", model.state.value)
+    }
+
+    @Test fun navigationAwayLetsTheReportFinishAndKeepsItsOutcome() = runTest(dispatcher) {
+        advanceUntilIdle()
+        val hold = CompletableDeferred<Unit>().also { fake.hold = it }
+        filled(); model.send(); advanceUntilIdle()
+        model.departed(); advanceUntilIdle()
+        assertFalse("Navigation never cancels the POST", fake.cancelled)
+        hold.complete(Unit); advanceUntilIdle()
+        assertEquals("The outcome is kept for the UI", ReportPhase.Done(ReportOutcome.Sent), state().phase)
+        // Outside an attempt, navigation away drops the form.
+        model.close(); filled(); model.departed()
+        assertNull(model.state.value)
+    }
+
+    @Test fun aGenuineBackgroundWhileSendingLandsInUnknownWithTheFrozenReport() = runTest(dispatcher) {
+        advanceUntilIdle()
+        fake.hold = CompletableDeferred()
+        filled(details = "kept why"); model.send(); advanceUntilIdle()
+        model.backgrounded(); advanceUntilIdle()
+        assertTrue("The call is cancelled", fake.cancelled)
+        assertEquals("Kept, never dropped", ReportPhase.Unknown(), state().phase)
+        assertEquals(ReportCategory.HARASSMENT, state().category)
+        assertEquals("kept why", state().details)
+        // Send again is available, as an explicit choice with the same report.
+        fake.hold = null; fake.cancelled = false
+        fake.results += ReportResult.AlreadyReported
+        model.sendAgain(); advanceUntilIdle()
+        assertEquals(fake.sends[0], fake.sends[1])
+        assertEquals(ReportPhase.Done(ReportOutcome.Sent), state().phase)
+    }
+
+    @Test fun aGenuineBackgroundWhileSendingAPersonReportOffersCheck() = runTest(dispatcher) {
+        advanceUntilIdle()
+        fake.hold = CompletableDeferred()
+        filled(target = person); model.send(); advanceUntilIdle()
+        model.backgrounded(); advanceUntilIdle()
+        assertEquals(ReportPhase.Unknown(), state().phase)
+        model.sendAgain(); advanceUntilIdle()
+        assertEquals("No resend for a person", 1, fake.sends.size)
+        fake.hold = null
+        fake.facts = ReportFacts(canReport = true, reportedByMe = true)
+        model.check(); advanceUntilIdle()
+        assertEquals(ReportPhase.Done(ReportOutcome.Sent), state().phase)
+    }
+
+    @Test fun aGenuineBackgroundWhileEditingDropsTheFormAndKeepsAnUnknown() = runTest(dispatcher) {
+        advanceUntilIdle()
+        filled(); model.backgrounded()
+        assertNull("An open form is memory only, never kept as a draft", model.state.value)
+        fake.results += ReportResult.Unknown(ApiFailure(FailureKind.TIMEOUT))
+        filled(); model.send(); advanceUntilIdle()
+        model.backgrounded()
+        assertEquals("An Unknown stays", ReportPhase.Unknown(), state().phase)
+    }
+
+    @Test fun aSessionChangeWhileSendingDropsEverything() = runTest(dispatcher) {
         advanceUntilIdle()
         fake.hold = CompletableDeferred()
         filled(); model.send(); advanceUntilIdle()
-        model.close(); advanceUntilIdle()
-        assertNull(model.state.value)
-        assertTrue("The attempt in flight was cancelled", fake.cancelled)
-        fake.hold = null
-        filled(); advanceUntilIdle()
         fake.session.value = fake.session.value.copy(generation = 2); advanceUntilIdle()
-        assertNull("A session change drops the form", model.state.value)
+        assertNull("The identity fence drops even an attempt in flight", model.state.value)
+        assertTrue(fake.cancelled)
+    }
+
+    @Test fun theStateKeepsItsOriginAndAShownOutcomeIsConsumedOnce() = runTest(dispatcher) {
+        advanceUntilIdle()
+        model.open(ReportTarget.DirectMessage(9), ReportOrigin.Direct(12)); model.choose(ReportCategory.SPAM)
+        model.send(); advanceUntilIdle()
+        assertEquals(ReportOrigin.Direct(12), state().origin)
+        assertEquals(ReportPhase.Done(ReportOutcome.Sent), state().phase)
+        model.consume()
+        assertNull("Shown once, then gone", model.state.value)
+    }
+
+    @Test fun aFinishedOutcomeWaitingToBeShownNeverBlocksANewReport() = runTest(dispatcher) {
+        advanceUntilIdle()
+        filled(); model.send(); advanceUntilIdle()
+        assertEquals(ReportPhase.Done(ReportOutcome.Sent), state().phase)
+        assertEquals(ReportOpen.OPENED, model.open(ReportTarget.RoomMessage(200), ReportOrigin.Room(5)))
+        assertEquals(ReportPhase.Editing(), state().phase)
+        assertEquals(ReportTarget.RoomMessage(200), state().target)
+    }
+
+    @Test fun aPendingUnknownIsDroppedByAReportElsewhereWithNothingSent() = runTest(dispatcher) {
+        advanceUntilIdle()
+        fake.results += ReportResult.Unknown(ApiFailure(FailureKind.TIMEOUT))
+        filled(); model.send(); advanceUntilIdle()
+        assertEquals("Reopening the same message keeps its Unknown (Review)", ReportOpen.OPENED, model.open(room, origin))
+        assertEquals(ReportPhase.Unknown(), state().phase)
+        assertEquals(ReportOpen.OPENED, model.open(ReportTarget.RoomMessage(200), ReportOrigin.Room(5)))
+        assertEquals(ReportPhase.Editing(), state().phase)
+        assertEquals("", state().details)
+        assertEquals("No POST for the dropped Unknown", 1, fake.sends.size)
+    }
+
+    @Test fun onlyAReportSendingOrCheckingBlocksANewOne() = runTest(dispatcher) {
+        advanceUntilIdle()
+        val hold = CompletableDeferred<Unit>().also { fake.hold = it }
+        filled(); model.send(); advanceUntilIdle()
+        assertEquals(ReportOpen.BUSY, model.open(ReportTarget.RoomMessage(200), ReportOrigin.Room(5)))
+        assertEquals(room, state().target)
+        hold.complete(Unit); advanceUntilIdle()
+        fake.hold = null
+        // A person Check blocks too.
+        fake.results += ReportResult.Unknown(ApiFailure(FailureKind.TIMEOUT))
+        filled(target = person); model.send(); advanceUntilIdle()
+        val read = CompletableDeferred<Unit>().also { fake.factsHold = it }
+        model.check(); advanceUntilIdle()
+        assertEquals(ReportOpen.BUSY, model.open(room, origin))
+        read.complete(Unit); advanceUntilIdle()
     }
 
     @Test fun detailsAndCategoryNeverReachAString() = runTest(dispatcher) {
@@ -213,6 +325,7 @@ class ReportViewModelTest {
         val checks = mutableListOf<ReportTarget.Person>()
         var facts: ReportFacts? = null
         var factsFailure: ApiFailure? = null
+        var factsHold: CompletableDeferred<Unit>? = null
         var hold: CompletableDeferred<Unit>? = null
         var cancelled = false
 
@@ -224,6 +337,7 @@ class ReportViewModelTest {
 
         override suspend fun personFacts(expected: SessionState, target: ReportTarget.Person): ReportFacts? {
             checks += target
+            factsHold?.await()
             factsFailure?.let { throw it }
             return facts
         }

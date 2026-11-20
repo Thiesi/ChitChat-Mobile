@@ -56,8 +56,21 @@ v3.10.0 (`docs/api/moderation-reports.md`, `reports/message.php`, `reports/user.
     arrive and makes the form editable again; a failed read stays Unknown.
   - **Kept-form notices:** a wait, picture gone (the category is removed and the choice cleared), not sent, and
     snapshot unavailable each keep the form with a notice.
-  - **Closing:** definite refusals close it with their reason. Close (Cancel, genuine background, navigation away) and
-    any session change drop everything and cancel an attempt in flight; a configuration change keeps it.
+  - **Closing:** definite refusals close it with their reason. A configuration change keeps it.
+  - **A report in flight is never silently dropped (TL, #324):**
+    - `close()` (Cancel, Close, Done) is refused while sending or checking; the form then offers no dismiss, and the wait
+      is bounded by the request timeout.
+    - `departed()` (navigation away) lets the attempt finish and keeps its outcome; the UI (R2) hosts the report so that
+      leaving a conversation doesn't dispose it.
+    - `backgrounded()` (a genuine background) cancels the call and lands in Unknown with the same frozen category and
+      details, kept: Send again (message) or Check (person) follows, never automatically. An open form is dropped
+      (memory only, no draft retention); an Unknown or a finished outcome stays.
+    - Only a session change drops an attempt in flight (the identity fence).
+  - **Where an outcome shows (PL, TL):** the state records its origin (`ReportOrigin.Room` or `.Direct`), so R2 shows
+    the outcome, or an Unknown's Review notice, in that conversation; `consume()` drops a finished outcome once shown.
+    `open()` is blocked only by a report that's sending or checking (`BUSY`, for the PL's "still sending" line). A
+    finished outcome waiting to be shown never blocks it, and a pending Unknown for another target is dropped with
+    nothing sent (the server's one-report-per-case rule covers one that arrived); the same target keeps its Unknown.
 
 ## Tests
 
@@ -72,5 +85,9 @@ v3.10.0 (`docs/api/moderation-reports.md`, `reports/message.php`, `reports/user.
   - an upload's 429 is unchanged; profile facts read strictly with the frozen room context.
 - **`ReportViewModelTest`:** a category is required; too-long details block Send without truncation; already-reported
   first versus after a Send again; the frozen Unknown summary and its exact resend; nothing automatic; the budget
-  after Unknown versus on a first attempt; refusals; picture gone; the person Check's three outcomes; close and a
-  session change cancel and drop; nothing private in `toString`.
+  after Unknown versus on a first attempt; refusals; picture gone; the person Check's three outcomes; close refused
+  while sending; navigation away finishing with the outcome kept; a background while sending landing in Unknown with
+  the frozen report (Send again for a message, Check for a person); a background while editing dropping the form; a
+  session change while sending dropping everything; the origin kept and a shown outcome consumed once; a waiting
+  outcome never blocking `open()`; a pending Unknown dropped by a report elsewhere with no POST; only sending or
+  checking blocking `open()`; nothing private in `toString`.
