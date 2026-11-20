@@ -242,6 +242,11 @@ technical-lead sign-off, and the affected tests are listed.
     (`preview_limit` keeps its "This is a development build." prefix). Updated by F4 (drop "viewing photos full
     screen, "; the files-and-photos clause stays if the viewer has no Save or Share yet) and by F5 ("Not in the app
     yet: profile pictures and guest invite links.").
+  - **F4 viewer offline** (PL J4): "The full image is available when you're back online." (`viewer_offline`), above the
+    disabled Load full image. A 429 wait instead reuses status row 7's lines (`status_rate_limited*`, no new copy).
+  - **F4** (PL): both now read "Not in the app yet: saving, opening and sharing files and photos, profile pictures, and
+    guest invite links." (`preview_limit` keeps its prefix). The viewer's lines are `viewer_*`; the Save-or-share clauses
+    return in F5. The frame's tap is "Open photo" (`image_open`).
   - **F3 frame labels** (PL, #310): "Photo from {sender}, {time}" (`image_description`), or "GIF from {sender}, {time}"
     (`image_description_gif`). In any state but Loaded, the state line follows after a full stop, without "Photo" and
     with "·" read as ", " (for example "Photo from Ana, 10:42. 48 MB, too large to show here"), built from the same

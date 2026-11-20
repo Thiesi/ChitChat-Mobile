@@ -192,7 +192,9 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
     targets: MessageTargetViewModel? = null, obscured: Boolean = false, onProfile: ((Long) -> Boolean)? = null,
     completion: io.github.thiesi.chitchat.feature.completion.CompletionViewModel? = null, completionEntryId: String = "",
     onStopped: ((owner: Any) -> Unit)? = null,
-    images: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel? = null, isCurrentEntry: () -> Boolean = { true }) {
+    images: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel? = null,
+    /** Identity only: this nav entry is still the current one (a departure closes its viewer, F4). */
+    isEntryCurrent: () -> Boolean = { true }, isCurrentEntry: () -> Boolean = { true }) {
     val session by model.session.collectAsStateWithLifecycle()
     val displayedSession = session
     val connection = model.realtime?.state?.collectAsStateWithLifecycle()?.value?.takeIf { it.generation == session.generation }
@@ -207,7 +209,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             val now = rememberSessionNow(session.retryAtMillis)
             val ready = sessionReady(session, now)
             val timeline = rememberLazyListState()
-            val received = io.github.thiesi.chitchat.core.ui.rememberReceivedImages(images, paneOwner, completionEntryId, timeline, "direct:")
+            val received = io.github.thiesi.chitchat.core.ui.rememberReceivedImages(images, paneOwner, completionEntryId, timeline, "direct:", isEntryCurrent)
             var blockConfirm by remember { mutableStateOf(false) }
             var detailsOpen by remember { mutableStateOf(false) }
             var profileDetailsToken by remember { mutableStateOf<Any?>(null) }
@@ -227,8 +229,11 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             val composerFocus = remember { FocusRequester() }
             val androidContext = LocalContext.current
             val attach = remember { DirectAttachmentControls() }
+            // The full-screen viewer is a modal too: no read proof and no typing while it's open (TL, F4).
+            val viewerEntry = images?.viewer?.state?.collectAsStateWithLifecycle()?.value?.entry
+            val viewerOpen = viewerEntry != null && viewerEntry == completionEntryId
             val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null ||
-                attach.modalOpen || state.attachmentReview != null
+                attach.modalOpen || state.attachmentReview != null || viewerOpen
             fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
                 !obscured && !blockConfirm && !detailsOpen
             fun interactive() = paneInteractive() && model.state.value.authorDialog == null && model.state.value.reactionDialog == null
@@ -437,6 +442,12 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             io.github.thiesi.chitchat.feature.status.OfflineLiveEdgeCaption(
                                 connection?.phase == RealtimePhase.OFFLINE && state.loaded && state.latestWindow)
                             Spacer(Modifier.height(1.dp))
+                        }
+                    }
+                    io.github.thiesi.chitchat.core.ui.ReceivedViewerHost(received, settled = state.loaded && !state.busy) { id ->
+                        state.messages.firstOrNull { it.attachment?.id == id && !it.deleted }?.let { message ->
+                            Triple(message.sender.username ?: stringResource(R.string.conversation_unknown_user),
+                                messageTime(message.createdAt, state.context?.display), message.body)
                         }
                     }
                     TypingStatus(model.typing, session, TypingTarget.Direct(peer),
@@ -725,7 +736,7 @@ private fun DirectMessageRow(message: DirectMessage, context: DirectContext?, on
                     onClick = onActions, onLongClick = onActions) else Modifier)) {
                 message.attachment?.let { io.github.thiesi.chitchat.core.ui.ReceivedAttachment(it, direct = true, messageId = message.id,
                     sender = message.sender.username ?: stringResource(R.string.conversation_unknown_user),
-                    time = messageTime(message.createdAt, context?.display), caption = message.body, images = received) }
+                    time = messageTime(message.createdAt, context?.display), caption = message.body, images = received, onActions = onActions) }
                 message.body?.let { MessageBody(it, mentions = mentionHints) }
                 if (message.editedAt != null) Text(stringResource(R.string.conversation_edited), style = MaterialTheme.typography.labelSmall)
             }

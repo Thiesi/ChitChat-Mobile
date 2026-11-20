@@ -92,13 +92,18 @@ class ReceivedFilesJourneyTest {
     }
     private val noClick = SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick)
     private val noLongClick = SemanticsMatcher.keyNotDefined(SemanticsActions.OnLongClick)
+    /** F4: a frame's tap opens the viewer ("Open photo") and its long-press keeps the message actions. */
+    private val opensPhoto = SemanticsMatcher("Open photo, long-press for actions") {
+        it.config.getOrNull(SemanticsActions.OnClick)?.label == context.getString(R.string.image_open) &&
+            it.config.getOrNull(SemanticsActions.OnLongClick)?.label == context.getString(R.string.message_actions)
+    }
     private fun description(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().config
         .getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ").orEmpty()
 
-    @Test fun anAttachmentOnlyRoomRowKeepsItsActionsNodeAndTheFrameHasNoClick() {
+    @Test fun anAttachmentOnlyRoomRowKeepsItsActionsNodeAndTheFrameOpensThePhoto() {
         rooms.messages = listOf(roomMessage(3, null, photo(70)))
         roomContent()
-        compose.onNodeWithTag("attachment_frame:70").assert(noClick).assert(noLongClick)
+        compose.onNodeWithTag("attachment_frame:70").assert(opensPhoto)
         compose.onNode(clickLabelled(actionsLabel) and hasAnyAncestor(hasTestTag("message:3"))).assertHeightIsAtLeast(48.dp)
         assertTrue(description("attachment_frame:70"), description("attachment_frame:70").startsWith("Photo from Bob, "))
     }
@@ -209,8 +214,8 @@ class ReceivedFilesJourneyTest {
 
     @Test fun bothDisclosuresNameWhatIsStillMissing() {
         // PL (#310 J3): the F3 wording; the signed-in form has no development prefix.
-        val missing = "Not in the app yet: saving, opening and sharing files and photos, viewing photos full screen, profile pictures, " +
-            "and guest invite links."
+        // F4 (PL): full-screen viewing shipped, so only saving, opening and sharing remain for files and photos.
+        val missing = "Not in the app yet: saving, opening and sharing files and photos, profile pictures, and guest invite links."
         assertEquals("This is a development build. $missing", context.getString(R.string.preview_limit))
         assertEquals(missing, context.getString(R.string.auth_preview_limit))
     }
@@ -241,10 +246,10 @@ class ReceivedFilesJourneyTest {
         assertTrue("Cards never download", source.calls.isEmpty())
     }
 
-    @Test fun beyondTheCapsTheBoxIsStaticTextAndNothingIsFetched() {
+    @Test fun beyondTheCapsTheBoxOpensTheViewerAndNothingIsFetched() {
         rooms.messages = listOf(roomMessage(3, null, photo(70, size = 40_000_000, preview = false)))
         roomContent()
-        compose.onNodeWithTag("attachment_frame:70").assert(noClick).assert(noLongClick)
+        compose.onNodeWithTag("attachment_frame:70").assert(opensPhoto)
         compose.onNodeWithText("too large to show here", substring = true).assertExists()
         compose.onAllNodesWithTag("attachment_show:70").assertCountEquals(0)
         assertTrue(source.calls.isEmpty())
@@ -277,10 +282,10 @@ class ReceivedFilesJourneyTest {
         compose.waitUntil(5_000) { 70L in source.calls }
     }
 
-    @Test fun anAttachmentOnlyDmRowKeepsItsActionsNodeAndTheFrameHasNoClick() {
+    @Test fun anAttachmentOnlyDmRowKeepsItsActionsNodeAndTheFrameOpensThePhoto() {
         directs.rows = listOf(dm(18, null, photo(70, direct = true)))
         directContent()
-        compose.onNodeWithTag("attachment_frame:70").assert(noClick).assert(noLongClick)
+        compose.onNodeWithTag("attachment_frame:70").assert(opensPhoto)
         compose.onNode(clickLabelled(actionsLabel) and hasAnyAncestor(hasTestTag("direct:18"))).assertHeightIsAtLeast(48.dp)
     }
 

@@ -317,9 +317,12 @@ Within the transcript spec's bubble, run and chit rules:
     label "Open photo"; long-press keeps the message actions.
 - **Staged in F3 (PL):**
   - file cards have no buttons until F5 and read "{name}, {type}, {size}" (APKs too);
-  - frames have no tap action until F4, and the "Too large" box is static text;
-  - GIFs show the badge only, on every API level, until F4 adds the play glyph with the tap (and the
-    API 26–27 rule).
+  - frames had no tap action until F4, and the "Too large" box was static text;
+  - GIFs showed the badge only until F4.
+- **From F4 (TL/PL):** a tap on the frame opens the viewer ("Open photo") and takes precedence, while
+  long-press keeps the message actions. Gone and not allowed have nothing to show, so their frame has
+  no tap. Too large and offline open the viewer with their line. GIF frames show the play glyph only
+  where the phone animates GIFs (API 28+); on API 26–27 the badge stays alone.
 - **Where frames never appear:** reply quotes (a quoted photo stays text-only), search results,
   notification rows and push. A room row collapsed because its author is ignored shows no frame
   and requests nothing until revealed. A blocked DM thread loads like any other; the server decides
@@ -356,7 +359,9 @@ The policy is local and read from existing system state, with no new requests:
   on that preview at once (no second download).
   - The original loads automatically only under the same rule: `size_bytes` ≤ 2 MiB on an
     unmetered network.
-  - Otherwise the bottom bar shows **Load full image · 3.4 MB** (`primary` text button). Only
+  - Otherwise the bottom bar shows **Load full image · 3.4 MB** (a text button in `overlayText`; on
+    the black ground persimmon falls to 3.71:1, so every viewer text button uses overlay text, at 38%
+    when disabled; PL J3). Only
     that tap fetches it, with a small static progress ring. A failure shows "Couldn't load the
     full image" with **Try again**, and the preview stays.
   - When the original arrives, it replaces the preview in place and zoom resets. Nothing loads
@@ -379,7 +384,7 @@ The policy is local and read from existing system state, with no new requests:
     version is named.
 - Save and Share always use the **original**, never the preview.
 - Black ground, edge-to-edge. Pinch and double-tap zoom, pan. Swipe down or Back closes.
-- The top bar is on a scrim: back, sender and time, **Save** and **Share**. The caption shows at
+- The top bar is on a scrim: Close, sender and time, **Save** and **Share**. The caption shows at
   the bottom on a scrim, expandable when long.
 - One image at a time (no swiping between messages in this slice). GIFs animate here, and stop
   when the viewer closes or the app backgrounds.
@@ -387,6 +392,47 @@ The policy is local and read from existing system state, with no new requests:
   typing proof while open, as other modals do (modals spec).
 - Accessibility: zoom gestures have button alternatives (zoom in, zoom out, reset). The image
   description is as above.
+- **Staged in F4 (PL, 2026-11-19):** Save and Share are absent from the top bar until F5, with no
+  placeholder, and the lines drop their Save-or-share clauses until then: "Too large to show here at
+  full size." (with a preview), "Too large to show here." (without one, on the black ground, with no
+  zoom group), and on API 26–27 "Animation isn't available on this phone." F5 restores the full
+  sentences.
+- **Zoom group (PL J2):** a horizontal pill on the overlay scrim with a 1dp border in overlay text
+  at 24%, at the bottom end directly above the bottom block, 8dp from the edge inside the side insets:
+  three 48dp buttons, "Zoom in", "Zoom out", "Reset zoom". Zoom out and Reset zoom are disabled at fit
+  scale, and Zoom in at the maximum. TalkBack order: Close, sender and time, the image, the zoom
+  group, the bottom bar. The pill never reaches the top bar.
+  - **Wide windows (PL J8):** in a window wider than tall, the pill sits beside the bottom block instead of above it: at
+    the end, bottom-aligned, 8dp from the edge and inside the insets. The caption-and-line column narrows by the pill's
+    width plus 8dp; its height cap is unchanged, so an expanded caption keeps at least two lines. Portrait is unchanged,
+    and the TalkBack order stays Close, sender and time, the image, the zoom group, the bottom bar (an explicit traversal
+    order).
+  - **Shared row (PL J8):** in a wide window, More/Less shares one row with the image action (Load full image · {size}, or
+    Try again): More/Less at the start, the action end-aligned at the far end of the column, never touching; two rows only
+    when they can't fit side by side, More/Less first. State lines (offline, waiting, failed, can't show, too large,
+    animation) keep their own row above it; disabled buttons stay as they are. With no caption the row is just the
+    action, start-aligned. At 200% the expanded caption keeps at least two full lines in the offer state, and at least
+    one with a state line. TalkBack reads the caption, More/Less, the state line, then the action.
+- **Insets (PL J1):** the top bar takes the top and side insets only; the bottom block the bottom and
+  side insets only.
+- **Offline (PL J4):** "The full image is available when you're back online." above a disabled Load
+  full image. Back online, the viewer makes the opening decision once: an original within the
+  automatic rule may load, anything else returns to the offer and waits for the tap.
+- **Waiting (PL):** a 429 wait shows status row 7's line above the disabled Load full image, since the
+  viewer covers the status slot: "Try again in {wait}." / "Try again in less than a minute." from
+  the server's positive wait, or "Try again in a little while." without one (shared strings and
+  formatter, P-106: display only, never an invented number, announced at most once a minute, the
+  countdown bound to the viewer's composition). When it ends, the offer returns: never an automatic
+  load, so no burst.
+- **GIF badge (PL J5):** a GIF shown as a still (its preview, offline, a failed original, or API
+  26–27) keeps the badge at the top start of the fitted image, 8dp in; it hides while zoomed or
+  animating.
+- **Caption (PL):** collapsed to two lines with an ellipsis and a 48dp "More" / "Less" button;
+  expanded, at most the smaller of 40% of the window height and the space that keeps the zoom pill
+  clear of the top bar, scrolling inside. The bars always show (no tap-to-hide). The sender is
+  server text: it's never ellipsized, so at 200% it may take more than two lines and break mid-token.
+  An explicit Close sits in the top bar, so swipe-down is never the only way out. Sizes keep their
+  number and unit together (a no-break space, PL J6).
 
 ## Save (download to a chosen place)
 
