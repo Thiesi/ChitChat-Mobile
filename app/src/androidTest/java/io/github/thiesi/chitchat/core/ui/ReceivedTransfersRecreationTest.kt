@@ -121,6 +121,20 @@ class ReceivedTransfersRecreationTest {
         document.parentFile!!.deleteRecursively()
     }
 
+    @Test fun anOpenNoAppHandlesDeletesTheCopyAndSaysSo() {
+        // #318 review: the handoff starts the other app first; with none for the type, the copy goes and the line shows.
+        rooms.messages = listOf(roomMessage(3, null, file(74, "data.ccmx", mime = "application/x-ccm-unknown")))
+        host(seen = true)
+        ActivityScenario.launch(OnCreateContentTestActivity::class.java).use {
+            compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
+            compose.onNodeWithTag("attachment_open:74").performClick()
+            compose.waitUntil(5_000) { (transfers.state.value as? TransferState.Stopped)?.reason == io.github.thiesi.chitchat.core.media.TransferStop.NO_APP }
+            compose.waitUntil(5_000) { compose.onAllNodesWithTag("transfer_level_1").fetchSemanticsNodes().isNotEmpty() }
+            assertTrue("The copy is deleted", root.walk().none { it.isFile })
+            assertFalse(transfers.busy)
+        }
+    }
+
     @Test fun theFirstUseNoteSurvivesARecreationAndItsCancelStillStartsNothing() {
         host(seen = false)
         ActivityScenario.launch(OnCreateContentTestActivity::class.java).use { scenario ->
