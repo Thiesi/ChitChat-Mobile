@@ -246,6 +246,18 @@ class ReceivedFilesJourneyTest {
         assertTrue("Cards never download", source.calls.isEmpty())
     }
 
+    @Test fun anImageTypedApkIsACardAndIsNeverPreviewed() {
+        // F5 (TL): the APK MIME type or extension makes a file Save-only, and it's never previewed, even under an image type.
+        val apk = photo(80).let { io.github.thiesi.chitchat.core.conversation.MessageAttachment(it.id, "pic.apk", it.mimeType,
+            it.sizeBytes, it.sha256, it.previewable, it.width, it.height, it.preview) }
+        rooms.messages = listOf(roomMessage(3, null, apk))
+        roomContent()
+        compose.onNodeWithTag("attachment_card:80").assertExists()
+        compose.onAllNodesWithTag("attachment_frame:80").assertCountEquals(0)
+        compose.waitForIdle()
+        assertTrue("Never previewed: ${source.calls}", source.calls.isEmpty())
+    }
+
     @Test fun beyondTheCapsTheBoxOpensTheViewerAndNothingIsFetched() {
         rooms.messages = listOf(roomMessage(3, null, photo(70, size = 40_000_000, preview = false)))
         roomContent()

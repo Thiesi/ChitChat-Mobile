@@ -1169,6 +1169,14 @@ class SessionRepository internal constructor(
 
     private class PendingLogout(val runtime: Runtime, val logout: okhttp3.Request, val revoke: okhttp3.Request?, val generation: Long)
 
+    /**
+     * The locally stored account (origin and user ID), read from the vault with no network and before any bootstrap; null
+     * when none is stored. F5's start-up sweep uses it to delete other accounts' share copies (TL, 2026-11-20).
+     */
+    internal suspend fun storedAccount(): Pair<String, Long>? = lock.withLock {
+        try { vault.read() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
+    }?.let { it.origin to it.userId }
+
     /** Under the lock. Push cleanup never fails a sign-out; storage problems leave keys unreadable at worst. */
     private suspend fun retirePush(origin: String?, userId: Long?): Long? =
         try { withContext(Dispatchers.IO) { push.retire(origin, userId) } }

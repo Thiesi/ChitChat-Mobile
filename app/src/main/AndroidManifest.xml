@@ -24,6 +24,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Received files F5: Share and Open copies only (cache/shared), never exported, read-only grants on intents. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/share_paths" />
+        </provider>
         <!-- The connector's receiver would use its own SQLite key store; ours uses the push vault. -->
         <receiver
             android:name="org.unifiedpush.android.connector.internal.MessagingReceiverImpl"

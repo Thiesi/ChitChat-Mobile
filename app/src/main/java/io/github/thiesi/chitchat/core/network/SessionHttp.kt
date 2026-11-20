@@ -777,10 +777,12 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
      * absolute URL. The body is streamed to [sink] in chunks as it arrives: exactly [expectedBytes], with a matching
      * `Content-Length` (anything else is `INCOMPATIBLE`, code [LENGTH_MISMATCH]) and its SHA-256 computed on the way. A
      * failing sink is `STORAGE`. Errors keep the ordinary typed failures (410, 403/404 with their codes, a positive 429
-     * wait). Never retried or replayed; cancellation cancels the call, and the sink then holds a partial file.
+     * wait). Never retried or replayed; cancellation cancels the call, and the sink then holds a partial file. A
+     * [streamed] download (Save, Share, Open; F5) may run up to an hour overall, since large files are legitimate and the
+     * person can cancel; display loads keep ten minutes. Both keep the 30-second idle read limit (TL, 2026-11-20).
      */
     internal suspend fun download(path: String, expectedBytes: Long, ifNoneMatch: String? = null,
-        expectedType: String? = null, sink: (ByteArray, Int) -> Unit): DownloadReply {
+        expectedType: String? = null, streamed: Boolean = false, sink: (ByteArray, Int) -> Unit): DownloadReply {
         require(expectedBytes > 0 && path.startsWith("/api/v1/")) { "Invalid download" }
         if (retiring) throw kotlinx.coroutines.CancellationException("Session retired")
         // Identity encoding: the length and SHA-256 checks apply to the stored bytes, so OkHttp must neither ask for
@@ -788,7 +790,8 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         val request = Request.Builder().url(origin.resolve(path)!!).header("Accept", "*/*").header("Accept-Encoding", "identity")
             .apply { ifNoneMatch?.let { header("If-None-Match", it) } }.build()
         // Shares this runtime's jar, dispatcher and pool (so retirement cancels it); idle-bounded rather than 25 s overall.
-        val transport = client.newBuilder().readTimeout(30, TimeUnit.SECONDS).callTimeout(10, TimeUnit.MINUTES).build()
+        val transport = client.newBuilder().readTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(if (streamed) 60L else 10L, TimeUnit.MINUTES).build()
         val call = transport.newCall(request)
         val started = requestScope()
         // OkHttp calls exactly one callback per enqueued call, including after cancel. A cancelled download returns only

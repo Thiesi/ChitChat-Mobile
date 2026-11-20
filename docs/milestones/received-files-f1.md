@@ -32,7 +32,8 @@ availability disclosures stay accurate. The contract is the released v3.10.0 one
       outcome.
   - **`stream` (Save and the share copy):** the original goes straight to the caller's stream, with no display cap and
     no buffer. The caller decides what to do with a partial or mismatching file: a chosen document is never deleted,
-    and a private share copy is.
+    and a private share copy is. Since [F5a](received-files-f5a.md) the destination is opened only at the first body
+    byte, a fence runs before every chunk, and a streamed download may take 60 minutes overall.
   - **Integrity:** the bytes' SHA-256 must equal the metadata's (or the preview's). A mismatch, or a wrong length, is
     `IntegrityFailed`, and the bytes are never returned as good.
   - **Outcomes:**
