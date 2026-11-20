@@ -101,6 +101,11 @@ internal class FileTransfers(
     private var pending: PendingSave? = null
     private var copy: ShareCopies.Copy? = null
     private var owner: Identity? = null
+    /**
+     * Whether the running transfer's destination has been opened. A Save's document is opened (and so truncated) at the
+     * first body byte, so this, not the progress, says whether a picked file may have changed (#317 review).
+     */
+    private var opened = java.util.concurrent.atomic.AtomicBoolean()
 
     init {
         // A session change retires everything that belonged to the old one, silently.
@@ -129,12 +134,10 @@ internal class FileTransfers(
         val expected = session.value
         if (destination == null || identityOf(expected) != request.identity) { idleIfNothingRuns(); return }
         val ref = request.ref
-        var wroteBody = false
-        run(ref, TransferPurpose.SAVE, expected, request.identity, open = { destination.open().also { wroteBody = true } },
-            done = { result ->
-                if (result == DownloadResult.Saved) TransferState.Saved(ref)
-                else stopped(ref, TransferPurpose.SAVE, result, wroteBody)
-            })
+        run(ref, TransferPurpose.SAVE, expected, request.identity, open = { destination.open() }, done = { result ->
+            if (result == DownloadResult.Saved) TransferState.Saved(ref)
+            else stopped(ref, TransferPurpose.SAVE, result, opened.get())
+        })
     }
 
     /** Share or Open: a fresh private copy, verified before it's offered for handoff. */
@@ -192,6 +195,7 @@ internal class FileTransfers(
         open: () -> OutputStream, done: (DownloadResult) -> TransferState) {
         val total = ref.attachment.sizeBytes
         val written = AtomicLong()
+        val destinationOpened = java.util.concurrent.atomic.AtomicBoolean().also { opened = it }
         val running = TransferState.Running(ref, purpose, 0, total)
         mutable.value = running
         // Progress from the destination's own writes: one update per whole percent, from the download's thread.
@@ -206,7 +210,7 @@ internal class FileTransfers(
         job = scope.launch {
             val result = try {
                 withContext(io) {
-                    source.stream(ref, expected, open = { CountingStream(open(), ::advance) }, ensureCurrent = {
+                    source.stream(ref, expected, open = { CountingStream(open().also { destinationOpened.set(true) }, ::advance) }, ensureCurrent = {
                         if (identityOf(session.value) != identity) throw ApiFailure(FailureKind.EXPIRED)
                     })
                 }
@@ -231,8 +235,8 @@ internal class FileTransfers(
                 if (current.purpose != TransferPurpose.SAVE) discardCopy(after = stopping)
                 // A Share or Open that never reached its handoff ends silently on background; a Save says what's left.
                 mutable.value = if (current.purpose == TransferPurpose.SAVE || reason == TransferStop.CANCELLED)
-                    TransferState.Stopped(current.ref, current.purpose, reason, wroteBody = current.purpose == TransferPurpose.SAVE &&
-                        current is TransferState.Running && current.written > 0) else null
+                    TransferState.Stopped(current.ref, current.purpose, reason,
+                        wroteBody = current.purpose == TransferPurpose.SAVE && opened.get()) else null
             }
             current is TransferState.Ready -> { discardCopy(); mutable.value = null }
             wasPending != null -> Unit

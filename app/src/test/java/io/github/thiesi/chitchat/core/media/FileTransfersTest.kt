@@ -219,6 +219,20 @@ class FileTransfersTest {
         assertEquals("Never deleted", 4, document.size())
     }
 
+    @Test fun aStopBeforeTheFirstPercentStillSaysTheDocumentWasOpened() = runTest {
+        // #317 review: a large file opened (and truncated) at the first byte, stopped before any whole percent.
+        val source = Source().apply { gate = CompletableDeferred() }
+        val transfers = transfers(source); advanceUntilIdle()
+        val large = AttachmentRef(MessageAttachment(30, "film.mp4", "video/mp4", 1_000_000_000L, "a".repeat(64), previewable = false), false)
+        val request = transfers.requestSave(large)!!
+        transfers.saveChosen(request, { ByteArrayOutputStream() }); advanceUntilIdle()
+        assertEquals("No whole percent yet", 0L, (transfers.state.value as TransferState.Running).written)
+        transfers.cancel(); advanceUntilIdle()
+        val stopped = transfers.state.value as TransferState.Stopped
+        assertEquals(TransferStop.CANCELLED, stopped.reason)
+        assertTrue("The picked file may have changed", stopped.wroteBody)
+    }
+
     @Test fun aSessionChangeMidShareCancelsItAndDeletesTheCopySilently() = runTest {
         val source = Source().apply { gate = CompletableDeferred() }
         val transfers = transfers(source); advanceUntilIdle()

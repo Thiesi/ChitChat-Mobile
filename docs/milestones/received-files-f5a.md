@@ -79,10 +79,11 @@ Share or Open ends silently with its copy deleted. Nothing starts during the ses
   - `ShareCopiesTest` (9): the layout, expiry, in-flight protection, discard, account deletion, `keepOnly`, the
     start-up sweep and its race with a session event, and the teardown (a cold start and restore keep the folder, a
     revalidation keeps it, a sign-out deletes it, a switch to another account deletes the old one).
-  - `FileTransfersTest` (17): one at a time; Save to the chosen document; a pre-body failure never opens it; damaged
+  - `FileTransfersTest` (18): one at a time; Save to the chosen document; a pre-body failure never opens it; damaged
     keeps it; a late or orphaned picker result does nothing; a cancelled picker starts nothing; the 429 wait; a verified
     copy and its handoff; failed or mismatching copies deleted; no space; APKs never copied; no app; background for
-    Share and for Save; a session change; a revalidation keeps the transfer; progress.
+    Share and for Save; a stop before the first whole percent still reports the document as opened (it's truncated at
+    the first byte; #317 review); a session change; a revalidation keeps the transfer; progress.
   - `AttachmentDownloadsTest` (18): adds a pre-body 410 and 429 never opening the destination, a mid-body failure
     keeping what was written and closing, and the per-chunk fence.
 - **Instrumented:**
