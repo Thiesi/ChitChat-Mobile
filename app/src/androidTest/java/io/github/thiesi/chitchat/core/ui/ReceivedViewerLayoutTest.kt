@@ -96,6 +96,7 @@ class ReceivedViewerLayoutTest {
         val top = bounds("viewer_top"); val pill = bounds("viewer_zoom"); val bottom = bounds("viewer_bottom")
         assertTrue("Pill $pill below the top bar $top", pill.top >= top.bottom - 0.5f)
         assertTrue("Pill $pill above the bottom block $bottom", pill.bottom <= bottom.top + 0.5f)
+        assertTrue("Bottom block $bottom below the top bar $top", bottom.top >= top.bottom - 0.5f)
     }
 
     @Test fun landscapeAt200PercentThePillSitsBesideTheBottomBlockAndTheCaptionKeepsTwoLines() = openExpanded(landscape = true) { collapsed ->
@@ -104,6 +105,7 @@ class ReceivedViewerLayoutTest {
         val caption = bounds("viewer_caption")
         assertTrue("Pill $pill clear of the top bar $top", !pill.overlaps(top))
         assertTrue("Pill $pill clear of the bottom block $bottom", !pill.overlaps(bottom))
+        assertTrue("Bottom block $bottom below the top bar $top", bottom.top >= top.bottom - 0.5f)
         assertTrue("Pill $pill at the end of the bottom block $bottom", pill.left >= bottom.right - 0.5f)
         assertTrue("Expanded caption ${caption.height} keeps two lines ($collapsed)", caption.height >= collapsed - 0.5f)
         // TalkBack: the zoom group before the bottom bar, as in portrait.
