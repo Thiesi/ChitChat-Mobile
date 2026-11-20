@@ -39,20 +39,38 @@ the TL's and PL's F4 rulings of 2026-11-19.
 - **Gestures:**
   - Pinch and double-tap zoom, and pan, clamped to the scaled image's bounds so it can't be dragged off screen (#313).
   - Swipe down closes at fit scale only; Back and an explicit Close always work.
-- **Zoom group (PL):**
-  - Three 48dp buttons, "Zoom in", "Zoom out" and "Reset zoom", on one overlay-scrim pill above the bottom scrim.
+- **Zoom group (PL, J2):**
+  - Three 48dp buttons, "Zoom in", "Zoom out" and "Reset zoom", on one **horizontal** overlay-scrim pill with a 1dp
+    border at 24% overlay text, directly above the bottom block.
   - Zoom out and Reset are disabled at fit scale, and Zoom in at the maximum.
   - There's no group when nothing is shown.
+  - The bottom column is capped to the space below the top bar, and the expanded caption is what gives way, so the pill
+    never reaches the top bar.
+- **Insets (J1):** the top bar takes only the top and side insets; the bottom block only the bottom and side insets.
+- **Colour (J3):** every viewer text button (Load full image, Try again, More/Less) uses overlay text, at 38% when
+  disabled; persimmon is too faint on black.
+- **GIF badge (J5):** a GIF shown still (its preview, offline, a failed original, API 26–27) keeps the badge at the top
+  start of the fitted image, 8dp in; it hides while zoomed or animating.
 - **Bars:**
-  - The top bar has Close plus the sender (wrapping, never ellipsized) and the time.
+  - The top bar has Close plus the sender and the time. The sender is server text: never ellipsized, so at 200% it may
+    take more than two lines and break mid-token.
   - The bottom bar has the caption (two lines with More/Less; expanded, at most 40% of the window, scrolling) and the
     full-image line:
-    - "Load full image · {size}", disabled offline and during a session wait;
+    - "Load full image · {size}"; offline, it's disabled under "The full image is available when you're back online."
+      (J4), and back online the viewer makes the opening decision once (a small original may load, anything else returns
+      to the offer); during a 429 wait it's disabled under status row 7's line (the server's positive wait through the
+      shared formatter, else "Try again in a little while."; P-106), and the wait ends on the offer only, with no burst.
+      The end-of-wait timer belongs to the viewer attempt: close, departure and a session change cancel it, and a stale
+      one never touches a later viewer (TL);
     - the loading ring, with "Loading the full image" after 2 s;
     - "Couldn't load the full image" / "Couldn't show the full image right now" with Try again;
     - the too-large lines, gone and not allowed;
     - on API 26–27, "Animation isn't available on this phone."
   - There's no Save or Share until F5.
+
+## Shared size text
+
+Sizes keep their number and unit together with a no-break space (`attach_size_*`, PL J6), everywhere they show.
 
 ## Disclosure
 

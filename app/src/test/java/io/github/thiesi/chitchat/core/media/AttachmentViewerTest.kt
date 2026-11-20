@@ -245,11 +245,79 @@ class AttachmentViewerTest {
         val pane = shownOnScreen(rig, photo)
         pane.openViewer(photo, 1080, 2000); advanceUntilIdle()
         source.replies += { DownloadResult.RateLimited(30) }
-        pane.loadFullImage(); advanceUntilIdle()
+        pane.loadFullImage(); advanceTimeBy(1_000) // Not past the 30 s wait.
         assertEquals(FullImage.WAITING, rig.viewer.state.value!!.full)
         val calls = source.calls.size
         advanceTimeBy(120_000); advanceUntilIdle()
         assertEquals("No burst after the wait", calls, source.calls.size)
+        assertEquals("The wait ends on the offer", FullImage.OFFER, rig.viewer.state.value!!.full)
+    }
+
+    @Test fun aWaitCarriesOnlyTheServersEndAndUnknownStaysUnknown() = runTest {
+        // P-106: the line shows only a positive server wait; without one it's "a little while".
+        val source = Source(); val rig = Rig(this, source); advanceUntilIdle()
+        val photo = ref()
+        val pane = shownOnScreen(rig, photo)
+        pane.openViewer(photo, 1080, 2000); advanceUntilIdle()
+        source.replies += { DownloadResult.RateLimited(30) }
+        val sent = testScheduler.currentTime
+        pane.loadFullImage(); advanceTimeBy(1_000)
+        assertEquals(sent + 30_000, rig.viewer.state.value!!.waitUntilMillis)
+        advanceTimeBy(60_000); advanceUntilIdle()
+        assertEquals(FullImage.OFFER, rig.viewer.state.value!!.full)
+        assertEquals("The offer carries no wait", null, rig.viewer.state.value!!.waitUntilMillis)
+        source.replies += { DownloadResult.RateLimited(null) }
+        pane.loadFullImage(); advanceUntilIdle()
+        assertEquals("No server wait: unknown, never invented", null, rig.viewer.state.value!!.waitUntilMillis)
+    }
+
+    @Test fun aClosedViewersPendingWaitEndNeverTouchesALaterViewer() = runTest {
+        // TL (#313): the end-of-wait timer belongs to its viewer attempt.
+        val source = Source(); val rig = Rig(this, source); advanceUntilIdle()
+        val photo = ref()
+        val pane = shownOnScreen(rig, photo)
+        pane.openViewer(photo, 1080, 2000); advanceUntilIdle()
+        source.replies += { DownloadResult.RateLimited(30) }
+        pane.loadFullImage(); advanceTimeBy(5_000)
+        assertEquals(FullImage.WAITING, rig.viewer.state.value!!.full)
+        pane.closeViewer()
+        // The same attachment again, now under a longer wait of its own.
+        pane.openViewer(photo, 1080, 2000); advanceTimeBy(1)
+        source.replies += { DownloadResult.RateLimited(120) }
+        pane.loadFullImage(); advanceTimeBy(1_000)
+        assertEquals(FullImage.WAITING, rig.viewer.state.value!!.full)
+        advanceTimeBy(40_000) // Well past the first viewer's end.
+        assertEquals("The old timer has no effect", FullImage.WAITING, rig.viewer.state.value!!.full)
+        advanceTimeBy(90_000); advanceUntilIdle()
+        assertEquals("Its own wait ends on the offer", FullImage.OFFER, rig.viewer.state.value!!.full)
+        // A session change during a wait closes the viewer and its timer with it.
+        source.replies += { DownloadResult.RateLimited(30) }
+        pane.loadFullImage(); advanceTimeBy(1_000)
+        session.value = signedIn.copy(generation = signedIn.generation + 1); advanceTimeBy(60_000); advanceUntilIdle()
+        assertEquals(null, rig.viewer.state.value)
+    }
+
+    @Test fun backOnlineASmallOriginalLoadsOnceAndALargeOneOffers() = runTest {
+        // TL (#313): the reconnect makes the opening decision once; never a retry loop.
+        val source = Source(); val rig = Rig(this, source); advanceUntilIdle()
+        val small = ref(id = 51, size = 1_500_000); val large = ref(id = 52)
+        val pane = shownOnScreen(rig, small)
+        pane.visible(large, 280, 210); advanceUntilIdle()
+        network.value = NetworkState(online = false, metered = false)
+        pane.openViewer(small, 1080, 2000); advanceUntilIdle()
+        assertEquals(FullImage.OFFLINE, rig.viewer.state.value!!.full)
+        network.value = NetworkState(online = true, metered = false); advanceUntilIdle()
+        assertEquals("The small original loads once", 1, source.calls.count { it == 51L to AttachmentVariant.ORIGINAL })
+        assertTrue(rig.viewer.state.value!!.original is ViewerImage.Still)
+        pane.closeViewer()
+        network.value = NetworkState(online = false, metered = false)
+        pane.openViewer(large, 1080, 2000); advanceUntilIdle()
+        network.value = NetworkState(online = true, metered = false); advanceUntilIdle()
+        assertEquals("The large one offers", FullImage.OFFER, rig.viewer.state.value!!.full)
+        assertTrue(source.calls.none { it == 52L to AttachmentVariant.ORIGINAL })
+        network.value = NetworkState(online = false, metered = false); network.value = NetworkState(online = true, metered = false)
+        advanceUntilIdle()
+        assertTrue("A reconnect on the offer loads nothing", source.calls.none { it == 52L to AttachmentVariant.ORIGINAL })
     }
 
     @Test fun onlyTheCurrentPaneDrivesTheViewerAndADepartureClosesOnlyItsOwnEntry() = runTest {

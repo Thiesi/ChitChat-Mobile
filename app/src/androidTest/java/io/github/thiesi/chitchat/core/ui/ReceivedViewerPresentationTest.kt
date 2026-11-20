@@ -61,6 +61,8 @@ class ReceivedViewerPresentationTest {
         val offlineAtOpen: Boolean = false,
         /** The transcript itself is the capture, not the viewer. */
         val frameOnly: Boolean = false,
+        /** Landscape, at 200% only (PL J2). */
+        val landscape: Boolean = false,
         val ready: (ViewerState) -> Boolean = { true },
         val act: ReceivedViewerPresentationTest.() -> Unit = {},
     )
@@ -82,6 +84,13 @@ class ReceivedViewerPresentationTest {
             ready = { it.full == FullImage.OFFLINE }),
         Shot("viewer-caption", roomMessage(3, longCaption, photo(70)), ready = { it.full == FullImage.OFFER }),
         Shot("viewer-caption-open", roomMessage(3, longCaption, photo(70)), ready = { it.full == FullImage.OFFER },
+            act = { compose.onNodeWithTag("viewer_caption_toggle").performClick() }),
+        Shot("viewer-offline", roomMessage(3, null, photo(70)), offlineAtOpen = true, ready = { it.full == FullImage.OFFLINE }),
+        // The server's 150 s wait reads "about 3 minutes" for the whole capture (PL, row 7's line).
+        Shot("viewer-waiting", roomMessage(3, null, photo(70)), script = { serve(70); reply(70) { DownloadResult.RateLimited(150) } },
+            ready = { it.full == FullImage.OFFER },
+            act = { compose.onNodeWithTag("viewer_load_full").performClick(); waitFor { it.full == FullImage.WAITING } }),
+        Shot("viewer-caption-open-landscape", roomMessage(3, longCaption, photo(70)), landscape = true, ready = { it.full == FullImage.OFFER },
             act = { compose.onNodeWithTag("viewer_caption_toggle").performClick() }),
         Shot("viewer-zoomed", roomMessage(3, null, photo(70)), ready = { it.full == FullImage.OFFER },
             act = { repeat(2) { compose.onNodeWithTag("viewer_zoom_in").performClick() } }),
@@ -108,7 +117,7 @@ class ReceivedViewerPresentationTest {
 
     private fun presentation(dark: Boolean, scales: List<Pair<String, Float>>, only: Set<String>?) {
         val theme = if (dark) "dark" else "light"
-        for ((scaleName, fontScale) in scales) for (shot in shots().filter { only == null || it.name in only }) {
+        for ((scaleName, fontScale) in scales) for (shot in shots().filter { (only == null || it.name in only) && (!it.landscape || scaleName == "font200") }) {
             // Keep one ActivityScenario per shot: setContent again in the same activity reuses the composition, and with
             // identical keys the screen's LaunchedEffect(roomId) never reruns, so the new model is never opened (#310).
             FontScaleTestActivity.requestedFontScale = fontScale
@@ -123,6 +132,14 @@ class ReceivedViewerPresentationTest {
             val room = ConversationViewModel(rooms)
             try {
                 ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+                    if (shot.landscape) {
+                        scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                        compose.waitUntil(5_000) {
+                            var orientation = 0
+                            scenario.onActivity { orientation = it.resources.configuration.orientation }
+                            orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                        }
+                    }
                     scenario.onActivity { activity ->
                         activity.setContent { ChitChatTheme(dark = dark) {
                             Surface(Modifier.fillMaxSize().testTag("files_host"), color = MaterialTheme.colorScheme.background) {

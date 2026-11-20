@@ -41,6 +41,7 @@
     <string name="viewer_no_memory">Couldn’t show the full image right now</string>
     <string name="viewer_too_large_preview">Too large to show here at full size.</string>
     <string name="viewer_too_large">Too large to show here.</string>
+    <string name="viewer_offline">The full image is available when you’re back online.</string>
     <string name="viewer_no_animation">Animation isn’t available on this phone.</string>
     <string name="viewer_zoom_in">Zoom in</string>
     <string name="viewer_zoom_out">Zoom out</string>

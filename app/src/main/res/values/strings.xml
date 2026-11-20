@@ -499,10 +499,10 @@
     <string name="attach_kind_videos">%1$s videos</string>
     <string name="attach_kind_audio">%1$s audio files</string>
     <string name="attach_kind_files">%1$s files</string>
-    <string name="attach_size_bytes">%1$s bytes</string>
-    <string name="attach_size_kb">%1$s kB</string>
-    <string name="attach_size_mb">%1$s MB</string>
-    <string name="attach_size_gb">%1$s GB</string>
+    <string name="attach_size_bytes">%1$s bytes</string>
+    <string name="attach_size_kb">%1$s kB</string>
+    <string name="attach_size_mb">%1$s MB</string>
+    <string name="attach_size_gb">%1$s GB</string>
     <string name="attach_waiting">Attaching the file when the room is ready…</string>
     <string name="attach_waiting_cancel">Don’t attach this file</string>
     <string name="attach_not_added">The file wasn’t attached. Choose it again.</string>

@@ -55,9 +55,10 @@ class ReceivedViewerJourneyTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val session = ReceivedFiles.session()
     private val source = ReceivedSource()
+    private val network = FixedNetwork()
     private val store = ViewModelStore()
     private val images: AttachmentImagesViewModel = ViewModelProvider.create(store, viewModelFactory {
-        initializer { AttachmentImagesViewModel(session, FixedNetwork(), source, 32L * 1024 * 1024) }
+        initializer { AttachmentImagesViewModel(session, network, source, 32L * 1024 * 1024) }
     })[AttachmentImagesViewModel::class.java]
     private val rooms = ReceivedRooms(session)
     private val typing = NativeTypingHarness(session)
@@ -73,8 +74,14 @@ class ReceivedViewerJourneyTest {
     private val noClick = SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick)
     private fun viewerShown() = compose.onAllNodesWithTag("viewer").fetchSemanticsNodes().isNotEmpty()
 
-    private fun roomContent() {
-        compose.setContent { MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } } }
+    private fun roomContent(fontScale: Float = 1f) {
+        compose.setContent {
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides
+                androidx.compose.ui.unit.Density(base.density, fontScale)) {
+                MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } }
+            }
+        }
         compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
     }
     private fun loaded(id: Long) = compose.waitUntil(5_000) {
@@ -121,7 +128,7 @@ class ReceivedViewerJourneyTest {
         roomContent(); loaded(70)
         compose.onNodeWithTag("attachment_frame:70").performClick()
         compose.waitUntil(5_000) { viewerShown() }
-        compose.onNodeWithTag("viewer_load_full").assertTextEquals(context.getString(R.string.viewer_load_full, "3.4 MB"))
+        compose.onNodeWithTag("viewer_load_full").assertTextEquals(context.getString(R.string.viewer_load_full, "3.4\u00A0MB"))
         assertTrue("No Save or Share until F5", compose.onAllNodesWithText("Save").fetchSemanticsNodes().isEmpty() &&
             compose.onAllNodesWithText("Share").fetchSemanticsNodes().isEmpty())
         val frame = compose.onNodeWithTag("attachment_frame:70").fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)
@@ -145,6 +152,64 @@ class ReceivedViewerJourneyTest {
         val label = compose.onNodeWithTag("viewer_image").fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)
         assertEquals(listOf(context.getString(R.string.image_description, "Bob", label!!.single().removePrefix("Photo from Bob, "))), label)
         assertTrue(label.single(), !label.single().contains(". "))
+    }
+
+    @Test fun offlineSaysWhyAndReconnectingReturnsALargeOriginalToTheOffer() {
+        // PL J4 and TL (#313): the offline line over a disabled button; back online, a large original waits for the tap.
+        network.state.value = io.github.thiesi.chitchat.core.media.NetworkState(online = false, metered = true)
+        rooms.messages = listOf(roomMessage(3, null, photo(70)))
+        roomContent()
+        compose.onNodeWithTag("attachment_frame:70").performClick()
+        compose.waitUntil(5_000) { images.viewer.state.value?.full == io.github.thiesi.chitchat.core.media.FullImage.OFFLINE }
+        compose.onNodeWithTag("viewer_line").assertTextEquals(text(R.string.viewer_offline))
+        compose.onNodeWithTag("viewer_load_full").assertIsNotEnabled()
+        network.state.value = io.github.thiesi.chitchat.core.media.NetworkState(online = true, metered = false)
+        compose.waitUntil(5_000) { images.viewer.state.value?.full == io.github.thiesi.chitchat.core.media.FullImage.OFFER }
+        compose.onNodeWithTag("viewer_load_full").assertIsEnabled()
+        compose.waitForIdle()
+        assertTrue("Nothing but the preview loads by itself: ${source.calls}", source.calls.count { it == 70L } <= 1)
+    }
+
+    @Test fun aRateLimitShowsRowSevensLineOverTheDisabledButton() {
+        // PL: the viewer covers the status slot, so it says why; only the server's wait, else "a little while".
+        source.serve(70)
+        source.reply(70) { DownloadResult.RateLimited(150) }
+        rooms.messages = listOf(roomMessage(3, null, photo(70)))
+        roomContent(); loaded(70)
+        compose.onNodeWithTag("attachment_frame:70").performClick()
+        compose.waitUntil(5_000) { images.viewer.state.value?.full == io.github.thiesi.chitchat.core.media.FullImage.OFFER }
+        compose.onNodeWithTag("viewer_load_full").performClick()
+        compose.waitUntil(5_000) { images.viewer.state.value?.full == io.github.thiesi.chitchat.core.media.FullImage.WAITING }
+        val minutes = context.resources.getQuantityString(R.plurals.wait_about_minutes, 3, 3)
+        compose.onNodeWithTag("viewer_line").assertTextEquals(context.getString(R.string.status_rate_limited, minutes))
+        compose.onNodeWithTag("viewer_load_full").assertIsNotEnabled()
+    }
+
+    @Test fun at200PercentTheExpandedCaptionNeverPushesTheZoomPillIntoTheTopBar() {
+        // PL J2: the caption gives way; the pill stays clear of the top bar.
+        val long = (1..30).joinToString(" ") { "We walked down to the harbour after dinner and stayed until the light went out." }
+        rooms.messages = listOf(roomMessage(3, long, photo(70)))
+        roomContent(fontScale = 2f); loaded(70)
+        compose.onNodeWithTag("attachment_frame:70").performClick()
+        compose.waitUntil(5_000) { viewerShown() }
+        compose.onNodeWithTag("viewer_caption_toggle").performClick()
+        compose.waitForIdle()
+        val top = compose.onNodeWithTag("viewer_top").fetchSemanticsNode().boundsInRoot
+        val pill = compose.onNodeWithTag("viewer_zoom").fetchSemanticsNode().boundsInRoot
+        assertTrue("Pill $pill below the top bar $top", pill.top >= top.bottom - 0.5f)
+    }
+
+    @Test fun aGifShownStillKeepsItsBadgeUntilZoomed() {
+        // PL J5: a GIF whose original failed shows its preview still, with the badge; zooming hides it.
+        source.serve(70)
+        source.reply(70) { DownloadResult.Failed(io.github.thiesi.chitchat.core.network.ApiFailure(io.github.thiesi.chitchat.core.network.FailureKind.NETWORK)) }
+        rooms.messages = listOf(roomMessage(3, null, photo(70, width = 480, height = 360, mime = "image/gif")))
+        roomContent(); loaded(70)
+        compose.onNodeWithTag("attachment_frame:70").performClick()
+        compose.waitUntil(5_000) { images.viewer.state.value?.full == io.github.thiesi.chitchat.core.media.FullImage.FAILED }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("viewer_gif_badge").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("viewer_zoom_in").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("viewer_gif_badge").fetchSemanticsNodes().isEmpty() }
     }
 
     @Test fun theZoomButtonsAreLabelledAndFollowTheScale() {

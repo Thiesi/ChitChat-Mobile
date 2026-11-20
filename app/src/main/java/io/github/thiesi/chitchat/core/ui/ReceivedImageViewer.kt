@@ -4,6 +4,7 @@ import android.graphics.drawable.Drawable
 import android.widget.ImageView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -11,18 +12,23 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,6 +40,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,18 +51,24 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -68,6 +81,8 @@ import io.github.thiesi.chitchat.core.media.ImageState
 import io.github.thiesi.chitchat.core.media.ViewerImage
 import io.github.thiesi.chitchat.core.media.ViewerState
 import io.github.thiesi.chitchat.core.media.attachmentSizeText
+import io.github.thiesi.chitchat.core.status.Wait
+import io.github.thiesi.chitchat.feature.status.waitText
 import io.github.thiesi.chitchat.core.theme.Lantern
 import kotlinx.coroutines.delay
 
@@ -88,17 +103,21 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
         val still = (viewer.original as? ViewerImage.Still)?.image ?: (held as? ImageState.Loaded)?.image
         val animated = (viewer.original as? ViewerImage.Animated)?.animation
         val showsImage = animated != null || still?.bitmap != null
+        val gif = viewer.ref.attachment.mimeType.equals("image/gif", ignoreCase = true)
         var scale by remember(viewer.key) { mutableFloatStateOf(1f) }
         var pan by remember(viewer.key) { mutableStateOf(Offset.Zero) }
         var captionOpen by remember(viewer.key) { mutableStateOf(false) }
-        var area by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+        var area by remember { mutableStateOf(IntSize.Zero) }
+        var topBar by remember { mutableIntStateOf(0) }
         // Pan stays within the scaled image's bounds, so a zoomed image can't be dragged off screen (TL, #313).
         fun bounded(offset: Offset, at: Float): Offset {
             val x = area.width * (at - 1f) / 2f; val y = area.height * (at - 1f) / 2f
             return Offset(offset.x.coerceIn(-x, x), offset.y.coerceIn(-y, y))
         }
-        Box(Modifier.fillMaxSize().background(Color.Black).testTag("viewer")) {
-            // The image, with the frame's description (label plus state; TL condition 7).
+        BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).testTag("viewer")) {
+            val window = maxHeight
+            val density = LocalDensity.current
+            // The image, with the viewer's own description (TL condition 7, #313).
             Box(Modifier.fillMaxSize().onSizeChanged { area = it }.semantics { contentDescription = description }.testTag("viewer_image")
                 .pointerInput(viewer.key) {
                     detectTapGestures(onDoubleTap = { if (scale > 1f) { scale = 1f; pan = Offset.Zero } else scale = 2.5f })
@@ -129,10 +148,22 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                         Image(bitmap, contentDescription = null, modifier = layer, contentScale = ContentScale.Fit)
                     }
                 }
+                // PL J5: a GIF shown still (a preview, offline, failed, or API 26–27) keeps its badge at the top start of the
+                // fitted image, 8dp in; not while zoomed or animating.
+                if (gif && animated == null && still != null && scale == 1f && area.width > 0 && still.width > 0 && still.height > 0) {
+                    val fit = minOf(area.width.toFloat() / still.width, area.height.toFloat() / still.height)
+                    val left = ((area.width - still.width * fit) / 2f).toInt()
+                    val top = ((area.height - still.height * fit) / 2f).toInt()
+                    val inset = with(density) { 8.dp.roundToPx() }
+                    GifBadge(Modifier.align(Alignment.TopStart).offset { IntOffset(left + inset, top + inset) }.testTag("viewer_gif_badge"))
+                }
             }
-            // Top bar on a scrim: Close, then the sender (wrapping, never ellipsized; P-222) and the time.
-            Row(Modifier.fillMaxWidth().background(Lantern.overlayScrim).windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Top bar on a scrim, inside the top and side insets only (PL J1): Close, the sender and the time. The sender is
+            // server text: never ellipsized, so it may take several lines at 200% and break mid-token (PL).
+            Row(Modifier.fillMaxWidth().background(Lantern.overlayScrim)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                .onSizeChanged { topBar = it.height }.padding(horizontal = 4.dp, vertical = 4.dp).testTag("viewer_top"),
+                verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose, modifier = Modifier.size(Lantern.target).testTag("viewer_close")) {
                     Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.viewer_close), tint = Lantern.overlayText)
                 }
@@ -141,21 +172,35 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                     Text(time, color = Lantern.overlayText, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            // The bottom block on a scrim: the zoom group above it, then the caption and the full-image line.
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-                if (showsImage) ZoomGroup(scale, Modifier.align(Alignment.End).padding(8.dp),
+            // The bottom: the zoom pill directly above the bottom block. Together they never reach the top bar (PL J2): the
+            // column is capped to the space below it, and the expanded caption is what gives way.
+            val below = window - with(density) { topBar.toDp() }
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = below.coerceAtLeast(0.dp))) {
+                if (showsImage) ZoomGroup(scale, Modifier.align(Alignment.End)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(8.dp),
                     onZoomIn = { scale = (scale * 2f).coerceAtMost(MAX_ZOOM) },
                     onZoomOut = { scale = (scale / 2f).coerceAtLeast(1f); pan = if (scale == 1f) Offset.Zero else bounded(pan, scale) },
                     onReset = { scale = 1f; pan = Offset.Zero })
-                Column(Modifier.fillMaxWidth().background(Lantern.overlayScrim).windowInsetsPadding(WindowInsets.safeDrawing)
+                Column(Modifier.fillMaxWidth().weight(1f, fill = false).background(Lantern.overlayScrim)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                     .padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (!caption.isNullOrBlank()) Caption(caption, captionOpen) { captionOpen = !captionOpen }
+                    if (!caption.isNullOrBlank()) {
+                        // PL: two lines with an ellipsis and More; expanded, at most 40% of the window and scrolling.
+                        val text = Modifier.testTag("viewer_caption")
+                        if (captionOpen) Text(caption, color = Lantern.overlayText,
+                            modifier = text.weight(1f, fill = false).heightIn(max = window * 0.4f).verticalScroll(rememberScrollState()))
+                        else Text(caption, color = Lantern.overlayText, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = text)
+                        OverlayButton(stringResource(if (captionOpen) R.string.viewer_less else R.string.viewer_more), "viewer_caption_toggle") {
+                            captionOpen = !captionOpen
+                        }
+                    }
                     FullImageLine(viewer, still != null || animated != null, onLoadFull)
                 }
             }
-            // Too large and nothing to show: the line on the black ground, no zoom group.
+            // Too large and nothing to show: the line on the black ground, centred (PL J7), no zoom group.
             if (!showsImage && viewer.full == FullImage.TOO_LARGE) Text(stringResource(R.string.viewer_too_large),
-                color = Lantern.overlayText, modifier = Modifier.align(Alignment.Center).padding(24.dp).testTag("viewer_ground_line"))
+                color = Lantern.overlayText, textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center).padding(24.dp).testTag("viewer_ground_line"))
         }
     }
 }
@@ -171,11 +216,19 @@ private fun AnimatedDrawable(drawable: Drawable?, modifier: Modifier) {
         update = { it.setImageDrawable(drawable) }, modifier = modifier.clearAndSetSemantics { })
 }
 
+/** Viewer text buttons are overlay-coloured, never persimmon (3.71:1 on black; PL J3); disabled at 38%. */
+@Composable
+private fun OverlayButton(text: String, tag: String, enabled: Boolean = true, onClick: () -> Unit) =
+    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = Lantern.target).testTag(tag),
+        colors = ButtonDefaults.textButtonColors(contentColor = Lantern.overlayText,
+            disabledContentColor = Lantern.overlayText.copy(alpha = 0.38f))) { Text(text) }
+
 @Composable
 private fun ZoomGroup(scale: Float, modifier: Modifier, onZoomIn: () -> Unit, onZoomOut: () -> Unit, onReset: () -> Unit) {
-    // PL: one pill on the overlay scrim; zoom out and reset are disabled at fit, zoom in at the maximum (a state, not a
-    // missing feature).
-    Column(modifier.background(Lantern.overlayScrim, Lantern.pill).testTag("viewer_zoom")) {
+    // PL J2: one horizontal pill on the overlay scrim with a 1dp border at 24% overlay text, so its shape holds where it
+    // crosses the image edge. Zoom out and reset are disabled at fit, zoom in at the maximum (a state, not a missing feature).
+    Row(modifier.background(Lantern.overlayScrim, Lantern.pill).border(1.dp, Lantern.overlayText.copy(alpha = 0.24f), Lantern.pill)
+        .testTag("viewer_zoom")) {
         ZoomButton(R.drawable.ic_zoom_in, R.string.viewer_zoom_in, scale < MAX_ZOOM, "viewer_zoom_in", onZoomIn)
         ZoomButton(R.drawable.ic_zoom_out, R.string.viewer_zoom_out, scale > 1f, "viewer_zoom_out", onZoomOut)
         ZoomButton(R.drawable.ic_zoom_reset, R.string.viewer_zoom_reset, scale > 1f, "viewer_zoom_reset", onReset)
@@ -191,35 +244,52 @@ private fun ZoomButton(icon: Int, label: Int, enabled: Boolean, tag: String, onC
     }
 }
 
+/**
+ * Row 7's wait line with the shared strings and formatter (P-106): display only, only the server's positive wait, rounded
+ * up, else "a little while". The countdown is bound to this composition; screen readers hear one stable line under a
+ * minute and at most one announcement per minute bucket, as in the status slot.
+ */
 @Composable
-private fun Caption(caption: String, open: Boolean, onToggle: () -> Unit) {
-    // PL: two lines with an ellipsis and More; expanded, at most 40% of the window and scrolling inside.
-    val cap = with(LocalDensity.current) { (androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.height * 0.4f).toDp() }
-    run {
-        Column {
-            val text = Modifier.testTag("viewer_caption")
-            if (open) Text(caption, color = Lantern.overlayText, modifier = text.heightIn(max = cap).verticalScroll(rememberScrollState()))
-            else Text(caption, color = Lantern.overlayText, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = text)
-            TextButton(onClick = onToggle, modifier = Modifier.heightIn(min = Lantern.target).testTag("viewer_caption_toggle")) {
-                Text(stringResource(if (open) R.string.viewer_less else R.string.viewer_more), color = Lantern.overlayText)
-            }
+private fun WaitLine(until: Long?) {
+    var now by remember(until) { mutableStateOf(System.currentTimeMillis()) }
+    if (until != null) LaunchedEffect(until) {
+        while (true) {
+            now = System.currentTimeMillis()
+            val remaining = until - now
+            if (remaining <= 0) break
+            delay(if (remaining <= 60_000) minOf(1_000L, remaining) else minOf(remaining - 60_000, 60_000L))
         }
+    }
+    val wait = until?.let { (it - now).takeIf { left -> left > 0 }?.let(Wait::of) }
+    val shown = if (wait == null) stringResource(R.string.status_rate_limited_unknown)
+        else stringResource(R.string.status_rate_limited, waitText(wait))
+    val spoken = if (wait is Wait.Seconds) stringResource(R.string.status_rate_limited_under_minute) else shown
+    val bucket: Any = when (wait) {
+        null -> "unknown"; is Wait.Seconds -> "seconds"; Wait.AboutAMinute -> "minute"
+        is Wait.AboutMinutes -> "minutes:${wait.minutes}"; is Wait.AboutHours -> "hours:${wait.hours}"
+    }
+    androidx.compose.runtime.key(bucket) {
+        Text(shown, color = Lantern.overlayText, style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.clearAndSetSemantics { contentDescription = spoken; liveRegion = LiveRegionMode.Polite }
+                .testTag("viewer_line"))
     }
 }
 
 @Composable
 private fun FullImageLine(viewer: ViewerState, showsSomething: Boolean, onLoadFull: () -> Unit) {
-    val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val locale = LocalConfiguration.current.locales[0]
     val size = sizeText(attachmentSizeText(viewer.ref.attachment.sizeBytes, locale))
     @Composable fun line(text: String) = Text(text, color = Lantern.overlayText, style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier.testTag("viewer_line"))
-    @Composable fun action(text: String, enabled: Boolean = true, tag: String = "viewer_load_full") =
-        TextButton(onClick = onLoadFull, enabled = enabled, modifier = Modifier.heightIn(min = Lantern.target).testTag(tag)) { Text(text) }
+    val load = stringResource(R.string.viewer_load_full, size)
     if (viewer.animationUnavailable) line(stringResource(R.string.viewer_no_animation))
     when (viewer.full) {
         FullImage.NONE -> Unit
-        FullImage.OFFER -> action(stringResource(R.string.viewer_load_full, size))
-        FullImage.OFFLINE, FullImage.WAITING -> action(stringResource(R.string.viewer_load_full, size), enabled = false)
+        FullImage.OFFER -> OverlayButton(load, "viewer_load_full", onClick = onLoadFull)
+        // PL J4: offline says why the button is off; a session wait (429) disables it without that line.
+        FullImage.OFFLINE -> { line(stringResource(R.string.viewer_offline)); OverlayButton(load, "viewer_load_full", enabled = false, onClick = onLoadFull) }
+        // PL: status row 7's line, since the viewer covers the status slot.
+        FullImage.WAITING -> { WaitLine(viewer.waitUntilMillis); OverlayButton(load, "viewer_load_full", enabled = false, onClick = onLoadFull) }
         FullImage.LOADING -> {
             var long by remember { mutableStateOf(false) }
             LaunchedEffect(Unit) { delay(2_000); long = true }
@@ -228,8 +298,8 @@ private fun FullImageLine(viewer: ViewerState, showsSomething: Boolean, onLoadFu
                 if (long) line(stringResource(R.string.viewer_loading_full))
             }
         }
-        FullImage.FAILED -> { line(stringResource(R.string.viewer_failed)); action(stringResource(R.string.retry), tag = "viewer_retry") }
-        FullImage.NO_MEMORY -> { line(stringResource(R.string.viewer_no_memory)); action(stringResource(R.string.retry), tag = "viewer_retry") }
+        FullImage.FAILED -> { line(stringResource(R.string.viewer_failed)); OverlayButton(stringResource(R.string.retry), "viewer_retry", onClick = onLoadFull) }
+        FullImage.NO_MEMORY -> { line(stringResource(R.string.viewer_no_memory)); OverlayButton(stringResource(R.string.retry), "viewer_retry", onClick = onLoadFull) }
         // With nothing shown the line sits on the black ground instead (see the viewer).
         FullImage.TOO_LARGE -> if (showsSomething) line(stringResource(R.string.viewer_too_large_preview))
         FullImage.GONE -> line(stringResource(R.string.image_gone))

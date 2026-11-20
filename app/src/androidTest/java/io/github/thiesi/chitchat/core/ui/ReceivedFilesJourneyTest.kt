@@ -137,7 +137,7 @@ class ReceivedFilesJourneyTest {
         }
         compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag("attachment_frame:79"))
         assertTrue(description("attachment_frame:79"),
-            Regex("^Photo from Bob, [^.]+\\. 40 MB, ${Regex.escape(context.getString(R.string.image_too_large_part))}$")
+            Regex("^Photo from Bob, [^.]+\\. 40\u00A0MB, ${Regex.escape(context.getString(R.string.image_too_large_part))}$")
                 .matches(description("attachment_frame:79")))
     }
 
@@ -148,7 +148,7 @@ class ReceivedFilesJourneyTest {
         roomContent()
         compose.waitUntil(5_000) { description("attachment_frame:70").contains(". ") }
         val spoken = description("attachment_frame:70")
-        assertTrue(spoken, Regex("^Photo from Bob, [^.]+\\. 3\\.4 MB$").matches(spoken))
+        assertTrue(spoken, Regex("^Photo from Bob, [^.]+\\. 3\\.4\u00A0MB$").matches(spoken))
         assertFalse(spoken, spoken.contains(context.getString(R.string.image_show)))
         compose.onNodeWithTag("attachment_show:70").assertHeightIsAtLeast(48.dp)
     }
@@ -171,7 +171,7 @@ class ReceivedFilesJourneyTest {
         roomContent()
         compose.waitUntil(5_000) { description("attachment_frame:70").contains(". ") }
         assertTrue(description("attachment_frame:70"),
-            description("attachment_frame:70").endsWith(". 3.4 MB, " + context.getString(R.string.image_offline_part)))
+            description("attachment_frame:70").endsWith(". 3.4\u00A0MB, " + context.getString(R.string.image_offline_part)))
         assertTrue("Offline requests nothing", source.calls.isEmpty())
     }
 
@@ -237,7 +237,7 @@ class ReceivedFilesJourneyTest {
         rooms.messages = listOf(roomMessage(3, null, file(71, "notes.pdf")), roomMessage(4, null, file(72, long)))
         roomContent()
         compose.onNodeWithTag("attachment_card:71").assert(noClick).assert(noLongClick)
-        assertEquals("notes.pdf, PDF, 2.4 MB", description("attachment_card:71"))
+        assertEquals("notes.pdf, PDF, 2.4\u00A0MB", description("attachment_card:71"))
         // The card is one merged TalkBack node, so its name text is only in the unmerged tree.
         val shown = compose.onAllNodesWithTag("attachment_card_name", useUnmergedTree = true)[1].fetchSemanticsNode().config
             .getOrNull(SemanticsProperties.Text)?.joinToString("").orEmpty()

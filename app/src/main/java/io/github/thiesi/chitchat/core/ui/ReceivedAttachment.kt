@@ -204,7 +204,7 @@ private fun FrameLoading() {
 }
 
 @Composable
-private fun GifBadge(modifier: Modifier) {
+internal fun GifBadge(modifier: Modifier) {
     // A badge only in F3: the play glyph promises a tap that arrives with the viewer in F4 (PL). It sits on the image, so
     // its colours are theme-independent (PL, #310 J1).
     Text(stringResource(R.string.image_gif), style = MaterialTheme.typography.labelMedium, color = Lantern.overlayText,
