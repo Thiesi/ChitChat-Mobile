@@ -49,6 +49,10 @@ the TL's and PL's F4 rulings of 2026-11-19.
   - **Wide windows (J8):** wider than tall, the pill sits beside the bottom block (end, bottom-aligned, 8dp in, inside
     the insets) and the column narrows by its width plus 8dp, so an expanded caption keeps at least two lines. TalkBack
     still reaches the zoom group before the bottom bar (`traversalIndex` in a traversal group).
+  - **Shared row (J8):** in a wide window More/Less and the image action share one row (More/Less at the start, the action
+    at the far end, two rows only when they don't fit), and state lines keep their own row above it; the block orders
+    its own traversal: caption, More/Less, state line, action. The bar is measured from the window's top edge, its inset
+    included, so the bottom stays below it.
 - **Insets (J1):** the top bar takes only the top and side insets; the bottom block only the bottom and side insets.
 - **Colour (J3):** every viewer text button (Load full image, Try again, More/Less) uses overlay text, at 38% when
   disabled; persimmon is too faint on black.
@@ -107,8 +111,12 @@ invite links." (PL).
 - **`ReceivedViewerLayoutTest`** (a real 200% font scale from the Activity's Configuration, which the viewer's Dialog
   window takes; a LocalDensity override in the host doesn't reach it):
   - portrait, caption expanded: the pill is below the top bar and above the bottom block (J2);
-  - landscape, caption expanded: the pill overlaps neither the top bar nor the bottom block, sits at its end, the
-    caption keeps at least the two lines it shows collapsed, and the pill comes first in traversal (J8).
+  - in both, the bottom block stays below the top bar, measured with its inset;
+  - landscape, caption expanded: the pill overlaps neither the top bar nor the bottom block and sits at its end; the
+    caption keeps at least the two lines it shows collapsed; Less and Load full image share one row at its two ends; the
+    pill comes first in traversal, and the block reads caption, More/Less, action (J8);
+  - landscape, a failed original with the caption expanded: the line sits above the shared row of Less and Try again,
+    the caption keeps at least one full line, and the block reads caption, More/Less, line, Try again (J8).
 - **`ReceivedFilesJourneyTest`:** the F3 frame cases now assert the F4 tap ("Open photo", long-press actions), including
   the too-large box.
 - **Captures:** the viewer's presentation captures are added by a separate follow-up PR, not by this slice. The reconnect
