@@ -65,6 +65,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -270,8 +271,8 @@ private fun WaitLine(until: Long?) {
     }
     androidx.compose.runtime.key(bucket) {
         Text(shown, color = Lantern.overlayText, style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.clearAndSetSemantics { contentDescription = spoken; liveRegion = LiveRegionMode.Polite }
-                .testTag("viewer_line"))
+            // The tag goes inside: clearAndSetSemantics drops one chained after it (#313).
+            modifier = Modifier.clearAndSetSemantics { testTag = "viewer_line"; contentDescription = spoken; liveRegion = LiveRegionMode.Polite })
     }
 }
 

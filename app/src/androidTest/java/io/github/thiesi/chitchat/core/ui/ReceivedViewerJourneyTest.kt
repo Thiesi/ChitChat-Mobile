@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotFocused
@@ -24,6 +25,8 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
@@ -181,7 +184,8 @@ class ReceivedViewerJourneyTest {
         compose.onNodeWithTag("viewer_load_full").performClick()
         compose.waitUntil(5_000) { images.viewer.state.value?.full == io.github.thiesi.chitchat.core.media.FullImage.WAITING }
         val minutes = context.resources.getQuantityString(R.plurals.wait_about_minutes, 3, 3)
-        compose.onNodeWithTag("viewer_line").assertTextEquals(context.getString(R.string.status_rate_limited, minutes))
+        // What TalkBack speaks; for a minute bucket it's the visible text too.
+        compose.onNodeWithTag("viewer_line").assertContentDescriptionEquals(context.getString(R.string.status_rate_limited, minutes))
         compose.onNodeWithTag("viewer_load_full").assertIsNotEnabled()
     }
 
@@ -190,6 +194,8 @@ class ReceivedViewerJourneyTest {
         val long = (1..30).joinToString(" ") { "We walked down to the harbour after dinner and stayed until the light went out." }
         rooms.messages = listOf(roomMessage(3, long, photo(70)))
         roomContent(fontScale = 2f); loaded(70)
+        // The tall row starts scrolled to its bottom: bring the frame into view before the tap (as the captures do).
+        compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag("attachment_frame:70"))
         compose.onNodeWithTag("attachment_frame:70").performClick()
         compose.waitUntil(5_000) { viewerShown() }
         compose.onNodeWithTag("viewer_caption_toggle").performClick()
