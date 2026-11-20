@@ -258,7 +258,7 @@ private fun AnimatedDrawable(drawable: Drawable?, modifier: Modifier) {
 
 /** Viewer text buttons are overlay-coloured, never persimmon (3.71:1 on black; PL J3); disabled at 38%. */
 @Composable
-private fun OverlayButton(text: String, tag: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) =
+private fun OverlayButton(text: String, tag: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) =
     TextButton(onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = Lantern.target).testTag(tag),
         colors = ButtonDefaults.textButtonColors(contentColor = Lantern.overlayText,
             disabledContentColor = Lantern.overlayText.copy(alpha = 0.38f))) { Text(text) }
