@@ -39,6 +39,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.foundation.background
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
@@ -172,10 +173,14 @@ internal fun FileTransfersHost(ui: FileTransfersUi, content: @Composable () -> U
         val ready = state as? TransferState.Ready ?: return@LaunchedEffect
         val intent = if (ready.purpose == TransferPurpose.OPEN) ShareProvider.openIntent(context, ready)
             else ShareProvider.shareIntent(context, ready)
+        // Start first, then hand off in the same main-thread task (#318 review): with no app for the type, noApp still
+        // deletes the copy and says so; the chooser's ON_STOP comes after this task, when nothing is running any more.
         try {
-            ui.transfers.handedOff(ready)
             context.startActivity(intent)
+            ui.transfers.handedOff(ready)
         } catch (_: ActivityNotFoundException) { ui.transfers.noApp(ready) }
+        // An app or provider can refuse the grant: the copy goes the same way, never left behind (TL).
+        catch (_: SecurityException) { ui.transfers.noApp(ready) }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         if (activity?.isChangingConfigurations != true && !ui.external) ui.transfers.backgrounded()
@@ -233,11 +238,13 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
                 // PL J2: one stable spoken line (no percent) announced politely, the progress as range info, and Cancel
                 // as its own node.
                 val spoken = stringResource(if (saving) R.string.transfer_saving_indeterminate else R.string.transfer_preparing_indeterminate, name)
+                // The tag goes inside: clearAndSetSemantics drops one chained after it.
                 Row(Modifier.weight(1f).clearAndSetSemantics {
+                    testTag = "transfer_progress"
                     contentDescription = spoken
                     liveRegion = LiveRegionMode.Polite
                     progressBarRangeInfo = if (percent != null) ProgressBarRangeInfo(percent / 100f, 0f..1f) else ProgressBarRangeInfo.Indeterminate
-                }.testTag("transfer_progress"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (percent != null) CircularProgressIndicator(progress = { percent / 100f }, Modifier.size(20.dp), color = text, strokeWidth = 2.dp)
                     else CircularProgressIndicator(Modifier.size(20.dp), color = text, strokeWidth = 2.dp)
                     Column {
