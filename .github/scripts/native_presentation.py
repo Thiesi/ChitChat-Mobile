@@ -57,6 +57,8 @@ FILES_NAME = re.compile(r"files-(?:(?:light|dark)-(?:default|font200)-"
     r"light-(?:default|font200)-(?:viewer-(?:preview|loading|original|failed|nomemory|toolarge-preview|toolarge|gif|gif-offline|"
     r"caption|caption-open|zoomed|longsender|gif-api27|offline|waiting)|frame-gif|frame-gif-api27)|"
     r"light-font200-viewer-(?:caption-open|failed)-landscape|light-default-viewer-(?:preview|caption)-landscape|"
+    r"light-font200-viewer-chrome-(?:caption-)?landscape(?:-hidden)?|light-default-viewer-(?:caption-hidden|talkback-tap|"
+    r"hidden-offline)|"
     r"dark-default-viewer-preview|"
     r"light-(?:default|font200)-transfer-(?:cards|save-progress|share-progress|saved|save-nothing|save-incomplete|"
     r"save-background|no-space|share-gone|actions-photo|actions-file|actions-apk|note|viewer-bar|viewer-offline|"
@@ -305,15 +307,16 @@ def collect_files():
     # plus black for a loaded frame and the raised box (2). F4: the viewer and the GIF frames, light at default and 200%
     # (36), landscape: a 200% expanded caption and failed original plus a default preview and caption (4), and one dark
     # viewer (1). F5: Save, Share and Open (cards, notices, actions, the first-use note, the viewer bar), light at default
-    # and 200% (32), and one dark card capture (1).
-    files = list(islice(SOURCE.rglob("ccm-files-presentation/*"), 169))
-    if (not files or len(files) > 168 or len({p.name for p in files}) != len(files)
+    # and 200% (32), and one dark card capture (1). F6: the chrome shown and hidden in landscape at 200% (4) and three
+    # portrait captures at default (3).
+    files = list(islice(SOURCE.rglob("ccm-files-presentation/*"), 176))
+    if (not files or len(files) > 175 or len({p.name for p in files}) != len(files)
         or any(FILES_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous files presentation output")
     FILES_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, FILES_DESTINATION / path.name)
-    print(f"Files presentation captures collected: {len(files)} of 168.")
+    print(f"Files presentation captures collected: {len(files)} of 175.")
 
 
 def collect_reset():

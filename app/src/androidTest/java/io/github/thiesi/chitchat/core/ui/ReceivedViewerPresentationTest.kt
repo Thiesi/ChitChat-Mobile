@@ -12,6 +12,8 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performScrollToNode
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
@@ -63,6 +65,12 @@ class ReceivedViewerPresentationTest {
         val frameOnly: Boolean = false,
         /** Landscape, at this one scale only (PL J2, J8). */
         val landscapeAt: String? = null,
+        /** Portrait, at this one scale only (F6). */
+        val portraitAt: String? = null,
+        /** F6: Save and Share in the top bar (a FileTransfersUi is provided). */
+        val transfers: Boolean = false,
+        /** F6: the assistive-input answer the viewer sees (TalkBack on). */
+        val assistive: Boolean = false,
         val ready: (ViewerState) -> Boolean = { true },
         val act: ReceivedViewerPresentationTest.() -> Unit = {},
     )
@@ -110,9 +118,63 @@ class ReceivedViewerPresentationTest {
             ready = { it.full == FullImage.OFFER && it.animationUnavailable }),
         Shot("frame-gif", roomMessage(3, null, photo(70, width = 480, height = 360, mime = "image/gif")), frameOnly = true),
         Shot("frame-gif-api27", roomMessage(3, null, photo(70, width = 480, height = 360, mime = "image/gif")), animates = false, frameOnly = true),
+        // F6 (PL): landscape 200%, the long sender with Save and Share on the offer, without and with a collapsed caption, shown
+        // and hidden; hidden by a real tap in the clear band.
+        Shot("viewer-chrome-landscape", longSender(null), landscapeAt = "font200", transfers = true, ready = { it.full == FullImage.OFFER }),
+        Shot("viewer-chrome-landscape-hidden", longSender(null), landscapeAt = "font200", transfers = true, ready = { it.full == FullImage.OFFER },
+            act = { hideByTap() }),
+        Shot("viewer-chrome-caption-landscape", longSender(longCaption), landscapeAt = "font200", transfers = true,
+            ready = { it.full == FullImage.OFFER }),
+        Shot("viewer-chrome-caption-landscape-hidden", longSender(longCaption), landscapeAt = "font200", transfers = true,
+            ready = { it.full == FullImage.OFFER }, act = { hideByTap() }),
+        // Portrait default: a photo with a caption, hidden; TalkBack on, after a tap (still shown); hidden, then the offline
+        // line appears (shown with the line).
+        Shot("viewer-caption-hidden", roomMessage(3, longCaption, photo(70)), portraitAt = "default", ready = { it.full == FullImage.OFFER },
+            act = { hideByTap() }),
+        Shot("viewer-talkback-tap", roomMessage(3, longCaption, photo(70)), portraitAt = "default", assistive = true,
+            ready = { it.full == FullImage.OFFER }, act = { tapClearBand(); pastDoubleTap() }),
+        Shot("viewer-hidden-offline", roomMessage(3, null, photo(70)), portraitAt = "default", ready = { it.full == FullImage.OFFER },
+            act = {
+                hideByTap()
+                network.state.value = NetworkState(online = false, metered = true)
+                waitFor { it.full == FullImage.OFFLINE }
+                compose.waitUntil(5_000) { present("viewer_line") }
+            }),
     )
 
+    private fun longSender(caption: String?) = RoomMessage(3, 42, 8, "Maximiliane-Theodora von Hohenberg-Ashworth-Lindqvist", "text",
+        caption, false, "2026-10-20 12:00:00+00", photo(70))
+
+    private fun present(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    /**
+     * F6: a real tap in the middle of the clear band between the top bar and the bottom row (block and pill). With no band
+     * left, the measured edges are the failure: a tap there couldn't hide the chrome either.
+     */
+    private fun tapClearBand() {
+        val top = compose.onNodeWithTag("viewer_top").fetchSemanticsNode().boundsInRoot.bottom
+        val bottom = listOf("viewer_bottom", "viewer_zoom").filter(::present)
+            .minOf { compose.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot.top }
+        val image = compose.onNodeWithTag("viewer_image").fetchSemanticsNode().boundsInRoot
+        if (bottom <= top) throw AssertionError("no clear band: top bar ends at $top, bottom row starts at $bottom")
+        compose.onNodeWithTag("viewer_image").performTouchInput {
+            click(androidx.compose.ui.geometry.Offset(image.width / 2f, (top + bottom) / 2f - image.top))
+        }
+    }
+
+    private fun hideByTap() {
+        tapClearBand()
+        compose.waitUntil(5_000) { !present("viewer_close") }
+    }
+
+    /** A fixed wait past the double-tap window, so a toggle that doesn't happen is really absent (never a retry). */
+    private fun pastDoubleTap() {
+        Thread.sleep(android.view.ViewConfiguration.getDoubleTapTimeout() * 2L)
+        compose.waitForIdle()
+    }
+
     private lateinit var images: AttachmentImagesViewModel
+    private lateinit var network: FixedNetwork
     /** Evidence only, never a retry: on a timeout, say which viewer state was reached. */
     private fun waitFor(condition: (ViewerState) -> Boolean) = try {
         compose.waitUntil(5_000) { images.viewer.state.value?.let(condition) == true }
@@ -127,14 +189,22 @@ class ReceivedViewerPresentationTest {
 
     private fun presentation(dark: Boolean, scales: List<Pair<String, Float>>, only: Set<String>?) {
         val theme = if (dark) "dark" else "light"
-        for ((scaleName, fontScale) in scales) for (shot in shots().filter { (only == null || it.name in only) && (it.landscapeAt == null || it.landscapeAt == scaleName) }) {
+        for ((scaleName, fontScale) in scales) for (shot in shots().filter { (only == null || it.name in only) &&
+            (it.landscapeAt ?: it.portraitAt).let { at -> at == null || at == scaleName } }) {
             // Keep one ActivityScenario per shot: setContent again in the same activity reuses the composition, and with
             // identical keys the screen's LaunchedEffect(roomId) never reruns, so the new model is never opened (#310).
             FontScaleTestActivity.requestedFontScale = fontScale
             val session = ReceivedFiles.session()
             val source = ReceivedSource().apply(shot.script)
-            val network = FixedNetwork()
+            network = FixedNetwork()
             val store = ViewModelStore()
+            val job = kotlinx.coroutines.SupervisorJob()
+            val copies = if (shot.transfers) java.nio.file.Files.createTempDirectory("ccm-viewer-chrome").toFile() else null
+            val ui = copies?.let {
+                FileTransfersUi(io.github.thiesi.chitchat.core.media.FileTransfers(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main + job),
+                    session, { _, _, _, _ -> DownloadResult.Gone }, io.github.thiesi.chitchat.core.media.ShareCopies(it), { Long.MAX_VALUE }),
+                    kotlinx.coroutines.flow.flowOf(true)) { }
+            }
             images = ViewModelProvider.create(store, viewModelFactory {
                 initializer { AttachmentImagesViewModel(session, network, source, 32L * 1024 * 1024, if (shot.animates) platformAnimatedDecoding() else null) }
             })[AttachmentImagesViewModel::class.java]
@@ -153,7 +223,10 @@ class ReceivedViewerPresentationTest {
                     scenario.onActivity { activity ->
                         activity.setContent { ChitChatTheme(dark = dark) {
                             Surface(Modifier.fillMaxSize().testTag("files_host"), color = MaterialTheme.colorScheme.background) {
-                                ConversationScreen(room, 42, {}, images = images)
+                                androidx.compose.runtime.CompositionLocalProvider(LocalFileTransfers provides ui,
+                                    LocalAssistiveInput provides shot.assistive) {
+                                    ConversationScreen(room, 42, {}, images = images)
+                                }
                             }
                         } }
                     }
@@ -171,7 +244,7 @@ class ReceivedViewerPresentationTest {
                     shot.act(this)
                     capture(label, "viewer")
                 }
-            } finally { compose.runOnIdle { room.cancel() }; store.clear() }
+            } finally { compose.runOnIdle { room.cancel() }; store.clear(); job.cancel(); copies?.deleteRecursively() }
         }
     }
 
