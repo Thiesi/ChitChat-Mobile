@@ -400,7 +400,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_excess_ambiguous_or_foreign_files_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"files-light-default-normal-{n}.png") for n in range(136)],
+        for files in ([Path(f"files-light-default-normal-{n}.png") for n in range(169)],
             [Path("a/files-dark-default-gone.png"), Path("b/files-dark-default-gone.png")],
             [Path("files-black-font200-normal.png")], [Path("files-dark-font200-viewer-preview.png")], [Path("other.png")]):
             self.copy.reset_mock(); self.mkdir.reset_mock(); self.received_files(files)
