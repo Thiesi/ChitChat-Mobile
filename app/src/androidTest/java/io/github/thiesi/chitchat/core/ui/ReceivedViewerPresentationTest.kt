@@ -93,6 +93,13 @@ class ReceivedViewerPresentationTest {
         // PL J8: in landscape the pill sits beside the bottom block.
         Shot("viewer-preview-landscape", roomMessage(3, null, photo(70)), landscapeAt = "default", ready = { it.full == FullImage.OFFER }),
         Shot("viewer-caption-landscape", roomMessage(3, longCaption, photo(70)), landscapeAt = "default", ready = { it.full == FullImage.OFFER }),
+        // PL J8: a failed original in landscape at 200%: the line above, Less and Try again on one row.
+        Shot("viewer-failed-landscape", roomMessage(3, longCaption, photo(70)), landscapeAt = "font200",
+            script = { serve(70); reply(70) { DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) } },
+            act = {
+                compose.onNodeWithTag("viewer_load_full").performClick(); waitFor { it.full == FullImage.FAILED }
+                compose.onNodeWithTag("viewer_caption_toggle").performClick()
+            }),
         Shot("viewer-caption-open-landscape", roomMessage(3, longCaption, photo(70)), landscapeAt = "font200", ready = { it.full == FullImage.OFFER },
             act = { compose.onNodeWithTag("viewer_caption_toggle").performClick() }),
         Shot("viewer-zoomed", roomMessage(3, null, photo(70)), ready = { it.full == FullImage.OFFER },
