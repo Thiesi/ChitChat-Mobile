@@ -429,6 +429,28 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def report_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-report-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_report_captures_are_copied_and_keep_the_original_status(self):
+        self.results(5)
+        files = [Path("report-light-default-form-room.png"), Path("report-light-font200-form-room-end.png"),
+            Path("report-dark-default-sent-sheet-room.png"), Path("report-light-font200-busy.png")]
+        self.report_files(files)
+        self.assertEqual(5, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.REPORT_DESTINATION / path.name)
+        self.assertEqual(5, self.copy.call_count)
+
+    def test_excess_ambiguous_or_foreign_report_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"report-light-default-form-room-{n}.png") for n in range(46)],
+            [Path("a/report-light-default-review.png"), Path("b/report-light-default-review.png")],
+            [Path("report-dark-default-review.png")], [Path("report-light-default-form-room-end.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.report_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def auth_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-auth-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
