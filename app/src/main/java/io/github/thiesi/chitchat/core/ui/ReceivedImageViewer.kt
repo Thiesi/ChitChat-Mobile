@@ -2,6 +2,34 @@ package io.github.thiesi.chitchat.core.ui
 
 import android.graphics.drawable.Drawable
 import android.widget.ImageView
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.focusable
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import io.github.thiesi.chitchat.core.media.TransferState
+import io.github.thiesi.chitchat.core.media.TransferStop
+import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -99,6 +127,13 @@ private const val MAX_ZOOM = 5f
  * count it as a modal for typing. Black ground, edge to edge, the same in every theme. Pinch and double-tap zoom, pan, and
  * swipe down at fit scale close it; Back and Close always do, so swipe-down is never the only way out. The zoom group is the
  * accessible alternative to the gestures. Save and Share arrive in F5 and aren't shown.
+ *
+ * F6 (PL spec, TL conditions of 2026-11-20): a single tap on the image, after the double-tap window, hides or shows the
+ * chrome (the top bar, the bottom block, the zoom pill and the GIF badge). Hidden controls leave semantics and the focus
+ * order; the image doesn't move. The toggle is off, the chrome always shown, with no image to look at, while a transfer
+ * runs and while assistive input is on; a new state line or a transfer result brings it back, and so does any key but
+ * Back and Esc (which close), with focus on Close. The image's "Show controls" and "Hide controls" actions mean a
+ * service the detection misses can always bring it back.
  */
 @Composable
 internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender: String, time: String, caption: String?,
@@ -113,23 +148,76 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
         var captionOpen by remember(viewer.key) { mutableStateOf(false) }
         var area by remember { mutableStateOf(IntSize.Zero) }
         var topBar by remember { mutableIntStateOf(0) }
+        // F6: hidden survives a rotation within this opening; a new opening starts shown.
+        var hidden by rememberSaveable(viewer.key) { mutableStateOf(false) }
+        var focusClose by remember { mutableStateOf(false) }
+        val closeFocus = remember { FocusRequester() }
+        val imageFocus = remember { FocusRequester() }
+        // The chrome's scrims while shown, in root coordinates: a tap there isn't a tap on the image.
+        val chromeRects = remember { mutableStateMapOf<String, Rect>() }
+        var imageOrigin by remember { mutableStateOf(Offset.Zero) }
+        val assistive = rememberAssistiveInput()
+        val transfersUi = LocalFileTransfers.current
+        val transferFlow = remember(transfersUi) { transfersUi?.transfers?.state ?: MutableStateFlow<TransferState?>(null) }
+        val transfer by transferFlow.collectAsState()
+        val running = transfer is TransferState.Running || transfer is TransferState.Ready
+        val hideable = showsImage && viewer.full != FullImage.GONE && viewer.full != FullImage.NOT_ALLOWED && !running && !assistive
+        val shown = !hidden || !hideable
+        val currentHideable by rememberUpdatedState(hideable)
+        // Whatever turns the toggle off shows the chrome for good (assistive input turning on shows it at once).
+        LaunchedEffect(hideable) { if (!hideable) hidden = false }
+        // A state line appearing or changing, or a transfer's result line, brings it back (never a progress tick).
+        val line = viewer.full.takeIf { it == FullImage.OFFLINE || it == FullImage.WAITING || it == FullImage.FAILED || it == FullImage.NO_MEMORY }
+        LaunchedEffect(line) { if (line != null) hidden = false }
+        val result = transfer?.takeIf { it is TransferState.Saved ||
+            (it is TransferState.Stopped && it.reason != TransferStop.CANCELLED && it.reason != TransferStop.BACKGROUND) }
+        LaunchedEffect(result) { if (result != null) hidden = false }
+        // Nothing keeps focus on a hidden control: hidden, the image holds it; shown after a key, Close takes it.
+        LaunchedEffect(shown, focusClose) {
+            if (!shown) runCatching { imageFocus.requestFocus() }
+            else if (focusClose) { focusClose = false; runCatching { closeFocus.requestFocus() } }
+        }
+        val showControls = stringResource(R.string.viewer_show_controls)
+        val hideControls = stringResource(R.string.viewer_hide_controls)
         // Pan stays within the scaled image's bounds, so a zoomed image can't be dragged off screen (TL, #313).
         fun bounded(offset: Offset, at: Float): Offset {
             val x = area.width * (at - 1f) / 2f; val y = area.height * (at - 1f) / 2f
             return Offset(offset.x.coerceIn(-x, x), offset.y.coerceIn(-y, y))
         }
-        BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).testTag("viewer")) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).testTag("viewer").onPreviewKeyEvent { event ->
+            when {
+                // Esc and Back always close, hidden or not; Esc closes here so every API level does the same.
+                event.key == Key.Escape -> { if (event.type == KeyEventType.KeyUp) onClose(); true }
+                event.key == Key.Back -> false
+                // Any other key while hidden first shows the chrome and puts focus on Close.
+                !shown -> { if (event.type == KeyEventType.KeyDown) { hidden = false; focusClose = true }; true }
+                else -> false
+            }
+        }) {
             val window = maxHeight
             val density = LocalDensity.current
             // The image, with the viewer's own description (TL condition 7, #313).
-            Box(Modifier.fillMaxSize().onSizeChanged { area = it }.semantics { contentDescription = description }.testTag("viewer_image")
+            Box(Modifier.fillMaxSize().onSizeChanged { area = it }.onGloballyPositioned { imageOrigin = it.positionInRoot() }
+                .focusRequester(imageFocus).focusable(enabled = !shown)
+                .semantics {
+                    contentDescription = description
+                    // TL: a service the detection misses can always bring the chrome back without a gesture.
+                    if (!shown) onClick(label = showControls) { hidden = false; focusClose = true; true }
+                    else if (hideable) customActions = listOf(CustomAccessibilityAction(hideControls) { hidden = true; true })
+                }.testTag("viewer_image")
                 .pointerInput(viewer.key) {
-                    detectTapGestures(onDoubleTap = { if (scale > 1f) { scale = 1f; pan = Offset.Zero } else scale = 2.5f })
+                    // onTap waits out the double-tap window, so a double-tap zooms and never toggles.
+                    detectTapGestures(onDoubleTap = { if (scale > 1f) { scale = 1f; pan = Offset.Zero } else scale = 2.5f },
+                        onTap = { at ->
+                            // While shown, the image's tap target excludes the controls' scrims.
+                            if (currentHideable && (hidden || chromeRects.values.none { it.contains(at + imageOrigin) })) hidden = !hidden
+                        })
                 }
                 .pointerInput(viewer.key) {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false)
                         var drag = 0f
+                        var travelled = Offset.Zero
                         do {
                             val event = awaitPointerEvent()
                             val zoom = event.calculateZoom()
@@ -138,7 +226,12 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                                 scale = (scale * zoom).coerceIn(1f, MAX_ZOOM)
                                 pan = if (scale == 1f) Offset.Zero else bounded(pan + move, scale)
                                 event.changes.forEach { if (it.positionChanged()) it.consume() }
-                            } else if (event.changes.size == 1) drag += move.y
+                            } else if (event.changes.size == 1) {
+                                drag += move.y
+                                travelled += move
+                                // F6: a drag is never a tap. Past the touch slop it's consumed, so the tap detector cancels.
+                                if (travelled.getDistance() > viewConfiguration.touchSlop) event.changes.forEach { if (it.positionChanged()) it.consume() }
+                            }
                         } while (event.changes.any { it.pressed })
                         // Swipe down at fit scale closes; a zoomed image pans instead.
                         if (scale == 1f && drag > 120.dp.toPx()) onClose()
@@ -159,18 +252,22 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                     val left = ((area.width - still.width * fit) / 2f).toInt()
                     val top = ((area.height - still.height * fit) / 2f).toInt()
                     val inset = with(density) { 8.dp.roundToPx() }
-                    GifBadge(Modifier.align(Alignment.TopStart).offset { IntOffset(left + inset, top + inset) }.testTag("viewer_gif_badge"))
+                    Chrome(shown, Modifier.align(Alignment.TopStart).offset { IntOffset(left + inset, top + inset) }) {
+                        GifBadge(Modifier.testTag("viewer_gif_badge"))
+                    }
                 }
             }
             // Top bar on a scrim, inside the top and side insets only (PL J1): Close, the sender and the time. The sender is
             // server text: never ellipsized, so it may take several lines at 200% and break mid-token (PL).
             // Measured outside its inset padding: the bar's full height from the window's top edge, the status bar
             // included, is what the bottom must stay below (#313).
+            Chrome(shown) {
             Row(Modifier.fillMaxWidth().background(Lantern.overlayScrim).onSizeChanged { topBar = it.height }
+                .onGloballyPositioned { chromeRects["top"] = it.boundsInRoot() }
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
                 .padding(horizontal = 4.dp, vertical = 4.dp).testTag("viewer_top"),
                 verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onClose, modifier = Modifier.size(Lantern.target).testTag("viewer_close")) {
+                IconButton(onClick = onClose, modifier = Modifier.size(Lantern.target).focusRequester(closeFocus).testTag("viewer_close")) {
                     Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.viewer_close), tint = Lantern.overlayText)
                 }
                 Column(Modifier.padding(horizontal = 8.dp).weight(1f).semantics(mergeDescendants = true) { heading() }) {
@@ -189,13 +286,14 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                         }
                 }
             }
+            }
             // The bottom: the zoom pill and the bottom block. Together they never reach the top bar (PL J2): they're capped to
             // the space below it, and the expanded caption is what gives way.
             val below = (window - with(density) { topBar.toDp() }).coerceAtLeast(0.dp)
             // PL J8: in a window wider than tall the pill sits beside the bottom block, so the caption keeps its height.
             val wide = maxWidth > maxHeight
             val pill: (@Composable (Modifier) -> Unit)? = if (!showsImage) null else { modifier ->
-                ZoomGroup(scale, modifier,
+                ZoomGroup(scale, modifier.onGloballyPositioned { chromeRects["pill"] = it.boundsInRoot() },
                     onZoomIn = { scale = (scale * 2f).coerceAtMost(MAX_ZOOM) },
                     onZoomOut = { scale = (scale / 2f).coerceAtLeast(1f); pan = if (scale == 1f) Offset.Zero else bounded(pan, scale) },
                     onReset = { scale = 1f; pan = Offset.Zero })
@@ -203,6 +301,7 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
             val showsSomething = still != null || animated != null
             @Composable fun BottomBlock(modifier: Modifier, sides: WindowInsetsSides) =
                 Column(modifier.background(Lantern.overlayScrim).windowInsetsPadding(WindowInsets.safeDrawing.only(sides))
+                    .onGloballyPositioned { chromeRects["bottom"] = it.boundsInRoot() }
                     .padding(horizontal = 16.dp, vertical = 8.dp).testTag("viewer_bottom")
                     // Wide: the visual order differs from the reading order, so the block orders its own traversal (PL J8).
                     .then(if (wide) Modifier.semantics { isTraversalGroup = true } else Modifier),
@@ -239,11 +338,12 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                         }
                     }
                 }
-            if (!wide) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = below)) {
+            Chrome(shown, Modifier.align(Alignment.BottomCenter)) {
+            if (!wide) Column(Modifier.fillMaxWidth().heightIn(max = below)) {
                 pill?.invoke(Modifier.align(Alignment.End).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                     .padding(8.dp))
                 BottomBlock(Modifier.fillMaxWidth().weight(1f, fill = false), WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
-            } else Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = below).semantics { isTraversalGroup = true },
+            } else Row(Modifier.fillMaxWidth().heightIn(max = below).semantics { isTraversalGroup = true },
                 verticalAlignment = Alignment.Bottom) {
                 // The column narrows by the pill's width plus its 8dp; TalkBack still reaches the zoom group before the bar.
                 BottomBlock(Modifier.weight(1f).semantics { traversalIndex = 1f },
@@ -251,11 +351,28 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                 pill?.invoke(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.End))
                     .padding(end = 8.dp, bottom = 8.dp).semantics { traversalIndex = 0f })
             }
+            }
             // Too large and nothing to show: the line on the black ground, centred (PL J7), no zoom group.
             if (!showsImage && viewer.full == FullImage.TOO_LARGE) Text(stringResource(R.string.viewer_too_large),
                 color = Lantern.overlayText, textAlign = TextAlign.Center,
                 modifier = Modifier.align(Alignment.Center).padding(24.dp).testTag("viewer_ground_line"))
         }
+    }
+}
+
+/** Tests run the fade with a test clock here (null follows the system animator setting). */
+internal val LocalChromeFade = staticCompositionLocalOf<Boolean?> { null }
+
+/**
+ * F6: a piece of the viewer's chrome. It fades for 150 ms both ways, instantly when the system animator scale is 0, and
+ * its semantics clear as the fade-out starts, so TalkBack and the focus order lose it at once.
+ */
+@Composable
+private fun Chrome(shown: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val fade = LocalChromeFade.current ?: remember { android.animation.ValueAnimator.areAnimatorsEnabled() }
+    AnimatedVisibility(shown, modifier, enter = if (fade) fadeIn(tween(150)) else EnterTransition.None,
+        exit = if (fade) fadeOut(tween(150)) else ExitTransition.None) {
+        Box(if (shown) Modifier else Modifier.clearAndSetSemantics { }) { content() }
     }
 }
 
