@@ -39,6 +39,8 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.foundation.background
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -171,14 +173,16 @@ internal fun FileTransfersHost(ui: FileTransfersUi, content: @Composable () -> U
     // The handoff only after the copy is verified: the chooser's ON_STOP then comes after the transfer is finished.
     LaunchedEffect(state) {
         val ready = state as? TransferState.Ready ?: return@LaunchedEffect
-        val intent = if (ready.purpose == TransferPurpose.OPEN) ShareProvider.openIntent(context, ready)
-            else ShareProvider.shareIntent(context, ready)
         // Start first, then hand off in the same main-thread task (#318 review): with no app for the type, noApp still
         // deletes the copy and says so; the chooser's ON_STOP comes after this task, when nothing is running any more.
         try {
+            // Built inside the try (TL): a URI or intent that can't be made is a failed handoff, never a crash.
+            val intent = if (ready.purpose == TransferPurpose.OPEN) ShareProvider.openIntent(context, ready)
+                else ShareProvider.shareIntent(context, ready)
             context.startActivity(intent)
             ui.transfers.handedOff(ready)
         } catch (_: ActivityNotFoundException) { ui.transfers.noApp(ready) }
+        catch (_: IllegalArgumentException) { ui.transfers.handoffFailed(ready) }
         // An app or provider can refuse the grant: the copy goes the same way, never left behind (TL).
         catch (_: SecurityException) { ui.transfers.noApp(ready) }
     }
@@ -223,6 +227,8 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
     val text = if (overlay) io.github.thiesi.chitchat.core.theme.Lantern.overlayText else ChitChatTheme.colors.text
     val muted = if (overlay) text else ChitChatTheme.colors.textMuted
     val name = FileNames.withoutBidiControls(current.ref.attachment.name)
+    // PL: the name as an isolated run wherever it sits inside a sentence, so a right-to-left name can't reorder it.
+    val isolated = androidx.core.text.BidiFormatter.getInstance().unicodeWrap(name)
     Column(modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("transfer_notice"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         when (current) {
             is TransferState.Running -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -237,27 +243,33 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
                 }
                 // PL J2: one stable spoken line (no percent) announced politely, the progress as range info, and Cancel
                 // as its own node.
-                val spoken = stringResource(if (saving) R.string.transfer_saving_indeterminate else R.string.transfer_preparing_indeterminate, name)
-                // The tag goes inside: clearAndSetSemantics drops one chained after it.
-                Row(Modifier.weight(1f).clearAndSetSemantics {
-                    testTag = "transfer_progress"
-                    contentDescription = spoken
-                    liveRegion = LiveRegionMode.Polite
-                    progressBarRangeInfo = if (percent != null) ProgressBarRangeInfo(percent / 100f, 0f..1f) else ProgressBarRangeInfo.Indeterminate
-                }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (percent != null) CircularProgressIndicator(progress = { percent / 100f }, Modifier.size(20.dp), color = text, strokeWidth = 2.dp)
-                    else CircularProgressIndicator(Modifier.size(20.dp), color = text, strokeWidth = 2.dp)
-                    Column {
-                        Text(status, color = text, maxLines = 1, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("transfer_line"))
-                        OneLineName(name, muted)
+                val spoken = stringResource(if (saving) R.string.transfer_saving_indeterminate else R.string.transfer_preparing_indeterminate, isolated)
+                // TalkBack hears only the overlay's stable line (J2); the visible ring and lines are hidden from it but stay
+                // measurable. The tag goes inside: clearAndSetSemantics drops one chained after it.
+                Box(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        val hidden = Modifier.semantics { hideFromAccessibility() }
+                        if (percent != null) CircularProgressIndicator(progress = { percent / 100f }, hidden.size(20.dp), color = text, strokeWidth = 2.dp)
+                        else CircularProgressIndicator(hidden.size(20.dp), color = text, strokeWidth = 2.dp)
+                        Column {
+                            // The status wraps at large text; only the name keeps to one middle-elided line (PL J1).
+                            Text(status, color = text, style = MaterialTheme.typography.bodyMedium, modifier = hidden.testTag("transfer_line"))
+                            OneLineName(name, muted, hidden)
+                        }
                     }
+                    Box(Modifier.matchParentSize().clearAndSetSemantics {
+                        testTag = "transfer_progress"
+                        contentDescription = spoken
+                        liveRegion = LiveRegionMode.Polite
+                        progressBarRangeInfo = if (percent != null) ProgressBarRangeInfo(percent / 100f, 0f..1f) else ProgressBarRangeInfo.Indeterminate
+                    })
                 }
                 TextButton(onClick = ui.transfers::cancel, modifier = Modifier.heightIn(min = 48.dp).testTag("transfer_cancel")) {
                     if (overlay) Text(stringResource(R.string.cancel), color = text) else Text(stringResource(R.string.cancel))
                 }
             }
             is TransferState.Saved -> NoticeLine(ui.savedPlace?.let { stringResource(R.string.transfer_saved_to, it) }
-                ?: stringResource(R.string.transfer_saved, name), muted)
+                ?: stringResource(R.string.transfer_saved, isolated), muted)
             is TransferState.Stopped -> {
                 val line = stopLine(current) ?: return@Column
                 val retry: @Composable () -> Unit = {
@@ -299,7 +311,7 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
 
 /** The name on one line, the middle elided so the start and the extension stay (PL J1). */
 @Composable
-private fun OneLineName(name: String, color: Color) {
+private fun OneLineName(name: String, color: Color, modifier: Modifier = Modifier) {
     val style = MaterialTheme.typography.bodySmall.copy(color = color)
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
     androidx.compose.foundation.layout.BoxWithConstraints {
@@ -307,7 +319,7 @@ private fun OneLineName(name: String, color: Color) {
         val shown = remember(name, width, style) {
             middleElided(name) { !measurer.measure(it, style, maxLines = 1, constraints = androidx.compose.ui.unit.Constraints(maxWidth = width)).hasVisualOverflow }
         }
-        Text(shown, style = style, maxLines = 1, modifier = Modifier.testTag("transfer_name"))
+        Text(shown, style = style, maxLines = 1, modifier = modifier.testTag("transfer_name"))
     }
 }
 

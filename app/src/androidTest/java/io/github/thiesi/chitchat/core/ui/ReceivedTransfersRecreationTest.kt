@@ -63,7 +63,8 @@ class ReceivedTransfersRecreationTest {
     })[AttachmentImagesViewModel::class.java]
     private val rooms = ReceivedRooms(session).apply { messages = listOf(roomMessage(3, null, file(71, "notes.pdf"))) }
     private val room = ConversationViewModel(rooms)
-    private val root = Files.createTempDirectory("ccm-transfer-recreation").toFile()
+    /** The FileProvider serves only this folder, as in the app. */
+    private val root = ShareProvider.root(context).apply { mkdirs() }
     private val job = SupervisorJob()
     private val streamed = mutableListOf<Long>()
     private val bytes = "the saved file".toByteArray()
@@ -88,11 +89,11 @@ class ReceivedTransfersRecreationTest {
 
     @After fun tearDown() { OnCreateContentTestActivity.content = null; room.cancel(); job.cancel(); store.clear(); root.deleteRecursively() }
 
-    private fun host(seen: Boolean) {
+    private fun host(seen: Boolean, with: FileTransfersUi = ui) {
         noteSeen.value = seen
         OnCreateContentTestActivity.content = {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
-                FileTransfersHost(ui) { MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } } }
+                FileTransfersHost(with) { MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } } }
             }
         }
     }
@@ -133,6 +134,24 @@ class ReceivedTransfersRecreationTest {
             assertTrue("The copy is deleted", root.walk().none { it.isFile })
             assertFalse(transfers.busy)
         }
+    }
+
+    @Test fun aHandoffThatCantBeBuiltFailsCleanlyWithoutACrash() {
+        // TL (#318): copies outside the provider's folder make uriFor throw; the host turns that into a failed handoff.
+        val outside = Files.createTempDirectory("ccm-transfer-outside").toFile()
+        val stray = FileTransfers(CoroutineScope(Dispatchers.Main + job), session, source, ShareCopies(outside), { Long.MAX_VALUE })
+        val strayUi = FileTransfersUi(stray, kotlinx.coroutines.flow.flowOf(true)) { }
+        host(seen = true, with = strayUi)
+        try {
+            ActivityScenario.launch(OnCreateContentTestActivity::class.java).use {
+                compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
+                compose.onNodeWithTag("attachment_open:71").performClick()
+                compose.waitUntil(5_000) { (stray.state.value as? TransferState.Stopped)?.reason == io.github.thiesi.chitchat.core.media.TransferStop.FAILED }
+                assertTrue("The copy is deleted", outside.walk().none { it.isFile })
+                assertFalse(stray.busy)
+                compose.waitUntil(5_000) { compose.onAllNodesWithTag("transfer_retry").fetchSemanticsNodes().isNotEmpty() }
+            }
+        } finally { outside.deleteRecursively() }
     }
 
     @Test fun theFirstUseNoteSurvivesARecreationAndItsCancelStillStartsNothing() {

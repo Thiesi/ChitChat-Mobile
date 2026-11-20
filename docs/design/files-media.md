@@ -508,9 +508,11 @@ The policy is local and read from existing system state, with no new requests:
   (its own row above the action row) while the viewer is open. A button disabled by a running
   transfer always has that transfer's notice on the same screen; the notice moves with the person.
 - **Progress (PL J1, J2):** a determinate ring and two lines with fixed roles, the status and percent
-  ("Saving… 40%" or "Getting the file ready… 40%") and then the name on one middle-elided line, with
+  ("Saving… 40%" or "Getting the file ready… 40%", wrapping at large text) and then the name on one
+  middle-elided line, with
   **Cancel** (48dp); with no reliable total, an indeterminate ring and no percent. TalkBack hears one
-  stable line, "Saving {name}…" or "Getting {name} ready…", announced politely, with the progress as
+  stable line, "Saving {name}…" or "Getting {name} ready…" (the name an isolated bidi run, as in "Saved
+  {name}"), announced politely, with the progress as
   range information; Cancel is its own node. Cancel and Try again are the ordinary primary text buttons
   in the conversation, overlay text only in the viewer (J4).
 - **Long notices (PL J3):** a level-2 notice's text takes at most 30% of the window and scrolls inside
