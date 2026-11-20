@@ -256,8 +256,11 @@ technical-lead sign-off, and the affected tests are listed.
     invite links." (`preview_limit` keeps its prefix). Save, Share and Open copy is in files-media.md "Save, Share and Open
     notices" (`transfer_*`, `action_save_*`/`action_share_*`, `file_open`/`file_save`, `viewer_save`/`viewer_share`);
     the viewer lines regain their Save-or-share sentences, and offline reads "You can load, save or share the full image
-    when you're back online." Engineering pick for J: a Save cancelled before any byte says "Nothing was saved. If you
-    saved to a new file, it may be empty. Delete it if you don't need it." (`transfer_nothing_saved_plain`).
+    when you're back online." A Save cancelled before any byte says "Nothing was saved. If you saved to a new file, it
+    may be empty. Delete it if you don't need it." (`transfer_nothing_saved_plain`), as a level-1 line (PL, F5b J).
+  - **Received files F6** (PL, 2026-11-20): two spoken-only labels on the viewer's image, with no visible copy, hint or
+    first-use note. "Show controls" (`viewer_show_controls`) is its click action while the chrome is hidden. "Hide
+    controls" (`viewer_hide_controls`) is a custom action while the chrome is shown and can hide.
   - **Sizes** (PL J6, #313): a no-break space between number and unit (`attach_size_*`), so "3.4 MB" never splits
     across lines, everywhere sizes show (the composer card, upload lines and received frames).
   - `dm_no_push` no longer claims there's no background push, since push shipped in M6c–M6e. It now says

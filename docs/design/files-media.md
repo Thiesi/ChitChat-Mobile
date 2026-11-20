@@ -438,12 +438,64 @@ The policy is local and read from existing system state, with no new requests:
   animating.
 - **Caption (PL):** collapsed to two lines with an ellipsis and a 48dp "More" / "Less" button;
   expanded, at most the smaller of 40% of the window height and the space that keeps the zoom pill
-  clear of the top bar, scrolling inside. The bars always show (no tap-to-hide). The sender is
+  clear of the top bar, scrolling inside. A tap can hide the chrome (F6, below). The sender is
   server text: it's never ellipsized, so at 200% it may take more than two lines and break mid-token.
   An explicit Close sits in the top bar, so swipe-down is never the only way out. Sizes keep their
   number and unit together (a no-break space, PL J6).
+- **Tap to hide the chrome (PL spec, TL rulings, F6, 2026-11-20).** F4 ruled "no tap-to-hide". At 200% in a
+  short landscape window that left almost no image. Measured in the F6 captures (640×320dp, x=300), the top bar
+  with a two-line sender runs 0–140dp and the bottom block 226–320dp, which leaves an 86dp clear band without a
+  caption. With a collapsed caption the two scrims meet and the band is 0. The TL ruled this a defect, fixed by
+  slice F6, and approved reversing the F4 ruling.
+  - **What toggles it:** a single tap anywhere that isn't a control, after the system double-tap timeout, so a
+    double-tap zooms and never flickers the chrome. The scrims, the sender and time, a collapsed caption and the
+    state lines are plain content, so a tap on them toggles too: at 200% landscape there may be nothing else to tap
+    (PL, TL agreed).
+  - **What doesn't:**
+    - Controls keep their own taps, even when disabled: Close, Save, Share, More/Less, Load full image, Try again,
+      the whole zoom pill, and the transfer notice's buttons.
+    - The expanded caption's scroller keeps its taps.
+    - Pan, pinch, swipe-down and long-press never toggle.
+  - **Hidden means gone:**
+    - The top bar, the bottom block, the zoom pill and the GIF badge all leave. Nothing of them stays in semantics or
+      the focus order; their semantics clear as the fade starts.
+    - The image doesn't move or rescale.
+    - Motion is a 150 ms fade both ways, instant when animations are off.
+    - System bars stay as they are: no immersive mode in F6, which is left to the visual overhaul.
+  - **Always shown (the toggle is off):**
+    - with no image to look at (the too-large ground without a preview, gone, not allowed, nothing decoded yet);
+    - while a transfer runs;
+    - while assistive input is on: touch exploration, or an enabled service that takes over input (touch
+      exploration, gestures or key filtering), judged by capability, never by app, and read as on when in doubt.
+
+    Whatever turns the toggle off shows the chrome at once.
+  - **What brings it back:**
+    - a state line appearing or changing (offline, waiting, failed, can't show), compared by kind, so a line already
+      present at opening doesn't prevent hiding;
+    - a transfer's result line, once (saved, or a stop that shows a line). Progress is never a trigger. A transfer
+      starting shows the chrome by running (TL).
+    - any key except system keys, Back and Esc: it first shows the chrome and moves focus to Close, and that key
+      does nothing else.
+
+    Back and Esc always close the viewer, hidden or not.
+  - **Anything that opens over the viewer shows the chrome first.** Today nothing can open while the chrome is
+    hidden: Save, Share, More and the first-use note all start from visible controls. A later way in, such as a
+    long-press menu on the image, must follow this rule.
+  - **Accessibility actions on the image (TL):**
+    - while hidden, its click action reads **"Show controls"** (`viewer_show_controls`), restores the chrome and,
+      outside touch mode, moves focus to Close;
+    - while shown and hideable, a custom action reads **"Hide controls"** (`viewer_hide_controls`). It's absent when
+      the toggle is off.
+
+    A voice or node-action service the detection misses can always bring the chrome back. In touch mode, Show
+    controls leaves accessibility focus with the service. TalkBack users always have the chrome shown.
+  - **Rotation and reopening:** hidden survives a rotation unless a state line is present, and each new opening
+    starts shown. There's no hint and no first-use note.
 
 ## Save (download to a chosen place)
+
+What shipped in F5b is in "Save, Share and Open notices" below. Where this section differs (the progress line's
+wording, the snackbar), the notices section wins.
 
 - **Save** opens the system "create document" picker with the original filename and MIME type,
   then streams the download into the chosen document with a progress line in a level-1 notice
@@ -633,4 +685,5 @@ The policy is local and read from existing system state, with no new requests:
 | P-154 | Save uses a chosen document and never silently deletes it. Share-out uses read-only FileProvider grants on copies in a private cache subfolder, never hands out authenticated URLs, never deletes on chooser return, lets copies expire after 24 hours and deletes expired copies at the next start or share (no claim of deletion at exactly 24 hours), and deletes them at once on cancel before handoff and on sign-out or account removal. | U, C, R |
 | P-155 | Share-in never sends by itself, drops items across sign-in, and supports one file. | C |
 | P-156 | The viewer suppresses read and typing proof and offers zoom alternatives. | C |
+| P-224 | The viewer's chrome hides on a single tap anywhere that isn't a control (controls, disabled ones included, keep their taps; double-tap, pan, pinch, swipe-down and long-press never toggle), leaves semantics and focus while hidden, and stays shown with no image, during a transfer and with assistive input. A new state line, a transfer result line or a key brings it back; Back and Esc close; "Show controls" and "Hide controls" are on the image when they apply. Hidden survives rotation unless a line is present; each opening starts shown (F6). | U, C |
 | P-223 | Received files: an integrity mismatch is never shown or handed over, and on Save shows the damaged notice without deleting the document. "Too large to show" (level 1, Save and Share still offered) differs from "Couldn't show … right now" (Try again). GIFs on API 26–27 are still images with the badge, no play glyph and the animation line. APKs offer Save only. Open and Share share one copy mechanism and one first-use note. "No app opens this file type" opens no chooser. | U, C |
