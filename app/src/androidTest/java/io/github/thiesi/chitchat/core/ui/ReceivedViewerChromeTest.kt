@@ -22,6 +22,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.isFocused
+import androidx.compose.ui.semantics.SemanticsProperties
+import io.github.thiesi.chitchat.testing.performNativeTap
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
@@ -136,6 +139,29 @@ class ReceivedViewerChromeTest {
         compose.waitForIdle()
     }
 
+    /** What TalkBack and the accessibility node tree see: a cleared node's children are gone from the merged tree only. */
+    private fun mergedChromeGone() = chrome.none { compose.onAllNodesWithTag(it).fetchSemanticsNodes().isNotEmpty() }
+
+    /**
+     * Keyboard mode for [block] (TL, #320): its real keys leave touch mode, the only mode where Compose gives buttons input
+     * focus. A real, system-routed tap in finally re-enters touch mode, on the image's centre, first confirmed to be outside
+     * every piece of chrome (a no-op toggle, nothing that launches). Nothing is asserted after it but the per-case
+     * unchanged-touch-mode check. A failing restore fails the case, never retried; after a failure it's attached to it.
+     */
+    private fun withRealKeys(block: () -> Unit) {
+        var failure: Throwable? = null
+        try { block() } catch (t: Throwable) { failure = t; throw t } finally {
+            try { restoreTouchMode() } catch (t: Throwable) { failure?.addSuppressed(t) ?: throw t }
+        }
+    }
+
+    private fun restoreTouchMode() {
+        val centre = image().fetchSemanticsNode().boundsInWindow.center
+        for (tag in listOf("viewer_top", "viewer_bottom", "viewer_zoom")) compose.onAllNodesWithTag(tag).fetchSemanticsNodes()
+            .forEach { check(!it.boundsInWindow.contains(centre)) { "The restoring tap would land on $tag" } }
+        image().performNativeTap()
+    }
+
     /** Returns Unit, so every `@Test fun … = withViewer { }` stays a void method whatever its block ends with. */
     private fun withViewer(caption: String? = "Harbour at dusk", beforeOpen: () -> Unit = {},
         block: (ActivityScenario<OnCreateContentTestActivity>) -> Unit) {
@@ -240,7 +266,26 @@ class ReceivedViewerChromeTest {
         assertEquals(text(R.string.viewer_show_controls), clickLabel())
         image().performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(5_000) { present("viewer_close") }
-        compose.onNodeWithTag("viewer_close").assertIsFocused()
+        // Touch mode: buttons take no input focus (the platform's rule; a service moves its own accessibility focus). Nothing
+        // focused is left among the chrome or on the image, and the image stops being focusable once shown.
+        val focused = compose.onAllNodes(isFocused(), useUnmergedTree = true).fetchSemanticsNodes()
+            .mapNotNull { it.config.getOrNull(SemanticsProperties.TestTag) }
+        assertTrue("No focus left on the chrome or the image: $focused", focused.none { it in chrome || it == "viewer_image" })
+        assertTrue("The image isn't focusable once shown", !image().fetchSemanticsNode().config.contains(SemanticsProperties.Focused))
+    }
+
+    @Test fun inKeyboardModeShowControlsPutsFocusOnClose() = withViewer {
+        withRealKeys {
+            // A keyboard user: a real key while shown leaves touch mode; then Hide and Show through the image's actions.
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_TAB)
+            compose.waitForIdle()
+            val hideIt = hideAction()!!
+            compose.runOnUiThread { hideIt.action() }
+            compose.waitUntil(5_000) { chromeGone() }
+            image().performSemanticsAction(SemanticsActions.OnClick)
+            compose.waitUntil(5_000) { present("viewer_close") }
+            compose.onNodeWithTag("viewer_close").assertIsFocused()
+        }
     }
 
     @Test fun assistiveInputKeepsTheChromeShownAndTurningItOnShowsItAtOnce() = withViewer {
@@ -302,10 +347,19 @@ class ReceivedViewerChromeTest {
 
     @Test fun aKeyWhileHiddenShowsTheChromeWithFocusOnClose() = withViewer {
         hide()
+        withRealKeys {
+            // A real Tab, as a keyboard user's: it leaves touch mode, where Close can take input focus.
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_TAB)
+            compose.waitUntil(5_000) { present("viewer_close") }
+            compose.onNodeWithTag("viewer_close").assertIsFocused()
+            assertTrue("The key only showed the chrome", viewerOpen())
+        }
+    }
+
+    @Test fun aKeyWhileHiddenIsConsumed() = withViewer {
+        hide()
         assertTrue("Tab is consumed while hidden", key(KeyEvent.KEYCODE_TAB))
         compose.waitUntil(5_000) { present("viewer_close") }
-        compose.onNodeWithTag("viewer_close").assertIsFocused()
-        assertTrue("The key only showed the chrome", viewerOpen())
     }
 
     @Test fun aSystemKeyWhileHiddenPassesThroughAndChangesNothing() = withViewer {
@@ -365,21 +419,23 @@ class ReceivedViewerChromeTest {
         fade = true
         withViewer {
             val hideIt = hideAction()!!
+            // The merged tree is what TalkBack reads; the fading content stays in the unmerged tree until it leaves (#320).
+            assertTrue("Close is in the merged tree before the hide", compose.onAllNodesWithTag("viewer_close").fetchSemanticsNodes().isNotEmpty())
             compose.mainClock.autoAdvance = false
             try {
                 // Apply the change now, so the paused clock's next frame is the exit's first (#320).
                 compose.runOnUiThread { hideIt.action(); Snapshot.sendApplyNotifications() }
                 compose.mainClock.advanceTimeByFrame()
-                val firstFrame = chromeGone()
+                val firstFrame = mergedChromeGone()
                 if (!firstFrame) {
                     // Evidence only, still a failure: does the next frame clear it?
                     compose.mainClock.advanceTimeByFrame()
-                    throw AssertionError("Not cleared at the exit's first frame (second frame: ${if (chromeGone()) "cleared" else "not cleared"})")
+                    throw AssertionError("Not cleared at the exit's first frame (second frame: ${if (mergedChromeGone()) "cleared" else "not cleared"})")
                 }
                 compose.mainClock.advanceTimeBy(50)
-                assertTrue("Still mid-fade, still gone", chromeGone())
+                assertTrue("Still mid-fade, still gone", mergedChromeGone())
                 compose.mainClock.advanceTimeBy(200)
-                assertTrue(chromeGone())
+                assertTrue(mergedChromeGone())
             } finally { compose.mainClock.autoAdvance = true }
             compose.waitForIdle()
             assertTrue(chromeGone())

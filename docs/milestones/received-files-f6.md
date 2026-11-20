@@ -48,12 +48,14 @@ turns the toggle off shows the chrome for good, so assistive input turning on wh
   line until it's dismissed, so this is the line on screen. A transfer starting shows the chrome by being a running
   transfer.
 - Any key but Back and Esc (Tab, arrows, Enter, D-pad): it first shows the chrome and puts focus on Close, and the key is
-  consumed. System keys (volume, mute, media, headset, call) and a modifier pressed alone pass through untouched and
+  consumed. Focus on Close applies outside touch mode (keyboard, D-pad), which a real key event enters; in touch mode
+  Compose, like Views, gives buttons no input focus, and an accessibility service moves its own focus. System keys (volume, mute, media, headset, call) and a modifier pressed alone pass through untouched and
   change nothing (TL). While hidden the image holds focus, so nothing ever leaves focus on a hidden control.
 - **Esc and Back** always close the viewer, hidden or not; Esc closes in the viewer itself, so every API level does the
   same.
 - **The image's accessibility actions** (TL): while hidden, its click action "Show controls" restores the chrome and
-  moves focus to Close; while shown and hideable, a custom action "Hide controls". A voice or node-action service the
+  moves focus to Close outside touch mode; in touch mode it restores the chrome and leaves accessibility focus with the
+  service (PL), and no focus is left on the chrome or the image; while shown and hideable, a custom action "Hide controls". A voice or node-action service the
   detection misses can always bring the chrome back without a gesture.
 - **Configuration change:** hidden survives a rotation within the viewer's opening unless a state line is present; each
   new opening starts shown. There's no hint and no first-use note.
@@ -66,7 +68,7 @@ turns the toggle off shows the chrome for good, so assistive input turning on wh
   doesn't toggle; a double-tap zooms with no toggle, and pan, pinch and a long-press don't toggle; Show controls and
   Hide controls; assistive input keeps it shown, with no Hide controls, and turning it on while hidden shows it; a
   running transfer can't be hidden and its result keeps it shown; a load that fails while hidden shows it with its line; a key while
-  hidden shows it with focus on Close; a system key (volume up, dispatched to the viewer's Compose view) isn't
+  hidden shows it with focus on Close (a real key in keyboard mode, touch mode restored by a real tap in finally); a system key (volume up, dispatched to the viewer's Compose view) isn't
   consumed and leaves it hidden; Esc and Back while hidden close; rotation keeps hidden with no line and shows
   with one; a new opening starts shown; and with the fade on a test clock, the semantics are gone from the first frame
   of the exit. CI runs with animations off, so every other case covers the instant path. Keys go straight to the
