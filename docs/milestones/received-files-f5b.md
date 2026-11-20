@@ -45,7 +45,12 @@ pictures and guest invite links." The viewer captures follow in a stacked F5c.
   the conversation clears an open note.
 - **J (PL):** progress on two lines (status and percent, then the name on one middle-elided line) with one stable spoken
   line and range info; level-2 text capped at 30% of the window, scrolling inside; primary text buttons in the
-  conversation; a Share/Open 429 says "Couldn't get the file ready." and the wait, with no Try again.
+  conversation; a Share/Open 429 says "Couldn't get the file ready." and the wait, with no Try again. The status line
+  wraps at 200% (only the name stays on one line), and the name is an isolated bidi run in the spoken line and "Saved
+  {name}"; the visible lines are hidden from TalkBack under a cleared overlay that carries the spoken line.
+- **Handoff:** the other app starts first, then `handedOff`; no app or a refused grant deletes the copy with the no-app
+  line, and an intent or URI that can't be built is a failed handoff (the copy deleted, the share-failed line), never a
+  crash (TL).
 
 ## Verification
 
@@ -67,5 +72,7 @@ pictures and guest invite links." The viewer captures follow in a stacked F5c.
   - a Share during a 429 says the file isn't ready and offers no Try again.
 - **`ReceivedTransfersRecreationTest`:** a Save whose picker result arrives after a real `recreate()` streams into the
   chosen document and leaves nothing busy; the first-use note survives a recreation and its Cancel still starts nothing.
+- **The 200% progress wrap** (`ReceivedViewerLayoutTest.at200PercentTheProgressStatusWrapsWithoutOverflow`) ships with the
+  captures in F5c (#319), which merges right after this PR (TL, to keep this diff under the review cap).
 - **JVM:** `FileNamesTest` adds the type label (`report.pdf` under the APK MIME reads "APK").
 - **`ReceivedFilesJourneyTest`:** the disclosures assert the final wording.

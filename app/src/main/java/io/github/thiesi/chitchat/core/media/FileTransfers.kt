@@ -196,6 +196,16 @@ internal class FileTransfers(
         mutable.value = TransferState.Stopped(ready.ref, ready.purpose, TransferStop.NO_APP, wroteBody = false)
     }
 
+    /**
+     * The handoff itself failed (an intent or URI that couldn't be built): the copy goes and the share failure shows,
+     * never a crash with the state left Ready (TL, #318).
+     */
+    fun handoffFailed(ready: TransferState.Ready) {
+        if (mutable.value !== ready) return
+        discardCopy()
+        mutable.value = TransferState.Stopped(ready.ref, ready.purpose, TransferStop.FAILED, wroteBody = false)
+    }
+
     /** The person's Cancel. */
     fun cancel() = stop(TransferStop.CANCELLED)
 

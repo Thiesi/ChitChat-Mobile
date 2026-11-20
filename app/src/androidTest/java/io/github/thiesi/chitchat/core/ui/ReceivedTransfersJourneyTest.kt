@@ -239,15 +239,23 @@ class ReceivedTransfersJourneyTest {
         compose.onNodeWithTag("transfer_cancel").assertHeightIsAtLeast(48.dp)
         // PL J2: one stable spoken line with the progress as range info; Cancel is its own node.
         val progress = compose.onNodeWithTag("transfer_progress").fetchSemanticsNode().config
-        assertEquals(context.getString(R.string.transfer_saving_indeterminate, "notes.pdf"),
+        val isolated = androidx.core.text.BidiFormatter.getInstance().unicodeWrap("notes.pdf")
+        assertEquals(context.getString(R.string.transfer_saving_indeterminate, isolated),
             progress.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(""))
         assertTrue("Range info", progress.getOrNull(SemanticsProperties.ProgressBarRangeInfo) != null)
         assertTrue("No percent spoken", progress.getOrNull(SemanticsProperties.Text) == null)
+        assertTrue("The visible status is hidden from TalkBack", compose.onNodeWithTag("transfer_line").fetchSemanticsNode().config
+            .contains(SemanticsProperties.HideFromAccessibility))
+        // TL: Cancel is its own focusable node, outside the spoken overlay, so explore-by-touch reaches it directly.
+        val overlay = compose.onNodeWithTag("transfer_progress").fetchSemanticsNode().boundsInRoot
+        val cancel = compose.onNodeWithTag("transfer_cancel").fetchSemanticsNode()
+        assertTrue("Cancel $cancel.boundsInRoot outside $overlay", cancel.boundsInRoot.left >= overlay.right - 0.5f)
+        assertTrue(cancel.config.contains(androidx.compose.ui.semantics.SemanticsActions.OnClick))
         compose.onNodeWithTag("attachment_save:72").assertIsNotEnabled()
         compose.onNodeWithTag("attachment_open:72").assertIsNotEnabled()
         gate!!.complete(Unit)
         compose.waitUntil(5_000) { transfers.state.value is TransferState.Saved }
-        compose.onNodeWithTag("transfer_line").assertTextEquals(context.getString(R.string.transfer_saved, "notes.pdf"))
+        compose.onNodeWithTag("transfer_line").assertTextEquals(context.getString(R.string.transfer_saved, isolated))
         compose.onNodeWithTag("attachment_save:72").assertIsEnabled()
     }
 
