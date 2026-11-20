@@ -61,7 +61,9 @@ jobs:
 
   journey:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45, not 30: the unfiltered suite reached 28–30 minutes, and a limit that cancels a finished suite during teardown
+    # is no gate (docs/build-test-release.md, "Native job time limits").
+    timeout-minutes: 45
     env:
       NATIVE_API: '35'
     steps:
@@ -118,7 +120,8 @@ jobs:
   api36-observation:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 45, as the journey above.
+    timeout-minutes: 45
     continue-on-error: true
     env:
       NATIVE_API: '36'
