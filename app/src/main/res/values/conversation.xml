@@ -51,9 +51,11 @@
     <string name="action_share_photo">Share photo</string>
     <string name="action_save_file">Save file</string>
     <string name="action_share_file">Share file</string>
-    <string name="transfer_saving">Saving %1$s… %2$d%%</string>
+    <string name="transfer_saving_status">Saving… %1$d%%</string>
+    <string name="transfer_saving_status_indeterminate">Saving…</string>
     <string name="transfer_saving_indeterminate">Saving %1$s…</string>
-    <string name="transfer_preparing">Getting %1$s ready… %2$d%%</string>
+    <string name="transfer_preparing_status">Getting the file ready… %1$d%%</string>
+    <string name="transfer_preparing_status_indeterminate">Getting the file ready…</string>
     <string name="transfer_preparing_indeterminate">Getting %1$s ready…</string>
     <string name="transfer_saved_to">Saved to %1$s</string>
     <string name="transfer_saved">Saved %1$s</string>
@@ -67,6 +69,7 @@
     <string name="transfer_save_background_incomplete">Saving stopped when you left the app. The file may be incomplete. Delete it in the place you chose if you don’t need it.</string>
     <string name="transfer_save_damaged">The saved file may be damaged: it doesn’t match the file on the server. Delete it in the place you chose if you don’t need it, then save it again.</string>
     <string name="transfer_share_failed">Couldn’t get the file ready. Try again.</string>
+    <string name="transfer_share_not_ready">Couldn’t get the file ready.</string>
     <string name="transfer_no_space">There isn’t enough space on this phone to get the file ready. Free up some space, then try again.</string>
     <string name="transfer_no_app">No app on this phone opens this file type. Save it instead.</string>
     <string name="transfer_first_use">Opening or sharing lets the app you choose keep its own copy of the file.</string>

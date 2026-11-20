@@ -507,10 +507,14 @@ The policy is local and read from existing system state, with no new requests:
 - **Where:** the conversation's notice stack under the status slot, and the viewer's bottom block
   (its own row above the action row) while the viewer is open. A button disabled by a running
   transfer always has that transfer's notice on the same screen; the notice moves with the person.
-- **Progress:** a determinate ring and "Saving {name}… 40%" or "Getting {name} ready… 40%" with
-  **Cancel** (48dp); with no reliable total, an indeterminate ring and no percent. The name is
-  middle-ellipsized, at most two lines. TalkBack announces politely at the start and the end; the
-  percent is read on focus.
+- **Progress (PL J1, J2):** a determinate ring and two lines with fixed roles, the status and percent
+  ("Saving… 40%" or "Getting the file ready… 40%") and then the name on one middle-elided line, with
+  **Cancel** (48dp); with no reliable total, an indeterminate ring and no percent. TalkBack hears one
+  stable line, "Saving {name}…" or "Getting {name} ready…", announced politely, with the progress as
+  range information; Cancel is its own node. Cancel and Try again are the ordinary primary text buttons
+  in the conversation, overlay text only in the viewer (J4).
+- **Long notices (PL J3):** a level-2 notice's text takes at most 30% of the window and scrolls inside
+  with the 1dp outline edge; its actions stay visible and the composer keeps its size.
 - **Success:** "Saved to {app or folder name}" (or "Saved {name}" when the provider gives no name),
   level 1, replacing the progress line, with no snackbar; it clears on the next transfer or when the
   person leaves the conversation. Share and Open clear at handoff, with no success line.
@@ -522,6 +526,8 @@ The policy is local and read from existing system state, with no new requests:
 - **Save failing mid-way:** "Saving stopped. The file may be incomplete. …" (also when the provider
   runs out of space); after a genuine background, "Saving stopped when you left the app. The file may
   be incomplete. Delete it in the place you chose if you don't need it.", shown on return.
+- **Share/Open during a 429 wait (PL J5):** "Couldn't get the file ready." as the lead, then row 7's wait
+  sentence, with no inline Try again.
 - **Share/Open:** not enough space is "There isn't enough space on this phone to get the file ready.
   Free up some space, then try again." (no inline Try again); a backgrounded or cancelled Share or
   Open ends silently.

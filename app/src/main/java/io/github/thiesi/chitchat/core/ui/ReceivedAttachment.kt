@@ -250,10 +250,7 @@ private fun ReceivedFileCard(attachment: MessageAttachment, direct: Boolean, mod
             if (transfers != null) {
                 // Disabled while another transfer runs or during the session's wait; that transfer's notice is on this
                 // screen (PL), and the status slot shows the wait.
-                val state by transfers.transfers.state.collectAsState()
-                val enabled = state == null || state is io.github.thiesi.chitchat.core.media.TransferState.Saved ||
-                    state is io.github.thiesi.chitchat.core.media.TransferState.Stopped
-                val usable = enabled && !transfers.transfers.busy && !transfers.transfers.waiting()
+                val usable = rememberTransfersUsable(transfers)
                 Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!apk) TextButton(onClick = { transfers.hand(ref, io.github.thiesi.chitchat.core.media.TransferPurpose.OPEN) },
                         enabled = usable, modifier = Modifier.heightIn(min = Lantern.target).testTag("attachment_open:${attachment.id}")) { Text(openLabel) }

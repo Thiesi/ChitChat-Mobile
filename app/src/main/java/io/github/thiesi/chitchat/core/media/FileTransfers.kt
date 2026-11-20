@@ -98,7 +98,14 @@ internal class FileTransfers(
     private val mutable = MutableStateFlow<TransferState?>(null)
     val state: StateFlow<TransferState?> = mutable.asStateFlow()
     private var job: Job? = null
-    private var pending: PendingSave? = null
+    /** Observable (#318 review), so screens re-enable their buttons when a pending Save ends. */
+    private val pendingFlow = MutableStateFlow<PendingSave?>(null)
+    val pendingSaveState: StateFlow<PendingSave?> = pendingFlow.asStateFlow()
+    private var pending: PendingSave?
+        get() = pendingFlow.value
+        set(value) { pendingFlow.value = value }
+    /** The session the transfers follow, for screens that show its 429 wait (#318 review). */
+    val sessionState: StateFlow<SessionState> get() = session
     private var copy: ShareCopies.Copy? = null
     private var owner: Identity? = null
     /**
