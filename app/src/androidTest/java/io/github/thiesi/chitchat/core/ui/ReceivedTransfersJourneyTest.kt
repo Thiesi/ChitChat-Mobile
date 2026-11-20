@@ -21,6 +21,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
@@ -109,11 +112,26 @@ class ReceivedTransfersJourneyTest {
         compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
     }
 
-    private fun openActions(messageId: Long) {
+    /**
+     * The labelled "Message actions" node: tapped by touch (file cards), or invoked through its own click action as
+     * TalkBack does ([semantics]). A touch at a photo row's centre lands on the frame, whose tap opens the viewer, so a
+     * photo's touch route is the frame's long-press ([longPressFrame]) (#318/#319 failed runs 44714352389, 44714400050).
+     */
+    private fun openActions(messageId: Long, semantics: Boolean = false, longPressFrame: Long? = null) {
         val label = text(R.string.message_actions)
-        compose.onNode(SemanticsMatcher("actions") { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsActions.OnClick)?.label == label } and
-            hasAnyAncestor(hasTestTag("message:$messageId"))).performClick()
+        val node = compose.onNode(SemanticsMatcher("actions") { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsActions.OnClick)?.label == label } and
+            hasAnyAncestor(hasTestTag("message:$messageId")))
+        when {
+            longPressFrame != null -> compose.onNodeWithTag("attachment_frame:$longPressFrame").performTouchInput { longClick() }
+            semantics -> node.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+            else -> node.performClick()
+        }
         compose.waitUntil(5_000) { !absent("message_actions") }
+    }
+
+    private fun closeActions() {
+        androidx.test.espresso.Espresso.pressBack()
+        compose.waitUntil(5_000) { absent("message_actions") }
     }
 
     private fun apkTypedPhoto(id: Long) = photo(id).let {
@@ -137,12 +155,15 @@ class ReceivedTransfersJourneyTest {
         rooms.messages = listOf(roomMessage(3, null, photo(70)), roomMessage(4, null, file(71, "notes.pdf")),
             roomMessage(5, null, apkTypedPhoto(80)))
         roomContent()
-        openActions(3)
-        compose.onNodeWithTag("message_save_action").assertTextEquals(text(R.string.action_save_photo))
-        compose.onNodeWithTag("message_share_action").assertTextEquals(text(R.string.action_share_photo))
-        compose.onNodeWithTag("message_save_action").assertHeightIsAtLeast(48.dp)
-        androidx.test.espresso.Espresso.pressBack()
-        compose.waitUntil(5_000) { absent("message_actions") }
+        // A photo: the touch route (the frame's long-press) and the TalkBack route reach the same choices (TL).
+        for (route in listOf("long-press", "semantics")) {
+            if (route == "long-press") openActions(3, longPressFrame = 70) else openActions(3, semantics = true)
+            compose.onNodeWithTag("message_save_action").assertTextEquals(text(R.string.action_save_photo))
+            compose.onNodeWithTag("message_share_action").assertTextEquals(text(R.string.action_share_photo))
+            compose.onNodeWithTag("message_save_action").assertHeightIsAtLeast(48.dp)
+            assertTrue("$route opened no viewer", absent("viewer"))
+            closeActions()
+        }
         openActions(4)
         compose.onNodeWithTag("message_save_action").assertTextEquals(text(R.string.action_save_file))
         compose.onNodeWithTag("message_share_action").assertTextEquals(text(R.string.action_share_file))
