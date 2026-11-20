@@ -18,6 +18,7 @@ import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -137,7 +138,8 @@ class ReceivedViewerJourneyTest {
         rooms.messages = listOf(roomMessage(3, null, photo(70, size = 1_500_000)))
         roomContent()
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("attachment_retry:70").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("attachment_frame:70").performClick()
+        // Try again sits in the frame's centre; tap the frame itself, near its corner.
+        compose.onNodeWithTag("attachment_frame:70").performTouchInput { click(androidx.compose.ui.geometry.Offset(12f, 12f)) }
         compose.waitUntil(5_000) { images.viewer.state.value?.original != null }
         compose.waitForIdle()
         val label = compose.onNodeWithTag("viewer_image").fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)

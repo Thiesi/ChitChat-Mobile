@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
@@ -135,6 +136,8 @@ class ReceivedViewerPresentationTest {
                     if (!tooLargeBare) compose.waitUntil(5_000) { images.images.states.value.values.any { it is ImageState.Loaded } }
                     if (shot.frameOnly) { capture(label, "files_host"); return@use }
                     if (shot.offlineAtOpen) network.state.value = NetworkState(online = false, metered = true)
+                    // A tall row (a long caption) starts scrolled to its bottom: bring the frame into view before the tap.
+                    compose.onNodeWithTag("conversation_timeline").performScrollToNode(androidx.compose.ui.test.hasTestTag("attachment_frame:70"))
                     compose.onNodeWithTag("attachment_frame:70").performClick()
                     compose.waitUntil(5_000) { compose.onAllNodesWithTag("viewer").fetchSemanticsNodes().isNotEmpty() }
                     waitFor(shot.ready)
