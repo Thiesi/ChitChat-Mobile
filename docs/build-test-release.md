@@ -61,6 +61,13 @@ This is an actual JVM HTTP/server integration check using transient in-memory cr
 - **API35:** the journey's post-merge main run saves after its tests, also when they fail.
 - **API36:** `api36-observation` runs only on PRs, so a separate main-push-only job, `api36-image-cache`, does it. On a miss it installs the image with sdkmanager as the runner does, runs the same pinned-revision check and saves. It runs no emulator and no tests, is never a PR or required check, and its result (`continue-on-error`) affects no gate. It covers image-install failures only. The runner (a421e43, unchanged in v2.38.0) always installs the latest emulator with sdkmanager and downloads the pinned emulator build with curl, so emulator download failures stay possible. The suite, API levels, image revisions, retries (none) and timeouts are unchanged.
 
+**Native job time limits (2026-11-20):** the API35 `journey` and the API36 `api36-observation` jobs have a 45-minute
+limit (it was 30). Over the 40 PR runs before the change, completed runs took 19.6–29.3 minutes (journey, median 23.8)
+and 21.0–29.6 (API36, median 25.1). Two were cancelled at 30 minutes, one of them (#315, run 44679216707) after the log
+showed "538/538 completed (0 failed)", during teardown. A limit that cancels a finished suite is no gate. Only the
+limits changed: the suite, filtering (none), retries (none), the wrappers, predicates, deadlines and the classification
+are unchanged. The wrappers' own short `adb` timeouts are per command, not suite limits.
+
 CI's `python3 -B .github/scripts/native_journeys.py` runs the original connected-test command once, preserving its exit status. On failure only, it attempts a15s `ImeTracker`/`TestRunner` capture and writes at most2000 allowlisted scalar/lifecycle records into the existing native-report artifact. It never writes raw logcat or falls back to arbitrary exception/body/window dumps; capture failure does not turn the gate green. Run its credential/device-free checks with `python3 -B -m unittest discover -s .github/scripts -p 'test_*.py'` (`python` on this Windows host). See [scope, recorded failures and verification](milestones/native-ime-diagnostics.md). This is fixture CI diagnostics, not permission to collect private live-conversation logs.
 
 Start an owned local emulator from the stable repository root, not a transient worktree: Windows can keep its launch working directory open after Git unregisters a completed worktree. Preserve reports/APK hashes before normal worktree removal; stop only the verified owned emulator when needed for that owned-directory cleanup. Never reset a shared adb server or alter ACL/OneDrive attributes to force removal.
