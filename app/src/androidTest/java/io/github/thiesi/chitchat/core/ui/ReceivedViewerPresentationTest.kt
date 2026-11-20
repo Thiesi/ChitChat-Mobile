@@ -127,18 +127,22 @@ class ReceivedViewerPresentationTest {
             ready = { it.full == FullImage.OFFER }),
         Shot("viewer-chrome-caption-landscape-hidden", longSender(longCaption), landscapeAt = "font200", transfers = true,
             ready = { it.full == FullImage.OFFER }, act = { hideByTap() }),
-        // Portrait default: a photo with a caption, hidden; TalkBack on, after a tap (still shown); hidden, then the offline
-        // line appears (shown with the line).
+        // Portrait default: a photo with a caption, hidden; TalkBack on, after a tap (still shown); hidden while the original
+        // loads, then it fails (shown with the line). Offline is decided at opening and at Load full (F4), both with the
+        // chrome shown, so the line that can appear while hidden is a running load's.
         Shot("viewer-caption-hidden", roomMessage(3, longCaption, photo(70)), portraitAt = "default", ready = { it.full == FullImage.OFFER },
             act = { hideByTap() }),
         Shot("viewer-talkback-tap", roomMessage(3, longCaption, photo(70)), portraitAt = "default", assistive = true,
             ready = { it.full == FullImage.OFFER }, act = { tapClearBand(); pastDoubleTap() }),
-        Shot("viewer-hidden-offline", roomMessage(3, null, photo(70)), portraitAt = "default", ready = { it.full == FullImage.OFFER },
+        Shot("viewer-hidden-failed", roomMessage(3, null, photo(70)), portraitAt = "default",
+            script = { serve(70); reply(70) { failGate.await(); DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) } },
+            ready = { it.full == FullImage.OFFER },
             act = {
+                compose.onNodeWithTag("viewer_load_full").performClick(); waitFor { it.full == FullImage.LOADING }
                 hideByTap()
-                network.state.value = NetworkState(online = false, metered = true)
-                waitFor { it.full == FullImage.OFFLINE }
-                compose.waitUntil(5_000) { present("viewer_line") }
+                failGate.complete(Unit)
+                waitFor { it.full == FullImage.FAILED }
+                compose.waitUntil(5_000) { present("viewer_line") && present("viewer_close") }
             }),
     )
 
@@ -175,6 +179,8 @@ class ReceivedViewerPresentationTest {
 
     private lateinit var images: AttachmentImagesViewModel
     private lateinit var network: FixedNetwork
+    /** Holds viewer-hidden-failed's original until the chrome is hidden. */
+    private val failGate = kotlinx.coroutines.CompletableDeferred<Unit>()
     /** Evidence only, never a retry: on a timeout, say which viewer state was reached. */
     private fun waitFor(condition: (ViewerState) -> Boolean) = try {
         compose.waitUntil(5_000) { images.viewer.state.value?.let(condition) == true }
