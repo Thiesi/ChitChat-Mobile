@@ -61,9 +61,12 @@ class MainActivity : ComponentActivity() {
                     (application as ChitChatApplication).sessions.state, (application as ChitChatApplication).attachmentDownloads,
                     (application as ChitChatApplication).shareCopies))
             val settingsRepository = (application as ChitChatApplication).settingsRepository
-            val transfersUi = androidx.compose.runtime.remember(fileTransfers) {
-                io.github.thiesi.chitchat.core.ui.FileTransfersUi(fileTransfers.transfers, settingsRepository::markShareNoteSeen)
-            }
+            // Activity-scoped, so the open first-use note and the picker's pending Save survive a recreation (#318 review).
+            val transfersUi: io.github.thiesi.chitchat.core.ui.FileTransfersUi = viewModel(factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                    io.github.thiesi.chitchat.core.ui.FileTransfersUi(fileTransfers.transfers, settingsRepository::markShareNoteSeen) as T
+            })
             val shareNoteSeen by settingsRepository.shareNoteSeen.collectAsState(initial = false)
             val accountDeletion: io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel.factory((application as ChitChatApplication).accounts))

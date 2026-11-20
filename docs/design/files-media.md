@@ -288,7 +288,8 @@ Within the transcript spec's bubble, run and chit rules:
   - **Displayed names (PL, F5b):** the name and its TalkBack label drop the bidi controls
     (U+202A–202E, U+2066–2069, U+200E, U+200F, U+061C; ZWJ and ZWNJ stay) and the label wraps the
     name as an isolated run, so a right-to-left name can't reorder "· 2.4 MB". The type is the real
-    last extension of that stripped name.
+    last extension of that stripped name, except that an APK-like file (by either rule) always reads
+    "APK", in the label too, so a Save-only card never claims another type (PL, F5b).
   - **Open** hands the file to another app through the same temporary private copy as Share
     (see Share out), with the server's declared MIME type, never a sniffed one.
 - **Image states:**
@@ -524,6 +525,11 @@ The policy is local and read from existing system state, with no new requests:
 - **Share/Open:** not enough space is "There isn't enough space on this phone to get the file ready.
   Free up some space, then try again." (no inline Try again); a backgrounded or cancelled Share or
   Open ends silently.
+- **Levels (PL, F5b):** what the person did, or a plain fact, is level 1 (a muted line): Saved, a Save
+  they cancelled ("Nothing was saved. If you saved to a new file, it may be empty. …" before any byte,
+  "Saving stopped. The file may be incomplete. …" after), and no app for the type. Failures are level 2
+  (the warning notice): the pre-byte reasons, the mid-way stops, the background stop, damaged, no space,
+  and Share/Open failures.
 - **One at a time:** while one runs, the other Open, Save and Share buttons are disabled, not hidden.
   During the session's 429 wait they're disabled too, with no line on the card (the status slot has
   row 7); the viewer keeps its own row-7 line.

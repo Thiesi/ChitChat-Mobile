@@ -31,6 +31,12 @@ pictures and guest invite links." The viewer captures follow in a stacked F5c.
   - **First-use note:** Share and Open ask once per install (a boolean in the backup-excluded settings store, recorded on
     Continue). Cancel starts nothing. The dialog counts in both screens' `composerDialog` (no read proof, no typing).
 - Disabled states come from F5a: one transfer at a time, and nothing during the session's 429 wait.
+- **Configuration changes (#318 review):** the picker's result is matched to `FileTransfers.pendingSave`, never to a
+  copy kept in a composition, so a rotation, theme or font change while the picker is open still delivers the Save and
+  never leaves the transfers busy. `FileTransfersUi` is an Activity-scoped ViewModel, so an open first-use note survives
+  too, and a finished line doesn't clear on a configuration change, only when the person leaves the conversation.
+- **Levels:** Saved, a cancelled Save and no app are level 1; every failure is level 2 (the shared warning notice).
+- **Type label:** the real extension, but "APK" for any APK-like file (`FileNames.typeLabel`).
 
 ## Verification
 
@@ -44,5 +50,9 @@ pictures and guest invite links." The viewer captures follow in a stacked F5c.
     Continue records it and starts the copy;
   - during a transfer the other card's buttons are disabled and the notice with Cancel shows; Saved then shows "Saved
     {name}" and the buttons return;
-  - a bidi override never reaches the card's shown name or label, and the APK rule runs on the sanitized name.
+  - a bidi override never reaches the card's shown name or label, and the APK rule runs on the sanitized name;
+  - a Save the person cancels is level 1, and a pre-byte 410 is level 2.
+- **`ReceivedTransfersRecreationTest`:** a Save whose picker result arrives after a real `recreate()` streams into the
+  chosen document and leaves nothing busy; the first-use note survives a recreation and its Cancel still starts nothing.
+- **JVM:** `FileNamesTest` adds the type label (`report.pdf` under the APK MIME reads "APK").
 - **`ReceivedFilesJourneyTest`:** the disclosures assert the final wording.

@@ -68,6 +68,14 @@ class FileNamesTest {
         assertFalse(FileNames.isApkLike(file("photo.png", "image/png")))
     }
 
+    @Test fun theTypeLabelIsTheExtensionUnlessTheFileIsApkLike() {
+        // PL (F5b): an APK by either rule always reads "APK", so a Save-only card never claims another type.
+        assertEquals("APK", FileNames.typeLabel(file("report.pdf", "application/vnd.android.package-archive")))
+        assertEquals("PDF", FileNames.typeLabel(file("report.pdf", "application/pdf")))
+        assertEquals("APK", FileNames.typeLabel(file("photo‮gnp.apk", "image/png")))
+        assertEquals("ZIP", FileNames.typeLabel(file("archive.zip")))
+    }
+
     @Test fun displayNamesDropBidiControlsButKeepJoiners() {
         assertEquals("photognp.apk", FileNames.withoutBidiControls("photo‮gnp.apk"))
         assertEquals("a‍b‌c", FileNames.withoutBidiControls("a‍b‌c‎‏؜⁦⁩"))
