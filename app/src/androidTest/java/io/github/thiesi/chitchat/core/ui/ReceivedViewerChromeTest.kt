@@ -1,7 +1,15 @@
 package io.github.thiesi.chitchat.core.ui
 
 import android.view.KeyEvent
+import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
+import androidx.compose.ui.platform.AbstractComposeView
+import androidx.core.view.children
+import androidx.test.espresso.UiController
+import androidx.test.espresso.ViewAction
+import androidx.test.espresso.matcher.RootMatchers
+import androidx.test.espresso.matcher.ViewMatchers
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +23,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -37,7 +46,6 @@ import io.github.thiesi.chitchat.core.media.DownloadResult
 import io.github.thiesi.chitchat.core.media.FileTransfers
 import io.github.thiesi.chitchat.core.media.FullImage
 import io.github.thiesi.chitchat.core.media.ImageState
-import io.github.thiesi.chitchat.core.media.NetworkState
 import io.github.thiesi.chitchat.core.media.ShareCopies
 import io.github.thiesi.chitchat.core.media.TransferPurpose
 import io.github.thiesi.chitchat.core.media.TransferState
@@ -103,7 +111,8 @@ class ReceivedViewerChromeTest {
         compose.waitForIdle()
     }
 
-    private fun <T> withViewer(caption: String? = "Harbour at dusk", block: (ActivityScenario<OnCreateContentTestActivity>) -> T): T {
+    /** Returns Unit, so every `@Test fun … = withViewer { }` stays a void method whatever its block ends with. */
+    private fun withViewer(caption: String? = "Harbour at dusk", block: (ActivityScenario<OnCreateContentTestActivity>) -> Unit) {
         rooms.messages = listOf(roomMessage(3, caption, photo(70)))
         OnCreateContentTestActivity.content = {
             CompositionLocalProvider(LocalAssistiveInput provides assistive.value, LocalChromeFade provides fade,
@@ -111,7 +120,7 @@ class ReceivedViewerChromeTest {
                 MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } }
             }
         }
-        return ActivityScenario.launch(OnCreateContentTestActivity::class.java).use { scenario ->
+        ActivityScenario.launch(OnCreateContentTestActivity::class.java).use { scenario ->
             compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
             compose.waitUntil(5_000) { images.images.states.value.values.any { it is ImageState.Loaded } }
             compose.onNodeWithTag("attachment_frame:70").performClick()
@@ -153,6 +162,10 @@ class ReceivedViewerChromeTest {
         pastDoubleTap()
         assertTrue("A pinch doesn't toggle", present("viewer_close"))
         compose.onNodeWithTag("viewer_zoom_out").assertIsEnabled()
+        compose.onNodeWithTag("viewer_zoom_reset").performClick()
+        image().performTouchInput { longClick(center) }
+        pastDoubleTap()
+        assertTrue("A long-press doesn't toggle (PL)", present("viewer_close"))
     }
 
     @Test fun showControlsAndHideControlsAreTheImagesOwnActions() = withViewer {
@@ -208,11 +221,20 @@ class ReceivedViewerChromeTest {
         } finally { gate.complete(Unit); job.cancel(); copies.deleteRecursively(); transfersUi = null }
     }
 
-    @Test fun aNewStateLineWhileHiddenShowsTheChrome() = withViewer {
-        hide()
-        network.state.value = NetworkState(online = false, metered = true)
-        compose.waitUntil(5_000) { images.viewer.state.value?.full == FullImage.OFFLINE }
-        compose.waitUntil(5_000) { present("viewer_close") && present("viewer_line") }
+    @Test fun aNewStateLineWhileHiddenShowsTheChrome() {
+        // Offline is decided at opening or at Load full (F4), so the line that can appear while hidden is a running load's:
+        // the original is loading when the chrome hides, then fails.
+        val gate = CompletableDeferred<Unit>()
+        source.serve(70)
+        source.reply(70) { gate.await(); DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) }
+        withViewer {
+            compose.onNodeWithTag("viewer_load_full").performClick()
+            compose.waitUntil(5_000) { images.viewer.state.value?.full == FullImage.LOADING }
+            hide()
+            gate.complete(Unit)
+            compose.waitUntil(5_000) { images.viewer.state.value?.full == FullImage.FAILED }
+            compose.waitUntil(5_000) { present("viewer_close") && present("viewer_line") }
+        }
     }
 
     @Test fun aKeyWhileHiddenShowsTheChromeWithFocusOnClose() = withViewer {
@@ -221,6 +243,25 @@ class ReceivedViewerChromeTest {
         compose.waitUntil(5_000) { present("viewer_close") }
         compose.onNodeWithTag("viewer_close").assertIsFocused()
         assertTrue("The key only showed the chrome", viewerOpen())
+    }
+
+    @Test fun aSystemKeyWhileHiddenPassesThroughAndChangesNothing() = withViewer {
+        hide()
+        // Straight to the viewer's Compose view, so the result is the viewer's own answer and no system volume changes.
+        var consumed: Boolean? = null
+        Espresso.onView(ViewMatchers.isRoot()).inRoot(RootMatchers.isDialog()).perform(object : ViewAction {
+            override fun getConstraints() = ViewMatchers.isRoot()
+            override fun getDescription() = "dispatch volume up to the viewer's Compose view"
+            override fun perform(uiController: UiController, view: View) {
+                val compose = generateSequence(listOf(view)) { level -> level.flatMap { (it as? ViewGroup)?.children?.toList().orEmpty() }.takeIf { it.isNotEmpty() } }
+                    .flatten().first { it is AbstractComposeView }
+                consumed = compose.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP)) ||
+                    compose.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_VOLUME_UP))
+            }
+        })
+        assertEquals("Volume up isn't consumed", false, consumed)
+        compose.waitForIdle()
+        assertTrue("The chrome stays hidden", chromeGone())
     }
 
     @Test fun escWhileHiddenClosesTheViewer() = withViewer {
@@ -235,7 +276,13 @@ class ReceivedViewerChromeTest {
         compose.waitUntil(5_000) { !viewerOpen() }
     }
 
-    @Test fun aRotationKeepsHiddenWithNoLineAndShowsWithOne() = withViewer { scenario ->
+    @Test fun aRotationKeepsHiddenWithNoLineAndShowsWithOne() {
+        source.serve(70)
+        source.reply(70) { DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) }
+        withViewer { scenario -> rotation(scenario) }
+    }
+
+    private fun rotation(scenario: ActivityScenario<OnCreateContentTestActivity>) {
         hide()
         scenario.recreate()
         compose.waitUntil(5_000) { viewerOpen() }
@@ -243,8 +290,9 @@ class ReceivedViewerChromeTest {
         assertTrue("Hidden survives a rotation with no line", chromeGone())
         tapImage()
         compose.waitUntil(5_000) { present("viewer_close") }
-        network.state.value = NetworkState(online = false, metered = true)
-        compose.waitUntil(5_000) { present("viewer_line") }
+        compose.onNodeWithTag("viewer_load_full").performClick()
+        compose.waitUntil(5_000) { images.viewer.state.value?.full == FullImage.FAILED && present("viewer_line") }
+        // A line present when hiding doesn't prevent it; a rotation with the line on screen shows the chrome again.
         hide()
         scenario.recreate()
         compose.waitUntil(5_000) { viewerOpen() && present("viewer_close") && present("viewer_line") }

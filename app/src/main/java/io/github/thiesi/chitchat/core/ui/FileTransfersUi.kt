@@ -340,6 +340,10 @@ internal fun stopLevel(stopped: TransferState.Stopped): Int = when {
 }
 
 /** The PL's copy for each stop (files-media.md; 2026-11-20). A cancelled or backgrounded Share/Open is silent. */
+/** Whether [stopLine] gives a line: every Save stop does; a cancelled or backgrounded Share or Open says nothing. */
+internal fun TransferState.Stopped.hasLine() =
+    purpose == TransferPurpose.SAVE || (reason != TransferStop.CANCELLED && reason != TransferStop.BACKGROUND)
+
 @Composable
 private fun stopLine(stopped: TransferState.Stopped): String? {
     val saving = stopped.purpose == TransferPurpose.SAVE
@@ -358,7 +362,7 @@ private fun stopLine(stopped: TransferState.Stopped): String? {
         TransferStop.NO_APP -> stringResource(R.string.transfer_no_app)
         // PL J5: the lead says what didn't happen, then row 7's wait; no Try again during the wait.
         TransferStop.RATE_LIMITED -> stringResource(R.string.transfer_share_not_ready) + " " + reason
-        TransferStop.CANCELLED, TransferStop.BACKGROUND -> null
+        TransferStop.CANCELLED, TransferStop.BACKGROUND -> null // hasLine() is false exactly here
         else -> stringResource(R.string.transfer_share_failed)
     }
     return when {
