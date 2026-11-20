@@ -18,6 +18,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
@@ -78,7 +79,9 @@ class ReceivedTransfersPresentationTest {
 
     private fun shots(): List<Shot> = listOf(
         Shot("transfer-cards", listOf(roomMessage(3, null, pdf), roomMessage(4, null, file(72, "tool.apk",
-            "application/vnd.android.package-archive")), roomMessage(5, null, file(73, "photo‮gnp.apk", "application/octet-stream")))),
+            "application/vnd.android.package-archive")), roomMessage(5, null, file(73, "photo‮gnp.apk", "application/octet-stream"))),
+            // PL: scrolled so the PDF card's Open and Save show, at 200% too.
+            act = { compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag("attachment_card:71")) }),
         Shot("transfer-save-progress", listOf(roomMessage(3, null, pdf)), Script(hold = true), act = { save(it) }),
         Shot("transfer-share-progress", listOf(roomMessage(3, null, pdf)), Script(hold = true), act = { prepare(it, TransferPurpose.SHARE) }),
         Shot("transfer-saved", listOf(roomMessage(3, null, pdf)), act = { save(it) }),
@@ -101,7 +104,6 @@ class ReceivedTransfersPresentationTest {
         Shot("transfer-viewer-bar", emptyList(), viewer = FullImage.OFFER, node = "viewer"),
         Shot("transfer-viewer-offline", emptyList(), viewer = FullImage.OFFLINE, node = "viewer"),
         Shot("transfer-viewer-progress", emptyList(), Script(hold = true), viewer = FullImage.NONE, node = "viewer", act = {
-            compose.runOnIdle { it.noteSeen = true }
             compose.runOnIdle { it.hand(AttachmentRef(photo(70), false), TransferPurpose.SHARE) }
             compose.waitUntil(5_000) { it.transfers.state.value is TransferState.Running }
         }),
@@ -116,7 +118,7 @@ class ReceivedTransfersPresentationTest {
     }
 
     private fun prepare(ui: FileTransfersUi, purpose: TransferPurpose) {
-        compose.runOnIdle { ui.noteSeen = true; ui.hand(AttachmentRef(pdf, false), purpose) }
+        compose.runOnIdle { ui.hand(AttachmentRef(pdf, false), purpose) }
         compose.waitUntil(5_000) { ui.transfers.state.value != null && (ui.transfers.state.value !is TransferState.Running || hold) }
     }
 
@@ -153,7 +155,8 @@ class ReceivedTransfersPresentationTest {
                 shot.script.result
             }
             val transfers = FileTransfers(CoroutineScope(Dispatchers.Main + job), session, source, ShareCopies(root), { shot.space })
-            val ui = FileTransfersUi(transfers) { }
+            // The note shows only where it's the subject; everywhere else it was already continued past.
+            val ui = FileTransfersUi(transfers, kotlinx.coroutines.flow.flowOf(shot.name != "transfer-note")) { }
             val viewerKey = ImageKey(session.value.server!!.value, 7, session.value.generation, false, 70)
             try {
                 ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
