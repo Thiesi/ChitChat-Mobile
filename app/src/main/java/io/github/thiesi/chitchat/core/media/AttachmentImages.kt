@@ -276,6 +276,11 @@ internal class AttachmentImages(
     internal fun unpin(ref: AttachmentRef) { key(ref)?.let { frames[it] }?.let { it.pinned = (it.pinned - 1).coerceAtLeast(0) } }
     /** A session 429 wait is running: nothing starts automatically (TL, #306). */
     internal fun waitingNow() = waiting()
+    /** How long the session 429 wait still runs, 0 when none. */
+    internal fun waitRemainingMillis() = (session.value.retryAtMillis - clock()).coerceAtLeast(0)
+    /** The session wait came from the server's positive retry_after_seconds (P-106), as the status slot decides it. */
+    internal fun waitKnown() = session.value.error?.status == 429 && (session.value.error?.retryAfterSeconds ?: 0L) > 0L
+    internal fun now() = clock()
     /** What the transcript frame loads for [ref]: the preview unless there's none, it's invalid, or it was unavailable. */
     internal fun loadsPreview(ref: AttachmentRef): Boolean {
         val frame = key(ref)?.let { frames[it] } ?: Frame(ref, 0, 0)

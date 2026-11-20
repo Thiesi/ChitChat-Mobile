@@ -88,14 +88,21 @@ internal object ReceivedFiles {
 /** Answers in order per attachment ID; otherwise [bytes] for that ID (a small real PNG by default) on [budget]. */
 internal class ReceivedSource(private val budget: AttachmentMemoryBudget = AttachmentMemoryBudget(64L * 1024 * 1024)) : AttachmentSource {
     val calls = CopyOnWriteArrayList<Long>()
+    /** What the shared budget still holds, to check that leases are released. */
+    val reserved: Long get() = budget.reservedBytes
     val replies = HashMap<Long, ArrayDeque<suspend () -> DownloadResult>>()
     var bytes: (Long) -> ByteArray = { ReceivedFiles.png(400, 300) }
     fun reply(id: Long, result: suspend () -> DownloadResult) { replies.getOrPut(id) { ArrayDeque() } += result }
+    /** Queues an ordinary answer (the default bytes), e.g. the preview before a scripted original. */
+    fun serve(id: Long) = reply(id) { data(id) }
+    private fun data(id: Long): DownloadResult {
+        val data = bytes(id)
+        return DownloadResult.Bytes(data, null, budget.reserve(data.size.toLong())!!)
+    }
     override suspend fun load(ref: AttachmentRef, variant: AttachmentVariant, expected: SessionState, ifNoneMatch: String?): DownloadResult {
         calls += ref.attachment.id
         replies[ref.attachment.id]?.removeFirstOrNull()?.let { return it() }
-        val data = bytes(ref.attachment.id)
-        return DownloadResult.Bytes(data, null, budget.reserve(data.size.toLong())!!)
+        return data(ref.attachment.id)
     }
 }
 
@@ -111,7 +118,9 @@ internal class ReceivedRooms(override val session: StateFlow<SessionState>) : Co
     override suspend fun history(roomId: Long, beforeId: Long?, limit: Int) = MessagePage(messages, messages.firstOrNull()?.id, false)
     override suspend fun pings(roomId: Long) = emptyList<RoomPing>()
     override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult = error("No sends in this fixture")
-    override suspend fun read(roomId: Long, messageId: Long) = messageId
+    /** Read POSTs, for the viewer's no-read-proof condition (TL, F4). */
+    val reads = java.util.concurrent.atomic.AtomicInteger()
+    override suspend fun read(roomId: Long, messageId: Long): Long { reads.incrementAndGet(); return messageId }
 }
 
 internal class ReceivedDirects(override val session: StateFlow<SessionState>) : DirectOperations {
