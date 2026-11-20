@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import io.github.thiesi.chitchat.core.ui.hasLine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -252,6 +253,17 @@ class FileTransfersTest {
         assertNull(transfers.state.value)
         assertTrue(copiesOnDisk().isEmpty())
         assertFalse(transfers.busy)
+    }
+
+    @Test fun everySaveStopHasALineAndAQuietShareStopHasNone() {
+        // F6 keys the viewer's chrome on this: the line the notice actually shows (PL).
+        val ref = AttachmentRef(MessageAttachment(40, "notes.pdf", "application/pdf", 10L, "a".repeat(64), previewable = false), false)
+        for (reason in TransferStop.entries) {
+            assertTrue("Save $reason", TransferState.Stopped(ref, TransferPurpose.SAVE, reason, false).hasLine())
+            val quiet = reason == TransferStop.CANCELLED || reason == TransferStop.BACKGROUND
+            for (purpose in listOf(TransferPurpose.SHARE, TransferPurpose.OPEN))
+                assertEquals("$purpose $reason", !quiet, TransferState.Stopped(ref, purpose, reason, false).hasLine())
+        }
     }
 
     @Test fun aRevalidationOfTheSameAccountKeepsTheTransfer() = runTest {

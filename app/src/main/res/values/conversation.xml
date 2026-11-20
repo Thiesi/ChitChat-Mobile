@@ -35,6 +35,9 @@
          clauses return in F5. -->
     <string name="image_open">Open photo</string>
     <string name="viewer_close">Close</string>
+    <!-- F6 (PL, 2026-11-20): spoken only, on the image. -->
+    <string name="viewer_show_controls">Show controls</string>
+    <string name="viewer_hide_controls">Hide controls</string>
     <string name="viewer_load_full">Load full image · %1$s</string>
     <string name="viewer_loading_full">Loading the full image</string>
     <string name="viewer_failed">Couldn’t load the full image</string>
