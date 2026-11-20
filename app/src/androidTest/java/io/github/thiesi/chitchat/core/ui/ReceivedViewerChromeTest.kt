@@ -15,11 +15,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
@@ -46,6 +48,7 @@ import io.github.thiesi.chitchat.core.media.DownloadResult
 import io.github.thiesi.chitchat.core.media.FileTransfers
 import io.github.thiesi.chitchat.core.media.FullImage
 import io.github.thiesi.chitchat.core.media.ImageState
+import io.github.thiesi.chitchat.core.media.NetworkState
 import io.github.thiesi.chitchat.core.media.ShareCopies
 import io.github.thiesi.chitchat.core.media.TransferPurpose
 import io.github.thiesi.chitchat.core.media.TransferState
@@ -92,7 +95,29 @@ class ReceivedViewerChromeTest {
     private var transfersUi: FileTransfersUi? = null
     private val chrome = listOf("viewer_close", "viewer_top", "viewer_bottom", "viewer_zoom", "viewer_caption", "viewer_save", "viewer_share")
 
-    @After fun tearDown() { OnCreateContentTestActivity.content = null; room.cancel(); store.clear() }
+    @After fun tearDown() {
+        OnCreateContentTestActivity.content = null; room.cancel(); store.clear()
+    }
+
+    /**
+     * Sends [code] (down, then up) straight to the viewer's Compose view and returns whether it was consumed. Never through
+     * the instrumentation: a real key event takes the whole device out of touch mode for the rest of the run.
+     */
+    private fun key(code: Int): Boolean {
+        var consumed: Boolean? = null
+        Espresso.onView(ViewMatchers.isRoot()).inRoot(RootMatchers.isDialog()).perform(object : ViewAction {
+            override fun getConstraints() = ViewMatchers.isRoot()
+            override fun getDescription() = "dispatch key $code to the viewer's Compose view"
+            override fun perform(uiController: UiController, view: View) {
+                val target = generateSequence(listOf(view)) { level -> level.flatMap { (it as? ViewGroup)?.children?.toList().orEmpty() }.takeIf { it.isNotEmpty() } }
+                    .flatten().first { it is AbstractComposeView }
+                val down = target.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+                val up = target.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+                consumed = down || up
+            }
+        })
+        return consumed!!
+    }
 
     private fun text(id: Int) = context.getString(id)
     private fun present(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
@@ -112,7 +137,8 @@ class ReceivedViewerChromeTest {
     }
 
     /** Returns Unit, so every `@Test fun … = withViewer { }` stays a void method whatever its block ends with. */
-    private fun withViewer(caption: String? = "Harbour at dusk", block: (ActivityScenario<OnCreateContentTestActivity>) -> Unit) {
+    private fun withViewer(caption: String? = "Harbour at dusk", beforeOpen: () -> Unit = {},
+        block: (ActivityScenario<OnCreateContentTestActivity>) -> Unit) {
         rooms.messages = listOf(roomMessage(3, caption, photo(70)))
         OnCreateContentTestActivity.content = {
             CompositionLocalProvider(LocalAssistiveInput provides assistive.value, LocalChromeFade provides fade,
@@ -123,9 +149,15 @@ class ReceivedViewerChromeTest {
         ActivityScenario.launch(OnCreateContentTestActivity::class.java).use { scenario ->
             compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
             compose.waitUntil(5_000) { images.images.states.value.values.any { it is ImageState.Loaded } }
+            fun touchMode(): Boolean { var mode = false; scenario.onActivity { mode = it.window.decorView.isInTouchMode }; return mode }
+            val touchBefore = touchMode()
+            beforeOpen()
             compose.onNodeWithTag("attachment_frame:70").performClick()
             compose.waitUntil(5_000) { viewerOpen() && present("viewer_close") }
             block(scenario)
+            // TL (#320): no case here may change touch mode (injected keys once broke AuthJourneyTest's keyboard handling
+            // later in the run). Fail here, loudly, rather than in another class.
+            assertEquals("Touch mode unchanged by this case", touchBefore, touchMode())
         }
     }
 
@@ -140,11 +172,42 @@ class ReceivedViewerChromeTest {
         compose.waitUntil(5_000) { present("viewer_close") && present("viewer_caption") }
     }
 
-    @Test fun whileShownATapOnTheChromesScrimIsNotATapOnTheImage() = withViewer {
-        // The sender and time sit on the top bar's scrim: no control, but not the image either.
-        compose.onNodeWithTag("viewer_top").performTouchInput { click(center) }
+    @Test fun aTapOnAControlKeepsTheChromeAndATapOnTheSenderOrCaptionTextToggles() = withViewer {
+        // PL and TL: a tap anywhere that isn't a control toggles; controls keep their own taps.
+        compose.onNodeWithTag("viewer_caption_toggle").performTouchInput { click(center) }
         pastDoubleTap()
-        assertTrue(present("viewer_close"))
+        assertTrue("More keeps its tap", present("viewer_close"))
+        compose.onNodeWithTag("viewer_caption_toggle").performTouchInput { click(center) } // Less
+        pastDoubleTap()
+        compose.onNodeWithTag("viewer_zoom_in").performTouchInput { click(center) }
+        pastDoubleTap()
+        assertTrue("Zoom in keeps its tap", present("viewer_close"))
+        compose.onNodeWithTag("viewer_zoom_reset").performTouchInput { click(center) }
+        pastDoubleTap()
+        // The sender and time are plain content on the top bar's scrim: a tap there hides the chrome.
+        compose.onNodeWithTag("viewer_top").performTouchInput { click(center) }
+        compose.waitUntil(5_000) { chromeGone() }
+        tapImage()
+        compose.waitUntil(5_000) { present("viewer_close") }
+        // So is a collapsed caption's text.
+        compose.onNodeWithTag("viewer_caption").performTouchInput { click(center) }
+        compose.waitUntil(5_000) { chromeGone() }
+    }
+
+    @Test fun aTapOnADisabledSaveDoesNotToggle() {
+        // Offline at opening, Save and Share are disabled; a disabled control still keeps its tap (PL and TL).
+        val copies = Files.createTempDirectory("ccm-chrome-save").toFile()
+        val job = SupervisorJob()
+        transfersUi = FileTransfersUi(FileTransfers(CoroutineScope(Dispatchers.Main + job), session, { _, _, _, _ -> DownloadResult.Gone },
+            ShareCopies(copies), { Long.MAX_VALUE }), flowOf(true)) { }
+        try {
+            withViewer(beforeOpen = { network.state.value = NetworkState(online = false, metered = true) }) {
+                compose.waitUntil(5_000) { images.viewer.state.value?.full == FullImage.OFFLINE }
+                compose.onNodeWithTag("viewer_save").assertIsNotEnabled().performTouchInput { click(center) }
+                pastDoubleTap()
+                assertTrue("A tap on a disabled Save doesn't toggle", present("viewer_close"))
+            }
+        } finally { job.cancel(); copies.deleteRecursively(); transfersUi = null }
     }
 
     @Test fun aDoubleTapZoomsAndPanAndPinchNeverToggle() = withViewer {
@@ -239,7 +302,7 @@ class ReceivedViewerChromeTest {
 
     @Test fun aKeyWhileHiddenShowsTheChromeWithFocusOnClose() = withViewer {
         hide()
-        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_TAB)
+        assertTrue("Tab is consumed while hidden", key(KeyEvent.KEYCODE_TAB))
         compose.waitUntil(5_000) { present("viewer_close") }
         compose.onNodeWithTag("viewer_close").assertIsFocused()
         assertTrue("The key only showed the chrome", viewerOpen())
@@ -247,26 +310,15 @@ class ReceivedViewerChromeTest {
 
     @Test fun aSystemKeyWhileHiddenPassesThroughAndChangesNothing() = withViewer {
         hide()
-        // Straight to the viewer's Compose view, so the result is the viewer's own answer and no system volume changes.
-        var consumed: Boolean? = null
-        Espresso.onView(ViewMatchers.isRoot()).inRoot(RootMatchers.isDialog()).perform(object : ViewAction {
-            override fun getConstraints() = ViewMatchers.isRoot()
-            override fun getDescription() = "dispatch volume up to the viewer's Compose view"
-            override fun perform(uiController: UiController, view: View) {
-                val compose = generateSequence(listOf(view)) { level -> level.flatMap { (it as? ViewGroup)?.children?.toList().orEmpty() }.takeIf { it.isNotEmpty() } }
-                    .flatten().first { it is AbstractComposeView }
-                consumed = compose.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP)) ||
-                    compose.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_VOLUME_UP))
-            }
-        })
-        assertEquals("Volume up isn't consumed", false, consumed)
+        // The viewer's own answer, and no system volume changes.
+        assertEquals("Volume up isn't consumed", false, key(KeyEvent.KEYCODE_VOLUME_UP))
         compose.waitForIdle()
         assertTrue("The chrome stays hidden", chromeGone())
     }
 
     @Test fun escWhileHiddenClosesTheViewer() = withViewer {
         hide()
-        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_ESCAPE)
+        key(KeyEvent.KEYCODE_ESCAPE)
         compose.waitUntil(5_000) { !viewerOpen() }
     }
 
@@ -315,9 +367,15 @@ class ReceivedViewerChromeTest {
             val hideIt = hideAction()!!
             compose.mainClock.autoAdvance = false
             try {
-                compose.runOnUiThread { hideIt.action() }
+                // Apply the change now, so the paused clock's next frame is the exit's first (#320).
+                compose.runOnUiThread { hideIt.action(); Snapshot.sendApplyNotifications() }
                 compose.mainClock.advanceTimeByFrame()
-                assertTrue("Cleared as the fade-out starts", chromeGone())
+                val firstFrame = chromeGone()
+                if (!firstFrame) {
+                    // Evidence only, still a failure: does the next frame clear it?
+                    compose.mainClock.advanceTimeByFrame()
+                    throw AssertionError("Not cleared at the exit's first frame (second frame: ${if (chromeGone()) "cleared" else "not cleared"})")
+                }
                 compose.mainClock.advanceTimeBy(50)
                 assertTrue("Still mid-fade, still gone", chromeGone())
                 compose.mainClock.advanceTimeBy(200)

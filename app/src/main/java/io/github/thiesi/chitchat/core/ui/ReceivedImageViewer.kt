@@ -9,21 +9,16 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.focusable
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
@@ -152,9 +147,6 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
         var focusClose by remember { mutableStateOf(false) }
         val closeFocus = remember { FocusRequester() }
         val imageFocus = remember { FocusRequester() }
-        // The chrome's scrims while shown, in root coordinates: a tap there isn't a tap on the image.
-        val chromeRects = remember { mutableStateMapOf<String, Rect>() }
-        var imageOrigin by remember { mutableStateOf(Offset.Zero) }
         val assistive = rememberAssistiveInput()
         val transfersUi = LocalFileTransfers.current
         val transferFlow = remember(transfersUi) { transfersUi?.transfers?.state ?: MutableStateFlow<TransferState?>(null) }
@@ -198,7 +190,7 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
             val window = maxHeight
             val density = LocalDensity.current
             // The image, with the viewer's own description (TL condition 7, #313).
-            Box(Modifier.fillMaxSize().onSizeChanged { area = it }.onGloballyPositioned { imageOrigin = it.positionInRoot() }
+            Box(Modifier.fillMaxSize().onSizeChanged { area = it }
                 .focusRequester(imageFocus).focusable(enabled = !shown)
                 .semantics {
                     contentDescription = description
@@ -211,9 +203,10 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                     // A no-op onLongPress: without it a held, still press would end as a tap and toggle (PL).
                     detectTapGestures(onDoubleTap = { if (scale > 1f) { scale = 1f; pan = Offset.Zero } else scale = 2.5f },
                         onLongPress = { },
-                        onTap = { at ->
-                            // While shown, the image's tap target excludes the controls' scrims.
-                            if (currentHideable && (hidden || chromeRects.values.none { it.contains(at + imageOrigin) })) hidden = !hidden
+                        onTap = {
+                            // A tap anywhere that isn't a control toggles (PL and TL): the scrims, the sender and time, a
+                            // collapsed caption and the state lines are plain content. Controls keep their own taps.
+                            if (currentHideable) hidden = !hidden
                         })
                 }
                 .pointerInput(viewer.key) {
@@ -265,13 +258,11 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
             // Measured outside its inset padding: the bar's full height from the window's top edge, the status bar
             // included, is what the bottom must stay below (#313).
             Chrome(shown) {
-            DisposableEffect(Unit) { onDispose { chromeRects.remove("top") } }
             Row(Modifier.fillMaxWidth().background(Lantern.overlayScrim).onSizeChanged { topBar = it.height }
-                .onGloballyPositioned { chromeRects["top"] = it.boundsInRoot() }
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
                 .padding(horizontal = 4.dp, vertical = 4.dp).testTag("viewer_top"),
                 verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onClose, modifier = Modifier.size(Lantern.target).focusRequester(closeFocus).testTag("viewer_close")) {
+                IconButton(onClick = onClose, modifier = Modifier.keepsTaps().size(Lantern.target).focusRequester(closeFocus).testTag("viewer_close")) {
                     Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.viewer_close), tint = Lantern.overlayText)
                 }
                 Column(Modifier.padding(horizontal = 8.dp).weight(1f).semantics(mergeDescendants = true) { heading() }) {
@@ -297,8 +288,7 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
             // PL J8: in a window wider than tall the pill sits beside the bottom block, so the caption keeps its height.
             val wide = maxWidth > maxHeight
             val pill: (@Composable (Modifier) -> Unit)? = if (!showsImage) null else { modifier ->
-                DisposableEffect(Unit) { onDispose { chromeRects.remove("pill") } }
-                ZoomGroup(scale, modifier.onGloballyPositioned { chromeRects["pill"] = it.boundsInRoot() },
+                ZoomGroup(scale, modifier,
                     onZoomIn = { scale = (scale * 2f).coerceAtMost(MAX_ZOOM) },
                     onZoomOut = { scale = (scale / 2f).coerceAtLeast(1f); pan = if (scale == 1f) Offset.Zero else bounded(pan, scale) },
                     onReset = { scale = 1f; pan = Offset.Zero })
@@ -306,12 +296,10 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
             val showsSomething = still != null || animated != null
             @Composable fun BottomBlock(modifier: Modifier, sides: WindowInsetsSides) =
                 Column(modifier.background(Lantern.overlayScrim).windowInsetsPadding(WindowInsets.safeDrawing.only(sides))
-                    .onGloballyPositioned { chromeRects["bottom"] = it.boundsInRoot() }
                     .padding(horizontal = 16.dp, vertical = 8.dp).testTag("viewer_bottom")
                     // Wide: the visual order differs from the reading order, so the block orders its own traversal (PL J8).
                     .then(if (wide) Modifier.semantics { isTraversalGroup = true } else Modifier),
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    DisposableEffect(Unit) { onDispose { chromeRects.remove("bottom") } }
                     val hasCaption = !caption.isNullOrBlank()
                     fun order(index: Float) = if (wide) Modifier.semantics { traversalIndex = index } else Modifier
                     if (hasCaption) {
@@ -393,17 +381,27 @@ private fun AnimatedDrawable(drawable: Drawable?, modifier: Modifier) {
         update = { it.setImageDrawable(drawable) }, modifier = modifier.clearAndSetSemantics { })
 }
 
+/**
+ * F6: a control keeps its taps, enabled or not, so a tap on it never reaches the image and toggles the chrome. A disabled
+ * button's clickable may take no part in hit testing; this always does. It works because Compose sends a pointer event
+ * along the first hit path only: a hit chrome sibling hides the event from the image sibling behind it, though nothing is
+ * consumed, so the button's own handling is unchanged. Don't "fix" it by consuming, or by sharing input with siblings
+ * (`sharePointerInputWithSiblings`): that would let the tap through to the image. `aTapOnADisabledSaveDoesNotToggle`
+ * is the proof.
+ */
+private fun Modifier.keepsTaps() = pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
+
 /** Viewer text buttons are overlay-coloured, never persimmon (3.71:1 on black; PL J3); disabled at 38%. */
 @Composable
 private fun OverlayButton(text: String, tag: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) =
-    TextButton(onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = Lantern.target).testTag(tag),
+    TextButton(onClick = onClick, enabled = enabled, modifier = modifier.keepsTaps().heightIn(min = Lantern.target).testTag(tag),
         colors = ButtonDefaults.textButtonColors(contentColor = Lantern.overlayText,
             disabledContentColor = Lantern.overlayText.copy(alpha = 0.38f))) { Text(text) }
 
 /** A 48dp overlay icon in the top bar, disabled at 38% (PL, F5b). */
 @Composable
 private fun TopIcon(icon: Int, label: Int, enabled: Boolean, tag: String, onClick: () -> Unit) =
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(Lantern.target).testTag(tag)) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.keepsTaps().size(Lantern.target).testTag(tag)) {
         Icon(painterResource(icon), contentDescription = stringResource(label),
             tint = Lantern.overlayText.copy(alpha = if (enabled) 1f else 0.38f))
     }
@@ -412,7 +410,7 @@ private fun TopIcon(icon: Int, label: Int, enabled: Boolean, tag: String, onClic
 private fun ZoomGroup(scale: Float, modifier: Modifier, onZoomIn: () -> Unit, onZoomOut: () -> Unit, onReset: () -> Unit) {
     // PL J2: one horizontal pill on the overlay scrim with a 1dp border at 24% overlay text, so its shape holds where it
     // crosses the image edge. Zoom out and reset are disabled at fit, zoom in at the maximum (a state, not a missing feature).
-    Row(modifier.background(Lantern.overlayScrim, Lantern.pill).border(1.dp, Lantern.overlayText.copy(alpha = 0.24f), Lantern.pill)
+    Row(modifier.keepsTaps().background(Lantern.overlayScrim, Lantern.pill).border(1.dp, Lantern.overlayText.copy(alpha = 0.24f), Lantern.pill)
         .testTag("viewer_zoom")) {
         ZoomButton(R.drawable.ic_zoom_in, R.string.viewer_zoom_in, scale < MAX_ZOOM, "viewer_zoom_in", onZoomIn)
         ZoomButton(R.drawable.ic_zoom_out, R.string.viewer_zoom_out, scale > 1f, "viewer_zoom_out", onZoomOut)

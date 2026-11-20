@@ -11,9 +11,12 @@ landscape defect (the chrome covering most of a short window), following the PL'
   `onDoubleTap`), so a double-tap zooms and never flickers the chrome. A drag past the touch slop is consumed by the
   transform gesture, so pan, pinch and swipe-down never toggle. A long-press doesn't toggle either: a no-op
   `onLongPress` consumes it, since without one a held, still press would end as a tap (PL).
-- **The tap target:** while the chrome is shown, a tap on its scrims (the top bar, the bottom block, the zoom pill)
-  isn't a tap on the image; hidden, the whole window is the image. Each scrim's bounds leave with its node, so a piece
-  that's gone (a wide/narrow switch, no pill) never keeps swallowing taps (TL).
+- **The tap target (PL and TL rulings):** a tap anywhere that isn't a control toggles, both ways: the scrims, the sender
+  and time, a collapsed caption's text, the state lines and empty block space are plain content. Controls keep their own
+  taps, enabled or not (`keepsTaps`, since a disabled button's clickable may take no part in hit testing): Close, Save,
+  Share, More/Less, Load full and Try again, the whole zoom pill, and the transfer notice's Cancel and Try again; the
+  expanded caption's scroller keeps its taps and drags. An exclusion of the scrims would switch F6 off exactly where it's
+  needed: at 200% landscape with a collapsed caption and a two-line sender the clear band is 0 (#321's capture).
 - **The chrome:** the top bar (Close, sender and time, Save, Share), the bottom block (caption, More/Less, state lines,
   transfer notice, action), the zoom pill and the GIF badge.
 - **Hidden means gone:** the pieces leave composition, so they're out of semantics and the focus order; their semantics
@@ -58,12 +61,16 @@ turns the toggle off shows the chrome for good, so assistive input turning on wh
 ## Tests
 
 - `ReceivedViewerChromeTest` (the real room screen, a host that sets its content in onCreate, so `recreate()` is a
-  genuine configuration change): hidden leaves no chrome node and the image's bounds equal the window's; a tap on the
-  top bar's scrim doesn't toggle; a double-tap zooms with no toggle, and pan, pinch and a long-press don't toggle; Show controls and
+  genuine configuration change): hidden leaves no chrome node and the image's bounds equal the window's; a tap on More
+  or zoom-in keeps the chrome while a tap on the sender line or the collapsed caption toggles; a tap on a disabled Save
+  doesn't toggle; a double-tap zooms with no toggle, and pan, pinch and a long-press don't toggle; Show controls and
   Hide controls; assistive input keeps it shown, with no Hide controls, and turning it on while hidden shows it; a
   running transfer can't be hidden and its result keeps it shown; a load that fails while hidden shows it with its line; a key while
   hidden shows it with focus on Close; a system key (volume up, dispatched to the viewer's Compose view) isn't
   consumed and leaves it hidden; Esc and Back while hidden close; rotation keeps hidden with no line and shows
   with one; a new opening starts shown; and with the fade on a test clock, the semantics are gone from the first frame
-  of the exit. CI runs with animations off, so every other case covers the instant path.
+  of the exit. CI runs with animations off, so every other case covers the instant path. Keys go straight to the
+  viewer's Compose view, never through the instrumentation (a real key event takes the device out of touch mode for the
+  rest of the run, which broke AuthJourneyTest), and every case asserts touch mode is unchanged. The 200% landscape
+  caption layout's real tap on the sender line is in #321's capture.
 - `AssistiveInputTest` (JVM): the capability set, each capability, a window-reading service alone, and failure.

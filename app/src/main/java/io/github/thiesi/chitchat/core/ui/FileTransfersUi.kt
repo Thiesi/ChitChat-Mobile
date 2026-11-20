@@ -339,11 +339,11 @@ internal fun stopLevel(stopped: TransferState.Stopped): Int = when {
     else -> 2
 }
 
-/** The PL's copy for each stop (files-media.md; 2026-11-20). A cancelled or backgrounded Share/Open is silent. */
 /** Whether [stopLine] gives a line: every Save stop does; a cancelled or backgrounded Share or Open says nothing. */
 internal fun TransferState.Stopped.hasLine() =
     purpose == TransferPurpose.SAVE || (reason != TransferStop.CANCELLED && reason != TransferStop.BACKGROUND)
 
+/** The PL's copy for each stop (files-media.md; 2026-11-20). A cancelled or backgrounded Share/Open is silent. */
 @Composable
 private fun stopLine(stopped: TransferState.Stopped): String? {
     val saving = stopped.purpose == TransferPurpose.SAVE
