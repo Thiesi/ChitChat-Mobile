@@ -46,7 +46,6 @@ import io.github.thiesi.chitchat.core.media.DownloadResult
 import io.github.thiesi.chitchat.core.media.FileTransfers
 import io.github.thiesi.chitchat.core.media.FullImage
 import io.github.thiesi.chitchat.core.media.ImageState
-import io.github.thiesi.chitchat.core.media.NetworkState
 import io.github.thiesi.chitchat.core.media.ShareCopies
 import io.github.thiesi.chitchat.core.media.TransferPurpose
 import io.github.thiesi.chitchat.core.media.TransferState
@@ -112,7 +111,8 @@ class ReceivedViewerChromeTest {
         compose.waitForIdle()
     }
 
-    private fun <T> withViewer(caption: String? = "Harbour at dusk", block: (ActivityScenario<OnCreateContentTestActivity>) -> T): T {
+    /** Returns Unit, so every `@Test fun … = withViewer { }` stays a void method whatever its block ends with. */
+    private fun withViewer(caption: String? = "Harbour at dusk", block: (ActivityScenario<OnCreateContentTestActivity>) -> Unit) {
         rooms.messages = listOf(roomMessage(3, caption, photo(70)))
         OnCreateContentTestActivity.content = {
             CompositionLocalProvider(LocalAssistiveInput provides assistive.value, LocalChromeFade provides fade,
@@ -120,7 +120,7 @@ class ReceivedViewerChromeTest {
                 MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } }
             }
         }
-        return ActivityScenario.launch(OnCreateContentTestActivity::class.java).use { scenario ->
+        ActivityScenario.launch(OnCreateContentTestActivity::class.java).use { scenario ->
             compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
             compose.waitUntil(5_000) { images.images.states.value.values.any { it is ImageState.Loaded } }
             compose.onNodeWithTag("attachment_frame:70").performClick()
@@ -221,11 +221,20 @@ class ReceivedViewerChromeTest {
         } finally { gate.complete(Unit); job.cancel(); copies.deleteRecursively(); transfersUi = null }
     }
 
-    @Test fun aNewStateLineWhileHiddenShowsTheChrome() = withViewer {
-        hide()
-        network.state.value = NetworkState(online = false, metered = true)
-        compose.waitUntil(5_000) { images.viewer.state.value?.full == FullImage.OFFLINE }
-        compose.waitUntil(5_000) { present("viewer_close") && present("viewer_line") }
+    @Test fun aNewStateLineWhileHiddenShowsTheChrome() {
+        // Offline is decided at opening or at Load full (F4), so the line that can appear while hidden is a running load's:
+        // the original is loading when the chrome hides, then fails.
+        val gate = CompletableDeferred<Unit>()
+        source.serve(70)
+        source.reply(70) { gate.await(); DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) }
+        withViewer {
+            compose.onNodeWithTag("viewer_load_full").performClick()
+            compose.waitUntil(5_000) { images.viewer.state.value?.full == FullImage.LOADING }
+            hide()
+            gate.complete(Unit)
+            compose.waitUntil(5_000) { images.viewer.state.value?.full == FullImage.FAILED }
+            compose.waitUntil(5_000) { present("viewer_close") && present("viewer_line") }
+        }
     }
 
     @Test fun aKeyWhileHiddenShowsTheChromeWithFocusOnClose() = withViewer {
@@ -267,7 +276,13 @@ class ReceivedViewerChromeTest {
         compose.waitUntil(5_000) { !viewerOpen() }
     }
 
-    @Test fun aRotationKeepsHiddenWithNoLineAndShowsWithOne() = withViewer { scenario ->
+    @Test fun aRotationKeepsHiddenWithNoLineAndShowsWithOne() {
+        source.serve(70)
+        source.reply(70) { DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) }
+        withViewer { scenario -> rotation(scenario) }
+    }
+
+    private fun rotation(scenario: ActivityScenario<OnCreateContentTestActivity>) {
         hide()
         scenario.recreate()
         compose.waitUntil(5_000) { viewerOpen() }
@@ -275,8 +290,9 @@ class ReceivedViewerChromeTest {
         assertTrue("Hidden survives a rotation with no line", chromeGone())
         tapImage()
         compose.waitUntil(5_000) { present("viewer_close") }
-        network.state.value = NetworkState(online = false, metered = true)
-        compose.waitUntil(5_000) { present("viewer_line") }
+        compose.onNodeWithTag("viewer_load_full").performClick()
+        compose.waitUntil(5_000) { images.viewer.state.value?.full == FullImage.FAILED && present("viewer_line") }
+        // A line present when hiding doesn't prevent it; a rotation with the line on screen shows the chrome again.
         hide()
         scenario.recreate()
         compose.waitUntil(5_000) { viewerOpen() && present("viewer_close") && present("viewer_line") }

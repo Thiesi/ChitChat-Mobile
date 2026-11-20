@@ -37,7 +37,9 @@ turns the toggle off shows the chrome for good, so assistive input turning on wh
 ## What brings it back
 
 - A state line appearing or changing (offline, waiting, failed, no memory), compared by kind, so a line present when
-  the viewer opens doesn't prevent hiding afterwards.
+  the viewer opens doesn't prevent hiding afterwards. Offline is decided at opening and at Load full (F4), both made
+  with the chrome shown, so a line that appears while hidden comes from a load already running (failed, no memory,
+  waiting).
 - A transfer's result line (saved, or stopped with a line, by the notice's own `hasLine()` rule: every Save stop, and a
   Share or Open stop except cancelled or backgrounded); never a progress tick. The viewer's notice shows any transfer's
   line until it's dismissed, so this is the line on screen. A transfer starting shows the chrome by being a running
@@ -59,7 +61,7 @@ turns the toggle off shows the chrome for good, so assistive input turning on wh
   genuine configuration change): hidden leaves no chrome node and the image's bounds equal the window's; a tap on the
   top bar's scrim doesn't toggle; a double-tap zooms with no toggle, and pan, pinch and a long-press don't toggle; Show controls and
   Hide controls; assistive input keeps it shown, with no Hide controls, and turning it on while hidden shows it; a
-  running transfer can't be hidden and its result keeps it shown; a new state line while hidden shows it; a key while
+  running transfer can't be hidden and its result keeps it shown; a load that fails while hidden shows it with its line; a key while
   hidden shows it with focus on Close; a system key (volume up, dispatched to the viewer's Compose view) isn't
   consumed and leaves it hidden; Esc and Back while hidden close; rotation keeps hidden with no line and shows
   with one; a new opening starts shown; and with the fade on a test clock, the semantics are gone from the first frame
