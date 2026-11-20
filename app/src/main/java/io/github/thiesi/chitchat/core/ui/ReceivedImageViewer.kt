@@ -181,10 +181,7 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                 // another transfer runs (its notice is in the bottom block). No Share for an APK-like file (TL).
                 val transfers = LocalFileTransfers.current
                 if (transfers != null && viewer.full != FullImage.GONE && viewer.full != FullImage.NOT_ALLOWED) {
-                    val transfer by transfers.transfers.state.collectAsState()
-                    val usable = viewer.full != FullImage.OFFLINE && !transfers.transfers.busy && !transfers.transfers.waiting() &&
-                        (transfer == null || transfer is io.github.thiesi.chitchat.core.media.TransferState.Saved ||
-                            transfer is io.github.thiesi.chitchat.core.media.TransferState.Stopped)
+                    val usable = viewer.full != FullImage.OFFLINE && rememberTransfersUsable(transfers)
                     TopIcon(R.drawable.ic_save, R.string.viewer_save, usable, "viewer_save") { transfers.save(viewer.ref) }
                     if (!io.github.thiesi.chitchat.core.media.FileNames.isApkLike(viewer.ref.attachment))
                         TopIcon(R.drawable.ic_share, R.string.viewer_share, usable, "viewer_share") {

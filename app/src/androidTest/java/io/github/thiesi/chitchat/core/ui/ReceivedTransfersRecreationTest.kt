@@ -74,7 +74,8 @@ class ReceivedTransfersRecreationTest {
     }
     private val transfers = FileTransfers(CoroutineScope(Dispatchers.Main + job), session, source, ShareCopies(root), { Long.MAX_VALUE })
     /** Activity-scoped in the app (a ViewModel), so the test keeps the one instance across the recreation too. */
-    private val ui = FileTransfersUi(transfers) { }
+    private val noteSeen = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private val ui = FileTransfersUi(transfers, noteSeen) { noteSeen.value = true }
 
     /** Records the launch; the test delivers the result after the recreation. */
     private val registry = object : ActivityResultRegistry() {
@@ -87,16 +88,17 @@ class ReceivedTransfersRecreationTest {
 
     @After fun tearDown() { OnCreateContentTestActivity.content = null; room.cancel(); job.cancel(); store.clear(); root.deleteRecursively() }
 
-    private fun host(noteSeen: Boolean) {
+    private fun host(seen: Boolean) {
+        noteSeen.value = seen
         OnCreateContentTestActivity.content = {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
-                FileTransfersHost(ui, noteSeen) { MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } } }
+                FileTransfersHost(ui) { MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } } }
             }
         }
     }
 
     @Test fun aSavePickedAcrossARecreationStillStreamsIntoTheChosenDocument() {
-        host(noteSeen = true)
+        host(seen = true)
         // A writable content: URI the picker could have returned (our own provider, in our own process).
         val document = java.io.File(ShareProvider.root(context), "picked/notes.pdf").apply { parentFile!!.mkdirs(); writeText("") }
         ActivityScenario.launch(OnCreateContentTestActivity::class.java).use { scenario ->
@@ -120,7 +122,7 @@ class ReceivedTransfersRecreationTest {
     }
 
     @Test fun theFirstUseNoteSurvivesARecreationAndItsCancelStillStartsNothing() {
-        host(noteSeen = false)
+        host(seen = false)
         ActivityScenario.launch(OnCreateContentTestActivity::class.java).use { scenario ->
             compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
             compose.onNodeWithTag("attachment_open:71").performClick()

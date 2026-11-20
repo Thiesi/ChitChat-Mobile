@@ -20,6 +20,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performTouchInput
@@ -222,7 +223,7 @@ class ReceivedTransfersJourneyTest {
         compose.waitUntil(5_000) { !absent("transfer_note") }
         compose.onNodeWithTag("transfer_note_continue").performClick()
         compose.waitUntil(5_000) { transfers.state.value is TransferState.Ready }
-        assertEquals(1, noteMarked)
+        compose.waitUntil(5_000) { noteMarked == 1 }
         assertEquals(listOf(71L), streamed)
     }
 
@@ -236,6 +237,12 @@ class ReceivedTransfersJourneyTest {
         compose.waitUntil(5_000) { transfers.state.value is TransferState.Running }
         compose.onNodeWithTag("transfer_notice").assertExists()
         compose.onNodeWithTag("transfer_cancel").assertHeightIsAtLeast(48.dp)
+        // PL J2: one stable spoken line with the progress as range info; Cancel is its own node.
+        val progress = compose.onNodeWithTag("transfer_progress").fetchSemanticsNode().config
+        assertEquals(context.getString(R.string.transfer_saving_indeterminate, "notes.pdf"),
+            progress.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(""))
+        assertTrue("Range info", progress.getOrNull(SemanticsProperties.ProgressBarRangeInfo) != null)
+        assertTrue("No percent spoken", progress.getOrNull(SemanticsProperties.Text) == null)
         compose.onNodeWithTag("attachment_save:72").assertIsNotEnabled()
         compose.onNodeWithTag("attachment_open:72").assertIsNotEnabled()
         gate!!.complete(Unit)
@@ -263,6 +270,35 @@ class ReceivedTransfersJourneyTest {
         compose.runOnIdle { transfers.saveChosen(second) { java.io.ByteArrayOutputStream() } }
         compose.waitUntil(5_000) { !absent("transfer_level_2") }
         assertTrue(absent("transfer_level_1"))
+        // PL J3: the notice's text stays within 30% of the window, and the composer keeps its size.
+        val window = compose.onRoot().fetchSemanticsNode().size.height
+        assertTrue(compose.onNodeWithTag("transfer_notice_text").fetchSemanticsNode().size.height <= window * 0.3f + 1)
+        compose.onNodeWithTag("conversation_composer").assertHeightIsAtLeast(48.dp)
+    }
+
+    @Test fun aShareDuringTheWaitSaysTheFileIsntReadyAndOffersNoTryAgain() {
+        // PL J5: the lead, then row 7's wait sentence; no Try again while the wait runs.
+        preBody = DownloadResult.RateLimited(30)
+        rooms.messages = listOf(roomMessage(3, null, file(71, "notes.pdf")))
+        roomContent()
+        compose.runOnIdle { transfers.prepare(AttachmentRef(file(71, "notes.pdf"), false), io.github.thiesi.chitchat.core.media.TransferPurpose.SHARE) }
+        compose.waitUntil(5_000) { !absent("transfer_level_2") }
+        compose.onNode(androidx.compose.ui.test.hasText(text(R.string.transfer_share_not_ready), substring = true)).assertExists()
+        assertTrue("No Try again during the wait", absent("transfer_retry"))
+    }
+
+    @Test fun theButtonsComeBackWhenTheSessionWaitEnds() {
+        // #318 review: enabling follows observable state, with a one-shot timer to the server's wait; it starts nothing.
+        rooms.messages = listOf(roomMessage(3, null, file(71, "notes.pdf")))
+        roomContent()
+        compose.runOnIdle { session.value = session.value.copy(retryAtMillis = System.currentTimeMillis() + 2_000) }
+        compose.onNodeWithTag("attachment_save:71").assertIsNotEnabled()
+        compose.waitUntil(10_000) { runCatching { compose.onNodeWithTag("attachment_save:71").assertIsEnabled() }.isSuccess }
+        compose.onNodeWithTag("attachment_open:71").assertIsEnabled()
+        compose.runOnIdle {
+            assertNull("Re-enabling starts nothing", transfers.state.value)
+            assertTrue(streamed.isEmpty())
+        }
     }
 
     @Test fun aBidiOverrideNeverReachesTheCardsShownName() {

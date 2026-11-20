@@ -37,6 +37,15 @@ pictures and guest invite links." The viewer captures follow in a stacked F5c.
   too, and a finished line doesn't clear on a configuration change, only when the person leaves the conversation.
 - **Levels:** Saved, a cancelled Save and no app are level 1; every failure is level 2 (the shared warning notice).
 - **Type label:** the real extension, but "APK" for any APK-like file (`FileNames.typeLabel`).
+- **Enabling (#318 review):** buttons follow observable state only (`rememberTransfersUsable`: the transfer, the pending
+  Save as a `StateFlow`, and the session's 429 wait with a composition-bound one-shot timer to its end), so they come
+  back when the wait ends; the timer only re-enables, never starts anything.
+- **First-use flag (#318 review):** read from the store when Share or Open asks (no "unseen" before it loads); Continue
+  starts the copy first and writes the flag in the ViewModel's scope (a failed write only shows the note again); leaving
+  the conversation clears an open note.
+- **J (PL):** progress on two lines (status and percent, then the name on one middle-elided line) with one stable spoken
+  line and range info; level-2 text capped at 30% of the window, scrolling inside; primary text buttons in the
+  conversation; a Share/Open 429 says "Couldn't get the file ready." and the wait, with no Try again.
 
 ## Verification
 
@@ -51,7 +60,11 @@ pictures and guest invite links." The viewer captures follow in a stacked F5c.
   - during a transfer the other card's buttons are disabled and the notice with Cancel shows; Saved then shows "Saved
     {name}" and the buttons return;
   - a bidi override never reaches the card's shown name or label, and the APK rule runs on the sanitized name;
-  - a Save the person cancels is level 1, and a pre-byte 410 is level 2.
+  - a Save the person cancels is level 1, and a pre-byte 410 is level 2, its text within 30% of the window with the
+    composer at least 48dp;
+  - the running notice speaks one stable line with range info, Cancel separate;
+  - the buttons come back when the session's wait ends, starting nothing;
+  - a Share during a 429 says the file isn't ready and offers no Try again.
 - **`ReceivedTransfersRecreationTest`:** a Save whose picker result arrives after a real `recreate()` streams into the
   chosen document and leaves nothing busy; the first-use note survives a recreation and its Cancel still starts nothing.
 - **JVM:** `FileNamesTest` adds the type label (`report.pdf` under the APK MIME reads "APK").

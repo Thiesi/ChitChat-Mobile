@@ -54,7 +54,7 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
             if (attachment != null && transfers != null) {
                 val apk = io.github.thiesi.chitchat.core.media.FileNames.isApkLike(attachment.attachment)
                 val photo = attachment.attachment.previewable && !apk
-                val usable = available && !transfers.transfers.busy && !transfers.transfers.waiting()
+                val usable = available && rememberTransfersUsable(transfers)
                 TextButton(onClick = { onDismiss(); transfers.save(attachment) }, enabled = usable,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("message_save_action")) {
                     Text(stringResource(if (photo) R.string.action_save_photo else R.string.action_save_file))

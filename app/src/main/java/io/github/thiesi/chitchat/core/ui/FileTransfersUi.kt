@@ -39,10 +39,16 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.foundation.background
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.viewModelScope
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.media.AttachmentRef
 import io.github.thiesi.chitchat.core.media.DocumentSaveDestination
@@ -56,6 +62,7 @@ import io.github.thiesi.chitchat.core.status.Wait
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.feature.status.waitText
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -64,13 +71,15 @@ import kotlinx.coroutines.launch
  * picker, the handoff to another app, the first-use note, and telling a genuine background from the app's own picker or
  * chooser.
  */
-internal class FileTransfersUi(val transfers: FileTransfers, private val markNoteSeen: suspend () -> Unit) : androidx.lifecycle.ViewModel() {
+internal class FileTransfersUi(val transfers: FileTransfers,
+    /** The stored once-per-install flag; read when a Share or Open asks, never assumed before it loads (#318 review). */
+    private val noteSeen: kotlinx.coroutines.flow.Flow<Boolean> = kotlinx.coroutines.flow.flowOf(false),
+    private val markNoteSeen: suspend () -> Unit) : androidx.lifecycle.ViewModel() {
     // An Activity-scoped ViewModel (#318 review): the open first-use note, the saved place and the picker flag survive a
     // configuration change, like the transfer itself.
     /** Share or Open waiting for the first-use note's Continue (PL: shown once per install, before any download). */
     var noteFor by mutableStateOf<Pair<AttachmentRef, TransferPurpose>?>(null)
         internal set
-    internal var noteSeen = false
     /** Where the last Save went, for "Saved to {app}": the picker's provider label, or null. */
     internal var savedPlace by mutableStateOf<String?>(null)
     internal var launchSave: (FileTransfers.PendingSave) -> Unit = {}
@@ -90,22 +99,45 @@ internal class FileTransfersUi(val transfers: FileTransfers, private val markNot
     /** Share or Open: the first-use note first, once per install; Cancel there starts nothing (TL). */
     fun hand(ref: AttachmentRef, purpose: TransferPurpose) {
         if (transfers.busy || transfers.waiting() || FileNames.isApkLike(ref.attachment)) return
-        if (!noteSeen) { noteFor = ref to purpose; return }
-        transfers.prepare(ref, purpose)
+        // The stored value, read now: a tap right after a cold start never sees a not-yet-loaded "unseen".
+        viewModelScope.launch {
+            if (!noteSeen.first()) noteFor = ref to purpose else transfers.prepare(ref, purpose)
+        }
     }
 
-    internal suspend fun continueNote() {
+    /** Continue: the copy starts first, then the flag is written, in this ViewModel's scope, so leaving can't drop it. */
+    internal fun continueNote() {
         val (ref, purpose) = noteFor ?: return
         noteFor = null
-        noteSeen = true
-        markNoteSeen()
         transfers.prepare(ref, purpose)
+        // A failed write only means the note shows again next time; it never blocks the transfer (TL).
+        viewModelScope.launch { try { markNoteSeen() } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled } catch (_: Exception) { } }
     }
 
     fun cancelNote() { noteFor = null }
 }
 
 internal val LocalFileTransfers = staticCompositionLocalOf<FileTransfersUi?> { null }
+
+/**
+ * Whether Open, Save and Share may be pressed now, from observable state only (#318 review): no transfer running or
+ * waiting for its picker or handoff, and no session 429 wait (with a timer to its end, bound to this composition, as the
+ * status slot does). Disabled buttons always have the running transfer's notice or the status slot's wait on screen.
+ */
+@Composable
+internal fun rememberTransfersUsable(ui: FileTransfersUi): Boolean {
+    val state by ui.transfers.state.collectAsState()
+    val pending by ui.transfers.pendingSaveState.collectAsState()
+    val session by ui.transfers.sessionState.collectAsState()
+    var now by remember { androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(session.retryAtMillis) {
+        now = System.currentTimeMillis()
+        val wait = session.retryAtMillis - now
+        if (wait > 0) { kotlinx.coroutines.delay(wait); now = System.currentTimeMillis() }
+    }
+    val idle = state == null || state is TransferState.Saved || state is TransferState.Stopped
+    return idle && pending == null && now >= session.retryAtMillis
+}
 
 /** The create-document picker with the server's MIME type and the sanitized suggested title (files-media.md "Save"). */
 private class CreateDocument : ActivityResultContract<FileTransfers.PendingSave, Uri?>() {
@@ -119,10 +151,9 @@ private class CreateDocument : ActivityResultContract<FileTransfers.PendingSave,
  * background (ON_STOP that isn't a configuration change and isn't the app's own picker or chooser).
  */
 @Composable
-internal fun FileTransfersHost(ui: FileTransfersUi, noteSeen: Boolean, content: @Composable () -> Unit) {
+internal fun FileTransfersHost(ui: FileTransfersUi, content: @Composable () -> Unit) {
     val context = LocalContext.current
     val activity = LocalActivity.current
-    ui.noteSeen = noteSeen
     // The result is matched to the transfer's own pending request, which survives a recreated Activity (#318 review).
     val picker = rememberLauncherForActivityResult(CreateDocument()) { uri ->
         ui.external = false
@@ -171,12 +202,13 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
     // A finished line clears when the person leaves the conversation (PL); the viewer's copy doesn't clear it.
     val activity = LocalActivity.current
     if (withNote) androidx.compose.runtime.DisposableEffect(ui) {
-        onDispose { if (activity?.isChangingConfigurations != true) ui.transfers.dismiss() }
+        // Leaving clears a finished line and an open first-use note, so neither shows up in another conversation.
+        onDispose { if (activity?.isChangingConfigurations != true) { ui.transfers.dismiss(); ui.cancelNote() } }
     }
     if (withNote) ui.noteFor?.let {
         AlertDialog(onDismissRequest = ui::cancelNote, modifier = Modifier.testTag("transfer_note").lanternDialogEdge(),
             text = { DialogScrollBody { Text(stringResource(R.string.transfer_first_use)) } },
-            confirmButton = { TextButton(onClick = { scope.launch { ui.continueNote() } }, modifier = Modifier.testTag("transfer_note_continue")) {
+            confirmButton = { TextButton(onClick = ui::continueNote, modifier = Modifier.testTag("transfer_note_continue")) {
                 Text(stringResource(R.string.transfer_continue)) } },
             dismissButton = { TextButton(onClick = ui::cancelNote, modifier = Modifier.testTag("transfer_note_cancel")) {
                 Text(stringResource(R.string.cancel)) } })
@@ -190,20 +222,31 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
         when (current) {
             is TransferState.Running -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 val percent = if (current.total > 0) (current.written * 100 / current.total).toInt().coerceIn(0, 100) else null
-                if (percent != null) CircularProgressIndicator(progress = { percent / 100f }, Modifier.size(20.dp), color = text, strokeWidth = 2.dp)
-                else CircularProgressIndicator(Modifier.size(20.dp), color = text, strokeWidth = 2.dp)
                 val saving = current.purpose == TransferPurpose.SAVE
-                val line = when {
-                    percent == null && saving -> stringResource(R.string.transfer_saving_indeterminate, name)
-                    percent == null -> stringResource(R.string.transfer_preparing_indeterminate, name)
-                    saving -> stringResource(R.string.transfer_saving, name, percent)
-                    else -> stringResource(R.string.transfer_preparing, name, percent)
+                // PL J1: two lines with fixed roles, the status and percent, then the name on one middle-elided line.
+                val status = when {
+                    percent == null && saving -> stringResource(R.string.transfer_saving_status_indeterminate)
+                    percent == null -> stringResource(R.string.transfer_preparing_status_indeterminate)
+                    saving -> stringResource(R.string.transfer_saving_status, percent)
+                    else -> stringResource(R.string.transfer_preparing_status, percent)
                 }
-                // Announced once at the start; the percent is visual and read on focus (PL).
-                Text(line, color = text, maxLines = 2, style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }.testTag("transfer_line"))
+                // PL J2: one stable spoken line (no percent) announced politely, the progress as range info, and Cancel
+                // as its own node.
+                val spoken = stringResource(if (saving) R.string.transfer_saving_indeterminate else R.string.transfer_preparing_indeterminate, name)
+                Row(Modifier.weight(1f).clearAndSetSemantics {
+                    contentDescription = spoken
+                    liveRegion = LiveRegionMode.Polite
+                    progressBarRangeInfo = if (percent != null) ProgressBarRangeInfo(percent / 100f, 0f..1f) else ProgressBarRangeInfo.Indeterminate
+                }.testTag("transfer_progress"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (percent != null) CircularProgressIndicator(progress = { percent / 100f }, Modifier.size(20.dp), color = text, strokeWidth = 2.dp)
+                    else CircularProgressIndicator(Modifier.size(20.dp), color = text, strokeWidth = 2.dp)
+                    Column {
+                        Text(status, color = text, maxLines = 1, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("transfer_line"))
+                        OneLineName(name, muted)
+                    }
+                }
                 TextButton(onClick = ui.transfers::cancel, modifier = Modifier.heightIn(min = 48.dp).testTag("transfer_cancel")) {
-                    Text(stringResource(R.string.cancel), color = text)
+                    if (overlay) Text(stringResource(R.string.cancel), color = text) else Text(stringResource(R.string.cancel))
                 }
             }
             is TransferState.Saved -> NoticeLine(ui.savedPlace?.let { stringResource(R.string.transfer_saved_to, it) }
@@ -213,7 +256,10 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
                 val retry: @Composable () -> Unit = {
                     if (current.purpose != TransferPurpose.SAVE && current.reason == TransferStop.FAILED)
                         TextButton(onClick = { ui.transfers.dismiss(); ui.hand(current.ref, current.purpose) },
-                            modifier = Modifier.heightIn(min = 48.dp).testTag("transfer_retry")) { Text(stringResource(R.string.retry), color = text) }
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("transfer_retry")) {
+                            // PL J4: the ordinary primary text button in the conversation; overlay text only in the viewer.
+                            if (overlay) Text(stringResource(R.string.retry), color = text) else Text(stringResource(R.string.retry))
+                        }
                 }
                 if (stopLevel(current) == 1) NoticeLine(line, muted)
                 else {
@@ -223,11 +269,38 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
                     val body = line.substring(cut).trim()
                     if (overlay) Column(Modifier.testTag("transfer_level_2")) {
                         WarningLine(lead, body, style = MaterialTheme.typography.bodyMedium, color = text); retry()
-                    } else WarningNotice(lead, body, Modifier.testTag("transfer_level_2"), actions = retry)
+                    } else {
+                        // PL J3: the text at most 30% of the window, scrolling inside with the 1dp outline edge, so the
+                        // composer never shrinks; the actions stay visible below it.
+                        val window = with(androidx.compose.ui.platform.LocalDensity.current) {
+                            androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.height.toDp()
+                        }
+                        Column(Modifier.fillMaxWidth().background(ChitChatTheme.colors.presenceWash).padding(horizontal = 16.dp, vertical = 8.dp)
+                            .testTag("transfer_level_2")) {
+                            DialogScrollBody(Modifier.heightIn(max = window * 0.3f).testTag("transfer_notice_text")) {
+                                WarningLine(lead, body, Modifier.padding(vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite })
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { retry() }
+                        }
+                    }
                 }
             }
             is TransferState.Ready -> Unit
         }
+    }
+}
+
+/** The name on one line, the middle elided so the start and the extension stay (PL J1). */
+@Composable
+private fun OneLineName(name: String, color: Color) {
+    val style = MaterialTheme.typography.bodySmall.copy(color = color)
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    androidx.compose.foundation.layout.BoxWithConstraints {
+        val width = constraints.maxWidth
+        val shown = remember(name, width, style) {
+            middleElided(name) { !measurer.measure(it, style, maxLines = 1, constraints = androidx.compose.ui.unit.Constraints(maxWidth = width)).hasVisualOverflow }
+        }
+        Text(shown, style = style, maxLines = 1, modifier = Modifier.testTag("transfer_name"))
     }
 }
 
@@ -264,7 +337,8 @@ private fun stopLine(stopped: TransferState.Stopped): String? {
         TransferStop.NOT_ALLOWED -> stringResource(R.string.image_not_allowed)
         TransferStop.NO_SPACE -> stringResource(R.string.transfer_no_space)
         TransferStop.NO_APP -> stringResource(R.string.transfer_no_app)
-        TransferStop.RATE_LIMITED -> reason
+        // PL J5: the lead says what didn't happen, then row 7's wait; no Try again during the wait.
+        TransferStop.RATE_LIMITED -> stringResource(R.string.transfer_share_not_ready) + " " + reason
         TransferStop.CANCELLED, TransferStop.BACKGROUND -> null
         else -> stringResource(R.string.transfer_share_failed)
     }

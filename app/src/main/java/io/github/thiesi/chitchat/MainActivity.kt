@@ -65,9 +65,9 @@ class MainActivity : ComponentActivity() {
             val transfersUi: io.github.thiesi.chitchat.core.ui.FileTransfersUi = viewModel(factory = object : androidx.lifecycle.ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
-                    io.github.thiesi.chitchat.core.ui.FileTransfersUi(fileTransfers.transfers, settingsRepository::markShareNoteSeen) as T
+                    io.github.thiesi.chitchat.core.ui.FileTransfersUi(fileTransfers.transfers, settingsRepository.shareNoteSeen,
+                        settingsRepository::markShareNoteSeen) as T
             })
-            val shareNoteSeen by settingsRepository.shareNoteSeen.collectAsState(initial = false)
             val accountDeletion: io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel.factory((application as ChitChatApplication).accounts))
             val typing: TypingPreferenceViewModel = viewModel(factory = TypingPreferenceViewModel.factory(
@@ -115,7 +115,7 @@ class MainActivity : ComponentActivity() {
                     (application as ChitChatApplication).rulesOperations, (application as ChitChatApplication).policyReads))
             val policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel.factory((application as ChitChatApplication).policyReads))
-            io.github.thiesi.chitchat.core.ui.FileTransfersHost(transfersUi, shareNoteSeen) {
+            io.github.thiesi.chitchat.core.ui.FileTransfersHost(transfersUi) {
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
                 notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings, pushPhone = pushPhone,
