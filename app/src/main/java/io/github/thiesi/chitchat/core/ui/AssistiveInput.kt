@@ -11,6 +11,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 
 /**
  * Whether assistive input is on (received files F6, TL ruling of 2026-11-20): touch exploration, or any enabled
@@ -69,5 +71,8 @@ internal fun rememberAssistiveInput(): Boolean {
             }
         }
     }
+    // Below API 33 a service enabled while another is already on changes no listened state: enabling one in Settings
+    // means coming back to the app, so re-read on resume too (TL). Show controls covers the gap meanwhile.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { assistive = AssistiveInput.read(manager) }
     return override ?: assistive
 }

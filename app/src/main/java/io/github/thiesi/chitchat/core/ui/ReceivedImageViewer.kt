@@ -28,7 +28,6 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import io.github.thiesi.chitchat.core.media.TransferState
-import io.github.thiesi.chitchat.core.media.TransferStop
 import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -169,8 +168,8 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
         // A state line appearing or changing, or a transfer's result line, brings it back (never a progress tick).
         val line = viewer.full.takeIf { it == FullImage.OFFLINE || it == FullImage.WAITING || it == FullImage.FAILED || it == FullImage.NO_MEMORY }
         LaunchedEffect(line) { if (line != null) hidden = false }
-        val result = transfer?.takeIf { it is TransferState.Saved ||
-            (it is TransferState.Stopped && it.reason != TransferStop.CANCELLED && it.reason != TransferStop.BACKGROUND) }
+        // The notice shows any transfer's line until it's dismissed, so this is the line on screen (PL).
+        val result = transfer?.takeIf { it is TransferState.Saved || (it is TransferState.Stopped && it.hasLine()) }
         LaunchedEffect(result) { if (result != null) hidden = false }
         // Nothing keeps focus on a hidden control: hidden, the image holds it; shown after a key, Close takes it.
         LaunchedEffect(shown, focusClose) {
@@ -189,6 +188,8 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                 // Esc and Back always close, hidden or not; Esc closes here so every API level does the same.
                 event.key == Key.Escape -> { if (event.type == KeyEventType.KeyUp) onClose(); true }
                 event.key == Key.Back -> false
+                // System keys (volume, mute, media, headset, call) and a modifier alone pass through and change nothing (TL).
+                event.nativeKeyEvent.isSystem || android.view.KeyEvent.isModifierKey(event.nativeKeyEvent.keyCode) -> false
                 // Any other key while hidden first shows the chrome and puts focus on Close.
                 !shown -> { if (event.type == KeyEventType.KeyDown) { hidden = false; focusClose = true }; true }
                 else -> false
@@ -207,7 +208,9 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                 }.testTag("viewer_image")
                 .pointerInput(viewer.key) {
                     // onTap waits out the double-tap window, so a double-tap zooms and never toggles.
+                    // A no-op onLongPress: without it a held, still press would end as a tap and toggle (PL).
                     detectTapGestures(onDoubleTap = { if (scale > 1f) { scale = 1f; pan = Offset.Zero } else scale = 2.5f },
+                        onLongPress = { },
                         onTap = { at ->
                             // While shown, the image's tap target excludes the controls' scrims.
                             if (currentHideable && (hidden || chromeRects.values.none { it.contains(at + imageOrigin) })) hidden = !hidden
@@ -262,6 +265,7 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
             // Measured outside its inset padding: the bar's full height from the window's top edge, the status bar
             // included, is what the bottom must stay below (#313).
             Chrome(shown) {
+            DisposableEffect(Unit) { onDispose { chromeRects.remove("top") } }
             Row(Modifier.fillMaxWidth().background(Lantern.overlayScrim).onSizeChanged { topBar = it.height }
                 .onGloballyPositioned { chromeRects["top"] = it.boundsInRoot() }
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
@@ -293,6 +297,7 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
             // PL J8: in a window wider than tall the pill sits beside the bottom block, so the caption keeps its height.
             val wide = maxWidth > maxHeight
             val pill: (@Composable (Modifier) -> Unit)? = if (!showsImage) null else { modifier ->
+                DisposableEffect(Unit) { onDispose { chromeRects.remove("pill") } }
                 ZoomGroup(scale, modifier.onGloballyPositioned { chromeRects["pill"] = it.boundsInRoot() },
                     onZoomIn = { scale = (scale * 2f).coerceAtMost(MAX_ZOOM) },
                     onZoomOut = { scale = (scale / 2f).coerceAtLeast(1f); pan = if (scale == 1f) Offset.Zero else bounded(pan, scale) },
@@ -306,6 +311,7 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                     // Wide: the visual order differs from the reading order, so the block orders its own traversal (PL J8).
                     .then(if (wide) Modifier.semantics { isTraversalGroup = true } else Modifier),
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    DisposableEffect(Unit) { onDispose { chromeRects.remove("bottom") } }
                     val hasCaption = !caption.isNullOrBlank()
                     fun order(index: Float) = if (wide) Modifier.semantics { traversalIndex = index } else Modifier
                     if (hasCaption) {

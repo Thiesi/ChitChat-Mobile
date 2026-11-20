@@ -9,9 +9,11 @@ landscape defect (the chrome covering most of a short window), following the PL'
 
 - **The tap:** a single tap on the image toggles only after the system double-tap timeout (`detectTapGestures` with
   `onDoubleTap`), so a double-tap zooms and never flickers the chrome. A drag past the touch slop is consumed by the
-  transform gesture, so pan, pinch and swipe-down never toggle; long-press is unchanged.
+  transform gesture, so pan, pinch and swipe-down never toggle. A long-press doesn't toggle either: a no-op
+  `onLongPress` consumes it, since without one a held, still press would end as a tap (PL).
 - **The tap target:** while the chrome is shown, a tap on its scrims (the top bar, the bottom block, the zoom pill)
-  isn't a tap on the image; hidden, the whole window is the image.
+  isn't a tap on the image; hidden, the whole window is the image. Each scrim's bounds leave with its node, so a piece
+  that's gone (a wide/narrow switch, no pill) never keeps swallowing taps (TL).
 - **The chrome:** the top bar (Close, sender and time, Save, Share), the bottom block (caption, More/Less, state lines,
   transfer notice, action), the zoom pill and the GIF badge.
 - **Hidden means gone:** the pieces leave composition, so they're out of semantics and the focus order; their semantics
@@ -28,17 +30,21 @@ turns the toggle off shows the chrome for good, so assistive input turning on wh
 - **Assistive input** (`AssistiveInput`): touch exploration, or any enabled accessibility service whose capabilities
   include touch exploration, gestures or key-event filtering (`INPUT_CAPABILITIES`, one constant with a JVM test per
   capability). Never by package name, so a password manager's window-reading service doesn't count. Any failure, or no
-  manager, reads as assistive. It listens for accessibility-state and touch-exploration changes, and on API 33+ for the
-  enabled services too.
+  manager, reads as assistive. It listens for accessibility-state and touch-exploration changes, on API 33+ for the
+  enabled services too, and re-reads on every resume (below 33, a service enabled beside another changes no listened
+  state; enabling one in Settings means coming back to the app).
 
 ## What brings it back
 
 - A state line appearing or changing (offline, waiting, failed, no memory), compared by kind, so a line present when
   the viewer opens doesn't prevent hiding afterwards.
-- A transfer's result line (saved, or stopped with a line); never a progress tick. A transfer starting shows the chrome
-  by being a running transfer.
+- A transfer's result line (saved, or stopped with a line, by the notice's own `hasLine()` rule: every Save stop, and a
+  Share or Open stop except cancelled or backgrounded); never a progress tick. The viewer's notice shows any transfer's
+  line until it's dismissed, so this is the line on screen. A transfer starting shows the chrome by being a running
+  transfer.
 - Any key but Back and Esc (Tab, arrows, Enter, D-pad): it first shows the chrome and puts focus on Close, and the key is
-  consumed. While hidden the image holds focus, so nothing ever leaves focus on a hidden control.
+  consumed. System keys (volume, mute, media, headset, call) and a modifier pressed alone pass through untouched and
+  change nothing (TL). While hidden the image holds focus, so nothing ever leaves focus on a hidden control.
 - **Esc and Back** always close the viewer, hidden or not; Esc closes in the viewer itself, so every API level does the
   same.
 - **The image's accessibility actions** (TL): while hidden, its click action "Show controls" restores the chrome and
@@ -51,10 +57,11 @@ turns the toggle off shows the chrome for good, so assistive input turning on wh
 
 - `ReceivedViewerChromeTest` (the real room screen, a host that sets its content in onCreate, so `recreate()` is a
   genuine configuration change): hidden leaves no chrome node and the image's bounds equal the window's; a tap on the
-  top bar's scrim doesn't toggle; a double-tap zooms with no toggle, and pan and pinch don't toggle; Show controls and
+  top bar's scrim doesn't toggle; a double-tap zooms with no toggle, and pan, pinch and a long-press don't toggle; Show controls and
   Hide controls; assistive input keeps it shown, with no Hide controls, and turning it on while hidden shows it; a
   running transfer can't be hidden and its result keeps it shown; a new state line while hidden shows it; a key while
-  hidden shows it with focus on Close; Esc and Back while hidden close; rotation keeps hidden with no line and shows
+  hidden shows it with focus on Close; a system key (volume up, dispatched to the viewer's Compose view) isn't
+  consumed and leaves it hidden; Esc and Back while hidden close; rotation keeps hidden with no line and shows
   with one; a new opening starts shown; and with the fade on a test clock, the semantics are gone from the first frame
   of the exit. CI runs with animations off, so every other case covers the instant path.
 - `AssistiveInputTest` (JVM): the capability set, each capability, a window-reading service alone, and failure.

@@ -1,7 +1,15 @@
 package io.github.thiesi.chitchat.core.ui
 
 import android.view.KeyEvent
+import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
+import androidx.compose.ui.platform.AbstractComposeView
+import androidx.core.view.children
+import androidx.test.espresso.UiController
+import androidx.test.espresso.ViewAction
+import androidx.test.espresso.matcher.RootMatchers
+import androidx.test.espresso.matcher.ViewMatchers
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +23,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -153,6 +162,10 @@ class ReceivedViewerChromeTest {
         pastDoubleTap()
         assertTrue("A pinch doesn't toggle", present("viewer_close"))
         compose.onNodeWithTag("viewer_zoom_out").assertIsEnabled()
+        compose.onNodeWithTag("viewer_zoom_reset").performClick()
+        image().performTouchInput { longClick(center) }
+        pastDoubleTap()
+        assertTrue("A long-press doesn't toggle (PL)", present("viewer_close"))
     }
 
     @Test fun showControlsAndHideControlsAreTheImagesOwnActions() = withViewer {
@@ -221,6 +234,25 @@ class ReceivedViewerChromeTest {
         compose.waitUntil(5_000) { present("viewer_close") }
         compose.onNodeWithTag("viewer_close").assertIsFocused()
         assertTrue("The key only showed the chrome", viewerOpen())
+    }
+
+    @Test fun aSystemKeyWhileHiddenPassesThroughAndChangesNothing() = withViewer {
+        hide()
+        // Straight to the viewer's Compose view, so the result is the viewer's own answer and no system volume changes.
+        var consumed: Boolean? = null
+        Espresso.onView(ViewMatchers.isRoot()).inRoot(RootMatchers.isDialog()).perform(object : ViewAction {
+            override fun getConstraints() = ViewMatchers.isRoot()
+            override fun getDescription() = "dispatch volume up to the viewer's Compose view"
+            override fun perform(uiController: UiController, view: View) {
+                val compose = generateSequence(listOf(view)) { level -> level.flatMap { (it as? ViewGroup)?.children?.toList().orEmpty() }.takeIf { it.isNotEmpty() } }
+                    .flatten().first { it is AbstractComposeView }
+                consumed = compose.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP)) ||
+                    compose.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_VOLUME_UP))
+            }
+        })
+        assertEquals("Volume up isn't consumed", false, consumed)
+        compose.waitForIdle()
+        assertTrue("The chrome stays hidden", chromeGone())
     }
 
     @Test fun escWhileHiddenClosesTheViewer() = withViewer {
