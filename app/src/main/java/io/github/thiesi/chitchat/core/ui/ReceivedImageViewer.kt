@@ -163,9 +163,11 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
             }
             // Top bar on a scrim, inside the top and side insets only (PL J1): Close, the sender and the time. The sender is
             // server text: never ellipsized, so it may take several lines at 200% and break mid-token (PL).
-            Row(Modifier.fillMaxWidth().background(Lantern.overlayScrim)
+            // Measured outside its inset padding: the bar's full height from the window's top edge, the status bar
+            // included, is what the bottom must stay below (#313).
+            Row(Modifier.fillMaxWidth().background(Lantern.overlayScrim).onSizeChanged { topBar = it.height }
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                .onSizeChanged { topBar = it.height }.padding(horizontal = 4.dp, vertical = 4.dp).testTag("viewer_top"),
+                .padding(horizontal = 4.dp, vertical = 4.dp).testTag("viewer_top"),
                 verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose, modifier = Modifier.size(Lantern.target).testTag("viewer_close")) {
                     Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.viewer_close), tint = Lantern.overlayText)
