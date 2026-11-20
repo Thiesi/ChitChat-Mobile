@@ -20,6 +20,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
@@ -95,6 +96,9 @@ class ReportPresentationTest {
         Shot("form-dm", node = "report_dialog", dm = true, act = { report(3) }),
         Shot("form-photo", node = "report_dialog", rooms = listOf(roomMessage(3, null, photo(70))), act = { report(3) }),
         Shot("form-file", node = "report_dialog", rooms = listOf(roomMessage(3, null, file(71, longFile))), act = { report(3) }),
+        // PL: the attachment line ("They'll see the file's name…") at the form's end, light default.
+        Shot("form-file-end", node = "report_dialog", onlyAt = "default", rooms = listOf(roomMessage(3, null, file(71, longFile))), act = {
+            report(3); compose.onNodeWithTag("report_who_attachment").performScrollTo() }),
         Shot("form-filled", node = "report_dialog", act = { report(3); fill() }),
         Shot("form-toolong", node = "report_dialog", act = {
             report(3); choose(ReportCategory.SPAM)
@@ -110,7 +114,11 @@ class ReportPresentationTest {
         Shot("sent-sheet-room", node = "report_sheet", act = { report(3); fill(); send(); await("report_sheet") }),
         Shot("sent-sheet-dm", node = "report_sheet", dm = true, act = { report(3); fill(); send(); await("report_sheet") }),
         // A sender already ignored: no sheet, so the stack's line is the subject.
-        Shot("already", ignored = setOf(8), results = listOf(ReportResult.AlreadyReported), act = { report(3); fill(); send(); await("report_outcome") }),
+        Shot("already", ignored = setOf(8), results = listOf(ReportResult.AlreadyReported), act = {
+            // An ignored sender's message is collapsed until revealed (an explicit person action), then reported.
+            compose.onNodeWithText(InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.conversation_ignored))
+                .performScrollTo().performClick()
+            report(3); fill(); send(); await("report_outcome") }),
         Shot("refused", results = listOf(ReportResult.Refused(ReportRefusal.NOT_ALLOWED)), act = { report(3); fill(); send(); await("report_outcome") }),
         Shot("notreportable", results = listOf(ReportResult.Refused(ReportRefusal.NOT_REPORTABLE)), act = {
             report(3); fill(); send(); await("report_outcome") }),

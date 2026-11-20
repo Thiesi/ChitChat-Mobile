@@ -445,7 +445,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_excess_ambiguous_or_foreign_report_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"report-light-default-form-room-{n}.png") for n in range(49)],
+        for files in ([Path(f"report-light-default-form-room-{n}.png") for n in range(50)],
             [Path("a/report-light-default-review.png"), Path("b/report-light-default-review.png")],
             [Path("report-dark-default-review.png")], [Path("report-light-default-form-room-end.png")], [Path("other.png")]):
             self.copy.reset_mock(); self.mkdir.reset_mock(); self.report_files(files)
