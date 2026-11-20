@@ -46,6 +46,9 @@ the TL's and PL's F4 rulings of 2026-11-19.
   - There's no group when nothing is shown.
   - The bottom column is capped to the space below the top bar, and the expanded caption is what gives way, so the pill
     never reaches the top bar.
+  - **Wide windows (J8):** wider than tall, the pill sits beside the bottom block (end, bottom-aligned, 8dp in, inside
+    the insets) and the column narrows by its width plus 8dp, so an expanded caption keeps at least two lines. TalkBack
+    still reaches the zoom group before the bottom bar (`traversalIndex` in a traversal group).
 - **Insets (J1):** the top bar takes only the top and side insets; the bottom block only the bottom and side insets.
 - **Colour (J3):** every viewer text button (Load full image, Try again, More/Less) uses overlay text, at 38% when
   disabled; persimmon is too faint on black.
@@ -98,7 +101,14 @@ invite links." (PL).
     original returns to the offer with nothing loaded by itself (J4);
   - a 429 shows status row 7's line ("Try again in about 3 minutes.") over the disabled button;
   - at 200% with a long caption expanded, the zoom pill stays below the top bar (J2);
-  - a GIF whose original failed keeps its badge on the still preview until zoomed (J5).
+  - a GIF whose original failed keeps its badge on the still preview until zoomed (J5);
+  - **Show and Try again stay their own accessibility actions beside "Open photo"** (#313 review): each is a separate
+    clickable node in the merged tree, and invoking it as TalkBack does shows or retries without opening the viewer.
+- **`ReceivedViewerLayoutTest`** (a real 200% font scale from the Activity's Configuration, which the viewer's Dialog
+  window takes; a LocalDensity override in the host doesn't reach it):
+  - portrait, caption expanded: the pill is below the top bar and above the bottom block (J2);
+  - landscape, caption expanded: the pill overlaps neither the top bar nor the bottom block, sits at its end, the
+    caption keeps at least the two lines it shows collapsed, and the pill comes first in traversal (J8).
 - **`ReceivedFilesJourneyTest`:** the F3 frame cases now assert the F4 tap ("Open photo", long-press actions), including
   the too-large box.
 - **Captures:** the viewer's presentation captures are added by a separate follow-up PR, not by this slice. The reconnect

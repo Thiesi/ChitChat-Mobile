@@ -402,6 +402,11 @@ The policy is local and read from existing system state, with no new requests:
   three 48dp buttons, "Zoom in", "Zoom out", "Reset zoom". Zoom out and Reset zoom are disabled at fit
   scale, and Zoom in at the maximum. TalkBack order: Close, sender and time, the image, the zoom
   group, the bottom bar. The pill never reaches the top bar.
+  - **Wide windows (PL J8):** in a window wider than tall, the pill sits beside the bottom block instead of above it: at
+    the end, bottom-aligned, 8dp from the edge and inside the insets. The caption-and-line column narrows by the pill's
+    width plus 8dp; its height cap is unchanged, so an expanded caption keeps at least two lines. Portrait is unchanged,
+    and the TalkBack order stays Close, sender and time, the image, the zoom group, the bottom bar (an explicit traversal
+    order).
 - **Insets (PL J1):** the top bar takes the top and side insets only; the bottom block the bottom and
   side insets only.
 - **Offline (PL J4):** "The full image is available when you're back online." above a disabled Load

@@ -1,0 +1,113 @@
+package io.github.thiesi.chitchat.core.ui
+
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.test.core.app.ActivityScenario
+import io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel
+import io.github.thiesi.chitchat.core.media.ImageState
+import io.github.thiesi.chitchat.core.theme.ChitChatTheme
+import io.github.thiesi.chitchat.core.ui.ReceivedFiles.photo
+import io.github.thiesi.chitchat.core.ui.ReceivedFiles.roomMessage
+import io.github.thiesi.chitchat.feature.conversation.ConversationScreen
+import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
+import io.github.thiesi.chitchat.testing.FontScaleTestActivity
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+
+/**
+ * Received files F4b: the viewer's bottom layout at a real 200% font scale (PL J2, J8). The Dialog's window takes its
+ * density from the Activity's Configuration, so the font scale comes from [FontScaleTestActivity], never from a
+ * LocalDensity override in the host composition, which the viewer's window doesn't see.
+ */
+class ReceivedViewerLayoutTest {
+    @get:Rule val compose = createEmptyComposeRule()
+    private val session = ReceivedFiles.session()
+    private val source = ReceivedSource()
+    private val store = ViewModelStore()
+    private val images: AttachmentImagesViewModel = ViewModelProvider.create(store, viewModelFactory {
+        initializer { AttachmentImagesViewModel(session, FixedNetwork(), source, 32L * 1024 * 1024) }
+    })[AttachmentImagesViewModel::class.java]
+    private val rooms = ReceivedRooms(session)
+    private val room = ConversationViewModel(rooms)
+    private val longCaption = (1..30).joinToString(" ") { "We walked down to the harbour after dinner and stayed until the light went out." }
+
+    @After fun tearDown() { FontScaleTestActivity.requestedFontScale = 1f; room.cancel(); store.clear() }
+
+    private fun bounds(tag: String): Rect = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+    private fun Rect.overlaps(other: Rect) = left < other.right - 0.5f && other.left < right - 0.5f &&
+        top < other.bottom - 0.5f && other.top < bottom - 0.5f
+
+    /** Opens the viewer on a long caption at 200%, in the given orientation, and expands the caption. */
+    private fun openExpanded(landscape: Boolean, check: (collapsedCaptionHeight: Float) -> Unit) {
+        FontScaleTestActivity.requestedFontScale = 2f
+        rooms.messages = listOf(roomMessage(3, longCaption, photo(70)))
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            val wanted = if (landscape) Configuration.ORIENTATION_LANDSCAPE else Configuration.ORIENTATION_PORTRAIT
+            scenario.onActivity {
+                it.requestedOrientation = if (landscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+            compose.waitUntil(5_000) {
+                var orientation = 0
+                scenario.onActivity { orientation = it.resources.configuration.orientation }
+                orientation == wanted
+            }
+            scenario.onActivity { activity ->
+                assertEquals(2f, activity.resources.configuration.fontScale)
+                activity.setContent { ChitChatTheme(dark = false) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}, images = images) }
+                } }
+            }
+            compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
+            compose.waitUntil(5_000) { images.images.states.value.values.any { it is ImageState.Loaded } }
+            // The tall row starts scrolled to its bottom: bring the frame into view before the tap.
+            compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag("attachment_frame:70"))
+            compose.onNodeWithTag("attachment_frame:70").performClick()
+            compose.waitUntil(5_000) { compose.onAllNodesWithTag("viewer").fetchSemanticsNodes().isNotEmpty() }
+            compose.waitForIdle()
+            val collapsed = bounds("viewer_caption").height
+            compose.onNodeWithTag("viewer_caption_toggle").performClick()
+            compose.waitForIdle()
+            check(collapsed)
+        }
+    }
+
+    @Test fun portraitAt200PercentThePillStaysAboveTheBottomBlockAndBelowTheTopBar() = openExpanded(landscape = false) { _ ->
+        val top = bounds("viewer_top"); val pill = bounds("viewer_zoom"); val bottom = bounds("viewer_bottom")
+        assertTrue("Pill $pill below the top bar $top", pill.top >= top.bottom - 0.5f)
+        assertTrue("Pill $pill above the bottom block $bottom", pill.bottom <= bottom.top + 0.5f)
+    }
+
+    @Test fun landscapeAt200PercentThePillSitsBesideTheBottomBlockAndTheCaptionKeepsTwoLines() = openExpanded(landscape = true) { collapsed ->
+        // PL J8: beside, not above, so the expanded caption keeps at least the two lines it shows collapsed.
+        val top = bounds("viewer_top"); val pill = bounds("viewer_zoom"); val bottom = bounds("viewer_bottom")
+        val caption = bounds("viewer_caption")
+        assertTrue("Pill $pill clear of the top bar $top", !pill.overlaps(top))
+        assertTrue("Pill $pill clear of the bottom block $bottom", !pill.overlaps(bottom))
+        assertTrue("Pill $pill at the end of the bottom block $bottom", pill.left >= bottom.right - 0.5f)
+        assertTrue("Expanded caption ${caption.height} keeps two lines ($collapsed)", caption.height >= collapsed - 0.5f)
+        // TalkBack: the zoom group before the bottom bar, as in portrait.
+        val pillIndex = compose.onNodeWithTag("viewer_zoom").fetchSemanticsNode().config.getOrNull(SemanticsProperties.TraversalIndex)
+        assertEquals(0f, pillIndex)
+    }
+}
