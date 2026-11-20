@@ -11,7 +11,7 @@ the TL's and PL's F4 rulings of 2026-11-19.
 - Gone and not allowed have nothing to show, so their frame has no tap and taps reach the row's actions (TL condition 6).
 - Too large and offline open the viewer with their line.
 - GIF frames show the play glyph only where the phone animates GIFs. The rule follows the viewer's own capability (API
-  28+), so the API 26–27 look can be captured on CI.
+  28+), so tests can show the API 26–27 look without an API 26–27 emulator.
 
 ## The viewer
 
@@ -68,10 +68,6 @@ the TL's and PL's F4 rulings of 2026-11-19.
     - on API 26–27, "Animation isn't available on this phone."
   - There's no Save or Share until F5.
 
-## Shared size text
-
-Sizes keep their number and unit together with a no-break space (`attach_size_*`, PL J6), everywhere they show.
-
 ## Disclosure
 
 Both strings now read "Not in the app yet: saving, opening and sharing files and photos, profile pictures, and guest
@@ -97,6 +93,13 @@ invite links." (PL).
   - a dispose after the entry stops being current, with no ON_STOP, closes the viewer and releases its original's lease;
   - **`ReceivedViewerRecreationTest`:** a real `recreate()` (content set in onCreate, so `isChangingConfigurations` is
     set) keeps the viewer open; a test-side recomposition alone isn't a configuration change and would count as a departure;
-  - a DM frame opens the viewer, with only the transcript's preview downloaded.
+  - a DM frame opens the viewer, with only the transcript's preview downloaded;
+  - offline shows "The full image is available when you're back online." over a disabled button, and back online a large
+    original returns to the offer with nothing loaded by itself (J4);
+  - a 429 shows status row 7's line ("Try again in about 3 minutes.") over the disabled button;
+  - at 200% with a long caption expanded, the zoom pill stays below the top bar (J2);
+  - a GIF whose original failed keeps its badge on the still preview until zoomed (J5).
 - **`ReceivedFilesJourneyTest`:** the F3 frame cases now assert the F4 tap ("Open photo", long-press actions), including
   the too-large box.
+- **Captures:** the viewer's presentation captures are added by a separate follow-up PR, not by this slice. The reconnect
+  decision, the wait end and the shared size text came with the prerequisites PR (see the [F4a record](received-files-f4a.md)).

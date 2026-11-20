@@ -53,11 +53,7 @@ FILES_DESTINATION = ROOT / "app/build/reports/androidTests/files-presentation"
 FILES_NAME = re.compile(r"files-(?:(?:light|dark)-(?:default|font200)-"
     r"(?:notloaded|loading|failed|nomemory|toolarge|gone|notallowed|offline|normal|panorama|panorama-show|panorama-retry|tall|small|"
     r"nodims|gif|"
-    r"card-short|card-long|card-apk|reply|dm-in-short|dm-out-long|preview-sheet)|"
-    r"light-(?:default|font200)-(?:viewer-(?:preview|loading|original|failed|nomemory|toolarge-preview|toolarge|gif|gif-offline|"
-    r"caption|caption-open|zoomed|longsender|gif-api27|offline|waiting)|frame-gif|frame-gif-api27)|"
-    r"light-font200-viewer-caption-open-landscape|dark-default-viewer-preview|"
-    r"black-default-(?:normal|notloaded))[.]png")
+    r"card-short|card-long|card-apk|reply|dm-in-short|dm-out-long|preview-sheet)|black-default-(?:normal|notloaded))[.]png")
 A11Y_NAME = re.compile(r"a11y-(light|dark)-(default|font200)-(signin|you|dialog)[.]png")
 YOU_DESTINATION = ROOT / "app/build/reports/androidTests/you-presentation"
 YOU_NAME = re.compile(r"you-(light|dark)-(default|font200)-(session|about|header|rootbar|pushedbar)[.]png")
@@ -298,16 +294,15 @@ def collect_deletion():
 def collect_files():
     # Received files F3: every image state, frame geometry (and short frames in interactive states), the GIF badge, file
     # cards, DM bubbles, a reply quoting a photo and the Welcome preview sheet, light and dark at default and 200% (92),
-    # plus black for a loaded frame and the raised box (2). F4: the viewer and the GIF frames, light at default and 200%
-    # (36), a landscape 200% expanded caption (1) and one dark viewer (1).
-    files = list(islice(SOURCE.rglob("ccm-files-presentation/*"), 133))
-    if (not files or len(files) > 132 or len({p.name for p in files}) != len(files)
+    # plus black for a loaded frame and the raised box (2).
+    files = list(islice(SOURCE.rglob("ccm-files-presentation/*"), 95))
+    if (not files or len(files) > 94 or len({p.name for p in files}) != len(files)
         or any(FILES_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous files presentation output")
     FILES_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, FILES_DESTINATION / path.name)
-    print(f"Files presentation captures collected: {len(files)} of 132.")
+    print(f"Files presentation captures collected: {len(files)} of 94.")
 
 
 def collect_reset():
