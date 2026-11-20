@@ -61,7 +61,8 @@ v3.10.0 (`docs/api/moderation-reports.md`, `reports/message.php`, `reports/user.
     - `close()` (Cancel, Close, Done) is refused while sending or checking; the form then offers no dismiss, and the wait
       is bounded by the request timeout.
     - `departed()` (navigation away) lets the attempt finish and keeps its outcome; the UI (R2) hosts the report so that
-      leaving a conversation doesn't dispose it.
+      leaving a conversation doesn't dispose it. It drops only an open form: a pending Unknown and a finished outcome
+      stay for their origin conversation, as after a background (#324 review).
     - `backgrounded()` (a genuine background) cancels the call and lands in Unknown with the same frozen category and
       details, kept: Send again (message) or Check (person) follows, never automatically. An open form is dropped
       (memory only, no draft retention); an Unknown or a finished outcome stays.
@@ -88,6 +89,7 @@ v3.10.0 (`docs/api/moderation-reports.md`, `reports/message.php`, `reports/user.
   after Unknown versus on a first attempt; refusals; picture gone; the person Check's three outcomes; close refused
   while sending; navigation away finishing with the outcome kept; a background while sending landing in Unknown with
   the frozen report (Send again for a message, Check for a person); a background while editing dropping the form; a
-  session change while sending dropping everything; the origin kept and a shown outcome consumed once; a waiting
+  session change while sending dropping everything; navigation away keeping a pending Unknown and a finished
+  outcome; the origin kept and a shown outcome consumed once; a waiting
   outcome never blocking `open()`; a pending Unknown dropped by a report elsewhere with no POST; only sending or
   checking blocking `open()`; nothing private in `toString`.

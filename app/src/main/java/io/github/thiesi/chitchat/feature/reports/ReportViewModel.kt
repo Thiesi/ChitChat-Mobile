@@ -196,8 +196,12 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
     /** Cancel, Close or Done: everything is dropped. Refused while sending or checking (the form offers no dismiss then). */
     fun close() { if (!inFlight) drop() }
 
-    /** Navigation away: a report in flight finishes and its outcome is kept; anything else is dropped. */
-    fun departed() { if (!inFlight) drop() }
+    /**
+     * Navigation away. An open form is dropped (memory only). A report in flight finishes, and a pending Unknown or a
+     * finished outcome stays: they wait for their origin conversation (its Review notice or its line), as after a
+     * background (#324 review). Only [open] for another target, [consume], [close] or a session change ends them.
+     */
+    fun departed() { if (mutable.value?.phase is ReportPhase.Editing) drop() }
 
     /**
      * Genuine background. While sending or checking the call is cancelled and the report lands in Unknown with the same

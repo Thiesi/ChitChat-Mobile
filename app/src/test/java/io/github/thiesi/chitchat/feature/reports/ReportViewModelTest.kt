@@ -205,6 +205,22 @@ class ReportViewModelTest {
         assertEquals("The outcome is kept for the UI", ReportPhase.Done(ReportOutcome.Sent), state().phase)
         // Outside an attempt, navigation away drops the form.
         model.close(); filled(); model.departed()
+        assertNull("An open form is dropped", model.state.value)
+    }
+
+    @Test fun navigationAwayKeepsAPendingUnknownAndAFinishedOutcomeForTheirOrigin() = runTest(dispatcher) {
+        advanceUntilIdle()
+        fake.results += ReportResult.Unknown(ApiFailure(FailureKind.TIMEOUT))
+        filled(); model.send(); advanceUntilIdle()
+        model.departed()
+        assertEquals("The Unknown waits for its Review (#324 review)", ReportPhase.Unknown(), state().phase)
+        assertEquals("Still frozen", "private why", state().details)
+        fake.results += ReportResult.AlreadyReported
+        model.sendAgain(); advanceUntilIdle()
+        assertEquals(ReportPhase.Done(ReportOutcome.Sent), state().phase)
+        model.departed()
+        assertEquals("The finished outcome waits for its line", ReportPhase.Done(ReportOutcome.Sent), state().phase)
+        model.consume()
         assertNull(model.state.value)
     }
 
