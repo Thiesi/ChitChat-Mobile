@@ -22,6 +22,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
@@ -72,6 +73,10 @@ class ReportPresentationTest {
         val results: List<ReportResult> = emptyList(), val hold: Boolean = false, val ignored: Set<Long> = emptySet(),
         /** Only at this scale (the 200% scrolled-to-end form). */
         val onlyAt: String? = null,
+        /** Landscape (the TL's geometry evidence, 200% only). */
+        val landscape: Boolean = false,
+        /** The StepUpDialog alone, which shares the form-dialog geometry (TL). */
+        val stepUp: Boolean = false,
         val act: ReportPresentationTest.(Fixture) -> Unit = {})
 
     /** The live objects a shot drives. */
@@ -111,6 +116,12 @@ class ReportPresentationTest {
             report(3); fill(); send(); await("report_outcome") }),
         Shot("sending-line", hold = true, act = { report(3); fill(); send(); away(it); await("report_sending_line") }),
         Shot("review", hold = true, act = { report(3); fill(); send(); compose.runOnIdle { it.reports.backgrounded() }; await("report_review") }),
+        // Evidence for the TL and PL (#326 run 44823638278: the details field not displayed at 200% landscape): the form
+        // as it opens, the form scrolled to its field, and the StepUpDialog with its field, all at 200% landscape.
+        Shot("diag-landscape-form", node = "report_dialog", onlyAt = "font200", landscape = true, act = { report(3) }),
+        Shot("diag-landscape-form-field", node = "report_dialog", onlyAt = "font200", landscape = true, act = {
+            report(3); compose.onNodeWithTag("report_details").performScrollTo() }),
+        Shot("diag-landscape-stepup", node = "dialog", onlyAt = "font200", landscape = true, stepUp = true),
         Shot("busy", hold = true, rooms = listOf(roomMessage(3, "check out my channel, link in bio, cheap followers"), roomMessage(5, "and again")),
             act = { report(3); fill(); send(); away(it); await("report_sending_line"); actions(5)
                 compose.onNodeWithTag("message_report_action").performScrollTo().performClick(); await("report_busy") }),
@@ -120,10 +131,15 @@ class ReportPresentationTest {
 
     private fun present(tag: String) = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
     private fun await(tag: String) = compose.waitUntil(5_000) { present(tag) }
+    private var dmScreen = false
+
+    /** Room rows are `message:{id}`, DM rows `direct:{id}`; the row is scrolled into the lazy list's composed range first. */
     private fun actions(messageId: Long) {
         val label = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.message_actions)
+        val row = if (dmScreen) "direct:$messageId" else "message:$messageId"
+        compose.onNodeWithTag(if (dmScreen) "dm_timeline" else "conversation_timeline").performScrollToNode(hasTestTag(row))
         compose.onNode(SemanticsMatcher("actions") { it.config.getOrNull(SemanticsActions.OnClick)?.label == label } and
-            hasAnyAncestor(hasTestTag("message:$messageId"))).performSemanticsAction(SemanticsActions.OnClick)
+            hasAnyAncestor(hasTestTag(row))).performSemanticsAction(SemanticsActions.OnClick)
         await("message_actions")
     }
     private fun report(messageId: Long) {
@@ -152,6 +168,7 @@ class ReportPresentationTest {
         val theme = if (dark) "dark" else "light"
         for ((scaleName, fontScale) in scales) for (shot in shots().filter { (only == null || it.name in only) && (it.onlyAt == null || it.onlyAt == scaleName) }) {
             FontScaleTestActivity.requestedFontScale = fontScale
+            dmScreen = shot.dm
             val session = ReceivedFiles.session()
             val rooms = ReceivedRooms(session).apply { messages = shot.rooms; ignored = shot.ignored }
             val room = ConversationViewModel(rooms)
@@ -174,16 +191,28 @@ class ReportPresentationTest {
             var screen by mutableStateOf("screen")
             try {
                 ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+                    if (shot.landscape) {
+                        scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                        compose.waitUntil(5_000) {
+                            var orientation = 0
+                            scenario.onActivity { orientation = it.resources.configuration.orientation }
+                            orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                        }
+                    }
                     scenario.onActivity { activity ->
                         activity.setContent { ChitChatTheme(dark = dark) { CompositionLocalProvider(LocalReports provides reports) {
                             Surface(Modifier.fillMaxSize().testTag("report_host"), color = MaterialTheme.colorScheme.background) {
-                                if (screen == "screen") {
+                                if (shot.stepUp) io.github.thiesi.chitchat.feature.auth.StepUpDialog(
+                                    androidx.compose.ui.res.stringResource(R.string.step_up_title_export),
+                                    io.github.thiesi.chitchat.core.account.VerificationMethods(false, true, 0), busy = false,
+                                    errorMessage = null, onVerify = { _, _ -> }, onCancel = {})
+                                else if (screen == "screen") {
                                     if (shot.dm) DirectThreadScreen(direct, 8, {}) else ConversationScreen(room, 42, {}, ignores = ignores)
                                 }
                             }
                         } } }
                     }
-                    compose.waitUntil(5_000) {
+                    if (!shot.stepUp) compose.waitUntil(5_000) {
                         if (shot.dm) direct.state.value.loaded && !direct.state.value.busy else room.state.value.loaded && !room.state.value.busy
                     }
                     shot.act(this, Fixture(reports, gate) { screen = it })
@@ -200,7 +229,8 @@ class ReportPresentationTest {
             ?: checkNotNull(instrumentation.targetContext.getExternalFilesDir(null))
         val folder = java.io.File(output, "ccm-report-presentation")
         check(folder.isDirectory || folder.mkdirs())
-        val bitmap = compose.onNodeWithTag(node).captureToImage().asAndroidBitmap()
+        val bitmap = (if (node == "dialog") compose.onNode(androidx.compose.ui.test.isDialog()) else compose.onNodeWithTag(node))
+            .captureToImage().asAndroidBitmap()
         try {
             java.io.File(folder, "$name.png").outputStream().use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
         } finally { bitmap.recycle() }
