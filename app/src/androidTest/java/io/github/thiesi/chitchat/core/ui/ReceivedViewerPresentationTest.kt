@@ -119,7 +119,7 @@ class ReceivedViewerPresentationTest {
         Shot("frame-gif", roomMessage(3, null, photo(70, width = 480, height = 360, mime = "image/gif")), frameOnly = true),
         Shot("frame-gif-api27", roomMessage(3, null, photo(70, width = 480, height = 360, mime = "image/gif")), animates = false, frameOnly = true),
         // F6 (PL): landscape 200%, the long sender with Save and Share on the offer, without and with a collapsed caption, shown
-        // and hidden; hidden by a real tap in the clear band.
+        // and hidden; hidden by a real tap on the sender line (with a caption there's no clear band at all).
         Shot("viewer-chrome-landscape", longSender(null), landscapeAt = "font200", transfers = true, ready = { it.full == FullImage.OFFER }),
         Shot("viewer-chrome-landscape-hidden", longSender(null), landscapeAt = "font200", transfers = true, ready = { it.full == FullImage.OFFER },
             act = { hideByTap() }),
@@ -132,9 +132,9 @@ class ReceivedViewerPresentationTest {
         // chrome shown, so the line that can appear while hidden is a running load's.
         Shot("viewer-caption-hidden", roomMessage(3, longCaption, photo(70)), portraitAt = "default", ready = { it.full == FullImage.OFFER },
             act = { hideByTap() }),
-        Shot("viewer-talkback-tap", roomMessage(3, longCaption, photo(70)), portraitAt = "default", assistive = true,
-            ready = { it.full == FullImage.OFFER }, act = { tapClearBand(); pastDoubleTap() }),
-        Shot("viewer-hidden-failed", roomMessage(3, null, photo(70)), portraitAt = "default",
+        Shot("viewer-talkback-tap", roomMessage(3, longCaption, photo(70)), portraitAt = "default", assistive = true, transfers = true,
+            ready = { it.full == FullImage.OFFER }, act = { tapSender(); pastDoubleTap() }),
+        Shot("viewer-hidden-failed", roomMessage(3, null, photo(70)), portraitAt = "default", transfers = true,
             script = { serve(70); reply(70) { failGate.await(); DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) } },
             ready = { it.full == FullImage.OFFER },
             act = {
@@ -151,23 +151,11 @@ class ReceivedViewerPresentationTest {
 
     private fun present(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
-    /**
-     * F6: a real tap in the middle of the clear band between the top bar and the bottom row (block and pill). With no band
-     * left, the measured edges are the failure: a tap there couldn't hide the chrome either.
-     */
-    private fun tapClearBand() {
-        val top = compose.onNodeWithTag("viewer_top").fetchSemanticsNode().boundsInRoot.bottom
-        val bottom = listOf("viewer_bottom", "viewer_zoom").filter(::present)
-            .minOf { compose.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot.top }
-        val image = compose.onNodeWithTag("viewer_image").fetchSemanticsNode().boundsInRoot
-        if (bottom <= top) throw AssertionError("no clear band: top bar ends at $top, bottom row starts at $bottom")
-        compose.onNodeWithTag("viewer_image").performTouchInput {
-            click(androidx.compose.ui.geometry.Offset(image.width / 2f, (top + bottom) / 2f - image.top))
-        }
-    }
+    /** F6: a real tap on the sender line, plain content on the top bar's scrim (a tap anywhere that isn't a control toggles). */
+    private fun tapSender() = compose.onNodeWithTag("viewer_top").performTouchInput { click(center) }
 
     private fun hideByTap() {
-        tapClearBand()
+        tapSender()
         compose.waitUntil(5_000) { !present("viewer_close") }
     }
 
