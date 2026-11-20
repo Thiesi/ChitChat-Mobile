@@ -911,7 +911,12 @@ class SessionRepository internal constructor(
         runtime?.let { invalidate(it, ApiFailure(FailureKind.EXPIRED)) }
     }
 
-    internal suspend fun <T> authorized(access: SessionAccess, operation: suspend SessionHttp.() -> T): T {
+    /**
+     * [localFailure] marks a failure that belongs to its own screen and must not take the session-wide path: today only
+     * a report budget's `429 rate_limited` (TL ruling, reporting R1; #323 tracks the other per-action policies).
+     */
+    internal suspend fun <T> authorized(access: SessionAccess, localFailure: (ApiFailure) -> Boolean = { false },
+        operation: suspend SessionHttp.() -> T): T {
         lock.withLock {
             ensureCurrent(access)
             val active = runtime ?: throw CancellationException("Session retired")
@@ -937,7 +942,7 @@ class SessionRepository internal constructor(
                 else {
                     val active = runtime
                     // Resource validation/permission errors belong to that screen, not global logout.
-                    if (active != null && (failure.status == 401 || failure.status == 429 || failure.status == 503 ||
+                    if (active != null && !localFailure(failure) && (failure.status == 401 || failure.status == 429 || failure.status == 503 ||
                             failure.code == "csrf_failed" || failure.kind in setOf(FailureKind.NETWORK,
                             FailureKind.TIMEOUT, FailureKind.REDIRECT))) failLocked(active, failure)
                 }
