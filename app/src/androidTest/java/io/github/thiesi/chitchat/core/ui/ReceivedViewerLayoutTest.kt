@@ -177,7 +177,9 @@ class ReceivedViewerLayoutTest {
                 compose.waitForIdle()
                 fun layout(tag: String): androidx.compose.ui.text.TextLayoutResult {
                     val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-                    compose.runOnIdle { compose.onNodeWithTag(tag).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!(results) }
+                    // Fetched on the test thread; only the layout action itself runs on the UI thread.
+                    val action = compose.onNodeWithTag(tag).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!
+                    compose.runOnIdle { action(results) }
                     return results.single()
                 }
                 assertFalse("The status wraps, never clips", layout("transfer_line").hasVisualOverflow)
