@@ -40,6 +40,7 @@ import io.github.thiesi.chitchat.core.realtime.SessionRealtimeRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class ChitChatApplication : Application() {
     // Numeric accounting survives retired sessions/workers; private payloads remain in draft owners.
@@ -56,7 +57,14 @@ class ChitChatApplication : Application() {
             getSystemService(android.app.NotificationManager::class.java)?.cancelAll()
         }
     }
-    private val sessionRepository by lazy { SessionRepository(KeystoreSessionVault(this), push = pushLocal) }
+    /** Share and Open copies (F5): deleted with their account's session, at expiry, and on cancel before handoff. */
+    internal val shareCopies by lazy {
+        io.github.thiesi.chitchat.core.media.ShareCopies(io.github.thiesi.chitchat.core.media.ShareProvider.root(this),
+            revoke = { io.github.thiesi.chitchat.core.media.ShareProvider.revoke(this, it) })
+    }
+    private val sessionRepository by lazy {
+        SessionRepository(KeystoreSessionVault(this), push = io.github.thiesi.chitchat.core.media.ShareCopyTeardown(pushLocal, shareCopies))
+    }
     internal val pushRegistrar by lazy {
         io.github.thiesi.chitchat.core.push.PushRegistrar(pushLocal, pushConnector, sessionRepository, processScope,
             poster = io.github.thiesi.chitchat.core.push.AndroidPushPoster(this) { foreground })
@@ -98,6 +106,11 @@ class ChitChatApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // F5: expired share copies, and any other account's, go at start (the stored identity, no network).
+        processScope.launch(Dispatchers.IO) {
+            val stored = sessionRepository.storedAccount()
+            runCatching { shareCopies.startupSweep(stored?.let { io.github.thiesi.chitchat.core.media.ShareCopies.accountKey(it.first, it.second) }) }
+        }
         realtimeRuntime = AndroidRealtimeRuntime(this, ProcessLifecycleOwner.get().lifecycle,
             { foreground -> this.foreground = foreground
                 realtimeCoordinator.setForeground(foreground); typingCoordinator.setForeground(foreground) },

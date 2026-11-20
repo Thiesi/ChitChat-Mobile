@@ -190,18 +190,71 @@ class AttachmentDownloadsTest {
         val state = signedIn()
         server.enqueue(file(bytes))
         val out = ByteArrayOutputStream()
-        assertEquals(DownloadResult.Saved, downloads.stream(attachment(), state, out))
+        assertEquals(DownloadResult.Saved, downloads.stream(attachment(), state, { out }))
         assertArrayEquals(bytes, out.toByteArray())
         assertEquals("No memory charge for streaming", 0L, budget.reservedBytes)
         server.enqueue(file(bytes.copyOf().also { it[1] = 42 }))
         val partial = ByteArrayOutputStream()
         assertEquals("The caller decides what to do with the written file", DownloadResult.IntegrityFailed,
-            downloads.stream(attachment(), state, partial))
+            downloads.stream(attachment(), state, { partial }))
         // Beyond the display caps it still streams.
         val big = ByteArray(40_000) { 3 }
         server.enqueue(file(big))
         assertEquals(DownloadResult.Saved, downloads.stream(AttachmentRef(MessageAttachment(20, "b.bin", "application/zip", big.size.toLong(),
-            sha(big), false), false), state, ByteArrayOutputStream()))
+            sha(big), false), false), state, { ByteArrayOutputStream() }))
+    }
+
+    @Test fun aFailureBeforeTheBodyNeverOpensTheDestination() = runTest {
+        // TL (F5): a picked document may be an existing file, so it's opened only once body bytes arrive.
+        val state = signedIn()
+        var opened = 0
+        server.enqueue(error("attachment_deleted", 410))
+        assertEquals(DownloadResult.Gone, downloads.stream(attachment(), state, { opened++; ByteArrayOutputStream() }))
+        server.enqueue(error("rate_limited", 429, ""","retry_after_seconds":30"""))
+        assertTrue(downloads.stream(attachment(), state, { opened++; ByteArrayOutputStream() }) is DownloadResult.RateLimited)
+        assertEquals("Nothing opened, created or truncated", 0, opened)
+        take(); take()
+    }
+
+    @Test fun aFailureMidBodyKeepsWhatWasWrittenAndClosesTheDestination() = runTest {
+        // F5: a mid-way failure leaves the partial file to the caller (a chosen document is never deleted).
+        val state = signedIn()
+        val large = ByteArray(200_000) { (it % 251).toByte() }
+        server.enqueue(file(large, "application/pdf"))
+        var opened = 0
+        var closed = false
+        val written = ByteArrayOutputStream()
+        val destination = object : OutputStream() {
+            override fun write(b: Int) = Unit
+            override fun write(b: ByteArray, off: Int, len: Int) {
+                if (written.size() >= 64 * 1024) throw IOException("full")
+                written.write(b, off, len)
+            }
+            override fun close() { closed = true }
+        }
+        val ref = AttachmentRef(MessageAttachment(21, "big.pdf", "application/pdf", large.size.toLong(), sha(large), false), false)
+        val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            downloads.stream(ref, state, { opened++; destination })
+        }
+        assertEquals(FailureKind.STORAGE, (result as DownloadResult.Failed).failure.kind)
+        assertEquals(1, opened)
+        assertEquals("The first chunk stays written", 64 * 1024, written.size())
+        assertTrue("Closed, never deleted", closed)
+        take()
+    }
+
+    @Test fun aStaleSessionStopsBeforeTheNextChunk() = runTest {
+        // F5: the caller's fence runs before every chunk; stopping leaves no further writes.
+        val state = signedIn()
+        server.enqueue(file(bytes))
+        var opened = 0
+        val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            downloads.stream(attachment(), state, { opened++; ByteArrayOutputStream() },
+                ensureCurrent = { throw io.github.thiesi.chitchat.core.network.ApiFailure(FailureKind.EXPIRED) })
+        }
+        assertEquals(FailureKind.EXPIRED, (result as DownloadResult.Failed).failure.kind)
+        assertEquals("Stopped before anything was opened", 0, opened)
+        take()
     }
 
     @Test fun aFailingDestinationIsAStorageFailure() = runTest {
@@ -211,7 +264,7 @@ class AttachmentDownloadsTest {
             object : OutputStream() { override fun write(b: Int) = throw IllegalStateException("closed") })) {
             server.enqueue(file(bytes))
             val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                kotlinx.coroutines.withTimeout(10_000) { downloads.stream(attachment(), state, broken) } }
+                kotlinx.coroutines.withTimeout(10_000) { downloads.stream(attachment(), state, { broken }) } }
             assertEquals(FailureKind.STORAGE, (result as DownloadResult.Failed).failure.kind)
             take()
         }
@@ -227,7 +280,7 @@ class AttachmentDownloadsTest {
             override fun write(b: Int) = Unit
             override fun write(b: ByteArray, off: Int, len: Int) { entered.countDown(); release.await(5, TimeUnit.SECONDS) }
         }
-        val job = launch(kotlinx.coroutines.Dispatchers.IO) { downloads.stream(attachment(), state, slow) }
+        val job = launch(kotlinx.coroutines.Dispatchers.IO) { downloads.stream(attachment(), state, { slow }) }
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { assertTrue(entered.await(5, TimeUnit.SECONDS)) }
         job.cancel()
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Thread.sleep(300) }

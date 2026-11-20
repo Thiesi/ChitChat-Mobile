@@ -90,7 +90,8 @@ private val FrameShape = Lantern.frame
 @Composable
 internal fun ReceivedAttachment(attachment: MessageAttachment, direct: Boolean, messageId: Long, sender: String, time: String,
     caption: String?, images: ReceivedImages?, modifier: Modifier = Modifier, onActions: (() -> Unit)? = null) {
-    if (attachment.previewable) ReceivedImageFrame(attachment, direct, messageId, sender, time, caption, images, modifier, onActions)
+    // An APK-like file (the MIME type or the extension, TL) is never previewed, even under an image type: its card is Save-only.
+    if (attachment.previewable && !io.github.thiesi.chitchat.core.media.FileNames.isApkLike(attachment)) ReceivedImageFrame(attachment, direct, messageId, sender, time, caption, images, modifier, onActions)
     else ReceivedFileCard(attachment, modifier)
 }
 

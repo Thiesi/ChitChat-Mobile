@@ -90,17 +90,34 @@ internal class AttachmentDownloads(private val sessions: SessionRepository, priv
     }
 
     /**
-     * The original streamed to [output] (Save, and the share copy): no display cap and no whole-file buffer. On anything
-     * but [DownloadResult.Saved] the stream may hold a partial or mismatching file; the caller decides what to do with it
-     * (a chosen document is never deleted; a private share copy is).
+     * The original streamed to a destination (Save, and the Share and Open copy; F5): no display cap, no memory lease and
+     * no whole-file buffer, only the transport's 64 KiB chunk. [open] is called once, when the first body byte has
+     * arrived, so a failure before the body (403, 410, 429, network, a session change) never opens, creates or truncates
+     * the destination (TL, 2026-11-20: a picked document may be an existing file). [ensureCurrent] runs before every
+     * chunk and may throw to stop. The stream is closed here; on anything but [DownloadResult.Saved] it may hold a
+     * partial or mismatching file, and the caller decides what to do with it (a chosen document is never deleted; a
+     * private copy is).
      */
-    suspend fun stream(ref: AttachmentRef, expected: SessionState, output: OutputStream): DownloadResult {
+    suspend fun stream(ref: AttachmentRef, expected: SessionState, open: () -> OutputStream,
+        ensureCurrent: () -> Unit = {}): DownloadResult {
         val target = target(ref, AttachmentVariant.ORIGINAL) ?: return DownloadResult.Failed(ApiFailure(FailureKind.INCOMPATIBLE))
-        val reply = request(expected) {
-            download(target.path, target.size) { chunk, count -> output.write(chunk, 0, count) }
+        var output: OutputStream? = null
+        var closeFailed = false
+        val reply = try {
+            request(expected) {
+                download(target.path, target.size, streamed = true) { chunk, count ->
+                    ensureCurrent()
+                    (output ?: open().also { output = it }).write(chunk, 0, count)
+                }
+            }
+        } finally {
+            // Closing flushes the provider; a failure there is the destination's, as for any write.
+            val opened = output
+            if (opened != null) try { opened.close() } catch (_: Exception) { closeFailed = true }
         }
         if (reply is DownloadResult) return reply
         reply as SessionHttp.DownloadReply
+        if (closeFailed) return DownloadResult.Failed(ApiFailure(FailureKind.STORAGE))
         return if (reply.sha256.equals(target.sha256, ignoreCase = true)) DownloadResult.Saved else DownloadResult.IntegrityFailed
     }
 
