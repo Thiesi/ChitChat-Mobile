@@ -134,6 +134,14 @@ class ReportFormLayoutTest {
             }
             report()
             compose.onNodeWithTag("report_details").performScrollTo()
+            // Evidence only, still a failure: with no keyboard yet, the field must be displayed; if not, say where things are.
+            try { compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("report_details").assertIsDisplayed() }.isSuccess } }
+            catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
+                fun bounds(tag: String) = runCatching { compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInWindow }.getOrNull()
+                throw AssertionError("Details not displayed before the tap: dialog=${bounds("report_dialog")}, body=${bounds("report_body")}, " +
+                    "details=${bounds("report_details")}, send=${bounds("report_send")}, cancel=${bounds("report_cancel")}, " +
+                    "roots=${compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes().map { it.boundsInWindow }}", timeout)
+            }
             compose.tapNativeInput("report_details", imeBottom = { imeBottom })
             compose.onNodeWithTag("report_details").performTextInput("why")
             compose.waitForIdle()

@@ -22,6 +22,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -98,10 +100,13 @@ class ReportJourneyTest {
     private fun roomContent() { content(); compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy } }
     private fun dmContent() { screen = "dm"; content(); compose.waitUntil(5_000) { direct.state.value.loaded && !direct.state.value.busy } }
 
+    /** Room rows are `message:{id}`, DM rows `direct:{id}`; the row is scrolled into the lazy list's composed range first. */
     private fun openActions(messageId: Long) {
         val label = text(R.string.message_actions)
+        val row = if (screen == "dm") "direct:$messageId" else "message:$messageId"
+        compose.onNodeWithTag(if (screen == "dm") "dm_timeline" else "conversation_timeline").performScrollToNode(hasTestTag(row))
         compose.onNode(SemanticsMatcher("actions") { it.config.getOrNull(SemanticsActions.OnClick)?.label == label } and
-            hasAnyAncestor(hasTestTag("message:$messageId"))).performSemanticsAction(SemanticsActions.OnClick)
+            hasAnyAncestor(hasTestTag(row))).performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil(5_000) { present("message_actions") }
     }
     private fun closeActions() { Espresso.pressBack(); compose.waitUntil(5_000) { !present("message_actions") } }
@@ -159,9 +164,9 @@ class ReportJourneyTest {
         compose.onNodeWithTag("report_excerpt").assertTextEquals(text(R.string.report_photo))
         compose.onNodeWithTag("report_cancel").performClick()
         compose.waitUntil(5_000) { !present("report_dialog") }
-        compose.runOnIdle { screen = "dm" }
         directs.rows = listOf(dm(4, "hi", null))
-        compose.waitUntil(5_000) { direct.state.value.loaded && !direct.state.value.busy }
+        compose.runOnIdle { screen = "dm" }
+        compose.waitUntil(5_000) { direct.state.value.loaded && !direct.state.value.busy && direct.state.value.messages.isNotEmpty() }
         report(4)
         compose.onNodeWithTag("report_who").assertTextEquals(text(R.string.report_who_dm))
         assertTrue(!present("report_who_attachment"))
@@ -185,7 +190,10 @@ class ReportJourneyTest {
     @Test fun anAlreadyIgnoredSenderGetsNoSheet() {
         rooms.ignored = setOf(8)
         rooms.messages = listOf(roomMessage(3, "hello"))
-        roomContent(); report(3)
+        roomContent()
+        // An ignored sender's message is collapsed until the person reveals it (M4c3b); then it can be reported.
+        compose.onNodeWithText(text(R.string.conversation_ignored)).performScrollTo().performClick()
+        report(3)
         choose(ReportCategory.SPAM); compose.onNodeWithTag("report_send").performClick()
         compose.waitUntil(5_000) { present("report_outcome") }
         compose.waitForIdle()
