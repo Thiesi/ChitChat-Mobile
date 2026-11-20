@@ -322,6 +322,72 @@ class ReportViewModelTest {
         read.complete(Unit); advanceUntilIdle()
     }
 
+    @Test fun aSuccessInPlaceOffersTheSheetOnceAndNotOnReturn() = runTest(dispatcher) {
+        advanceUntilIdle()
+        filled(); assertTrue("Open presents the dialog", state().presented)
+        model.send(); advanceUntilIdle()
+        assertFalse("The dialog closes on the outcome", state().presented)
+        assertTrue("The follow-up sheet, in place (PL)", state().sheet)
+        model.dismissSheet()
+        assertFalse(state().sheet)
+        assertEquals("The line stays until leaving", ReportPhase.Done(ReportOutcome.Sent), state().phase)
+        // Left mid-send: the outcome lands without a sheet.
+        model.leaveConversation(origin)
+        val hold = CompletableDeferred<Unit>().also { fake.hold = it }
+        filled(); model.send(); advanceUntilIdle()
+        model.leaveConversation(origin)
+        assertFalse(state().presented)
+        hold.complete(Unit); advanceUntilIdle()
+        assertEquals(ReportPhase.Done(ReportOutcome.Sent), state().phase)
+        assertFalse("No sheet on return (PL)", state().sheet)
+    }
+
+    @Test fun aRefusalNeverOffersTheSheet() = runTest(dispatcher) {
+        advanceUntilIdle()
+        fake.results += ReportResult.Refused(ReportRefusal.NOT_ALLOWED)
+        filled(); model.send(); advanceUntilIdle()
+        assertFalse(state().sheet)
+    }
+
+    @Test fun leavingItsOwnConversationConsumesAShownOutcomeAndLeavesOthersAlone() = runTest(dispatcher) {
+        advanceUntilIdle()
+        filled(); model.send(); advanceUntilIdle()
+        model.leaveConversation(ReportOrigin.Room(99))
+        assertEquals("Another conversation's departure doesn't touch it", ReportPhase.Done(ReportOutcome.Sent), state().phase)
+        model.leaveConversation(origin)
+        assertNull("Leaving its own conversation clears the shown line", model.state.value)
+        filled(); model.leaveConversation(origin)
+        assertNull("An open form is dropped", model.state.value)
+    }
+
+    @Test fun reviewReopensAPendingUnknownsSummary() = runTest(dispatcher) {
+        advanceUntilIdle()
+        fake.hold = CompletableDeferred()
+        filled(); model.send(); advanceUntilIdle()
+        model.backgrounded(); advanceUntilIdle()
+        assertFalse("The dialog goes with the background", state().presented)
+        model.review()
+        assertTrue(state().presented)
+        assertEquals(ReportPhase.Unknown(), state().phase)
+        model.close()
+        assertNull("Close also dismisses the notice", model.state.value)
+    }
+
+    @Test fun theBusyLineShowsWhereItWasRefusedAndClearsOnSettleOrLeaving() = runTest(dispatcher) {
+        advanceUntilIdle()
+        val hold = CompletableDeferred<Unit>().also { fake.hold = it }
+        filled(); model.send(); advanceUntilIdle()
+        assertEquals(ReportOpen.BUSY, model.request(ReportTarget.RoomMessage(200), ReportOrigin.Room(5)))
+        assertEquals(ReportOrigin.Room(5), model.busyNotice.value)
+        assertEquals(ReportOpen.BUSY, model.request(ReportTarget.RoomMessage(201), ReportOrigin.Room(5)))
+        assertEquals("Never twice: one line", ReportOrigin.Room(5), model.busyNotice.value)
+        model.leaveConversation(ReportOrigin.Room(5))
+        assertNull("Leaving clears it", model.busyNotice.value)
+        model.request(ReportTarget.RoomMessage(200), ReportOrigin.Room(5))
+        hold.complete(Unit); advanceUntilIdle()
+        assertNull("Settling clears it", model.busyNotice.value)
+    }
+
     @Test fun detailsAndCategoryNeverReachAString() = runTest(dispatcher) {
         advanceUntilIdle()
         filled(details = "very private words")

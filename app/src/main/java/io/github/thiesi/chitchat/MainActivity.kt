@@ -49,6 +49,8 @@ class MainActivity : ComponentActivity() {
             val model=settingsModel
             val auth: AuthViewModel = viewModel(factory = AuthViewModel.factory((application as ChitChatApplication).sessions))
             val account: AccountViewModel = viewModel(factory = AccountViewModel.factory((application as ChitChatApplication).accounts))
+            val reports: io.github.thiesi.chitchat.feature.reports.ReportViewModel = viewModel(
+                factory = io.github.thiesi.chitchat.feature.reports.ReportViewModel.factory((application as ChitChatApplication).reports))
             val recoveryKeys: io.github.thiesi.chitchat.feature.account.RecoveryKeyViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.account.RecoveryKeyViewModel.factory((application as ChitChatApplication).accounts))
             val receivedImages: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel = viewModel(
@@ -116,6 +118,7 @@ class MainActivity : ComponentActivity() {
             val policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel.factory((application as ChitChatApplication).policyReads))
             io.github.thiesi.chitchat.core.ui.FileTransfersHost(transfersUi) {
+            io.github.thiesi.chitchat.feature.reports.ReportsHost(reports) {
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
                 notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings, pushPhone = pushPhone,
@@ -127,6 +130,7 @@ class MainActivity : ComponentActivity() {
                     navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
                 )
             })
+            }
             }
         }
     }

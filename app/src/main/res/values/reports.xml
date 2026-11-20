@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Reporting R2: the message report (reporting.md at 5c88f70; PL rulings of 2026-11-20). -->
+    <string name="report_action">Report…</string>
+    <string name="report_title">Report this message</string>
+    <string name="report_whats_wrong">What’s wrong?</string>
+    <string name="report_spam">Spam</string>
+    <string name="report_spam_help">Ads, scams or repeated junk</string>
+    <string name="report_harassment">Harassment or bullying</string>
+    <string name="report_harassment_help">Targeting or insulting someone</string>
+    <string name="report_hate">Hate</string>
+    <string name="report_hate_help">Attacks on who someone is</string>
+    <string name="report_threats">Threats or violence</string>
+    <string name="report_threats_help">Threatening to hurt someone</string>
+    <string name="report_sexual_content">Sexual content</string>
+    <string name="report_sexual_content_help">Unwanted or inappropriate sexual material</string>
+    <string name="report_privacy">Private information</string>
+    <string name="report_privacy_help">Sharing someone’s personal details</string>
+    <string name="report_impersonation">Pretending to be someone</string>
+    <string name="report_impersonation_help">Posing as another person</string>
+    <string name="report_other">Something else</string>
+    <string name="report_other_help">Tell the moderators below</string>
+    <string name="report_details_label">Anything else moderators should know? (optional)</string>
+    <string name="report_counter">%1$d / 1000</string>
+    <string name="report_counter_too_long">Too long: %1$d / 1000</string>
+    <string name="report_who_room">%1$s’s owners and moderators, and the server’s moderation team, will see this message’s text, its time and your report. They won’t see other messages.</string>
+    <string name="report_who_dm">The server’s moderation team will see this message and your report. They won’t see the rest of your conversation.</string>
+    <string name="report_who_attachment">They’ll see the file’s name, not the file itself.</string>
+    <string name="report_send">Send report</string>
+    <string name="report_send_again">Send again</string>
+    <string name="report_close">Close</string>
+    <string name="report_sending_spoken">Sending report</string>
+    <string name="report_reason">Reason: %1$s</string>
+    <string name="report_unknown">Not sure your report went through.</string>
+    <string name="report_review">Review</string>
+    <string name="report_sending_line">Sending your report…</string>
+    <string name="report_busy">Your last report is still sending. Try again in a moment.</string>
+    <string name="report_sent_room">Thanks. Your report was sent to %1$s’s moderators and the server’s moderation team.</string>
+    <string name="report_sent_dm">Thanks. Your report was sent to the server’s moderation team.</string>
+    <string name="report_already">You’ve already reported this message.</string>
+    <string name="report_not_reportable">This message can’t be reported anymore. It may have been deleted.</string>
+    <string name="report_not_allowed">You can’t report this message.</string>
+    <string name="report_rate_limited">You’ve sent a lot of reports recently. Try again in %1$s.</string>
+    <string name="report_rate_limited_unknown">You’ve sent a lot of reports recently. Try again later.</string>
+    <string name="report_not_sent">Something went wrong. Nothing was sent.</string>
+    <string name="report_photo">Photo</string>
+    <string name="report_gif">GIF</string>
+    <!-- The follow-up sheet (PL ruling, 2026-11-20). -->
+    <string name="report_sheet_room_title">Stop seeing %1$s’s messages?</string>
+    <string name="report_sheet_room_lead">Ignoring %1$s hides their messages from you. You can undo this later.</string>
+    <string name="report_sheet_ignore">Ignore %1$s</string>
+    <string name="report_sheet_dm_title">Stop hearing from %1$s?</string>
+    <string name="report_sheet_dm_lead">You can block %1$s. You’ll confirm before anything changes.</string>
+    <string name="report_sheet_block">Block %1$s</string>
+    <string name="report_sheet_done">Done</string>
+</resources>

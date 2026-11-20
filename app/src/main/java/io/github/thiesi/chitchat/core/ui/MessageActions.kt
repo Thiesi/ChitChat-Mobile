@@ -36,7 +36,9 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
     onReactions: (() -> Unit)? = null, canReact: Boolean = false,
     links: List<MessageInline.Link> = emptyList(), onOpenLink: ((String) -> Unit)? = null,
     /** F5b: the message's file, for Save and Share (no Share for an APK-like file, TL). */
-    attachment: io.github.thiesi.chitchat.core.media.AttachmentRef? = null) {
+    attachment: io.github.thiesi.chitchat.core.media.AttachmentRef? = null,
+    /** Reporting R2: Report… after Copy and Save/Share, only where the server allows a report (canReportMessage). */
+    onReport: (() -> Unit)? = null) {
     val transfers = LocalFileTransfers.current
     AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("message_actions").lanternDialogEdge(),
         title = { Text(stringResource(R.string.message_actions)) },
@@ -62,6 +64,13 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
                 if (!apk) TextButton(onClick = { onDismiss(); transfers.hand(attachment, io.github.thiesi.chitchat.core.media.TransferPurpose.SHARE) },
                     enabled = usable, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("message_share_action")) {
                     Text(stringResource(if (photo) R.string.action_share_photo else R.string.action_share_file))
+                }
+            }
+            // Enabled even while another report is sending: a tap then explains why, a disabled row wouldn't (PL).
+            onReport?.let { report ->
+                TextButton(onClick = report, enabled = available,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("message_report_action")) {
+                    Text(stringResource(R.string.report_action))
                 }
             }
             onEdit?.let { action ->

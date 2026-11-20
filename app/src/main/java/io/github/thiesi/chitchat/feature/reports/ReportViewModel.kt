@@ -2,6 +2,8 @@ package io.github.thiesi.chitchat.feature.reports
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.reports.ReportCategory
 import io.github.thiesi.chitchat.core.reports.ReportDetails
@@ -82,6 +84,10 @@ class ReportState internal constructor(
     val pictureAvailable: Boolean,
     /** This attempt is a Send again after Unknown: its already-reported answer means the first one arrived (PL). */
     val afterUnknown: Boolean,
+    /** The form dialog is up in its origin conversation (R2). A departure or a background takes it away, never the report. */
+    val presented: Boolean = false,
+    /** A finished outcome that arrived while the dialog was up: the follow-up sheet shows once, in place, never on return. */
+    val sheet: Boolean = false,
 ) {
     val categories: List<ReportCategory>
         get() = if (target is ReportTarget.Person) ReportCategory.personCategories(pictureAvailable) else ReportCategory.messageCategories
@@ -89,8 +95,9 @@ class ReportState internal constructor(
     val canSend get() = editable && category != null && !ReportDetails.tooLong(details)
 
     internal fun copy(category: ReportCategory? = this.category, details: String = this.details, phase: ReportPhase = this.phase,
-        pictureAvailable: Boolean = this.pictureAvailable, afterUnknown: Boolean = this.afterUnknown) =
-        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown)
+        pictureAvailable: Boolean = this.pictureAvailable, afterUnknown: Boolean = this.afterUnknown,
+        presented: Boolean = this.presented, sheet: Boolean = this.sheet) =
+        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown, presented, sheet)
 
     override fun toString() = "ReportState(${target::class.simpleName}, phase=$phase)"
 }
@@ -135,12 +142,53 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
         if (inFlight) return ReportOpen.BUSY
         if (current != null && current.phase is ReportPhase.Unknown && current.target == target) return ReportOpen.OPENED
         drop()
-        mutable.value = ReportState(target, origin, null, "", ReportPhase.Editing(), pictureAvailable && target is ReportTarget.Person, false)
+        mutable.value = ReportState(target, origin, null, "", ReportPhase.Editing(), pictureAvailable && target is ReportTarget.Person, false,
+            presented = true)
         return ReportOpen.OPENED
     }
 
     /** The UI showed the finished outcome's line once, in its origin conversation: it's gone now (PL). */
     fun consume() { if (mutable.value?.phase is ReportPhase.Done) drop() }
+
+    /** Review on the stack's "Not sure your report went through." notice: the same dialog, in its read-only summary. */
+    fun review() {
+        val current = mutable.value ?: return
+        if (current.phase is ReportPhase.Unknown) mutable.value = current.copy(presented = true)
+    }
+
+    /** Done, Ignore or Block on the follow-up sheet: it closes; the outcome's line stays until the person leaves. */
+    fun dismissSheet() {
+        val current = mutable.value ?: return
+        if (current.sheet) mutable.value = current.copy(sheet = false)
+    }
+
+    private val busyMutable = MutableStateFlow<ReportOrigin?>(null)
+
+    /**
+     * Where "Your last report is still sending. Try again in a moment." shows: the conversation whose Report… was refused
+     * as BUSY. It clears when that report settles or the person leaves that conversation, and never stacks twice (TL).
+     */
+    val busyNotice = busyMutable.asStateFlow()
+
+    /** Report… from the message actions: [open], and a BUSY refusal shows its line in [origin]. */
+    fun request(target: ReportTarget, origin: ReportOrigin, pictureAvailable: Boolean = false): ReportOpen =
+        open(target, origin, pictureAvailable).also { if (it == ReportOpen.BUSY) busyMutable.value = origin }
+
+    /**
+     * Leaving conversation [origin] (a navigation departure, not a configuration change or a background). Its own shown
+     * outcome is consumed (the line clears on leaving, PL); its open form is dropped; a report in flight or a pending
+     * Unknown stays, with the dialog taken away. Another conversation's report is untouched.
+     */
+    fun leaveConversation(origin: ReportOrigin) {
+        if (busyMutable.value == origin) busyMutable.value = null
+        val current = mutable.value ?: return
+        if (current.origin != origin) return
+        when (current.phase) {
+            is ReportPhase.Done -> drop()
+            is ReportPhase.Editing -> drop()
+            else -> mutable.value = current.copy(presented = false, sheet = false)
+        }
+    }
 
     fun choose(category: ReportCategory) {
         val current = mutable.value ?: return
@@ -181,6 +229,7 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
                 catch (_: ApiFailure) { null }
             if (mine != attempt) return@launch
             val now = mutable.value ?: return@launch
+            busyMutable.value = null
             mutable.value = when (facts?.reportedByMe) {
                 true -> done(ReportOutcome.Sent)
                 // It didn't arrive: the form is editable again and Send report is an explicit choice.
@@ -201,7 +250,10 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
      * finished outcome stays: they wait for their origin conversation (its Review notice or its line), as after a
      * background (#324 review). Only [open] for another target, [consume], [close] or a session change ends them.
      */
-    fun departed() { if (mutable.value?.phase is ReportPhase.Editing) drop() }
+    fun departed() {
+        val current = mutable.value ?: return
+        if (current.phase is ReportPhase.Editing) drop() else if (current.presented) mutable.value = current.copy(presented = false)
+    }
 
     /**
      * Genuine background. While sending or checking the call is cancelled and the report lands in Unknown with the same
@@ -213,21 +265,32 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
         when (current.phase) {
             ReportPhase.Sending, ReportPhase.Checking -> {
                 job?.cancel(); job = null; attempt++
-                mutable.value = current.copy(phase = ReportPhase.Unknown())
+                mutable.value = current.copy(phase = ReportPhase.Unknown(), presented = false)
+                busyMutable.value = null
             }
             is ReportPhase.Editing -> drop()
-            is ReportPhase.Unknown, is ReportPhase.Done -> Unit
+            // The dialog goes with the background; the stack shows Review next time (PL).
+            is ReportPhase.Unknown -> mutable.value = current.copy(presented = false)
+            is ReportPhase.Done -> Unit
         }
+    }
+
+    companion object {
+        fun factory(operations: ReportOperations): androidx.lifecycle.ViewModelProvider.Factory =
+            viewModelFactory { initializer { ReportViewModel(operations) } }
     }
 
     /** A session change: everything goes, an attempt in flight included (the identity fence). */
     private fun drop() {
         job?.cancel(); job = null; attempt++
         mutable.value = null
+        busyMutable.value = null
     }
 
     private fun done(outcome: ReportOutcome) = mutable.value!!.let {
-        ReportState(it.target, it.origin, null, "", ReportPhase.Done(outcome), false, false)
+        // The follow-up sheet only for a success that lands while the dialog is up (PL: never on return).
+        ReportState(it.target, it.origin, null, "", ReportPhase.Done(outcome), false, false, presented = false,
+            sheet = it.presented && outcome !is ReportOutcome.Refused)
     }
 
     private fun launch(sending: ReportState) {
@@ -240,7 +303,8 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
         job = viewModelScope.launch {
             val result = operations.send(session, sending.target, category, details)
             if (mine != attempt || mutable.value == null) return@launch
-            mutable.value = next(sending, result)
+            mutable.value = next(mutable.value!!.let { now -> sending.copy(presented = now.presented) }, result)
+            busyMutable.value = null
         }
     }
 

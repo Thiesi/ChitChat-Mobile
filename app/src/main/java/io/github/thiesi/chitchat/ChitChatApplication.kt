@@ -91,6 +91,9 @@ class ChitChatApplication : Application() {
     val push: io.github.thiesi.chitchat.core.push.PushOperations by lazy { io.github.thiesi.chitchat.core.push.SessionPushRepository(sessionRepository) }
     val messageSearch: MessageSearchOperations by lazy { SessionMessageSearchRepository(sessionRepository) }
     val profiles: ProfileOperations by lazy { SessionProfileRepository(sessionRepository) }
+    val reports: io.github.thiesi.chitchat.core.reports.ReportOperations by lazy {
+        io.github.thiesi.chitchat.core.reports.SessionReportRepository(sessionRepository)
+    }
     val roomMentions: RoomMentionOperations by lazy { SessionRoomMentionRepository(sessionRepository) }
     private val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val realtimeCoordinator by lazy {
