@@ -233,7 +233,8 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             val viewerEntry = images?.viewer?.state?.collectAsStateWithLifecycle()?.value?.entry
             val viewerOpen = viewerEntry != null && viewerEntry == completionEntryId
             val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null ||
-                attach.modalOpen || state.attachmentReview != null || viewerOpen
+                attach.modalOpen || state.attachmentReview != null || viewerOpen ||
+                io.github.thiesi.chitchat.core.ui.LocalFileTransfers.current?.dialogOpen == true
             fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
                 !obscured && !blockConfirm && !detailsOpen
             fun interactive() = paneInteractive() && model.state.value.authorDialog == null && model.state.value.reactionDialog == null
@@ -408,6 +409,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         ThreadFeedback(model, state, attention[peer], ready, onAuthorCheck = checkAuthorHistory,
                             onReactionCheck = checkReactionHistory)
                     }
+                    io.github.thiesi.chitchat.core.ui.TransferNotice(Modifier.padding(horizontal = 16.dp))
                     LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("dm_timeline"), timeline,
                         contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item("older") { if (state.mayHaveOlder) TextButton(onClick = model::older, enabled = !state.busy && !state.stale) {
@@ -562,8 +564,9 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                 val message = state.messages.firstOrNull { it.id == request.messageId }
                 val available = message != null && model.canUseMessage(displayedSession, peer, message)
                 val links = remember(message) { message?.body?.let { messageLinks(it) }.orEmpty() }
-                MessageActions(available, message?.let { model.canReplyTo(displayedSession, peer, it) } == true,
-                    !message?.body.isNullOrEmpty(), onReply = {
+                MessageActions(attachment = message?.attachment?.let { io.github.thiesi.chitchat.core.media.AttachmentRef(it, direct = true) },
+                    available = available, canReply = message?.let { model.canReplyTo(displayedSession, peer, it) } == true,
+                    canCopy = !message?.body.isNullOrEmpty(), onReply = {
                         if (actions === request && interactive() && message != null && model.replyTo(displayedSession, peer, message)) {
                             actions = null; focusReply = model.state.value.composerReply
                         }

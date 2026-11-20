@@ -279,9 +279,16 @@ Within the transcript spec's bubble, run and chit rules:
 - **Other files:** a file card inside the bubble: type icon, filename (two lines max, ellipsized
   in the middle so the extension stays visible), "PDF · 2.4 MB", plus **Open** and **Save**
   (48dp each). The caption goes below.
-  - **APKs** (`application/vnd.android.package-archive`) are **Save only**: no Open button, and
-    no Share in the overflow or message actions (TL, 2026-11-19). The card reads "{name},
-    {type}, {size}, Save".
+  - **APKs** are **Save only**: no Open button, and no Share anywhere (TL, 2026-11-19 and
+    2026-11-20). A file is APK-like when its MIME type is `application/vnd.android.package-archive`
+    **or** its sanitized name ends in .apk, .apks, .xapk or .apkm (any case); such a file is never
+    previewed, even under an image type. The card reads "{name}, {type}, {size}, Save".
+  - **No overflow on the card (PL, F5b):** the card keeps Open and Save; Share lives in the
+    message actions and the viewer. Image frames get no Save or Share buttons either.
+  - **Displayed names (PL, F5b):** the name and its TalkBack label drop the bidi controls
+    (U+202A–202E, U+2066–2069, U+200E, U+200F, U+061C; ZWJ and ZWNJ stay) and the label wraps the
+    name as an isolated run, so a right-to-left name can't reorder "· 2.4 MB". The type is the real
+    last extension of that stripped name.
   - **Open** hands the file to another app through the same temporary private copy as Share
     (see Share out), with the server's declared MIME type, never a sniffed one.
 - **Image states:**
@@ -392,11 +399,12 @@ The policy is local and read from existing system state, with no new requests:
   typing proof while open, as other modals do (modals spec).
 - Accessibility: zoom gestures have button alternatives (zoom in, zoom out, reset). The image
   description is as above.
-- **Staged in F4 (PL, 2026-11-19):** Save and Share are absent from the top bar until F5, with no
-  placeholder, and the lines drop their Save-or-share clauses until then: "Too large to show here at
-  full size." (with a preview), "Too large to show here." (without one, on the black ground, with no
-  zoom group), and on API 26–27 "Animation isn't available on this phone." F5 restores the full
-  sentences.
+- **Save and Share in the viewer (PL, F5b):** two 48dp icon buttons at the end of the top bar, **Save**
+  then **Share** (Share outermost), the Lantern `save` and `share` icons in `overlayText`, 38% when
+  disabled; TalkBack reads Close, sender and time, Save, Share. They're absent on gone and not allowed,
+  present for too large, and disabled offline, where the line reads "You can load, save or share the
+  full image when you're back online." No Share for an APK-like file. The lines carry their full
+  Save-or-share sentences again (F4 staged them without).
 - **Zoom group (PL J2):** a horizontal pill on the overlay scrim with a 1dp border in overlay text
   at 24%, at the bottom end directly above the bottom block, 8dp from the edge inside the side insets:
   three 48dp buttons, "Zoom in", "Zoom out", "Reset zoom". Zoom out and Reset zoom are disabled at fit
@@ -454,7 +462,7 @@ The policy is local and read from existing system state, with no new requests:
 
 ## Share out (to another app)
 
-- **Share** (viewer, file card overflow, message actions) downloads the file into the app's
+- **Share** (viewer, message actions) downloads the file into the app's
   private cache, then opens the system share sheet with a **temporary read grant** through a
   FileProvider URI. Authenticated URLs are never handed to other apps (feature-parity).
 - **Lifetime of the copy (technical lead decision, 2026-11-08, issue #1).** Android gives no
@@ -487,7 +495,41 @@ The policy is local and read from existing system state, with no new requests:
   and a level-1 line says "No app on this phone opens this file type. Save it instead."
 - A small first-use note, shown once for Open and Share together: "Opening or sharing lets the
   app you choose keep its own copy of the file." (It says what the person should understand:
-  the receiving app can keep the file, beyond CCM's control.)
+  the receiving app can keep the file, beyond CCM's control.) **F5b (PL/TL):** a small dialog before
+  the download starts, its body in DialogScrollBody, with Cancel and Continue. Cancel starts nothing
+  (no picker, no request, no copy); "seen" is recorded only on Continue, as one per-install boolean in
+  the backup-excluded settings store (sign-out and forgetting a server keep it). It counts as a
+  conversation modal: no read proof and no typing while it shows.
+
+## Save, Share and Open notices (PL, F5b, 2026-11-20)
+
+- **Where:** the conversation's notice stack under the status slot, and the viewer's bottom block
+  (its own row above the action row) while the viewer is open. A button disabled by a running
+  transfer always has that transfer's notice on the same screen; the notice moves with the person.
+- **Progress:** a determinate ring and "Saving {name}… 40%" or "Getting {name} ready… 40%" with
+  **Cancel** (48dp); with no reliable total, an indeterminate ring and no percent. The name is
+  middle-ellipsized, at most two lines. TalkBack announces politely at the start and the end; the
+  percent is read on focus.
+- **Success:** "Saved to {app or folder name}" (or "Saved {name}" when the provider gives no name),
+  level 1, replacing the progress line, with no snackbar; it clears on the next transfer or when the
+  person leaves the conversation. Share and Open clear at handoff, with no success line.
+- **Save failing before any byte** (the document is opened only once bytes arrive, so a picked
+  existing file stays unchanged; TL): "Nothing was saved. {reason} If you saved to a new file, it may
+  be empty. Delete it if you don't need it." Reasons: "This file was deleted." (410), "You can't open
+  this file anymore." (403/404), row 7's wait lines (429), "Saving stopped when you left the app."
+  (background), otherwise "The download didn't get through." A Cancel before any byte drops the reason.
+- **Save failing mid-way:** "Saving stopped. The file may be incomplete. …" (also when the provider
+  runs out of space); after a genuine background, "Saving stopped when you left the app. The file may
+  be incomplete. Delete it in the place you chose if you don't need it.", shown on return.
+- **Share/Open:** not enough space is "There isn't enough space on this phone to get the file ready.
+  Free up some space, then try again." (no inline Try again); a backgrounded or cancelled Share or
+  Open ends silently.
+- **One at a time:** while one runs, the other Open, Save and Share buttons are disabled, not hidden.
+  During the session's 429 wait they're disabled too, with no line on the card (the status slot has
+  row 7); the viewer keeps its own row-7 line.
+- **Message actions:** **Save** and **Share** after Reply and Copy for any message with a file ("Save
+  photo" / "Share photo" for images and GIFs, "Save file" / "Share file" otherwise); no Share for an
+  APK-like file.
 - For DMs, the share sheet doesn't preselect any target, and the not-end-to-end-encrypted
   disclosure stays where it is. No extra warning is invented.
 

@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import android.content.Intent
 import android.os.Bundle
 import android.os.Build
@@ -53,6 +55,16 @@ class MainActivity : ComponentActivity() {
                 factory = io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel.factory(application,
                     (application as ChitChatApplication).sessions.state, (application as ChitChatApplication).attachmentDownloads,
                     (application as ChitChatApplication).attachmentMemory))
+            // F5: Save, Share and Open, app-scoped like the images; the host below needs this Activity.
+            val fileTransfers: io.github.thiesi.chitchat.core.media.FileTransfersViewModel = viewModel(
+                factory = io.github.thiesi.chitchat.core.media.FileTransfersViewModel.factory(application,
+                    (application as ChitChatApplication).sessions.state, (application as ChitChatApplication).attachmentDownloads,
+                    (application as ChitChatApplication).shareCopies))
+            val settingsRepository = (application as ChitChatApplication).settingsRepository
+            val transfersUi = androidx.compose.runtime.remember(fileTransfers) {
+                io.github.thiesi.chitchat.core.ui.FileTransfersUi(fileTransfers.transfers, settingsRepository::markShareNoteSeen)
+            }
+            val shareNoteSeen by settingsRepository.shareNoteSeen.collectAsState(initial = false)
             val accountDeletion: io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel.factory((application as ChitChatApplication).accounts))
             val typing: TypingPreferenceViewModel = viewModel(factory = TypingPreferenceViewModel.factory(
@@ -100,6 +112,7 @@ class MainActivity : ComponentActivity() {
                     (application as ChitChatApplication).rulesOperations, (application as ChitChatApplication).policyReads))
             val policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel.factory((application as ChitChatApplication).policyReads))
+            io.github.thiesi.chitchat.core.ui.FileTransfersHost(transfersUi, shareNoteSeen) {
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
                 notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings, pushPhone = pushPhone,
@@ -111,6 +124,7 @@ class MainActivity : ComponentActivity() {
                     navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
                 )
             })
+            }
         }
     }
 

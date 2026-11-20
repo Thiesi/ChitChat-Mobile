@@ -179,7 +179,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     val viewerEntry = images?.viewer?.state?.collectAsStateWithLifecycle()?.value?.entry
     val viewerOpen = viewerEntry != null && viewerEntry == completionEntryId
     val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null ||
-        attach.modalOpen || state.attachmentReview != null || viewerOpen
+        attach.modalOpen || state.attachmentReview != null || viewerOpen ||
+        io.github.thiesi.chitchat.core.ui.LocalFileTransfers.current?.dialogOpen == true
     fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !obscured &&
         !pingsOpen && model.state.value.pingSelection == null && !detailsOpen &&
         ignores?.state?.value?.target == null && !model.state.value.draftsOpen
@@ -483,6 +484,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(headerLimit) {
             header(false) {}
         }
+        // F5b: Save, Share and Open's notice in the conversation's stack (PL).
+        io.github.thiesi.chitchat.core.ui.TransferNotice(Modifier.padding(horizontal = 16.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("conversation_timeline"), state = timeline,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "history_header") {
@@ -617,7 +620,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         val message = state.messages.firstOrNull { it.id == request.messageId }
         val available = message != null && model.canUseMessage(displayedSession, roomId, message)
         val links = remember(message) { message?.body?.let { messageLinks(it, message.type == "emote") }.orEmpty() }
-        MessageActions(available, message?.let { model.canReplyTo(displayedSession, roomId, it) } == true,
+        MessageActions(attachment = message?.attachment?.let { io.github.thiesi.chitchat.core.media.AttachmentRef(it, direct = false) },
+            available = available, canReply = message?.let { model.canReplyTo(displayedSession, roomId, it) } == true, canCopy =
             !message?.body.isNullOrEmpty(), onReply = {
                 if (actions === request && interactive() && message != null && model.replyTo(displayedSession, roomId, message)) {
                     actions = null; focusReply = model.state.value.composerReply

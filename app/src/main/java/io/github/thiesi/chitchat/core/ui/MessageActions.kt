@@ -34,7 +34,10 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
     onEdit: (() -> Unit)? = null, canEdit: Boolean = false,
     onDelete: (() -> Unit)? = null, canDelete: Boolean = false,
     onReactions: (() -> Unit)? = null, canReact: Boolean = false,
-    links: List<MessageInline.Link> = emptyList(), onOpenLink: ((String) -> Unit)? = null) {
+    links: List<MessageInline.Link> = emptyList(), onOpenLink: ((String) -> Unit)? = null,
+    /** F5b: the message's file, for Save and Share (no Share for an APK-like file, TL). */
+    attachment: io.github.thiesi.chitchat.core.media.AttachmentRef? = null) {
+    val transfers = LocalFileTransfers.current
     AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("message_actions").lanternDialogEdge(),
         title = { Text(stringResource(R.string.message_actions)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -47,6 +50,19 @@ internal fun MessageActions(available: Boolean, canReply: Boolean, canCopy: Bool
             TextButton(onClick = onCopy, enabled = available && canCopy,
                 modifier = Modifier.fillMaxWidth().testTag("message_copy_action")) {
                 Text(stringResource(R.string.message_copy_action))
+            }
+            if (attachment != null && transfers != null) {
+                val apk = io.github.thiesi.chitchat.core.media.FileNames.isApkLike(attachment.attachment)
+                val photo = attachment.attachment.previewable && !apk
+                val usable = available && !transfers.transfers.busy && !transfers.transfers.waiting()
+                TextButton(onClick = { onDismiss(); transfers.save(attachment) }, enabled = usable,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("message_save_action")) {
+                    Text(stringResource(if (photo) R.string.action_save_photo else R.string.action_save_file))
+                }
+                if (!apk) TextButton(onClick = { onDismiss(); transfers.hand(attachment, io.github.thiesi.chitchat.core.media.TransferPurpose.SHARE) },
+                    enabled = usable, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("message_share_action")) {
+                    Text(stringResource(if (photo) R.string.action_share_photo else R.string.action_share_file))
+                }
             }
             onEdit?.let { action ->
                 TextButton(onClick = action, enabled = available && canEdit,
