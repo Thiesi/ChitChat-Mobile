@@ -111,7 +111,9 @@ dialogs and other windows.
 | `onboarding` | welcome, address, found, found-top (host only); step 2 certificate failure at 200% (O2a, PR #260) | light, dark × default, 200% | black; failure at default; name-plus-host card |
 | `step-up` | the step-up dialog for export, replace key, create key, transfer room, and the recovery-code warning (PR #297) | light, dark × default, 200% | black; keyboard up; delete account (in `deletion`) |
 | `deletion` | row, explanation, explanation-actions, dialog, stepup, unknown, notdeleted, waiting, endedunknown, checkfailed, signedout, scheduled, endedrefusal; pt-BR long date at 200% (D2, PR #300) | light, dark × default, 200% | black |
-| `files` | received photo frames: notloaded, loading, failed, nomemory, toolarge, gone, notallowed, offline; normal, panorama, tall, small, nodims; panorama-show, panorama-retry (short frames); gif (badge only); file cards: card-short, card-long, card-apk; reply (no frame in the quote); DM dm-in-short, dm-out-long; the Welcome preview-sheet (F3b, PR #310) | light, dark × default, 200%; black for normal and notloaded | black for the rest; the viewer and the API 26–27 GIF (F4); card Open and Save (F5) |
+| `files` | received photo frames: notloaded, loading, failed, nomemory, toolarge, gone, notallowed, offline; normal, panorama, tall, small, nodims; panorama-show, panorama-retry (short frames); gif (badge only); file cards: card-short, card-long, card-apk; reply (no frame in the quote); DM dm-in-short, dm-out-long; the Welcome preview-sheet (F3b, PR #310) | light, dark × default, 200%; black for normal and notloaded | black for the rest |
+| `files` viewer | full-screen viewer (F4, PRs #313 and #315): viewer-preview, -loading, -original, -zoomed, -caption, -caption-open, -longsender, -failed, -nomemory, -offline, -waiting, -toolarge, -toolarge-preview, -gif, -gif-api27, -gif-offline; wide windows: -preview-landscape and -caption-landscape (default), -caption-open-landscape and -failed-landscape (200%); transcript frames frame-gif and frame-gif-api27 (the play glyph) | light × default, 200%; dark default for viewer-preview | the ground is black in every theme, so dark and black only check the scrims and tokens: dark at 200%; black |
+| `files` transfer | Save, Share and Open (F5, PRs #318 and #319): transfer-cards (scrolled, all three cards' buttons), -actions-photo, -actions-file, -actions-apk, -note, -save-progress, -share-progress, -saved, -save-nothing, -save-incomplete, -save-background, -no-space, -share-gone; in the viewer: -viewer-bar, -viewer-offline, -viewer-progress | light × default, 200%; dark default for transfer-cards | dark and black for the rest; damaged (integrity), no app for the type, Share/Open during a 429 wait (asserted, not captured) |
 
 ### Screens and states with no capture yet
 
@@ -221,6 +223,15 @@ against current main before acting.
     an `error` action (PRs #297, #300): both belong to the modals restyle. A file name can
     break at its extension's dot ("chitchat-release." / "apk", PR #310 `files` card-apk at 200%);
     the middle ellipsis keeps the extension visible, but the break still falls at the dot.
+15. **The viewer's chrome at 200%.** All of these are accepted for now and belong to the overhaul:
+    - **Short wide windows:** at 200% in a 640×320dp window the chrome leaves an 86dp clear band without a caption,
+      and none with a collapsed caption (F6 captures, PR #321). F6 makes it hideable with a tap (files-media.md); the
+      chrome's own height and immersive mode are the overhaul's.
+    - **A long sender:** the sender is server text and never ellipsized. The long-sender fixture wraps to five lines
+      plus a two-line time in portrait at 200%, about 280dp of top bar with Save and Share (PR #318's first J).
+    - **The state line after an expanded caption:** in wide windows at 200%, it follows with only the 4dp column gap.
+      In `viewer-failed-landscape`, "… stayed until the" runs straight into "Couldn't load the full image" in the same
+      colour. Type size and the line break tell them apart (PR #313's J).
 
 ## Evidence
 
