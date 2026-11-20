@@ -90,5 +90,6 @@ invite links." (PL).
   reading order.
 - **`ReceivedFilesJourneyTest`:** the F3 frame cases now assert the F4 tap ("Open photo", long-press actions), including
   the too-large box.
-- **Captures:** the viewer's presentation captures are added by a separate follow-up PR, not by this slice. The reconnect
+- **Captures:** the viewer's presentation captures came separately, in #315: `ReceivedViewerPresentationTest`, 135
+  captures (every viewer state at default and 200%, the landscape set, the GIF frames and one dark viewer). The reconnect
   decision, the wait end and the shared size text came with the prerequisites PR (see the [F4a record](received-files-f4a.md)).
