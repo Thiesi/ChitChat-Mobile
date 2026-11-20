@@ -64,7 +64,9 @@ import kotlinx.coroutines.launch
  * picker, the handoff to another app, the first-use note, and telling a genuine background from the app's own picker or
  * chooser.
  */
-internal class FileTransfersUi(val transfers: FileTransfers, private val markNoteSeen: suspend () -> Unit) {
+internal class FileTransfersUi(val transfers: FileTransfers, private val markNoteSeen: suspend () -> Unit) : androidx.lifecycle.ViewModel() {
+    // An Activity-scoped ViewModel (#318 review): the open first-use note, the saved place and the picker flag survive a
+    // configuration change, like the transfer itself.
     /** Share or Open waiting for the first-use note's Continue (PL: shown once per install, before any download). */
     var noteFor by mutableStateOf<Pair<AttachmentRef, TransferPurpose>?>(null)
         internal set
@@ -121,18 +123,16 @@ internal fun FileTransfersHost(ui: FileTransfersUi, noteSeen: Boolean, content: 
     val context = LocalContext.current
     val activity = LocalActivity.current
     ui.noteSeen = noteSeen
-    var pending by remember { mutableStateOf<FileTransfers.PendingSave?>(null) }
+    // The result is matched to the transfer's own pending request, which survives a recreated Activity (#318 review).
     val picker = rememberLauncherForActivityResult(CreateDocument()) { uri ->
         ui.external = false
-        val request = pending ?: return@rememberLauncherForActivityResult
-        pending = null
+        val request = ui.transfers.pendingSave ?: return@rememberLauncherForActivityResult
         ui.savedPlace = uri?.let { providerLabel(context, it) }
         ui.transfers.saveChosen(request, uri?.let { DocumentSaveDestination(context.contentResolver, it) })
     }
     ui.launchSave = { request ->
-        pending = request
         try { picker.launch(request) } catch (_: ActivityNotFoundException) {
-            ui.external = false; pending = null; ui.transfers.saveChosen(request, null)
+            ui.external = false; ui.transfers.saveChosen(request, null)
         }
     }
     val state by ui.transfers.state.collectAsState()
@@ -169,7 +169,10 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
     val state by ui.transfers.state.collectAsState()
     val scope = rememberCoroutineScope()
     // A finished line clears when the person leaves the conversation (PL); the viewer's copy doesn't clear it.
-    if (withNote) androidx.compose.runtime.DisposableEffect(ui) { onDispose { ui.transfers.dismiss() } }
+    val activity = LocalActivity.current
+    if (withNote) androidx.compose.runtime.DisposableEffect(ui) {
+        onDispose { if (activity?.isChangingConfigurations != true) ui.transfers.dismiss() }
+    }
     if (withNote) ui.noteFor?.let {
         AlertDialog(onDismissRequest = ui::cancelNote, modifier = Modifier.testTag("transfer_note").lanternDialogEdge(),
             text = { DialogScrollBody { Text(stringResource(R.string.transfer_first_use)) } },
@@ -181,6 +184,7 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
     val current = state ?: return
     if (current is TransferState.Ready) return
     val text = if (overlay) io.github.thiesi.chitchat.core.theme.Lantern.overlayText else ChitChatTheme.colors.text
+    val muted = if (overlay) text else ChitChatTheme.colors.textMuted
     val name = FileNames.withoutBidiControls(current.ref.attachment.name)
     Column(modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("transfer_notice"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         when (current) {
@@ -203,13 +207,24 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
                 }
             }
             is TransferState.Saved -> NoticeLine(ui.savedPlace?.let { stringResource(R.string.transfer_saved_to, it) }
-                ?: stringResource(R.string.transfer_saved, name), text)
+                ?: stringResource(R.string.transfer_saved, name), muted)
             is TransferState.Stopped -> {
                 val line = stopLine(current) ?: return@Column
-                NoticeLine(line, text)
-                if (current.purpose != TransferPurpose.SAVE && current.reason == TransferStop.FAILED)
-                    TextButton(onClick = { ui.transfers.dismiss(); ui.hand(current.ref, current.purpose) },
-                        modifier = Modifier.heightIn(min = 48.dp).testTag("transfer_retry")) { Text(stringResource(R.string.retry), color = text) }
+                val retry: @Composable () -> Unit = {
+                    if (current.purpose != TransferPurpose.SAVE && current.reason == TransferStop.FAILED)
+                        TextButton(onClick = { ui.transfers.dismiss(); ui.hand(current.ref, current.purpose) },
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("transfer_retry")) { Text(stringResource(R.string.retry), color = text) }
+                }
+                if (stopLevel(current) == 1) NoticeLine(line, muted)
+                else {
+                    // Level 2: the shared warning notice, its first sentence as the bold lead (PL).
+                    val cut = line.indexOf(". ").let { if (it < 0) line.length else it + 1 }
+                    val lead = line.substring(0, cut)
+                    val body = line.substring(cut).trim()
+                    if (overlay) Column(Modifier.testTag("transfer_level_2")) {
+                        WarningLine(lead, body, style = MaterialTheme.typography.bodyMedium, color = text); retry()
+                    } else WarningNotice(lead, body, Modifier.testTag("transfer_level_2"), actions = retry)
+                }
             }
             is TransferState.Ready -> Unit
         }
@@ -217,8 +232,20 @@ internal fun TransferNotice(modifier: Modifier = Modifier, overlay: Boolean = fa
 }
 
 @Composable
-private fun NoticeLine(line: String, color: Color) = Text(line, color = color, style = MaterialTheme.typography.bodyMedium,
-    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("transfer_line"))
+private fun NoticeLine(line: String, color: Color) = Column(Modifier.testTag("transfer_level_1")) {
+    Text(line, color = color, style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("transfer_line"))
+}
+
+/**
+ * Level 1 for what the person did or a plain fact (a Save they cancelled, no app for the type); level 2 for failures,
+ * including the background stop and no space (PL, 2026-11-20).
+ */
+internal fun stopLevel(stopped: TransferState.Stopped): Int = when {
+    stopped.purpose == TransferPurpose.SAVE && stopped.reason == TransferStop.CANCELLED -> 1
+    stopped.purpose != TransferPurpose.SAVE && stopped.reason == TransferStop.NO_APP -> 1
+    else -> 2
+}
 
 /** The PL's copy for each stop (files-media.md; 2026-11-20). A cancelled or backgrounded Share/Open is silent. */
 @Composable
@@ -243,6 +270,7 @@ private fun stopLine(stopped: TransferState.Stopped): String? {
     }
     return when {
         stopped.reason == TransferStop.DAMAGED -> stringResource(R.string.transfer_save_damaged)
+        stopped.wroteBody && stopped.reason == TransferStop.CANCELLED -> stringResource(R.string.transfer_save_incomplete)
         stopped.wroteBody && stopped.reason == TransferStop.BACKGROUND -> stringResource(R.string.transfer_save_background_incomplete)
         stopped.wroteBody || stopped.reason == TransferStop.STORAGE -> stringResource(R.string.transfer_save_incomplete)
         stopped.reason == TransferStop.CANCELLED -> stringResource(R.string.transfer_nothing_saved_plain)

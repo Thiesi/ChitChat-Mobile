@@ -228,7 +228,7 @@ private fun ReceivedFileCard(attachment: MessageAttachment, direct: Boolean, mod
     val ref = remember(attachment, direct) { io.github.thiesi.chitchat.core.media.AttachmentRef(attachment, direct) }
     val apk = io.github.thiesi.chitchat.core.media.FileNames.isApkLike(attachment)
     val name = io.github.thiesi.chitchat.core.media.FileNames.withoutBidiControls(attachment.name)
-    val type = attachmentExtension(name)
+    val type = io.github.thiesi.chitchat.core.media.FileNames.typeLabel(attachment)
     val size = sizeText(attachmentSizeText(attachment.sizeBytes, locale))
     val openLabel = stringResource(R.string.file_open)
     val saveLabel = stringResource(R.string.file_save)

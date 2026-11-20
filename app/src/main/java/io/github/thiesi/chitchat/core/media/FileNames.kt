@@ -66,6 +66,13 @@ internal object FileNames {
     fun isApkLike(attachment: MessageAttachment): Boolean =
         attachment.mimeType.trim().equals(APK_MIME, ignoreCase = true) || extension(attachment.name) in APK_EXTENSIONS
 
+    /**
+     * The card's type label (PL, F5b): the real last extension of the bidi-stripped name, as F3 shows it, except that a
+     * file that's APK-like by either rule always reads "APK", so a Save-only card never claims to be a PDF.
+     */
+    fun typeLabel(attachment: MessageAttachment): String? =
+        if (isApkLike(attachment)) "APK" else attachmentExtension(withoutBidiControls(attachment.name))
+
     /** A name for display (F5b cards): the bidi controls dropped; the caller then renders it as an isolated run. */
     fun withoutBidiControls(name: String): String = name.filterNot { it in BIDI_CONTROLS }
 }

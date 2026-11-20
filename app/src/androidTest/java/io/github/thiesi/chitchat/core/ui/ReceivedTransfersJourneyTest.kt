@@ -77,8 +77,13 @@ class ReceivedTransfersJourneyTest {
     /** Streams a few bytes; [gate] holds the body so a transfer stays running. */
     private val streamed = mutableListOf<Long>()
     private var gate: CompletableDeferred<Unit>? = null
+    /** Holds the stream before its body (a Cancel then lands before any byte); [preBody] ends it there instead. */
+    private var preGate: CompletableDeferred<Unit>? = null
+    private var preBody: DownloadResult? = null
     private val fileSource = FileSource { ref, _, open, _ ->
         synchronized(streamed) { streamed += ref.attachment.id }
+        preGate?.let { runBlocking { it.await() } }
+        preBody?.let { return@FileSource it }
         open().use { out -> out.write(ByteArray(4)); gate?.let { runBlocking { it.await() } }; out.write(ByteArray(4)) }
         DownloadResult.Saved
     }
@@ -87,7 +92,7 @@ class ReceivedTransfersJourneyTest {
     private val ui = FileTransfersUi(transfers) { noteMarked++ }
     private var launched: FileTransfers.PendingSave? = null
 
-    @After fun tearDown() { gate?.complete(Unit); compose.runOnIdle { room.cancel() }; job.cancel(); store.clear(); root.deleteRecursively() }
+    @After fun tearDown() { gate?.complete(Unit); preGate?.complete(Unit); compose.runOnIdle { room.cancel() }; job.cancel(); store.clear(); root.deleteRecursively() }
 
     private fun text(id: Int) = context.getString(id)
     private fun description(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().config
@@ -216,6 +221,27 @@ class ReceivedTransfersJourneyTest {
         compose.waitUntil(5_000) { transfers.state.value is TransferState.Saved }
         compose.onNodeWithTag("transfer_line").assertTextEquals(context.getString(R.string.transfer_saved, "notes.pdf"))
         compose.onNodeWithTag("attachment_save:72").assertIsEnabled()
+    }
+
+    @Test fun aSaveTheyCancelIsLevelOneAndAFailureIsLevelTwo() {
+        // PL (F5b): what the person did is level 1; a failure is level 2.
+        preGate = CompletableDeferred()
+        rooms.messages = listOf(roomMessage(3, null, file(71, "notes.pdf")))
+        roomContent()
+        compose.onNodeWithTag("attachment_save:71").performClick()
+        val first = compose.runOnIdle { launched!! }
+        compose.runOnIdle { transfers.saveChosen(first) { java.io.ByteArrayOutputStream() } }
+        compose.waitUntil(5_000) { transfers.state.value is TransferState.Running }
+        compose.onNodeWithTag("transfer_cancel").performClick()
+        compose.waitUntil(5_000) { !absent("transfer_level_1") }
+        compose.onNodeWithTag("transfer_line").assertTextEquals(text(R.string.transfer_nothing_saved_plain))
+        // A 410 before any byte: level 2, with its reason.
+        preGate!!.complete(Unit); preGate = null; preBody = DownloadResult.Gone
+        compose.onNodeWithTag("attachment_save:71").performClick()
+        val second = compose.runOnIdle { launched!! }
+        compose.runOnIdle { transfers.saveChosen(second) { java.io.ByteArrayOutputStream() } }
+        compose.waitUntil(5_000) { !absent("transfer_level_2") }
+        assertTrue(absent("transfer_level_1"))
     }
 
     @Test fun aBidiOverrideNeverReachesTheCardsShownName() {

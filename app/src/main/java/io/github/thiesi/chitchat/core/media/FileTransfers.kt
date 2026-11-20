@@ -112,6 +112,13 @@ internal class FileTransfers(
         scope.launch { session.collect { next -> if (owner != null && identityOf(next) != owner) retire() } }
     }
 
+    /**
+     * The Save waiting for its picker result, read-only (#318 review): a picker result is matched to this, never to a copy
+     * kept in a composition, so an Activity recreated while the picker is open still delivers it. [saveChosen]'s own
+     * identity and request checks stay the only authority.
+     */
+    val pendingSave: PendingSave? get() = pending
+
     /** Running or waiting for a picker or a handoff: the other actions are disabled (PL). */
     val busy: Boolean get() = pending != null || job?.isActive == true || mutable.value is TransferState.Ready
 
