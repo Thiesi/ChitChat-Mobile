@@ -63,6 +63,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
@@ -173,18 +175,20 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                     Text(time, color = Lantern.overlayText, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            // The bottom: the zoom pill directly above the bottom block. Together they never reach the top bar (PL J2): the
-            // column is capped to the space below it, and the expanded caption is what gives way.
-            val below = window - with(density) { topBar.toDp() }
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = below.coerceAtLeast(0.dp))) {
-                if (showsImage) ZoomGroup(scale, Modifier.align(Alignment.End)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)).padding(8.dp),
+            // The bottom: the zoom pill and the bottom block. Together they never reach the top bar (PL J2): they're capped to
+            // the space below it, and the expanded caption is what gives way.
+            val below = (window - with(density) { topBar.toDp() }).coerceAtLeast(0.dp)
+            // PL J8: in a window wider than tall the pill sits beside the bottom block, so the caption keeps its height.
+            val wide = maxWidth > maxHeight
+            val pill: (@Composable (Modifier) -> Unit)? = if (!showsImage) null else { modifier ->
+                ZoomGroup(scale, modifier,
                     onZoomIn = { scale = (scale * 2f).coerceAtMost(MAX_ZOOM) },
                     onZoomOut = { scale = (scale / 2f).coerceAtLeast(1f); pan = if (scale == 1f) Offset.Zero else bounded(pan, scale) },
                     onReset = { scale = 1f; pan = Offset.Zero })
-                Column(Modifier.fillMaxWidth().weight(1f, fill = false).background(Lantern.overlayScrim)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-                    .padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            }
+            @Composable fun BottomBlock(modifier: Modifier, sides: WindowInsetsSides) =
+                Column(modifier.background(Lantern.overlayScrim).windowInsetsPadding(WindowInsets.safeDrawing.only(sides))
+                    .padding(horizontal = 16.dp, vertical = 8.dp).testTag("viewer_bottom"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (!caption.isNullOrBlank()) {
                         // PL: two lines with an ellipsis and More; expanded, at most 40% of the window and scrolling.
                         val text = Modifier.testTag("viewer_caption")
@@ -197,6 +201,17 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                     }
                     FullImageLine(viewer, still != null || animated != null, onLoadFull)
                 }
+            if (!wide) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = below)) {
+                pill?.invoke(Modifier.align(Alignment.End).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(8.dp))
+                BottomBlock(Modifier.fillMaxWidth().weight(1f, fill = false), WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
+            } else Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = below).semantics { isTraversalGroup = true },
+                verticalAlignment = Alignment.Bottom) {
+                // The column narrows by the pill's width plus its 8dp; TalkBack still reaches the zoom group before the bar.
+                BottomBlock(Modifier.weight(1f).semantics { traversalIndex = 1f },
+                    if (pill == null) WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal else WindowInsetsSides.Bottom + WindowInsetsSides.Start)
+                pill?.invoke(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.End))
+                    .padding(end = 8.dp, bottom = 8.dp).semantics { traversalIndex = 0f })
             }
             // Too large and nothing to show: the line on the black ground, centred (PL J7), no zoom group.
             if (!showsImage && viewer.full == FullImage.TOO_LARGE) Text(stringResource(R.string.viewer_too_large),

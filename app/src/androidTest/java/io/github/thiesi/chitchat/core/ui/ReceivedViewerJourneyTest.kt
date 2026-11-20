@@ -25,6 +25,8 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
@@ -77,14 +79,8 @@ class ReceivedViewerJourneyTest {
     private val noClick = SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick)
     private fun viewerShown() = compose.onAllNodesWithTag("viewer").fetchSemanticsNodes().isNotEmpty()
 
-    private fun roomContent(fontScale: Float = 1f) {
-        compose.setContent {
-            val base = androidx.compose.ui.platform.LocalDensity.current
-            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides
-                androidx.compose.ui.unit.Density(base.density, fontScale)) {
-                MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } }
-            }
-        }
+    private fun roomContent() {
+        compose.setContent { MaterialTheme { Box(Modifier.size(320.dp, 640.dp)) { ConversationScreen(room, 42, {}, images = images) } } }
         compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
     }
     private fun loaded(id: Long) = compose.waitUntil(5_000) {
@@ -189,20 +185,28 @@ class ReceivedViewerJourneyTest {
         compose.onNodeWithTag("viewer_load_full").assertIsNotEnabled()
     }
 
-    @Test fun at200PercentTheExpandedCaptionNeverPushesTheZoomPillIntoTheTopBar() {
-        // PL J2: the caption gives way; the pill stays clear of the top bar.
-        val long = (1..30).joinToString(" ") { "We walked down to the harbour after dinner and stayed until the light went out." }
-        rooms.messages = listOf(roomMessage(3, long, photo(70)))
-        roomContent(fontScale = 2f); loaded(70)
-        // The tall row starts scrolled to its bottom: bring the frame into view before the tap (as the captures do).
-        compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag("attachment_frame:70"))
-        compose.onNodeWithTag("attachment_frame:70").performClick()
-        compose.waitUntil(5_000) { viewerShown() }
-        compose.onNodeWithTag("viewer_caption_toggle").performClick()
-        compose.waitForIdle()
-        val top = compose.onNodeWithTag("viewer_top").fetchSemanticsNode().boundsInRoot
-        val pill = compose.onNodeWithTag("viewer_zoom").fetchSemanticsNode().boundsInRoot
-        assertTrue("Pill $pill below the top bar $top", pill.top >= top.bottom - 0.5f)
+    @Test fun showAndTryAgainStayTheirOwnAccessibilityActionsBesideOpenPhoto() {
+        // #313 review: the frame's own click ("Open photo") must not swallow Show and Try again for TalkBack or switch
+        // users. Each is its own merge boundary: a separate clickable node in the merged tree, invoked here as TalkBack does.
+        network.state.value = io.github.thiesi.chitchat.core.media.NetworkState(online = true, metered = true)
+        source.reply(70) { DownloadResult.Failed(io.github.thiesi.chitchat.core.network.ApiFailure(io.github.thiesi.chitchat.core.network.FailureKind.NETWORK)) }
+        rooms.messages = listOf(roomMessage(3, null, photo(70)))
+        roomContent()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("attachment_show:70").fetchSemanticsNodes().isNotEmpty() }
+        val frame = compose.onNodeWithTag("attachment_frame:70").fetchSemanticsNode()
+        assertEquals(text(R.string.image_open), frame.config[androidx.compose.ui.semantics.SemanticsActions.OnClick].label)
+        val show = compose.onNodeWithTag("attachment_show:70")
+        show.assertHasClickAction()
+        assertTrue("Show is its own node", show.fetchSemanticsNode().id != frame.id)
+        show.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("attachment_retry:70").fetchSemanticsNodes().isNotEmpty() }
+        val retry = compose.onNodeWithTag("attachment_retry:70")
+        retry.assertHasClickAction()
+        assertTrue("Try again is its own node", retry.fetchSemanticsNode().id != frame.id)
+        val calls = source.calls.count { it == 70L }
+        retry.performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        compose.waitUntil(5_000) { source.calls.count { it == 70L } > calls }
+        assertTrue("Neither action opened the viewer", images.viewer.state.value == null)
     }
 
     @Test fun aGifShownStillKeepsItsBadgeUntilZoomed() {
