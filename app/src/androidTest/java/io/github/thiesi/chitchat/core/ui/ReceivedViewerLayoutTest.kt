@@ -22,7 +22,11 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.test.core.app.ActivityScenario
 import io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel
+import io.github.thiesi.chitchat.core.media.DownloadResult
+import io.github.thiesi.chitchat.core.media.FullImage
 import io.github.thiesi.chitchat.core.media.ImageState
+import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import io.github.thiesi.chitchat.core.ui.ReceivedFiles.photo
 import io.github.thiesi.chitchat.core.ui.ReceivedFiles.roomMessage
@@ -59,9 +63,13 @@ class ReceivedViewerLayoutTest {
         top < other.bottom - 0.5f && other.top < bottom - 0.5f
 
     /** Opens the viewer on a long caption at 200%, in the given orientation, and expands the caption. */
-    private fun openExpanded(landscape: Boolean, check: (collapsedCaptionHeight: Float) -> Unit) {
+    private fun openExpanded(landscape: Boolean, failed: Boolean = false, check: (collapsedCaptionHeight: Float) -> Unit) {
         FontScaleTestActivity.requestedFontScale = 2f
         rooms.messages = listOf(roomMessage(3, longCaption, photo(70)))
+        if (failed) {
+            source.serve(70)
+            source.reply(70) { DownloadResult.Failed(ApiFailure(FailureKind.NETWORK)) }
+        }
         ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
             val wanted = if (landscape) Configuration.ORIENTATION_LANDSCAPE else Configuration.ORIENTATION_PORTRAIT
             scenario.onActivity {
@@ -84,6 +92,10 @@ class ReceivedViewerLayoutTest {
             compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag("attachment_frame:70"))
             compose.onNodeWithTag("attachment_frame:70").performClick()
             compose.waitUntil(5_000) { compose.onAllNodesWithTag("viewer").fetchSemanticsNodes().isNotEmpty() }
+            if (failed) {
+                compose.onNodeWithTag("viewer_load_full").performClick()
+                compose.waitUntil(5_000) { images.viewer.state.value?.full == FullImage.FAILED }
+            }
             compose.waitForIdle()
             val collapsed = bounds("viewer_caption").height
             compose.onNodeWithTag("viewer_caption_toggle").performClick()
@@ -108,8 +120,32 @@ class ReceivedViewerLayoutTest {
         assertTrue("Bottom block $bottom below the top bar $top", bottom.top >= top.bottom - 0.5f)
         assertTrue("Pill $pill at the end of the bottom block $bottom", pill.left >= bottom.right - 0.5f)
         assertTrue("Expanded caption ${caption.height} keeps two lines ($collapsed)", caption.height >= collapsed - 0.5f)
+        // PL J8: More/Less and Load full image share one row, at its two ends.
+        val toggle = bounds("viewer_caption_toggle"); val load = bounds("viewer_load_full")
+        assertTrue("One row: $toggle, $load", toggle.top < load.bottom && load.top < toggle.bottom)
+        assertTrue("Less at the start, the action at the far end", toggle.right < load.left)
         // TalkBack: the zoom group before the bottom bar, as in portrait.
         val pillIndex = compose.onNodeWithTag("viewer_zoom").fetchSemanticsNode().config.getOrNull(SemanticsProperties.TraversalIndex)
         assertEquals(0f, pillIndex)
+        // Reading order in the block: caption, More/Less, the action (no state line here).
+        assertEquals(listOf(0f, 1f, 3f), listOf("viewer_caption", "viewer_caption_toggle", "viewer_load_full").map {
+            compose.onNodeWithTag(it).fetchSemanticsNode().config.getOrNull(SemanticsProperties.TraversalIndex)
+        })
     }
+
+    @Test fun landscapeAt200PercentAFailedOriginalKeepsItsLineAboveAndOneCaptionLine() =
+        openExpanded(landscape = true, failed = true) { collapsed ->
+            // PL J8: with a state line, the expanded caption keeps at least one full line; the line sits above the shared
+            // row of Less and Try again.
+            val top = bounds("viewer_top"); val bottom = bounds("viewer_bottom"); val caption = bounds("viewer_caption")
+            val line = bounds("viewer_line"); val toggle = bounds("viewer_caption_toggle"); val retry = bounds("viewer_retry")
+            assertTrue("Bottom block $bottom below the top bar $top", bottom.top >= top.bottom - 0.5f)
+            assertTrue("Expanded caption ${caption.height} keeps one line (${collapsed / 2})", caption.height >= collapsed / 2 - 0.5f)
+            assertTrue("The line $line above the row $toggle", line.bottom <= minOf(toggle.top, retry.top) + 0.5f)
+            assertTrue("One row: $toggle, $retry", toggle.top < retry.bottom && retry.top < toggle.bottom)
+            assertTrue("Less at the start, Try again at the far end", toggle.right < retry.left)
+            assertEquals(listOf(0f, 1f, 2f, 3f), listOf("viewer_caption", "viewer_caption_toggle", "viewer_line", "viewer_retry").map {
+                compose.onNodeWithTag(it).fetchSemanticsNode().config.getOrNull(SemanticsProperties.TraversalIndex)
+            })
+        }
 }

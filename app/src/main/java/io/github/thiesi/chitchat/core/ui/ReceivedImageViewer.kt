@@ -188,20 +188,42 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                     onZoomOut = { scale = (scale / 2f).coerceAtLeast(1f); pan = if (scale == 1f) Offset.Zero else bounded(pan, scale) },
                     onReset = { scale = 1f; pan = Offset.Zero })
             }
+            val showsSomething = still != null || animated != null
             @Composable fun BottomBlock(modifier: Modifier, sides: WindowInsetsSides) =
                 Column(modifier.background(Lantern.overlayScrim).windowInsetsPadding(WindowInsets.safeDrawing.only(sides))
-                    .padding(horizontal = 16.dp, vertical = 8.dp).testTag("viewer_bottom"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (!caption.isNullOrBlank()) {
+                    .padding(horizontal = 16.dp, vertical = 8.dp).testTag("viewer_bottom")
+                    // Wide: the visual order differs from the reading order, so the block orders its own traversal (PL J8).
+                    .then(if (wide) Modifier.semantics { isTraversalGroup = true } else Modifier),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val hasCaption = !caption.isNullOrBlank()
+                    fun order(index: Float) = if (wide) Modifier.semantics { traversalIndex = index } else Modifier
+                    if (hasCaption) {
                         // PL: two lines with an ellipsis and More; expanded, at most 40% of the window and scrolling.
-                        val text = Modifier.testTag("viewer_caption")
-                        if (captionOpen) Text(caption, color = Lantern.overlayText,
+                        val text = Modifier.testTag("viewer_caption").then(order(0f))
+                        if (captionOpen) Text(caption!!, color = Lantern.overlayText,
                             modifier = text.weight(1f, fill = false).heightIn(max = window * 0.4f).verticalScroll(rememberScrollState()))
-                        else Text(caption, color = Lantern.overlayText, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = text)
-                        OverlayButton(stringResource(if (captionOpen) R.string.viewer_less else R.string.viewer_more), "viewer_caption_toggle") {
-                            captionOpen = !captionOpen
+                        else Text(caption!!, color = Lantern.overlayText, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = text)
+                    }
+                    val toggle: @Composable () -> Unit = {
+                        OverlayButton(stringResource(if (captionOpen) R.string.viewer_less else R.string.viewer_more), "viewer_caption_toggle",
+                            modifier = order(1f)) { captionOpen = !captionOpen }
+                    }
+                    if (!wide) {
+                        // Portrait: caption, More/Less, the state line, the action, one under another.
+                        if (hasCaption) toggle()
+                        FullImageState(viewer, showsSomething)
+                        FullImageAction(viewer, onLoadFull)
+                    } else {
+                        // PL J8: the state line keeps its own row; More/Less and the action share the row under it, More/Less at
+                        // the start and the action at the far end, two rows only when they can't fit side by side.
+                        FullImageState(viewer, showsSomething, order(2f))
+                        val action = hasFullImageAction(viewer)
+                        when {
+                            hasCaption && action -> SharedRow(toggle) { FullImageAction(viewer, onLoadFull, order(3f)) }
+                            hasCaption -> toggle()
+                            else -> FullImageAction(viewer, onLoadFull, order(3f))
                         }
                     }
-                    FullImageLine(viewer, still != null || animated != null, onLoadFull)
                 }
             if (!wide) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = below)) {
                 pill?.invoke(Modifier.align(Alignment.End).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
@@ -236,8 +258,8 @@ private fun AnimatedDrawable(drawable: Drawable?, modifier: Modifier) {
 
 /** Viewer text buttons are overlay-coloured, never persimmon (3.71:1 on black; PL J3); disabled at 38%. */
 @Composable
-private fun OverlayButton(text: String, tag: String, enabled: Boolean = true, onClick: () -> Unit) =
-    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = Lantern.target).testTag(tag),
+private fun OverlayButton(text: String, tag: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) =
+    TextButton(onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = Lantern.target).testTag(tag),
         colors = ButtonDefaults.textButtonColors(contentColor = Lantern.overlayText,
             disabledContentColor = Lantern.overlayText.copy(alpha = 0.38f))) { Text(text) }
 
@@ -268,7 +290,7 @@ private fun ZoomButton(icon: Int, label: Int, enabled: Boolean, tag: String, onC
  * minute and at most one announcement per minute bucket, as in the status slot.
  */
 @Composable
-private fun WaitLine(until: Long?) {
+private fun WaitLine(until: Long?, modifier: Modifier = Modifier) {
     var now by remember(until) { mutableStateOf(System.currentTimeMillis()) }
     if (until != null) LaunchedEffect(until) {
         while (true) {
@@ -289,38 +311,80 @@ private fun WaitLine(until: Long?) {
     androidx.compose.runtime.key(bucket) {
         Text(shown, color = Lantern.overlayText, style = MaterialTheme.typography.bodyMedium,
             // The tag goes inside: clearAndSetSemantics drops one chained after it (#313).
-            modifier = Modifier.clearAndSetSemantics { testTag = "viewer_line"; contentDescription = spoken; liveRegion = LiveRegionMode.Polite })
+            modifier = modifier.clearAndSetSemantics { testTag = "viewer_line"; contentDescription = spoken; liveRegion = LiveRegionMode.Polite })
     }
 }
 
+/** The full-image state lines (PL J8: their own row in every layout); [modifier] goes on each line. */
 @Composable
-private fun FullImageLine(viewer: ViewerState, showsSomething: Boolean, onLoadFull: () -> Unit) {
-    val locale = LocalConfiguration.current.locales[0]
-    val size = sizeText(attachmentSizeText(viewer.ref.attachment.sizeBytes, locale))
+private fun FullImageState(viewer: ViewerState, showsSomething: Boolean, modifier: Modifier = Modifier) {
     @Composable fun line(text: String) = Text(text, color = Lantern.overlayText, style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.testTag("viewer_line"))
-    val load = stringResource(R.string.viewer_load_full, size)
+        modifier = modifier.testTag("viewer_line"))
     if (viewer.animationUnavailable) line(stringResource(R.string.viewer_no_animation))
     when (viewer.full) {
-        FullImage.NONE -> Unit
-        FullImage.OFFER -> OverlayButton(load, "viewer_load_full", onClick = onLoadFull)
-        // PL J4: offline says why the button is off; a session wait (429) disables it without that line.
-        FullImage.OFFLINE -> { line(stringResource(R.string.viewer_offline)); OverlayButton(load, "viewer_load_full", enabled = false, onClick = onLoadFull) }
+        FullImage.NONE, FullImage.OFFER -> Unit
+        // PL J4: offline says why the button is off.
+        FullImage.OFFLINE -> line(stringResource(R.string.viewer_offline))
         // PL: status row 7's line, since the viewer covers the status slot.
-        FullImage.WAITING -> { WaitLine(viewer.waitUntilMillis); OverlayButton(load, "viewer_load_full", enabled = false, onClick = onLoadFull) }
+        FullImage.WAITING -> WaitLine(viewer.waitUntilMillis, modifier)
         FullImage.LOADING -> {
             var long by remember { mutableStateOf(false) }
             LaunchedEffect(Unit) { delay(2_000); long = true }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CircularProgressIndicator(progress = { 0.75f }, Modifier.size(20.dp), color = Lantern.overlayText, strokeWidth = 2.dp)
-                if (long) line(stringResource(R.string.viewer_loading_full))
+                if (long) Text(stringResource(R.string.viewer_loading_full), color = Lantern.overlayText,
+                    style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("viewer_line"))
             }
         }
-        FullImage.FAILED -> { line(stringResource(R.string.viewer_failed)); OverlayButton(stringResource(R.string.retry), "viewer_retry", onClick = onLoadFull) }
-        FullImage.NO_MEMORY -> { line(stringResource(R.string.viewer_no_memory)); OverlayButton(stringResource(R.string.retry), "viewer_retry", onClick = onLoadFull) }
+        FullImage.FAILED -> line(stringResource(R.string.viewer_failed))
+        FullImage.NO_MEMORY -> line(stringResource(R.string.viewer_no_memory))
         // With nothing shown the line sits on the black ground instead (see the viewer).
         FullImage.TOO_LARGE -> if (showsSomething) line(stringResource(R.string.viewer_too_large_preview))
         FullImage.GONE -> line(stringResource(R.string.image_gone))
         FullImage.NOT_ALLOWED -> line(stringResource(R.string.image_not_allowed))
+    }
+}
+
+private fun hasFullImageAction(viewer: ViewerState) = viewer.full in setOf(FullImage.OFFER, FullImage.OFFLINE, FullImage.WAITING,
+    FullImage.FAILED, FullImage.NO_MEMORY)
+
+/** The full-image action: Load full image (disabled offline and during a 429 wait) or Try again. */
+@Composable
+private fun FullImageAction(viewer: ViewerState, onLoadFull: () -> Unit, modifier: Modifier = Modifier) {
+    val locale = LocalConfiguration.current.locales[0]
+    val load = stringResource(R.string.viewer_load_full, sizeText(attachmentSizeText(viewer.ref.attachment.sizeBytes, locale)))
+    when (viewer.full) {
+        FullImage.OFFER -> OverlayButton(load, "viewer_load_full", modifier = modifier, onClick = onLoadFull)
+        FullImage.OFFLINE, FullImage.WAITING -> OverlayButton(load, "viewer_load_full", enabled = false, modifier = modifier, onClick = onLoadFull)
+        FullImage.FAILED, FullImage.NO_MEMORY -> OverlayButton(stringResource(R.string.retry), "viewer_retry", modifier = modifier, onClick = onLoadFull)
+        else -> Unit
+    }
+}
+
+/**
+ * PL J8: More/Less at the start and the action at the far end of one row, at least 8dp apart so they never touch; when
+ * they can't both fit, two rows, More/Less first.
+ */
+@Composable
+private fun SharedRow(start: @Composable () -> Unit, end: @Composable () -> Unit) {
+    val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
+    androidx.compose.ui.layout.Layout(contents = listOf(start, end), modifier = Modifier.fillMaxWidth().testTag("viewer_action_row")) {
+            (first, second), constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val a = first.map { it.measure(loose) }
+        val b = second.map { it.measure(loose) }
+        val aw = a.maxOfOrNull { it.width } ?: 0; val ah = a.maxOfOrNull { it.height } ?: 0
+        val bw = b.maxOfOrNull { it.width } ?: 0; val bh = b.maxOfOrNull { it.height } ?: 0
+        val width = constraints.maxWidth
+        if (aw + gap + bw <= width) {
+            val height = maxOf(ah, bh)
+            layout(width, height) {
+                a.forEach { it.place(0, (height - it.height) / 2) }
+                b.forEach { it.place(width - it.width, (height - it.height) / 2) }
+            }
+        } else layout(width, ah + bh) {
+            a.forEach { it.place(0, 0) }
+            b.forEach { it.place(0, ah) }
+        }
     }
 }

@@ -407,6 +407,12 @@ The policy is local and read from existing system state, with no new requests:
     width plus 8dp; its height cap is unchanged, so an expanded caption keeps at least two lines. Portrait is unchanged,
     and the TalkBack order stays Close, sender and time, the image, the zoom group, the bottom bar (an explicit traversal
     order).
+  - **Shared row (PL J8):** in a wide window, More/Less shares one row with the image action (Load full image · {size}, or
+    Try again): More/Less at the start, the action end-aligned at the far end of the column, never touching; two rows only
+    when they can't fit side by side, More/Less first. State lines (offline, waiting, failed, can't show, too large,
+    animation) keep their own row above it; disabled buttons stay as they are. With no caption the row is just the
+    action, start-aligned. At 200% the expanded caption keeps at least two full lines in the offer state, and at least
+    one with a state line. TalkBack reads the caption, More/Less, the state line, then the action.
 - **Insets (PL J1):** the top bar takes the top and side insets only; the bottom block the bottom and
   side insets only.
 - **Offline (PL J4):** "The full image is available when you're back online." above a disabled Load
