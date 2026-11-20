@@ -75,6 +75,11 @@ internal data class ViewerState(
     val full: FullImage,
     /** A GIF on a phone that can't animate it (API 26–27): shown still, with the PL's line. */
     val animationUnavailable: Boolean,
+    /**
+     * While WAITING: when the wait ends, on the loader's clock, only when the server gave a positive wait (P-106: never an
+     * invented number); null shows "a little while".
+     */
+    val waitUntilMillis: Long? = null,
 )
 
 /** What a pane drives (F4): [AttachmentViewer] in the app. */
@@ -113,18 +118,61 @@ internal class AttachmentViewer(
 
     private val mutable = MutableStateFlow<ViewerState?>(null)
     val state: StateFlow<ViewerState?> = mutable.asStateFlow()
+    /** Whether this phone animates GIFs (API 28+): the transcript's play glyph shows only then (PL, F4). */
+    val animates: Boolean get() = animated != null
     private var held: Held? = null
     private var job: Job? = null
     private var width = 1
     private var height = 1
     private var scopeOf: Any? = session.value.scope()
 
+    private var waitEnd: Job? = null
+    /** Each open and close starts a new attempt: a pending end-of-wait acts only on its own (TL, #313). */
+    private var attempt = 0L
+
     init {
         scope.launch { session.collect { next -> if (next.scope() != scopeOf) { scopeOf = next.scope(); close() } } }
+        scope.launch {
+            var wasOnline = network.value.online
+            network.collect { now -> if (now.online && !wasOnline) reconnected(); wasOnline = now.online }
+        }
+    }
+
+    /**
+     * Back online after OFFLINE: the same decision as opening, once (TL/PL, #313). An original that qualifies for the
+     * automatic rule (or a GIF, or one without a preview, whose opening was the request) loads; anything else returns to
+     * the offer and waits for the tap. Never a retry loop.
+     */
+    private fun reconnected() {
+        val current = mutable.value ?: return
+        if (current.full != FullImage.OFFLINE) return
+        val attachment = current.ref.attachment
+        val gif = attachment.mimeType.equals("image/gif", ignoreCase = true)
+        if (!images.loadsPreview(current.ref) || (gif && animated != null) || automatic(attachment.sizeBytes)) fetch()
+        else set(FullImage.OFFER)
+    }
+
+    /**
+     * A 429 wait: WAITING until it ends, then the offer. Nothing loads by itself, so no burst, and the end is only the
+     * offer, never the automatic rule (TL, #306/#313). The timer belongs to this viewer attempt: close, departure and a
+     * session change cancel it, and a stale one can never touch a later viewer, for the same attachment or another.
+     */
+    private fun waitThenOffer(millis: Long, known: Boolean) {
+        val mine = attempt
+        val opened = mutable.value ?: return
+        val now = images.now()
+        waitEnd?.cancel()
+        mutable.value = opened.copy(full = FullImage.WAITING, waitUntilMillis = if (known) now + millis else null)
+        waitEnd = scope.launch {
+            kotlinx.coroutines.delay(millis)
+            val current = mutable.value
+            if (attempt == mine && current != null && current.ref === opened.ref && current.full == FullImage.WAITING) set(FullImage.OFFER)
+        }
     }
 
     override fun open(ref: AttachmentRef, entry: String, width: Int, height: Int) {
         close()
+        attempt++
         val key = images.key(ref) ?: return
         this.width = width.coerceAtLeast(1); this.height = height.coerceAtLeast(1)
         val attachment = ref.attachment
@@ -152,7 +200,9 @@ internal class AttachmentViewer(
     }
 
     override fun close() {
+        attempt++
         job?.cancel(); job = null
+        waitEnd?.cancel(); waitEnd = null
         release()
         mutable.value?.let { images.unpin(it.ref) }
         mutable.value = null
@@ -163,12 +213,12 @@ internal class AttachmentViewer(
     private fun automatic(size: Long) = network.value.online && !network.value.metered && !images.waitingNow() &&
         size <= AttachmentImages.AUTO_MAX_BYTES
 
-    private fun set(full: FullImage) { mutable.value = mutable.value?.copy(full = full) }
+    private fun set(full: FullImage) { mutable.value = mutable.value?.copy(full = full, waitUntilMillis = null) }
 
     private fun fetch() {
         val opened = mutable.value ?: return
         if (!network.value.online) { set(FullImage.OFFLINE); return }
-        if (images.waitingNow()) { set(FullImage.WAITING); return }
+        if (images.waitingNow()) { waitThenOffer(images.waitRemainingMillis(), images.waitKnown()); return }
         set(FullImage.LOADING)
         val expected = session.value
         val animate = opened.ref.attachment.mimeType.equals("image/gif", ignoreCase = true) && animated != null
@@ -181,7 +231,12 @@ internal class AttachmentViewer(
                 DownloadResult.NoMemory -> set(FullImage.NO_MEMORY)
                 DownloadResult.Gone -> set(FullImage.GONE)
                 DownloadResult.NotAllowed -> set(FullImage.NOT_ALLOWED)
-                is DownloadResult.RateLimited -> set(FullImage.WAITING)
+                is DownloadResult.RateLimited -> {
+                    val own = (result.retryAfterSeconds ?: 0L).coerceAtLeast(0) * 1000
+                    val session = images.waitRemainingMillis()
+                    // Known only from a positive server value: this response's, or the session's when it's the longer one.
+                    waitThenOffer(maxOf(session, own), if (own >= session) result.retryAfterSeconds != null else images.waitKnown())
+                }
                 else -> set(FullImage.FAILED) // Network, a SHA-256 mismatch (never shown) or anything unexpected.
             }
         }

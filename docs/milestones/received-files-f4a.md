@@ -22,7 +22,16 @@ files-media.md "Full-screen viewer" and the TL's and PL's F4 rulings of 2026-11-
 - **The original goes through F1 unchanged:** the caps, integrity, the server MIME and the session wait.
   - Too large is decided from metadata and never fetched.
   - A failure or an integrity mismatch keeps the preview, and the mismatched bytes are never shown.
-  - A 429 leaves it waiting, and nothing starts by itself afterwards.
+  - A 429 leaves it waiting (`WAITING`). When the wait ends it returns to the offer only, never the automatic rule, so
+    nothing loads by itself and there's no burst (F2's no-catch-up rule; TL, #313). Before that fix WAITING never cleared.
+  - The end-of-wait timer belongs to one viewer attempt: close, a departure and a session change cancel it, and a stale
+    one can't change a later viewer for the same attachment or another (TL, #313).
+  - `ViewerState.waitUntilMillis` is set only from the server's positive wait (this response's `retry_after_seconds`, or
+    the session's under the status slot's known-wait rule), otherwise null (P-106: never an invented number), for F4b's
+    wait line.
+  - **Offline, then back online:** the viewer makes the opening decision once. It fetches when there's no preview, for a
+    GIF where it animates, or within the automatic rule; anything else returns to the offer. Never a retry loop, and
+    offline only (TL, #313).
   - The states are `FullImage` (offer, loading, failed, can't show right now, too large, gone, not allowed, offline,
     waiting).
 - **Main-confined state:** the decode runs off Main and only returns an outcome, which is applied on Main after the
@@ -37,11 +46,13 @@ files-media.md "Full-screen viewer" and the TL's and PL's F4 rulings of 2026-11-
   - **API 26–27:** no animated decoding, so a GIF is a still under the ordinary rule, flagged `animationUnavailable` for
     the PL's line.
   - **Background:** F4b's screen starts the animation, and stops it on background.
+- **Shared size text (PL J6, #313):** `attach_size_*` puts a no-break space between number and unit, so a size never
+  splits across lines wherever it shows; ReceivedFilesJourneyTest's size assertions expect it.
 - **Shared caps check:** `originalBeyondDisplayCaps()` is now one function for the transcript's frames and the viewer.
 
 ## Verification
 
-- **JVM: `AttachmentViewerTest` (13):**
+- **JVM: `AttachmentViewerTest` (16):**
   - it opens on the held preview with no second download, and offers the original beyond the rule;
   - a small original loads by itself only unmetered and online (metered offers it, offline says so);
   - a failure or a mismatch keeps the preview, and nothing reloads by itself;
@@ -55,7 +66,11 @@ files-media.md "Full-screen viewer" and the TL's and PL's F4 rulings of 2026-11-
   - a GIF's original is fetched on opening (even metered), with the source bytes plus two frame buffers leased and the
     animation stopped on close;
   - below API 28 a GIF is a still under the ordinary rule;
-  - a session wait starts nothing, and nothing starts after it;
+  - a session wait starts nothing, nothing starts after it, and the wait ends on the offer;
+  - a wait carries only the server's end, and an unknown wait stays unknown (P-106);
+  - **a closed viewer's pending wait end never touches a later viewer**, and a session change during a wait closes the
+    viewer with its timer (TL, #313);
+  - back online, a small original loads once, a large one offers, and a reconnect on the offer loads nothing;
   - only the current pane drives the viewer (a retired pane's late close or replace is a no-op), and a departure closes
     only its own entry's viewer.
 - **JVM:** `ImagePanesTest` (4) and `AttachmentImagesTest` (24) are unchanged and pass.

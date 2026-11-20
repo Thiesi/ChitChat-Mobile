@@ -247,6 +247,8 @@ technical-lead sign-off, and the affected tests are listed.
     with "·" read as ", " (for example "Photo from Ana, 10:42. 48 MB, too large to show here"), built from the same
     parts as the visible line (`image_photo`, `image_too_large_part`, `image_offline_part`); Loading speaks "Loading"
     (`image_loading_spoken`). The caption isn't in the frame label: the message's actions node reads it.
+  - **Sizes** (PL J6, #313): a no-break space between number and unit (`attach_size_*`), so "3.4 MB" never splits
+    across lines, everywhere sizes show (the composer card, upload lines and received frames).
   - `dm_no_push` no longer claims there's no background push, since push shipped in M6c–M6e. It now says
     direct-message alerts are optional and can be chosen in Account → Notifications. It shows always, because the DM screen doesn't know without a new request whether the server offers the preference (P-127).
 
