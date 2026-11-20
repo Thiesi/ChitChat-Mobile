@@ -284,6 +284,27 @@ internal class SessionHttp(server: ServerAddress, base: OkHttpClient = OkHttpCli
         return withContext(Dispatchers.Default) { policyDocumentReply(raw.body) }
     }
 
+    /**
+     * One CSRF `reports/message.php` POST (moderation-reports.md). Success is exactly 201; every refusal stays typed for
+     * reportResult. Never retried here. Returns the case ID when the body carries one.
+     */
+    suspend fun reportMessage(direct: Boolean, messageId: Long, category: String, details: String?, csrf: String): Long? {
+        incompatibleUnless(messageId > 0)
+        val body = apiJson.encodeToString(MessageReportRequest(if (direct) "direct" else "room", messageId, category, details))
+        val raw = request("reports/message.php", body, csrf)
+        incompatibleUnless(raw.status == 201)
+        return reportCaseId(raw.body)
+    }
+
+    /** One CSRF `reports/user.php` POST: [roomId] is the profile request's own context, or null for a global report. */
+    suspend fun reportUser(userId: Long, roomId: Long?, category: String, details: String?, csrf: String): Long? {
+        incompatibleUnless(userId > 0 && (roomId == null || roomId > 0))
+        val body = apiJson.encodeToString(UserReportRequest(userId, category, details, roomId?.let(::UserReportContext)))
+        val raw = request("reports/user.php", body, csrf)
+        incompatibleUnless(raw.status == 201)
+        return reportCaseId(raw.body)
+    }
+
     suspend fun profile(userId: Long, roomId: Long?): ProfileSnapshot {
         validateProfileTarget(userId, roomId)
         val path = "users/profile.php?user_id=$userId" + (roomId?.let { "&room_id=$it" } ?: "")

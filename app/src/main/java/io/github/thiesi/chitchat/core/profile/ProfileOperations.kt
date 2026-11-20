@@ -12,8 +12,12 @@ class ProfileRequest(val userId: Long, val roomId: Long? = null)
 class BasicProfile(val id: Long, val username: String, val memberSince: String, val badge: String?,
     val guest: Boolean, val hasAvatar: Boolean, val avatarVersion: Long?, val canRemoveAvatar: Boolean)
 
-/** No image URL/bytes or mutation capability. Removal hints/availability never authorize an action. */
-class ProfileSnapshot(val profile: BasicProfile, val roomId: Long?, val avatarsAvailable: Boolean)
+/**
+ * No image URL/bytes or mutation capability. Removal hints/availability never authorize an action. [report] is the
+ * reporting facts for this request's own room context, or null when the server didn't publish them (P-165).
+ */
+class ProfileSnapshot(val profile: BasicProfile, val roomId: Long?, val avatarsAvailable: Boolean,
+    val report: io.github.thiesi.chitchat.core.reports.ReportFacts? = null)
 
 /** One explicit member GET through the original session; no cache, policy mutation or replay. */
 interface ProfileOperations {

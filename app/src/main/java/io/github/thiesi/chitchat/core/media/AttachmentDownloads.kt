@@ -124,7 +124,7 @@ internal class AttachmentDownloads(private val sessions: SessionRepository, priv
     /** One GET under the rendered session's access; typed failures come back as results, never as a replay. */
     private suspend fun request(expected: SessionState, operation: suspend SessionHttp.() -> SessionHttp.DownloadReply): Any = try {
         val access = sessions.openAccess(expected)
-        sessions.authorized(access, operation)
+        sessions.authorized(access, operation = operation)
     } catch (failure: ApiFailure) { classify(failure) }
 
     private class Target(val path: String, val size: Long, val sha256: String, val type: String?)
