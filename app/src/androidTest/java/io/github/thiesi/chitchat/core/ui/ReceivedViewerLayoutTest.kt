@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
+import java.nio.file.Files
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -35,6 +37,7 @@ import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -148,4 +151,40 @@ class ReceivedViewerLayoutTest {
                 compose.onNodeWithTag(it).fetchSemanticsNode().config.getOrNull(SemanticsProperties.TraversalIndex)
             })
         }
+
+    @Test fun at200PercentTheProgressStatusWrapsWithoutOverflow() {
+        // PL J1: the status line wraps at a real 200%; only the name keeps to one middle-elided line.
+        FontScaleTestActivity.requestedFontScale = 2f
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val copies = Files.createTempDirectory("ccm-progress-200").toFile()
+        val job = kotlinx.coroutines.SupervisorJob()
+        val transfers = io.github.thiesi.chitchat.core.media.FileTransfers(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main + job),
+            session, { _, _, open, _ -> open().use { it.write(ByteArray(10)); kotlinx.coroutines.runBlocking { gate.await() } }; DownloadResult.Saved },
+            io.github.thiesi.chitchat.core.media.ShareCopies(copies), { Long.MAX_VALUE })
+        val ui = FileTransfersUi(transfers, kotlinx.coroutines.flow.flowOf(true)) { }
+        val report = ReceivedFiles.file(71, "quarterly-report-for-the-steering-committee-final.pdf")
+        rooms.messages = listOf(roomMessage(3, null, report))
+        try {
+            ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalFileTransfers provides ui) {
+                        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}, images = images) }
+                    } } }
+                }
+                compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
+                compose.runOnIdle { ui.hand(io.github.thiesi.chitchat.core.media.AttachmentRef(report, false), io.github.thiesi.chitchat.core.media.TransferPurpose.SHARE) }
+                compose.waitUntil(5_000) { transfers.state.value is io.github.thiesi.chitchat.core.media.TransferState.Running }
+                compose.waitForIdle()
+                fun layout(tag: String): androidx.compose.ui.text.TextLayoutResult {
+                    val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                    // Fetched on the test thread; only the layout action itself runs on the UI thread.
+                    val action = compose.onNodeWithTag(tag).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!
+                    compose.runOnIdle { action(results) }
+                    return results.single()
+                }
+                assertFalse("The status wraps, never clips", layout("transfer_line").hasVisualOverflow)
+                assertEquals("The name keeps to one line", 1, layout("transfer_name").lineCount)
+            }
+        } finally { gate.complete(Unit); job.cancel(); copies.deleteRecursively() }
+    }
 }
