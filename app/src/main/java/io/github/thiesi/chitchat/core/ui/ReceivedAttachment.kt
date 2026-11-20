@@ -22,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,7 +93,7 @@ internal fun ReceivedAttachment(attachment: MessageAttachment, direct: Boolean, 
     caption: String?, images: ReceivedImages?, modifier: Modifier = Modifier, onActions: (() -> Unit)? = null) {
     // An APK-like file (the MIME type or the extension, TL) is never previewed, even under an image type: its card is Save-only.
     if (attachment.previewable && !io.github.thiesi.chitchat.core.media.FileNames.isApkLike(attachment)) ReceivedImageFrame(attachment, direct, messageId, sender, time, caption, images, modifier, onActions)
-    else ReceivedFileCard(attachment, modifier)
+    else ReceivedFileCard(attachment, direct, modifier)
 }
 
 @Composable
@@ -214,26 +215,48 @@ internal fun GifBadge(modifier: Modifier) {
 }
 
 /**
- * Other files: type icon, the name (two lines, the middle elided so the extension stays), "PDF · 2.4 MB". No buttons
- * until F5 and no click semantics (TL/PL): its label is "{name}, {type}, {size}", APKs included.
+ * Other files: type icon, the name (two lines, the middle elided so the extension stays), "PDF · 2.4 MB", then **Open**
+ * and **Save** (48dp each; an APK-like file has Save only, TL). The card itself has no click; its label is
+ * "{name}, {type}, {size}, Open, Save" (or ", Save"). The name drops bidi controls and is an isolated run, so a
+ * right-to-left name can't reorder the rest (PL, F5b).
  */
 @Composable
-private fun ReceivedFileCard(attachment: MessageAttachment, modifier: Modifier) {
+private fun ReceivedFileCard(attachment: MessageAttachment, direct: Boolean, modifier: Modifier) {
     val colors = ChitChatTheme.colors
     val locale = LocalConfiguration.current.locales[0]
-    val type = attachmentExtension(attachment.name)
+    val transfers = LocalFileTransfers.current
+    val ref = remember(attachment, direct) { io.github.thiesi.chitchat.core.media.AttachmentRef(attachment, direct) }
+    val apk = io.github.thiesi.chitchat.core.media.FileNames.isApkLike(attachment)
+    val name = io.github.thiesi.chitchat.core.media.FileNames.withoutBidiControls(attachment.name)
+    val type = io.github.thiesi.chitchat.core.media.FileNames.typeLabel(attachment)
     val size = sizeText(attachmentSizeText(attachment.sizeBytes, locale))
-    val label = listOfNotNull(attachment.name, type, size).joinToString(", ")
+    val openLabel = stringResource(R.string.file_open)
+    val saveLabel = stringResource(R.string.file_save)
+    val actions = if (transfers == null) emptyList() else listOfNotNull(openLabel.takeIf { !apk }, saveLabel)
+    val label = (listOfNotNull(androidx.core.text.BidiFormatter.getInstance().unicodeWrap(name), type, size) + actions).joinToString(", ")
     Surface(modifier.widthIn(max = 320.dp).semantics(mergeDescendants = true) { contentDescription = label }
         .testTag("attachment_card:${attachment.id}"), color = colors.raised, shape = FrameShape) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(40.dp).background(colors.surface, MaterialTheme.shapes.small), contentAlignment = Alignment.Center) {
-                Icon(painterResource(R.drawable.ic_document), contentDescription = null, Modifier.size(24.dp), tint = colors.textMuted)
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(40.dp).background(colors.surface, MaterialTheme.shapes.small), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(R.drawable.ic_document), contentDescription = null, Modifier.size(24.dp), tint = colors.textMuted)
+                }
+                Column(Modifier.padding(start = 12.dp)) {
+                    MiddleElidedName(name)
+                    Text(listOfNotNull(type, size).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = colors.textMuted,
+                        maxLines = 1)
+                }
             }
-            Column(Modifier.padding(start = 12.dp)) {
-                MiddleElidedName(attachment.name)
-                Text(listOfNotNull(type, size).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = colors.textMuted,
-                    maxLines = 1)
+            if (transfers != null) {
+                // Disabled while another transfer runs or during the session's wait; that transfer's notice is on this
+                // screen (PL), and the status slot shows the wait.
+                val usable = rememberTransfersUsable(transfers)
+                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!apk) TextButton(onClick = { transfers.hand(ref, io.github.thiesi.chitchat.core.media.TransferPurpose.OPEN) },
+                        enabled = usable, modifier = Modifier.heightIn(min = Lantern.target).testTag("attachment_open:${attachment.id}")) { Text(openLabel) }
+                    TextButton(onClick = { transfers.save(ref) }, enabled = usable,
+                        modifier = Modifier.heightIn(min = Lantern.target).testTag("attachment_save:${attachment.id}")) { Text(saveLabel) }
+                }
             }
         }
     }

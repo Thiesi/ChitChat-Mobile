@@ -38,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -176,6 +177,17 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                     Text(sender, color = Lantern.overlayText, style = MaterialTheme.typography.titleSmall)
                     Text(time, color = Lantern.overlayText, style = MaterialTheme.typography.bodySmall)
                 }
+                // F5b (PL): Save, then Share outermost; absent when there's nothing to fetch, disabled offline and while
+                // another transfer runs (its notice is in the bottom block). No Share for an APK-like file (TL).
+                val transfers = LocalFileTransfers.current
+                if (transfers != null && viewer.full != FullImage.GONE && viewer.full != FullImage.NOT_ALLOWED) {
+                    val usable = viewer.full != FullImage.OFFLINE && rememberTransfersUsable(transfers)
+                    TopIcon(R.drawable.ic_save, R.string.viewer_save, usable, "viewer_save") { transfers.save(viewer.ref) }
+                    if (!io.github.thiesi.chitchat.core.media.FileNames.isApkLike(viewer.ref.attachment))
+                        TopIcon(R.drawable.ic_share, R.string.viewer_share, usable, "viewer_share") {
+                            transfers.hand(viewer.ref, io.github.thiesi.chitchat.core.media.TransferPurpose.SHARE)
+                        }
+                }
             }
             // The bottom: the zoom pill and the bottom block. Together they never reach the top bar (PL J2): they're capped to
             // the space below it, and the expanded caption is what gives way.
@@ -212,11 +224,13 @@ internal fun ReceivedImageViewer(viewer: ViewerState, held: ImageState?, sender:
                         // Portrait: caption, More/Less, the state line, the action, one under another.
                         if (hasCaption) toggle()
                         FullImageState(viewer, showsSomething)
+                        TransferNotice(overlay = true, withNote = false)
                         FullImageAction(viewer, onLoadFull)
                     } else {
                         // PL J8: the state line keeps its own row; More/Less and the action share the row under it, More/Less at
                         // the start and the action at the far end, two rows only when they can't fit side by side.
                         FullImageState(viewer, showsSomething, order(2f))
+                        TransferNotice(order(2.5f), overlay = true, withNote = false)
                         val action = hasFullImageAction(viewer)
                         when {
                             hasCaption && action -> SharedRow(toggle) { FullImageAction(viewer, onLoadFull, order(3f)) }
@@ -262,6 +276,14 @@ private fun OverlayButton(text: String, tag: String, modifier: Modifier = Modifi
     TextButton(onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = Lantern.target).testTag(tag),
         colors = ButtonDefaults.textButtonColors(contentColor = Lantern.overlayText,
             disabledContentColor = Lantern.overlayText.copy(alpha = 0.38f))) { Text(text) }
+
+/** A 48dp overlay icon in the top bar, disabled at 38% (PL, F5b). */
+@Composable
+private fun TopIcon(icon: Int, label: Int, enabled: Boolean, tag: String, onClick: () -> Unit) =
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(Lantern.target).testTag(tag)) {
+        Icon(painterResource(icon), contentDescription = stringResource(label),
+            tint = Lantern.overlayText.copy(alpha = if (enabled) 1f else 0.38f))
+    }
 
 @Composable
 private fun ZoomGroup(scale: Float, modifier: Modifier, onZoomIn: () -> Unit, onZoomOut: () -> Unit, onReset: () -> Unit) {

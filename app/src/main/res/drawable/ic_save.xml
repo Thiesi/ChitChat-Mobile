@@ -1,0 +1,7 @@
+<!-- Lantern icon, docs/design/assets/icons/save.svg. Tinted by the caller. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M12,4v11M7,10l5,5 5,-5M5,20h14"
+        android:strokeColor="@android:color/black" android:strokeWidth="1.8"
+        android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="@android:color/transparent" />
+</vector>

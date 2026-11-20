@@ -252,6 +252,12 @@ technical-lead sign-off, and the affected tests are listed.
     with "·" read as ", " (for example "Photo from Ana, 10:42. 48 MB, too large to show here"), built from the same
     parts as the visible line (`image_photo`, `image_too_large_part`, `image_offline_part`); Loading speaks "Loading"
     (`image_loading_spoken`). The caption isn't in the frame label: the message's actions node reads it.
+  - **Received files F5** (PL, 2026-11-20): both disclosures now read "Not in the app yet: profile pictures and guest
+    invite links." (`preview_limit` keeps its prefix). Save, Share and Open copy is in files-media.md "Save, Share and Open
+    notices" (`transfer_*`, `action_save_*`/`action_share_*`, `file_open`/`file_save`, `viewer_save`/`viewer_share`);
+    the viewer lines regain their Save-or-share sentences, and offline reads "You can load, save or share the full image
+    when you're back online." Engineering pick for J: a Save cancelled before any byte says "Nothing was saved. If you
+    saved to a new file, it may be empty. Delete it if you don't need it." (`transfer_nothing_saved_plain`).
   - **Sizes** (PL J6, #313): a no-break space between number and unit (`attach_size_*`), so "3.4 MB" never splits
     across lines, everywhere sizes show (the composer card, upload lines and received frames).
   - `dm_no_push` no longer claims there's no background push, since push shipped in M6c–M6e. It now says

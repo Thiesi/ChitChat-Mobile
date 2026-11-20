@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import android.content.Intent
 import android.os.Bundle
 import android.os.Build
@@ -53,6 +55,19 @@ class MainActivity : ComponentActivity() {
                 factory = io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel.factory(application,
                     (application as ChitChatApplication).sessions.state, (application as ChitChatApplication).attachmentDownloads,
                     (application as ChitChatApplication).attachmentMemory))
+            // F5: Save, Share and Open, app-scoped like the images; the host below needs this Activity.
+            val fileTransfers: io.github.thiesi.chitchat.core.media.FileTransfersViewModel = viewModel(
+                factory = io.github.thiesi.chitchat.core.media.FileTransfersViewModel.factory(application,
+                    (application as ChitChatApplication).sessions.state, (application as ChitChatApplication).attachmentDownloads,
+                    (application as ChitChatApplication).shareCopies))
+            val settingsRepository = (application as ChitChatApplication).settingsRepository
+            // Activity-scoped, so the open first-use note and the picker's pending Save survive a recreation (#318 review).
+            val transfersUi: io.github.thiesi.chitchat.core.ui.FileTransfersUi = viewModel(factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                    io.github.thiesi.chitchat.core.ui.FileTransfersUi(fileTransfers.transfers, settingsRepository.shareNoteSeen,
+                        settingsRepository::markShareNoteSeen) as T
+            })
             val accountDeletion: io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel.factory((application as ChitChatApplication).accounts))
             val typing: TypingPreferenceViewModel = viewModel(factory = TypingPreferenceViewModel.factory(
@@ -100,6 +115,7 @@ class MainActivity : ComponentActivity() {
                     (application as ChitChatApplication).rulesOperations, (application as ChitChatApplication).policyReads))
             val policies: io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel = viewModel(
                 factory = io.github.thiesi.chitchat.feature.policies.PolicyDocumentViewModel.factory((application as ChitChatApplication).policyReads))
+            io.github.thiesi.chitchat.core.ui.FileTransfersHost(transfersUi) {
             ChitChatApp(model, auth, account, rooms, conversations, directInbox = directInbox, directThread = directThread, messageTargets = targets,
                 realtime = (application as ChitChatApplication).realtime, typingPreferences = typing, ignores = ignores,
                 notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings, pushPhone = pushPhone,
@@ -111,6 +127,7 @@ class MainActivity : ComponentActivity() {
                     navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
                 )
             })
+            }
         }
     }
 

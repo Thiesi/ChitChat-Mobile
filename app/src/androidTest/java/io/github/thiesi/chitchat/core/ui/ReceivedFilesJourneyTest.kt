@@ -214,8 +214,8 @@ class ReceivedFilesJourneyTest {
 
     @Test fun bothDisclosuresNameWhatIsStillMissing() {
         // PL (#310 J3): the F3 wording; the signed-in form has no development prefix.
-        // F4 (PL): full-screen viewing shipped, so only saving, opening and sharing remain for files and photos.
-        val missing = "Not in the app yet: saving, opening and sharing files and photos, profile pictures, and guest invite links."
+        // F5 (PL): saving, opening and sharing shipped, so only profile pictures and guest invite links remain.
+        val missing = "Not in the app yet: profile pictures and guest invite links."
         assertEquals("This is a development build. $missing", context.getString(R.string.preview_limit))
         assertEquals(missing, context.getString(R.string.auth_preview_limit))
     }

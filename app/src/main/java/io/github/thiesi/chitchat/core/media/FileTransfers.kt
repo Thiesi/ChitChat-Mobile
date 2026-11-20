@@ -98,7 +98,14 @@ internal class FileTransfers(
     private val mutable = MutableStateFlow<TransferState?>(null)
     val state: StateFlow<TransferState?> = mutable.asStateFlow()
     private var job: Job? = null
-    private var pending: PendingSave? = null
+    /** Observable (#318 review), so screens re-enable their buttons when a pending Save ends. */
+    private val pendingFlow = MutableStateFlow<PendingSave?>(null)
+    val pendingSaveState: StateFlow<PendingSave?> = pendingFlow.asStateFlow()
+    private var pending: PendingSave?
+        get() = pendingFlow.value
+        set(value) { pendingFlow.value = value }
+    /** The session the transfers follow, for screens that show its 429 wait (#318 review). */
+    val sessionState: StateFlow<SessionState> get() = session
     private var copy: ShareCopies.Copy? = null
     private var owner: Identity? = null
     /**
@@ -111,6 +118,13 @@ internal class FileTransfers(
         // A session change retires everything that belonged to the old one, silently.
         scope.launch { session.collect { next -> if (owner != null && identityOf(next) != owner) retire() } }
     }
+
+    /**
+     * The Save waiting for its picker result, read-only (#318 review): a picker result is matched to this, never to a copy
+     * kept in a composition, so an Activity recreated while the picker is open still delivers it. [saveChosen]'s own
+     * identity and request checks stay the only authority.
+     */
+    val pendingSave: PendingSave? get() = pending
 
     /** Running or waiting for a picker or a handoff: the other actions are disabled (PL). */
     val busy: Boolean get() = pending != null || job?.isActive == true || mutable.value is TransferState.Ready
@@ -180,6 +194,16 @@ internal class FileTransfers(
         if (mutable.value !== ready) return
         discardCopy()
         mutable.value = TransferState.Stopped(ready.ref, ready.purpose, TransferStop.NO_APP, wroteBody = false)
+    }
+
+    /**
+     * The handoff itself failed (an intent or URI that couldn't be built): the copy goes and the share failure shows,
+     * never a crash with the state left Ready (TL, #318).
+     */
+    fun handoffFailed(ready: TransferState.Ready) {
+        if (mutable.value !== ready) return
+        discardCopy()
+        mutable.value = TransferState.Stopped(ready.ref, ready.purpose, TransferStop.FAILED, wroteBody = false)
     }
 
     /** The person's Cancel. */

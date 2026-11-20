@@ -196,6 +196,17 @@ class FileTransfersTest {
         assertFalse(ready.copy.file.exists())
     }
 
+    @Test fun aHandoffThatCantBeBuiltDeletesTheCopyAndFails() = runTest {
+        // TL (#318): a failed handoff never leaves the state Ready or a copy behind.
+        val source = Source(); val transfers = transfers(source); advanceUntilIdle()
+        transfers.prepare(ref(), TransferPurpose.SHARE); advanceUntilIdle()
+        val ready = transfers.state.value as TransferState.Ready
+        transfers.handoffFailed(ready)
+        assertEquals(TransferStop.FAILED, (transfers.state.value as TransferState.Stopped).reason)
+        assertFalse(ready.copy.file.exists())
+        assertFalse(transfers.busy)
+    }
+
     @Test fun aGenuineBackgroundEndsAShareSilentlyAndDeletesItsCopy() = runTest {
         val source = Source().apply { gate = CompletableDeferred() }
         val transfers = transfers(source); advanceUntilIdle()

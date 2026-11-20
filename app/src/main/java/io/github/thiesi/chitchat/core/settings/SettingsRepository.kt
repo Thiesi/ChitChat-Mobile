@@ -38,6 +38,13 @@ class SettingsRepository(context: Context) : SettingsStore, GuidelinesAcceptance
 
     override suspend fun savePureBlack(enabled: Boolean) { store.edit { it[PURE_BLACK] = enabled } }
 
+    /**
+     * F5: the Open/Share first-use note was continued past once on this install (PL/TL, 2026-11-20). One boolean in the
+     * backup-excluded settings store, with no account or server data; sign-out and forgetting a server keep it.
+     */
+    val shareNoteSeen: Flow<Boolean> = store.data.map { it[SHARE_NOTE_SEEN] == true }
+    suspend fun markShareNoteSeen() { store.edit { it[SHARE_NOTE_SEEN] = true } }
+
     override val accepted: Flow<Set<GuidelinesAcceptance>> = store.data.map { preferences ->
         preferences[GUIDELINES].orEmpty().mapNotNull(::decodeAcceptance).toSet()
     }
@@ -51,6 +58,7 @@ class SettingsRepository(context: Context) : SettingsStore, GuidelinesAcceptance
     private companion object {
         val GUIDELINES = stringSetPreferencesKey("guidelines_accepted")
         val PURE_BLACK = booleanPreferencesKey("pure_black")
+        val SHARE_NOTE_SEEN = booleanPreferencesKey("share_note_seen")
         val SERVER = stringPreferencesKey("server")
         val THEME = stringPreferencesKey("theme")
     }
