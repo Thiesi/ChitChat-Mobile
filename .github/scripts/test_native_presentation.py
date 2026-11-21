@@ -237,9 +237,9 @@ class PresentationGateTests(unittest.TestCase):
 
     def cleanup_files(self, contents):
         # Real temporary files (outside any report directory) so the collector's size and content checks run for real.
-        import tempfile
+        import shutil, tempfile
         folder = Path(tempfile.mkdtemp(prefix="ccm-cleanup-test-"))
-        self.addCleanup(lambda: [f.unlink() for f in folder.iterdir()] and None)
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True) # The folder too, not only its files (TL).
         files = []
         for name, text in contents:
             path = folder / name; path.write_bytes(text.encode("utf-8")); files.append(path)
