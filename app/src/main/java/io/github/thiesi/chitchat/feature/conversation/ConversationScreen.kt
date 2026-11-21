@@ -491,7 +491,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         // F5b: Save, Share and Open's notice in the conversation's stack (PL).
         io.github.thiesi.chitchat.core.ui.TransferNotice(Modifier.padding(horizontal = 16.dp))
         // Reporting R2: this room's report lines (PL).
-        io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, state.context?.room?.name ?: "", Modifier.padding(horizontal = 16.dp))
+        io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Room(state.context?.room?.name), Modifier.padding(horizontal = 16.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("conversation_timeline"), state = timeline,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "history_header") {
@@ -667,7 +667,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             } })
     }
     val reportUnknownUser = stringResource(R.string.conversation_unknown_user)
-    io.github.thiesi.chitchat.feature.reports.ReportHost(reportOrigin, state.context?.room?.name ?: "",
+    io.github.thiesi.chitchat.feature.reports.ReportHost(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Room(state.context?.room?.name),
         subject = { target ->
             (target as? io.github.thiesi.chitchat.core.reports.ReportTarget.RoomMessage)?.let { t -> state.messages.firstOrNull { it.id == t.messageId } }
                 ?.let { m -> io.github.thiesi.chitchat.feature.reports.ReportSubject(m.username ?: reportUnknownUser,

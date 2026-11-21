@@ -108,8 +108,14 @@ internal class ReportFollowUp(val name: String, val direct: Boolean, val act: ()
  * the report whose origin is [origin] shows here. Leaving the conversation (not a configuration change) consumes its shown
  * outcome or takes the dialog away; the report itself keeps going (R1).
  */
+/** Where the report's copy points: a room (its name, or null while it isn't known yet) or a direct message. */
+internal sealed interface ReportPlace {
+    data class Room(val name: String?) : ReportPlace
+    data object Direct : ReportPlace
+}
+
 @Composable
-internal fun ReportHost(origin: ReportOrigin, roomName: String?, subject: (ReportTarget) -> ReportSubject?,
+internal fun ReportHost(origin: ReportOrigin, place: ReportPlace, subject: (ReportTarget) -> ReportSubject?,
     followUp: (ReportTarget) -> ReportFollowUp?) {
     val reports = LocalReports.current ?: return
     val activity = LocalActivity.current
@@ -118,7 +124,7 @@ internal fun ReportHost(origin: ReportOrigin, roomName: String?, subject: (Repor
     }
     val state by reports.state.collectAsState()
     val current = state?.takeIf { it.origin == origin } ?: return
-    if (current.presented) ReportDialog(reports, current, roomName, subject(current.target))
+    if (current.presented) ReportDialog(reports, current, place, subject(current.target))
     if (current.sheet) {
         val action = followUp(current.target)
         // An action that doesn't apply (already ignored or blocked, unknown policy) shows no sheet at all (PL).
@@ -139,7 +145,7 @@ internal fun reportModalOpen(origin: ReportOrigin): Boolean {
  * mid-send, "Not sure your report went through." with Review after a background (level 2), and the BUSY line.
  */
 @Composable
-internal fun ReportNotices(origin: ReportOrigin, roomName: String?, modifier: Modifier = Modifier) {
+internal fun ReportNotices(origin: ReportOrigin, place: ReportPlace, modifier: Modifier = Modifier) {
     val reports = LocalReports.current ?: return
     val state by reports.state.collectAsState()
     val busy by reports.busyNotice.collectAsState()
@@ -149,7 +155,7 @@ internal fun ReportNotices(origin: ReportOrigin, roomName: String?, modifier: Mo
         if (current == null) return@Column
         when (val phase = current.phase) {
             ReportPhase.Sending, ReportPhase.Checking -> if (!current.presented) NoticeLine(stringResource(R.string.report_sending_line), "report_sending_line")
-            is ReportPhase.Done -> NoticeLine(outcomeLine(phase.outcome, roomName), "report_outcome")
+            is ReportPhase.Done -> NoticeLine(outcomeLine(phase.outcome, place), "report_outcome")
             is ReportPhase.Unknown -> if (!current.presented) WarningNotice(stringResource(R.string.report_unknown), "",
                 Modifier.testTag("report_unknown_notice")) {
                 TextButton(onClick = reports::review, modifier = Modifier.heightIn(min = 48.dp).testTag("report_review")) {
@@ -162,8 +168,13 @@ internal fun ReportNotices(origin: ReportOrigin, roomName: String?, modifier: Mo
 }
 
 @Composable
-private fun outcomeLine(outcome: ReportOutcome, roomName: String?) = when (outcome) {
-    ReportOutcome.Sent -> if (roomName != null) stringResource(R.string.report_sent_room, roomName) else stringResource(R.string.report_sent_dm)
+private fun outcomeLine(outcome: ReportOutcome, place: ReportPlace) = when (outcome) {
+    // A room whose name isn't loaded yet gets the neutral room wording, never an empty name (review).
+    ReportOutcome.Sent -> when (place) {
+        is ReportPlace.Room -> place.name?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.report_sent_room, it) }
+            ?: stringResource(R.string.report_sent_room_unnamed)
+        ReportPlace.Direct -> stringResource(R.string.report_sent_dm)
+    }
     ReportOutcome.AlreadyReported -> stringResource(R.string.report_already)
     is ReportOutcome.Refused -> stringResource(if (outcome.reason == ReportRefusal.NOT_REPORTABLE) R.string.report_not_reportable else R.string.report_not_allowed)
 }
@@ -190,7 +201,7 @@ private val categoryText = mapOf(
  * with a read-only summary, Send again and Close (PL).
  */
 @Composable
-private fun ReportDialog(reports: ReportViewModel, state: ReportState, roomName: String?, subject: ReportSubject?) {
+private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: ReportPlace, subject: ReportSubject?) {
     val phase = state.phase
     val sending = phase == ReportPhase.Sending || phase == ReportPhase.Checking
     val unknown = phase is ReportPhase.Unknown
@@ -210,7 +221,11 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, roomName:
                 subject?.let { ContextCard(it) }
                 if (unknown) Summary(state) else Form(reports, state, sending)
                 notice?.let { NoticeText(it, waitSeconds, waiting) }
-                Text(if (roomName != null) stringResource(R.string.report_who_room, roomName) else stringResource(R.string.report_who_dm),
+                Text(when (place) {
+                    is ReportPlace.Room -> place.name?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.report_who_room, it) }
+                        ?: stringResource(R.string.report_who_room_unnamed)
+                    ReportPlace.Direct -> stringResource(R.string.report_who_dm)
+                },
                     style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("report_who"))
                 if (subject?.hasAttachment == true) Text(stringResource(R.string.report_who_attachment),
                     style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("report_who_attachment"))
