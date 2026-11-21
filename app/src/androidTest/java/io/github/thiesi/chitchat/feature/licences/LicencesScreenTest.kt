@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
@@ -26,6 +26,9 @@ import org.junit.Test
 
 /** The licences list and one entry's terms, at the default and 2.0 font sizes. Captures go to the presentation lead. */
 class LicencesScreenTest {
+    // The v2 rule (a standard test dispatcher): these screens load with produceState { withContext(Dispatchers.IO) },
+    // and the v1 rule's unconfined effect context resumed that on the IO worker, applying composition changes off Main
+    // (#329, run 44850760989). Any composable test hosting a withContext(IO) result must use the v2 rule.
     @get:Rule val compose = createComposeRule()
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val licences = OssLicences.load(context.assets)
