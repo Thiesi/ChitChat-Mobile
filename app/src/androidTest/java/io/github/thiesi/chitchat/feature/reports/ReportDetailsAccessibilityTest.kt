@@ -98,7 +98,7 @@ class ReportDetailsAccessibilityTest {
             val nodes = mutableListOf<AccessibilityNodeInfo>()
             fun walk(node: AccessibilityNodeInfo?) {
                 node ?: return
-            node.refresh() // The app's current state, not UiAutomation's cached node (run 44881894197, API36).
+                node.refresh() // The app's current state, not UiAutomation's cached node (run 44881894197, API36).
                 if (node.isEditable) nodes += node
                 for (index in 0 until node.childCount) walk(node.getChild(index))
             }
@@ -107,7 +107,7 @@ class ReportDetailsAccessibilityTest {
             val order = mutableListOf<String>()
             fun texts(node: AccessibilityNodeInfo?) {
                 node ?: return
-            node.refresh() // The app's current state, not UiAutomation's cached node (run 44881894197, API36).
+                node.refresh() // The app's current state, not UiAutomation's cached node (run 44881894197, API36).
                 if (!node.text.isNullOrEmpty() || !node.contentDescription.isNullOrEmpty() || node.isEditable)
                     order += (if (node.isEditable) "EDIT" else "") + "(${node.text ?: node.contentDescription})"
                 for (index in 0 until node.childCount) texts(node.getChild(index))
@@ -120,7 +120,7 @@ class ReportDetailsAccessibilityTest {
                 nodes.joinToString(",") { node ->
                     val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
                     "[${node.className} $bounds text=${node.text} name=${node.contentDescription} hint=${node.hintText} " +
-                        "labeledBy=${node.labeledBy != null}]"
+                        "labeledBy=${node.labeledBy != null} refreshed=${node.refresh()}]"
                 }
         }
     }
@@ -189,6 +189,14 @@ class ReportDetailsAccessibilityTest {
             assertEquals("The question is exposed exactly once", 1, spoken(question))
             val typed = "Posted the same link in 3 rooms"
             compose.onNodeWithTag("report_details").performTextInput(typed)
+            // TL: tell "the text never reached the field" (input, IME) apart from "it's in the field but not on the node"
+            // (an exposure gap): the field's own Compose semantics must hold the typed text first.
+            try {
+                compose.waitUntil(5_000) { compose.onNodeWithTag("report_details").fetchSemanticsNode().config
+                    .getOrNull(androidx.compose.ui.semantics.SemanticsProperties.EditableText)?.text == typed }
+            } catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
+                throw AssertionError("The typed text never reached the field's Compose semantics (input, not exposure)", timeout)
+            }
             exposed("the typed text") { editables().any { it.text?.toString() == typed } }
             val filled = editables().first { it.text?.toString() == typed }
             io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=report-details-a11y-filled editable=${filled.isEditable} " +
