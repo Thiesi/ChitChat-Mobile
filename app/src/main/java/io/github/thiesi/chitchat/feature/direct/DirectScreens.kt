@@ -415,7 +415,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     }
                     io.github.thiesi.chitchat.core.ui.TransferNotice(Modifier.padding(horizontal = 16.dp))
                     // Reporting R2: this conversation's report lines (PL).
-                    io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, null, Modifier.padding(horizontal = 16.dp))
+                    io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Direct, Modifier.padding(horizontal = 16.dp))
                     LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("dm_timeline"), timeline,
                         contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item("older") { if (state.mayHaveOlder) TextButton(onClick = model::older, enabled = !state.busy && !state.stale) {
@@ -610,7 +610,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         }
                     } })
             }
-            io.github.thiesi.chitchat.feature.reports.ReportHost(reportOrigin, null,
+            io.github.thiesi.chitchat.feature.reports.ReportHost(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Direct,
                 subject = { target ->
                     (target as? io.github.thiesi.chitchat.core.reports.ReportTarget.DirectMessage)?.let { t -> state.messages.firstOrNull { it.id == t.messageId } }
                         ?.let { m -> io.github.thiesi.chitchat.feature.reports.ReportSubject(m.sender.username.orEmpty(), io.github.thiesi.chitchat.feature.reports.reportExcerpt(m.body, m.attachment), m.attachment != null) }

@@ -140,7 +140,12 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
         if (operations.session.value.identity() == null || operations.session.value.identity() != identity) return ReportOpen.UNAVAILABLE
         val current = mutable.value
         if (inFlight) return ReportOpen.BUSY
-        if (current != null && current.phase is ReportPhase.Unknown && current.target == target) return ReportOpen.OPENED
+        // The same target's pending Unknown: Report… reopens its read-only summary, as Review does (review: after a
+        // departure or background took the dialog away, the tap must show it again, never do nothing).
+        if (current != null && current.phase is ReportPhase.Unknown && current.target == target) {
+            mutable.value = current.copy(presented = true)
+            return ReportOpen.OPENED
+        }
         drop()
         mutable.value = ReportState(target, origin, null, "", ReportPhase.Editing(), pictureAvailable && target is ReportTarget.Person, false,
             presented = true)

@@ -229,6 +229,32 @@ class ReportJourneyTest {
         assertTrue(!present("report_sheet"))
     }
 
+    /** Review: Ignore {name} on the sheet opens the existing ignore dialog for the sender; its own confirm applies it. */
+    @Test fun ignoreOnTheSheetOpensTheIgnoreDialogForTheSender() {
+        rooms.messages = listOf(roomMessage(3, "hello"))
+        roomContent(); report(3)
+        choose(ReportCategory.HARASSMENT); compose.onNodeWithTag("report_send").performClick()
+        compose.waitUntil(5_000) { present("report_sheet") }
+        compose.onNodeWithTag("report_sheet_action").performClick()
+        compose.waitUntil(5_000) { present("room_person_dialog") }
+        assertTrue("The sheet closes", !present("report_sheet"))
+        assertTrue("Nothing applied before the dialog's own confirm", ignoreCalls.isEmpty())
+        compose.onNodeWithTag("room_ignore_change").performClick()
+        compose.waitUntil(5_000) { ignoreCalls.isNotEmpty() }
+        assertEquals("The reported message's sender", listOf(8L), ignoreCalls.toList())
+    }
+
+    /** Review: Block {name} on the DM sheet opens the existing block confirmation, which applies nothing by itself. */
+    @Test fun blockOnTheDmSheetOpensTheBlockConfirmation() {
+        directs.rows = listOf(dm(3, "hi", null))
+        dmContent(); report(3)
+        choose(ReportCategory.SPAM); compose.onNodeWithTag("report_send").performClick()
+        compose.waitUntil(5_000) { present("report_sheet") }
+        compose.onNodeWithTag("report_sheet_action").performClick()
+        compose.waitUntil(5_000) { present("dm_confirm_block") }
+        assertTrue("The sheet closes", !present("report_sheet"))
+    }
+
     @Test fun whileSendingTheFormCantBeClosed() {
         rooms.messages = listOf(roomMessage(3, "hello"))
         fake.hold = CompletableDeferred()

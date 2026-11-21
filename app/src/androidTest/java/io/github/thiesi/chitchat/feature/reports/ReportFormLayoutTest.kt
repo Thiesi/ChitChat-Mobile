@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -142,11 +143,34 @@ class ReportFormLayoutTest {
                     "details=${bounds("report_details")}, send=${bounds("report_send")}, cancel=${bounds("report_cancel")}, " +
                     "roots=${compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes().map { it.boundsInWindow }}", timeout)
             }
-            compose.tapNativeInput("report_details", imeBottom = { imeBottom })
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
             compose.onNodeWithTag("report_details").performTextInput("why")
             compose.waitForIdle()
-            compose.onNodeWithTag("report_send").assertIsDisplayed()
-            compose.onNodeWithTag("report_cancel").assertIsDisplayed()
+            // Against the dialog window's own IME top, not isDisplayed alone (which passed with both buttons under the
+            // keyboard in portrait, TL). Each button is scrolled to (one column may hold it below the fold) and must be
+            // whole, so a clipped-away node can't pass the edge check vacuously.
+            val ime = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
+            val field = compose.onNodeWithTag("report_details").fetchSemanticsNode().boundsInWindow
+            fun scrolledTo(tag: String): androidx.compose.ui.geometry.Rect {
+                compose.onNodeWithTag(tag).performScrollTo()
+                return compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInWindow
+            }
+            val send = scrolledTo("report_send"); val cancel = scrolledTo("report_cancel")
+            val case = "report-font200-${if (landscape) "landscape" else "portrait"}"
+            io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=$case window=${ime.height}px imeVisible=${ime.visible} " +
+                "imeBottom=${ime.imeBottom}px imeTop=${ime.imeTop}px sendBottom=${send.bottom}px cancelBottom=${cancel.bottom}px " +
+                "fieldTop=${field.top}px fieldBottom=${field.bottom}px")
+            val detail = "$case: imeTop=${ime.imeTop} send=$send cancel=$cancel field=$field"
+            if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
+                assertTrue("The keyboard showed ($detail)", ime.visible)
+            val whole = 40 * context.resources.displayMetrics.density
+            assertTrue("Send is whole ($detail)", send.height >= whole)
+            assertTrue("Cancel is whole ($detail)", cancel.height >= whole)
+            assertTrue("Send above the keyboard ($detail)", send.bottom <= ime.imeTop + 0.5f)
+            assertTrue("Cancel above the keyboard ($detail)", cancel.bottom <= ime.imeTop + 0.5f)
+            assertTrue("The field above the keyboard ($detail)", field.top < ime.imeTop && field.height > 0f)
+            compose.onNodeWithTag("report_details").assertIsFocused()
         }
     }
 }

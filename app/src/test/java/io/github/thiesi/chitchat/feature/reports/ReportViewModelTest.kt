@@ -373,6 +373,25 @@ class ReportViewModelTest {
         assertNull("Close also dismisses the notice", model.state.value)
     }
 
+    /** Review: Report… on the same message after a background or departure shows the Unknown's summary again. */
+    @Test fun reportOnTheSameTargetReopensAPendingUnknownsSummary() = runTest(dispatcher) {
+        advanceUntilIdle()
+        fake.hold = CompletableDeferred()
+        filled(); model.send(); advanceUntilIdle()
+        model.backgrounded(); advanceUntilIdle()
+        assertFalse(state().presented)
+        val sends = fake.sends.size
+        assertEquals(ReportOpen.OPENED, model.request(room, origin))
+        assertTrue("The tap shows the dialog, never nothing", state().presented)
+        assertEquals("Still the read-only summary", ReportPhase.Unknown(), state().phase)
+        assertEquals("private why", state().details)
+        assertEquals("Nothing is sent", sends, fake.sends.size)
+        model.leaveConversation(origin)
+        assertFalse(state().presented)
+        assertEquals(ReportOpen.OPENED, model.request(room, origin))
+        assertTrue("Also after a departure", state().presented)
+    }
+
     @Test fun theBusyLineShowsWhereItWasRefusedAndClearsOnSettleOrLeaving() = runTest(dispatcher) {
         advanceUntilIdle()
         val hold = CompletableDeferred<Unit>().also { fake.hold = it }
