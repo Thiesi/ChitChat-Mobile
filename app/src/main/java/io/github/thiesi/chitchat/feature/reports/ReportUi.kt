@@ -1,5 +1,8 @@
 package io.github.thiesi.chitchat.feature.reports
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import io.github.thiesi.chitchat.core.ui.FormDialog
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
@@ -314,7 +317,10 @@ private fun Form(reports: ReportViewModel, state: ReportState, sending: Boolean)
     // labeledBy, so naming the field itself left it unnamed (TL, PL; measured on the real node).
     Text(stringResource(R.string.report_details_label), style = MaterialTheme.typography.titleSmall,
         modifier = Modifier.testTag("report_details_label"))
-    OutlinedTextField(state.details, reports::edit, enabled = !sending, minLines = 3,
+    // The field's own value, seeded from the VM per form and pushed to it on every change: a value read back through
+    // the StateFlow lags a frame and reset the caret or dropped input (TL). Memory only; a reopen or recreation reseeds.
+    var field by remember(state.target) { mutableStateOf(TextFieldValue(state.details, TextRange(state.details.length))) }
+    OutlinedTextField(field, { field = it; reports.edit(it.text) }, enabled = !sending, minLines = 3,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("report_details"))
     Counter(state.details)
 }
