@@ -238,10 +238,16 @@ class ReportJourneyTest {
         compose.waitUntil(5_000) { present("report_sheet") }
         compose.onNodeWithTag("report_sheet_action").performClick()
         compose.waitUntil(5_000) { present("room_person_dialog") }
+        // The sheet routed to the reported message's sender: the ignore dialog is titled with their name (TL).
+        compose.onNode(androidx.compose.ui.test.hasText("Bob") and androidx.compose.ui.test.hasAnyAncestor(
+            androidx.compose.ui.test.hasTestTag("room_person_dialog"))).assertExists()
         assertTrue("The sheet closes", !present("report_sheet"))
         assertTrue("Nothing applied before the dialog's own confirm", ignoreCalls.isEmpty())
-        // As RoomIgnoreJourneyTest does: the button sits in the dialog's scrolling body (run 44859786709 tapped it below
-        // the fold: "Failed to inject touch input").
+        // The dialog shows its change button once its session policy is known and ready, which can be after the dialog
+        // itself (run 44864054443: not there yet). Then, as RoomIgnoreJourneyTest does, scroll to it in the dialog's
+        // scrolling body (run 44859786709 tapped it below the fold: "Failed to inject touch input").
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("room_ignore_change").fetchSemanticsNodes()
+            .any { androidx.compose.ui.semantics.SemanticsProperties.Disabled !in it.config } }
         compose.onNodeWithTag("room_ignore_change").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
         compose.waitUntil(5_000) { ignoreCalls.isNotEmpty() }
         assertEquals("The reported message's sender", listOf(8L), ignoreCalls.toList())

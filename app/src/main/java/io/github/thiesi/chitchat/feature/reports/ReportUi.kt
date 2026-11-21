@@ -308,9 +308,14 @@ private fun Form(reports: ReportViewModel, state: ReportState, sending: Boolean)
             }
         }
     }
+    // PL (J on run 44864313479): the question is a visible label above the field, styled like "What's wrong?", not a
+    // floating label, which wrapped onto the border at 200% and overlapped the helper above. TalkBack hears it once, as
+    // the field's name: the visible label is hidden from accessibility (TL).
+    val question = stringResource(R.string.report_details_label)
+    Text(question, style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.testTag("report_details_label").clearAndSetSemantics { })
     OutlinedTextField(state.details, reports::edit, enabled = !sending, minLines = 3,
-        label = { Text(stringResource(R.string.report_details_label)) },
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("report_details"))
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("report_details").semantics { contentDescription = question })
     Counter(state.details)
 }
 
