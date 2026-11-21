@@ -166,7 +166,10 @@ class ReportPresentationTest {
         choose(ReportCategory.HARASSMENT)
         compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms")
     }
-    private fun send() = compose.onNodeWithTag("report_send").performClick()
+    // Scrolled to first: at 200% with the keyboard up the form is one column with Send below the fold, and a click at its
+    // unclipped centre landed outside the surface, dismissing the form (run 44859793565). The scaffold's outer column
+    // always scrolls, so this works pinned too.
+    private fun send() = compose.onNodeWithTag("report_send").performScrollTo().performClick()
     private fun ReportPresentationTest.awaitUnknown() = await("report_send_again")
     /** A navigation departure and return: the screen leaves composition and comes back (no configuration change). */
     private fun away(fixture: Fixture) {
