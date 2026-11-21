@@ -79,12 +79,39 @@ class ReportDetailsAccessibilityTest {
         return found
     }
 
+    /**
+     * Each window (type, title, layer, whether its root was retrieved) and each editable node in it (class, screen bounds,
+     * text, name, hint), so a failure identifies the node: the dialog's field or the composer behind it. Fixture text only.
+     */
+    private fun exposure(): String {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val windows = automation.windows
+        val interactive = automation.serviceInfo.flags and
+            android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS != 0
+        return "interactiveWindowsFlag=$interactive windows=${windows.size}: " + windows.joinToString(" | ") { window ->
+            val root = window.root
+            val nodes = mutableListOf<AccessibilityNodeInfo>()
+            fun walk(node: AccessibilityNodeInfo?) {
+                node ?: return
+                if (node.isEditable) nodes += node
+                for (index in 0 until node.childCount) walk(node.getChild(index))
+            }
+            walk(root)
+            "type=${window.type} title=${window.title} layer=${window.layer} active=${window.isActive} " +
+                "focused=${window.isFocused} root=${root != null} editables=" +
+                nodes.joinToString(",") { node ->
+                    val bounds = android.graphics.Rect().also(node::getBoundsInScreen)
+                    "[${node.className} $bounds text=${node.text} name=${node.contentDescription} hint=${node.hintText} " +
+                        "labeledBy=${node.labeledBy != null}]"
+                }
+        }
+    }
+
     /** Waits for [what]; on timeout the failure lists what each editable node exposes (fixture text only). */
     private fun exposed(what: String, condition: () -> Boolean) {
         try { compose.waitUntil(5_000, condition) }
         catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
-            throw AssertionError("Not exposed: $what. Editable nodes: " + editables().joinToString("; ") {
-                "text=${it.text} contentDescription=${it.contentDescription} hint=${it.hintText}" }, timeout)
+            throw AssertionError("Not exposed: $what. ${exposure()}", timeout)
         }
     }
 
