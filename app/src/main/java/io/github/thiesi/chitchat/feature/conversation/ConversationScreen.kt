@@ -674,11 +674,13 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     io.github.thiesi.chitchat.feature.reports.reportExcerpt(m.body, m.attachment), m.attachment != null) }
         },
         // The follow-up only where Ignore applies: a known policy, a sender not yet ignored, a member, the ignore control (PL).
+        // The session's policy, read as the sheet renders: the ignore dialog acts on it, so the two never disagree (TL: a
+        // loaded room context with an unknown session policy offered a dialog with no change button). Otherwise no sheet.
         followUp = { target ->
             val message = (target as? io.github.thiesi.chitchat.core.reports.ReportTarget.RoomMessage)?.let { t -> state.messages.firstOrNull { it.id == t.messageId } }
             val sender = message?.senderId
-            val policyKnown = session.chatPolicy != null || state.context?.policy != null
-            if (ignores == null || message == null || sender == null || !policyKnown || sender in ignoredIds || session.user?.guest != false) null
+            val ignoring = session.chatPolicy?.ignoredUserIds
+            if (ignores == null || message == null || sender == null || ignoring == null || sender in ignoring || session.user?.guest != false) null
             else io.github.thiesi.chitchat.feature.reports.ReportFollowUp(message.username ?: reportUnknownUser, direct = false) {
                 ignores.open(displayedSession, roomId, sender, message.username)
             }

@@ -85,6 +85,9 @@ class ReportJourneyTest {
     @After fun tearDown() { fake.hold?.complete(Unit); compose.runOnIdle { room.cancel(); direct.background(); reports.close() } }
 
     private fun text(id: Int, vararg args: Any) = context.getString(id, *args)
+    /** The session's chat policy, as a real bootstrap carries it; the fixture session starts without one (unknown). */
+    private fun policy(vararg ignored: Long) { session.value = session.value.copy(chatPolicy =
+        io.github.thiesi.chitchat.core.conversation.ChatPolicy(ignored.toSet(), null, io.github.thiesi.chitchat.core.conversation.DisplayPreferences())) }
     private fun present(tag: String) = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
 
     private fun content() {
@@ -193,6 +196,7 @@ class ReportJourneyTest {
     }
 
     @Test fun a201ClosesTheFormShowsTheLineAndOffersIgnoreWithoutApplyingIt() {
+        policy()
         rooms.messages = listOf(roomMessage(3, "hello"))
         roomContent(); report(3)
         choose(ReportCategory.HARASSMENT)
@@ -207,8 +211,19 @@ class ReportJourneyTest {
         assertEquals(listOf(ReportTarget.RoomMessage(3)), fake.sends.map { it.first })
     }
 
+    /** TL and PL: the session's policy unknown means Ignore doesn't apply, so only the line shows and no sheet opens. */
+    @Test fun anUnknownSessionPolicyGivesTheLineAndNoSheet() {
+        rooms.messages = listOf(roomMessage(3, "hello"))
+        roomContent(); report(3)
+        choose(ReportCategory.SPAM); compose.onNodeWithTag("report_send").performClick()
+        compose.waitUntil(5_000) { present("report_outcome") }
+        compose.waitForIdle()
+        compose.onNodeWithTag("report_outcome").assertTextEquals(text(R.string.report_sent_room, "Lounge"))
+        assertTrue("No sheet when the session's policy is unknown", !present("report_sheet"))
+    }
+
     @Test fun anAlreadyIgnoredSenderGetsNoSheet() {
-        rooms.ignored = setOf(8)
+        rooms.ignored = setOf(8); policy(8)
         rooms.messages = listOf(roomMessage(3, "hello"))
         roomContent()
         // An ignored sender's message is collapsed until the person reveals it (M4c3b); then it can be reported.
@@ -232,6 +247,9 @@ class ReportJourneyTest {
 
     /** Review: Ignore {name} on the sheet opens the existing ignore dialog for the sender; its own confirm applies it. */
     @Test fun ignoreOnTheSheetOpensTheIgnoreDialogForTheSender() {
+        // The ignore dialog acts on the session's policy, which a real bootstrap always carries; this fixture's session has
+        // none, so the dialog would stay on "unknown" with no change button (run 44868633029). Same as the room's: nobody.
+        policy()
         rooms.messages = listOf(roomMessage(3, "hello"))
         roomContent(); report(3)
         choose(ReportCategory.HARASSMENT); compose.onNodeWithTag("report_send").performClick()
