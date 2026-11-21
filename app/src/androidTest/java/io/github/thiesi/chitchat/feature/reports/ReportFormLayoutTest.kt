@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
@@ -98,8 +99,7 @@ class ReportFormLayoutTest {
             scenario.recreate()
             compose.waitUntil(5_000) { present("report_dialog") }
             assertEquals("A configuration change keeps the category (TL)", ReportCategory.HATE, reports.state.value?.category)
-            compose.onNodeWithTag("report_details").performScrollTo().assertTextEquals(
-                context.getString(R.string.report_details_label), "kept why")
+            compose.onNodeWithTag("report_details").performScrollTo().assertTextEquals("kept why")
         }
         // Process death: a new process has a new model, and nothing comes back (the details were never saved).
         val fresh = ReportViewModel(operations)
@@ -176,6 +176,42 @@ class ReportFormLayoutTest {
             assertTrue("The form stays open", present("report_dialog"))
             assertEquals(ReportCategory.SPAM, reports.state.value?.category)
             assertEquals("kept why", reports.state.value?.details)
+        }
+    }
+
+    /**
+     * PL and TL: the details question is a separate label above the field. At 200% its bounds touch neither the last
+     * category row (with its helper) above nor the field below, and TalkBack hears the question exactly once, as the
+     * field's name, across the whole dialog.
+     */
+    @Test fun theDetailsQuestionIsALabelAboveTheFieldAnnouncedOnce() {
+        val reports = ReportViewModel(operations)
+        FontScaleTestActivity.requestedFontScale = 2f
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
+                } } }
+            }
+            report()
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.waitForIdle()
+            fun box(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInWindow
+            val label = box("report_details_label")
+            val row = box("report_category:${ReportCategory.messageCategories.last().wire}")
+            val field = box("report_details")
+            assertTrue("The label sits below the last category row ($label, $row)", label.top >= row.bottom)
+            assertTrue("The label sits above the field ($label, $field)", label.bottom <= field.top)
+            val question = context.getString(R.string.report_details_label)
+            val spoken = compose.onAllNodes(hasAnyAncestor(hasTestTag("report_dialog")) or hasTestTag("report_dialog"))
+                .fetchSemanticsNodes().sumOf { node ->
+                    (node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text).orEmpty().map { it.text } +
+                        node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription).orEmpty())
+                        .count { question in it }
+                }
+            assertEquals("The question is announced exactly once", 1, spoken)
+            compose.onNodeWithTag("report_details").assert(
+                androidx.compose.ui.test.SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription, listOf(question)))
         }
     }
 
