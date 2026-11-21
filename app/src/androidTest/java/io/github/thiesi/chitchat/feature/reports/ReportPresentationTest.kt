@@ -91,8 +91,16 @@ class ReportPresentationTest {
         Shot("actions-own", node = "message_actions", rooms = listOf(RoomMessage(3, 42, 7, "Alice", "text", "my own message", false,
             "2026-10-20 12:00:00+00")), act = { actions(3) }),
         Shot("form-room", node = "report_dialog", act = { report(3) }),
+        // PL: the true end, with no bottom divider and nothing cut. Every scroller around the who-sees line goes to its end
+        // (performScrollTo on the line stopped short of the bottom in the nested scrollers).
         Shot("form-room-end", node = "report_dialog", onlyAt = "font200", act = {
-            report(3); compose.onNodeWithTag("report_who").performScrollTo() }),
+            report(3)
+            compose.onAllNodes(androidx.compose.ui.test.hasScrollAction() and androidx.compose.ui.test.hasAnyDescendant(
+                androidx.compose.ui.test.hasTestTag("report_who"))).fetchSemanticsNodes().forEach { node ->
+                compose.onNode(androidx.compose.ui.test.SemanticsMatcher("scroller ${node.id}") { it.id == node.id })
+                    .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+            }
+        }),
         Shot("form-dm", node = "report_dialog", dm = true, act = { report(3) }),
         Shot("form-photo", node = "report_dialog", rooms = listOf(roomMessage(3, null, photo(70))), act = { report(3) }),
         Shot("form-file", node = "report_dialog", rooms = listOf(roomMessage(3, null, file(71, longFile))), act = { report(3) }),
