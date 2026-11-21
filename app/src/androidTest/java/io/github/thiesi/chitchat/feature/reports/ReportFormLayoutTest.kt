@@ -8,6 +8,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
@@ -107,6 +110,42 @@ class ReportFormLayoutTest {
             compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
             assertTrue(!present("report_dialog"))
             assertEquals(null, fresh.state.value)
+        }
+    }
+
+    /**
+     * PL: while the room's name isn't known, the who-sees line and the sent line say "this room’s"; the wording is chosen
+     * when the line shows, so each switches to the named line once the name arrives. Never an empty name.
+     */
+    @Test fun anUnknownRoomNameSaysThisRoomsUntilTheNameArrives() {
+        val reports = ReportViewModel(operations)
+        val origin = ReportOrigin.Room(42)
+        var place by mutableStateOf<ReportPlace>(ReportPlace.Room(null))
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
+                    Surface(Modifier.fillMaxSize()) { androidx.compose.foundation.layout.Column {
+                        ReportNotices(origin, place)
+                        ReportHost(origin, place, subject = { null }, followUp = { null })
+                    } }
+                } } }
+            }
+            compose.waitForIdle()
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                assertEquals(ReportOpen.OPENED, reports.request(ReportTarget.RoomMessage(3), origin))
+            }
+            compose.waitUntil(5_000) { present("report_who") }
+            compose.onNodeWithTag("report_who").assertTextEquals(context.getString(R.string.report_who_room_unnamed))
+            place = ReportPlace.Room("Lounge")
+            compose.waitForIdle()
+            compose.onNodeWithTag("report_who").assertTextEquals(context.getString(R.string.report_who_room, "Lounge"))
+            place = ReportPlace.Room(null)
+            InstrumentationRegistry.getInstrumentation().runOnMainSync { reports.choose(ReportCategory.SPAM); reports.send() }
+            compose.waitUntil(5_000) { present("report_outcome") }
+            compose.onNodeWithTag("report_outcome").assertTextEquals(context.getString(R.string.report_sent_room_unnamed))
+            place = ReportPlace.Room("Lounge")
+            compose.waitForIdle()
+            compose.onNodeWithTag("report_outcome").assertTextEquals(context.getString(R.string.report_sent_room, "Lounge"))
         }
     }
 
