@@ -60,15 +60,19 @@ class ReportDetailsAccessibilityTest {
 
     @After fun tearDown() { InstrumentationRegistry.getInstrumentation().runOnMainSync { room.cancel() } }
 
+    /** UiAutomation with every interactive window retrievable, as TalkBack sees them (PL). */
+    private fun automation() = InstrumentationRegistry.getInstrumentation().uiAutomation.also { automation ->
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
+    }
+
     /**
      * Every editable node in every interactive window, as an accessibility service sees them (run 44872841961 read the
      * active window's first editable node, which needn't be the dialog's field: the conversation's composer is one too).
      */
     private fun editables(): List<AccessibilityNodeInfo> {
-        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        automation.serviceInfo = automation.serviceInfo.apply {
-            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-        }
+        val automation = automation()
         val found = mutableListOf<AccessibilityNodeInfo>()
         fun walk(node: AccessibilityNodeInfo?) {
             node ?: return
@@ -84,7 +88,7 @@ class ReportDetailsAccessibilityTest {
      * text, name, hint), so a failure identifies the node: the dialog's field or the composer behind it. Fixture text only.
      */
     private fun exposure(): String {
-        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val automation = automation()
         val windows = automation.windows
         val interactive = automation.serviceInfo.flags and
             android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS != 0
@@ -97,6 +101,17 @@ class ReportDetailsAccessibilityTest {
                 for (index in 0 until node.childCount) walk(node.getChild(index))
             }
             walk(root)
+            // Text-bearing nodes in traversal order (the last few before and including each editable), to show what precedes it.
+            val order = mutableListOf<String>()
+            fun texts(node: AccessibilityNodeInfo?) {
+                node ?: return
+                if (!node.text.isNullOrEmpty() || !node.contentDescription.isNullOrEmpty() || node.isEditable)
+                    order += (if (node.isEditable) "EDIT" else "") + "(${node.text ?: node.contentDescription})"
+                for (index in 0 until node.childCount) texts(node.getChild(index))
+            }
+            texts(root)
+            val at = order.indexOfFirst { it.startsWith("EDIT") }
+            "order=${if (at < 0) "none" else order.subList(maxOf(0, at - 3), at + 1).joinToString(">")} " +
             "type=${window.type} title=${window.title} layer=${window.layer} active=${window.isActive} " +
                 "focused=${window.isFocused} root=${root != null} editables=" +
                 nodes.joinToString(",") { node ->
@@ -105,6 +120,33 @@ class ReportDetailsAccessibilityTest {
                         "labeledBy=${node.labeledBy != null}]"
                 }
         }
+    }
+
+    /** The focused window's text-bearing nodes in traversal order: the one right before its editable field. */
+    private fun before(): String? {
+        val automation = automation()
+        val order = mutableListOf<AccessibilityNodeInfo>()
+        fun walk(node: AccessibilityNodeInfo?) {
+            node ?: return
+            if (!node.text.isNullOrEmpty() || !node.contentDescription.isNullOrEmpty() || node.isEditable) order += node
+            for (index in 0 until node.childCount) walk(node.getChild(index))
+        }
+        walk(automation.windows.firstOrNull { it.isFocused }?.root)
+        val at = order.indexOfFirst { it.isEditable }
+        return if (at <= 0) null else order[at - 1].let { (it.text ?: it.contentDescription)?.toString() }
+    }
+
+    /** How many nodes in the focused window carry [text] as their text or name. */
+    private fun spoken(text: String): Int {
+        val automation = automation()
+        var count = 0
+        fun walk(node: AccessibilityNodeInfo?) {
+            node ?: return
+            if (node.text?.toString() == text || node.contentDescription?.toString() == text) count++
+            for (index in 0 until node.childCount) walk(node.getChild(index))
+        }
+        walk(automation.windows.firstOrNull { it.isFocused }?.root)
+        return count
     }
 
     /** Waits for [what]; on timeout the failure lists what each editable node exposes (fixture text only). */
@@ -132,23 +174,23 @@ class ReportDetailsAccessibilityTest {
             compose.onNodeWithTag("message_report_action").performScrollTo().performClick()
             compose.waitUntil(5_000) { compose.onAllNodesWithTag("report_details").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("report_details").performScrollTo()
-            // The empty field: an editable node named by the question, with no typed text.
-            exposed("the empty field named by the question") { editables().any { it.contentDescription?.toString() == question } }
-            val empty = editables().first { it.contentDescription?.toString() == question }
-            // For the PL's J record: the matched node, as scalars the presentation collector allowlists.
+            // Candidate (a): the question is its own text node right before the field, which has no separate name; Compose
+            // 1.11 exposes no hint or labeledBy for a text field, and a text field's contentDescription isn't exposed.
+            exposed("the empty field preceded by the question") { before() == question }
+            val empty = editables().single()
             io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=report-details-a11y-empty editable=${empty.isEditable} " +
-                "nameIsQuestion=${empty.contentDescription?.toString() == question} nameLength=${empty.contentDescription?.length} " +
-                "textLength=${empty.text?.length ?: 0}")
-            assertTrue("The empty field has no typed text (${empty.text})", empty.text.isNullOrEmpty() || empty.text.toString() == question)
+                "precededByQuestion=${before() == question} questionNodes=${spoken(question)} textLength=${empty.text?.length ?: 0}")
+            assertTrue("The empty field has no typed text (${empty.text})", empty.text.isNullOrEmpty())
+            assertEquals("The question is exposed exactly once", 1, spoken(question))
             val typed = "Posted the same link in 3 rooms"
             compose.onNodeWithTag("report_details").performTextInput(typed)
             exposed("the typed text") { editables().any { it.text?.toString() == typed } }
             val filled = editables().first { it.text?.toString() == typed }
             io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=report-details-a11y-filled editable=${filled.isEditable} " +
-                "nameIsQuestion=${filled.contentDescription?.toString() == question} nameLength=${filled.contentDescription?.length} " +
-                "text=${filled.text}")
+                "precededByQuestion=${before() == question} questionNodes=${spoken(question)} text=${filled.text}")
             assertEquals("The typed text stays the node's text", typed, filled.text?.toString())
-            assertEquals("The question stays the separate name", question, filled.contentDescription?.toString())
+            assertEquals("The question still comes right before the field", question, before())
+            assertEquals("The question is still exposed exactly once", 1, spoken(question))
         }
     }
 }
