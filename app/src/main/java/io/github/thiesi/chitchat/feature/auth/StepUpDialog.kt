@@ -4,14 +4,9 @@ import androidx.compose.material3.MaterialTheme
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -22,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -57,10 +53,16 @@ internal fun StepUpDialog(title: String, methods: VerificationMethods, busy: Boo
             onVerify(entered, recovery)
         }
     }
-    AlertDialog(onDismissRequest = onCancel,
+    // A form dialog (P-220 amendment): its own window above the keyboard, so Verify and Cancel never sit under it, and one
+    // scrolling column when a short window leaves the body under 120dp (PL, TL; #326's landscape finding).
+    io.github.thiesi.chitchat.core.ui.FormDialog(onDismissRequest = onCancel,
         title = { Text(title) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        modifier = Modifier.lanternDialogEdge(),
+        bodyArrangement = Arrangement.spacedBy(16.dp),
+        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) } },
+        confirmButton = { if (canEnter) TextButton(onClick = submit, enabled = !busy && filled) {
+            Text(stringResource(R.string.verify_and_continue))
+        } }) {
                 if (methods.mfaEnabled) {
                     Text(stringResource(R.string.step_up_passkey_unavailable))
                     Text(stringResource(R.string.recovery_remaining, methods.recoveryCodesRemaining))
@@ -71,18 +73,12 @@ internal fun StepUpDialog(title: String, methods: VerificationMethods, busy: Boo
                 } else if (methods.hasPassword) Text(stringResource(R.string.step_up_password_explanation))
                 else Text(stringResource(R.string.step_up_provider_unavailable))
                 errorMessage?.let { InlineError(it) }
-                if (canEnter) OutlinedTextField(secret, { secret = it }, Modifier.fillMaxWidth().semantics {
+                if (canEnter) OutlinedTextField(secret, { secret = it }, Modifier.fillMaxWidth().testTag("step_up_secret").semantics {
                     if (!recovery) contentType = ContentType.Password
                 }, label = { Text(stringResource(if (recovery) R.string.recovery_code else R.string.current_password)) },
                     singleLine = true, enabled = !busy, visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { submit() }), shape = MaterialTheme.shapes.medium)
                 if (busy) CircularProgressIndicator()
-            }
-        },
-        confirmButton = { if (canEnter) TextButton(onClick = submit, enabled = !busy && filled) {
-            Text(stringResource(R.string.verify_and_continue))
-        } },
-        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) } },
-     modifier = Modifier.lanternDialogEdge())
+    }
 }

@@ -1,0 +1,186 @@
+package io.github.thiesi.chitchat.core.ui
+
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.test.core.app.ActivityScenario
+import androidx.test.platform.app.InstrumentationRegistry
+import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.core.account.VerificationMethods
+import io.github.thiesi.chitchat.core.theme.ChitChatTheme
+import io.github.thiesi.chitchat.feature.auth.StepUpDialog
+import io.github.thiesi.chitchat.testing.FontScaleTestActivity
+import io.github.thiesi.chitchat.testing.tapNativeInput
+import org.junit.After
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import java.util.Locale
+import kotlin.math.abs
+
+/**
+ * The form-dialog scaffold (P-220 amendment; PL and TL of 2026-11-21): with the keyboard up, the buttons and the focused
+ * field sit above it, read against the dialog window's own IME inset, never only "displayed" in the app window. Pinned
+ * while the body keeps 120dp; one column below that. Each case records its measurements for the J record.
+ */
+class FormDialogGeometryTest {
+    @get:Rule val compose = createEmptyComposeRule()
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    @After fun reset() { FontScaleTestActivity.requestedFontScale = 1f }
+
+    private fun present(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    private fun bounds(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInWindow
+
+    private fun host(fontScale: Float, landscape: Boolean, content: @Composable () -> Unit, block: () -> Unit) {
+        FontScaleTestActivity.requestedFontScale = fontScale
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            if (landscape) {
+                scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                compose.waitUntil(5_000) {
+                    var orientation = 0
+                    scenario.onActivity { orientation = it.resources.configuration.orientation }
+                    orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                }
+            }
+            scenario.onActivity { it.setContent { ChitChatTheme(dark = false) {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
+            } } }
+            compose.waitForIdle()
+            block()
+        }
+    }
+
+    /** Scrolls a node into view when it sits in a scroller (an AlertDialog's buttons don't); otherwise leaves it. */
+    private fun SemanticsNodeInteraction.scrollIfScrollable() {
+        var parent = fetchSemanticsNode().parent
+        while (parent != null && SemanticsActions.ScrollBy !in parent.config) parent = parent.parent
+        if (parent != null) performScrollTo()
+    }
+
+    private fun mode() = if (present("form_dialog_pinned")) "pinned" else "column"
+
+    /**
+     * One native tap on the field, then typing; the field must be focused and above the keyboard. Then each button is
+     * scrolled to (one column may hold it below the fold; focus stays in the field) and must end at or above the IME top,
+     * read from the dialog window's own IME inset. Every case writes its numbers for the J record.
+     */
+    private fun aboveTheKeyboard(case: String, field: SemanticsNodeInteraction, fieldTag: String, send: SemanticsNodeInteraction,
+        cancel: SemanticsNodeInteraction, typed: String, fieldTopOnly: Boolean = false) {
+        val before = mode()
+        field.scrollIfScrollable()
+        compose.tapNativeInput(fieldTag, imeBottom = { focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+        field.performTextInput(typed)
+        compose.waitForIdle()
+        val ime = focusedWindowIme()
+        val windowHeight = ime.height; val imeBottom = ime.imeBottom; val imeTop = ime.imeTop
+        val fieldBox = field.fetchSemanticsNode().boundsInWindow
+        val after = mode()
+        send.scrollIfScrollable(); val sendBox = send.fetchSemanticsNode().boundsInWindow
+        cancel.scrollIfScrollable(); val cancelBox = cancel.fetchSemanticsNode().boundsInWindow
+        val density = context.resources.displayMetrics.density
+        fun dp(px: Float) = "%.1f".format(Locale.ROOT, px / density)
+        recordFormDialogMetrics("case=$case modeImeHidden=$before modeImeUp=$after window=${windowHeight}px imeVisible=${ime.visible} imeBottom=${imeBottom}px " +
+            "imeTop=${imeTop}px/${dp(imeTop.toFloat())}dp sendBottom=${sendBox.bottom}px/${dp(sendBox.bottom)}dp " +
+            "cancelBottom=${cancelBox.bottom}px/${dp(cancelBox.bottom)}dp fieldTop=${fieldBox.top}px/${dp(fieldBox.top)}dp " +
+            "fieldBottom=${fieldBox.bottom}px/${dp(fieldBox.bottom)}dp")
+        val detail = "$case: imeTop=$imeTop send=$sendBox cancel=$cancelBox field=$fieldBox"
+        if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
+            assertTrue("The keyboard showed ($detail)", ime.visible)
+        val target = 40 * density // A collapsed (clipped-away) node would pass the edge checks vacuously.
+        assertTrue("Send is whole ($detail)", sendBox.height >= target)
+        assertTrue("Cancel is whole ($detail)", cancelBox.height >= target)
+        assertTrue("Send above the keyboard ($detail)", sendBox.bottom <= imeTop + 0.5f)
+        assertTrue("Cancel above the keyboard ($detail)", cancelBox.bottom <= imeTop + 0.5f)
+        assertTrue("The focused field above the keyboard ($detail)",
+            if (fieldTopOnly) fieldBox.top < imeTop && fieldBox.height > 0f else fieldBox.bottom <= imeTop + 0.5f)
+        field.assertIsFocused()
+    }
+
+    private fun stepUp(fontScale: Float, landscape: Boolean, case: String) = host(fontScale, landscape, {
+        StepUpDialog("Confirm it's you", VerificationMethods(false, true, 0), busy = false, errorMessage = null,
+            onVerify = { _, _ -> }, onCancel = {})
+    }) {
+        aboveTheKeyboard(case, compose.onNodeWithTag("step_up_secret"), "step_up_secret",
+            compose.onNode(hasText(context.getString(R.string.verify_and_continue)) and hasAnyAncestor(isDialog())),
+            compose.onNode(hasText(context.getString(R.string.cancel)) and hasAnyAncestor(isDialog())), "fixture-password")
+    }
+
+    private fun fixture(case: String, typed: String = "why") = aboveTheKeyboard(case, compose.onNodeWithTag("fixture_details"),
+        "fixture_details", compose.onNodeWithTag("fixture_send"), compose.onNodeWithTag("fixture_cancel"), typed, fieldTopOnly = true)
+
+    @Test fun stepUpAtDefaultSize() = stepUp(1f, landscape = false, "stepup-default-portrait")
+    @Test fun stepUpAt200PercentPortrait() = stepUp(2f, landscape = false, "stepup-font200-portrait")
+    @Test fun stepUpAt200PercentLandscape() = stepUp(2f, landscape = true, "stepup-font200-landscape")
+
+    @Test fun reportShapedFormAtDefaultSize() = host(1f, false, { ReportShapedFormDialog() }) { fixture("fixture-default-portrait") }
+    @Test fun reportShapedFormAt200PercentPortrait() = host(2f, false, { ReportShapedFormDialog() }) { fixture("fixture-font200-portrait") }
+    @Test fun reportShapedFormAt200PercentLandscape() = host(2f, true, { ReportShapedFormDialog() }) { fixture("fixture-font200-landscape") }
+
+    /** TL: with the keyboard up at 200% portrait, a six-line entry keeps its caret line in view above the IME. */
+    @Test fun aSixLineEntryKeepsItsCaretAboveTheKeyboard() = host(2f, false, { ReportShapedFormDialog() }) {
+        fixture("fixture-font200-portrait-6lines", (1..6).joinToString("\n") { "line $it" })
+        compose.onNodeWithTag("fixture_details").performScrollTo() // Back from the buttons; the caret must show.
+        compose.waitForIdle()
+        val ime = focusedWindowIme()
+        val windowHeight = ime.height; val imeBottom = ime.imeBottom
+        val field = compose.onNodeWithTag("fixture_details").fetchSemanticsNode()
+        val results = mutableListOf<TextLayoutResult>()
+        compose.runOnIdle { field.config[SemanticsActions.GetTextLayoutResult].action!!(results) }
+        val selection = field.config[SemanticsProperties.TextSelectionRange]
+        val caret: Rect = results.single().getCursorRect(selection.end)
+        val padding = 16 * context.resources.displayMetrics.density
+        val caretBottom = field.boundsInWindow.top + padding + caret.bottom
+        recordFormDialogMetrics("case=fixture-font200-portrait-6lines-caret caretBottom=${caretBottom}px imeTop=${windowHeight - imeBottom}px")
+        assertTrue("The caret line above the keyboard (caret=$caretBottom, imeTop=${windowHeight - imeBottom})",
+            caretBottom <= windowHeight - imeBottom + 0.5f)
+        compose.onNodeWithTag("fixture_details").assertIsFocused()
+    }
+
+    /**
+     * Fit-today, IME hidden, default size: the scaffold lays out as M3's AlertDialog does (same surface size, title,
+     * body and button positions within 1px), so dialogs that fit don't change.
+     */
+    @Test fun aFittingDialogMatchesTheAlertDialog() {
+        var formBoxes = emptyList<Rect>()
+        var alertBoxes = emptyList<Rect>()
+        fun boxes(): List<Rect> {
+            val dialog = compose.onNodeWithTag("compare_dialog", useUnmergedTree = true).fetchSemanticsNode().boundsInWindow
+            return listOf("compare_dialog", "compare_title", "compare_body", "compare_field", "compare_cancel", "compare_confirm").map { tag ->
+                compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInWindow.translate(-dialog.left, -dialog.top)
+            }
+        }
+        host(1f, false, { CompareDialog(form = true) }) { formBoxes = boxes() }
+        host(1f, false, { CompareDialog(form = false) }) { alertBoxes = boxes() }
+        val metrics = context.resources.displayMetrics
+        recordFormDialogMetrics("case=fit-compare display=${metrics.widthPixels}x${metrics.heightPixels}px density=${metrics.density} form=${formBoxes.joinToString(";") { it.toString() }} " +
+            "alert=${alertBoxes.joinToString(";") { it.toString() }}")
+        formBoxes.zip(alertBoxes).forEachIndexed { index, (form, alert) ->
+            for ((a, b) in listOf(form.left to alert.left, form.top to alert.top, form.right to alert.right, form.bottom to alert.bottom))
+                assertTrue("Slot $index: form $form, alert $alert", abs(a - b) <= 1f)
+        }
+    }
+
+    /** Fit-today, IME hidden: the pinned layout; a short landscape window: one column (the measurement decides). */
+    @Test fun theModeFollowsTheMeasuredBody() {
+        host(1f, false, { ReportShapedFormDialog() }) { assertTrue("Default portrait stays pinned", present("form_dialog_pinned")) }
+        host(2f, false, { ReportShapedFormDialog() }) { assertTrue("200% portrait stays pinned with the keyboard hidden", present("form_dialog_pinned")) }
+        host(2f, true, { ReportShapedFormDialog() }) { assertTrue("200% landscape becomes one column", present("form_dialog_column")) }
+    }
+}

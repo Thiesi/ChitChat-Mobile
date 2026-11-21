@@ -34,7 +34,8 @@ RECOVERY_DESTINATION = ROOT / "app/build/reports/androidTests/recovery-presentat
 STEP_UP_DESTINATION = ROOT / "app/build/reports/androidTests/step-up-presentation"
 DELETION_DESTINATION = ROOT / "app/build/reports/androidTests/deletion-presentation"
 DELETION_NAME = re.compile(r"deletion-(light|dark)-(default|font200)-(row|explanation|explanation-actions|dialog|stepup|unknown|notdeleted|waiting|endedunknown|checkfailed|signedout|scheduled|scheduled-longdate|endedrefusal)[.]png")
-STEP_UP_NAME = re.compile(r"stepup-(light|dark)-(default|font200)-(export|replace|create|transfer|recovery)[.]png")
+STEP_UP_NAME = re.compile(r"stepup-(?:(light|dark)-(default|font200)-(export|replace|create|transfer|recovery)|"
+    r"light-font200-landscape-(top|end))[.]png")
 RECOVERY_NAME = re.compile(r"recovery-(light|dark)-(default|font200)-(display(-api32|-reset)?(-end)?|dialog|exists|notset|notice)[.]png")
 RESET_DESTINATION = ROOT / "app/build/reports/androidTests/reset-presentation"
 RESET_NAME = re.compile(r"reset-(light|dark)-(default|font200)-(signin-forgot|form|mfa|stop|cancelled|passkey|failed|unknown|cancel-unknown)[.]png")
@@ -276,15 +277,15 @@ def collect_recovery():
 
 def collect_step_up():
     # Each step-up caller's own title (export, Replace key, Create key, room transfer) and the recovery-code warning, at
-    # default and 200%, light and dark (20).
-    files = list(islice(SOURCE.rglob("ccm-step-up-presentation/*"), 21))
-    if (not files or len(files) > 20 or len({p.name for p in files}) != len(files)
+    # default and 200%, light and dark (20), plus the form-dialog scaffold's 200% landscape top and end (2).
+    files = list(islice(SOURCE.rglob("ccm-step-up-presentation/*"), 23))
+    if (not files or len(files) > 22 or len({p.name for p in files}) != len(files)
         or any(STEP_UP_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous step-up presentation output")
     STEP_UP_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, STEP_UP_DESTINATION / path.name)
-    print(f"Step-up presentation captures collected: {len(files)} of 20.")
+    print(f"Step-up presentation captures collected: {len(files)} of 22.")
 
 
 def collect_deletion():
