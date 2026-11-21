@@ -130,6 +130,12 @@ class ReportPresentationTest {
         Shot("diag-landscape-form-field", node = "report_dialog", onlyAt = "font200", landscape = true, act = {
             report(3); compose.onNodeWithTag("report_details").performScrollTo() }),
         Shot("diag-landscape-stepup", node = "dialog", onlyAt = "font200", landscape = true, stepUp = true),
+        // On the form-dialog scaffold (#328), for the PL's J (TL): the form scrolled to its end (Send report stacked above
+        // Cancel) and the Unknown summary, both at 200% landscape.
+        Shot("diag-landscape-form-end", node = "report_dialog", onlyAt = "font200", landscape = true, act = {
+            report(3); compose.onNodeWithTag("report_cancel").performScrollTo() }),
+        Shot("diag-landscape-unknown", node = "report_dialog", onlyAt = "font200", landscape = true, results = listOf(unknown),
+            act = { report(3); fill(); send(); awaitUnknown() }),
         Shot("busy", hold = true, rooms = listOf(roomMessage(3, "check out my channel, link in bio, cheap followers"), roomMessage(5, "and again")),
             act = { report(3); fill(); send(); away(it); await("report_sending_line"); actions(5)
                 compose.onNodeWithTag("message_report_action").performScrollTo().performClick(); await("report_busy") }),
