@@ -149,6 +149,36 @@ class ReportFormLayoutTest {
         }
     }
 
+    /**
+     * PL: a native tap outside the report form's surface does nothing; the chosen reason and the typed details stay.
+     * Landscape leaves a side margin outside the 320dp surface to tap.
+     */
+    @Test fun anOutsideTapLeavesTheReportFormAndItsFieldsAlone() {
+        val reports = ReportViewModel(operations)
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+            compose.waitUntil(5_000) {
+                var orientation = 0
+                scenario.onActivity { orientation = it.resources.configuration.orientation }
+                orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            }
+            scenario.onActivity { activity ->
+                activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
+                } } }
+            }
+            report()
+            compose.onNodeWithTag("report_category:${ReportCategory.SPAM.wire}").performScrollTo().performClick()
+            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("kept why")
+            compose.waitForIdle()
+            io.github.thiesi.chitchat.core.ui.tapOutsideSurface(compose.onNodeWithTag("report_dialog", useUnmergedTree = true))
+            compose.waitForIdle()
+            assertTrue("The form stays open", present("report_dialog"))
+            assertEquals(ReportCategory.SPAM, reports.state.value?.category)
+            assertEquals("kept why", reports.state.value?.details)
+        }
+    }
+
     @Test fun at200PercentPortraitTheButtonsStayReachableWithTheKeyboardUp() = buttonsAboveTheKeyboard(landscape = false)
 
     @Test fun at200PercentLandscapeTheButtonsStayReachableWithTheKeyboardUp() = buttonsAboveTheKeyboard(landscape = true)

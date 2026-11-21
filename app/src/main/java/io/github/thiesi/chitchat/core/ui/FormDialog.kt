@@ -71,12 +71,16 @@ internal val FormDialogMinimumBody: Dp = 120.dp
 @Composable
 internal fun FormDialog(onDismissRequest: () -> Unit, title: @Composable () -> Unit, confirmButton: @Composable () -> Unit,
     modifier: Modifier = Modifier, dismissButton: (@Composable () -> Unit)? = null,
-    bodyArrangement: Arrangement.Vertical = Arrangement.Top,
+    bodyArrangement: Arrangement.Vertical = Arrangement.Top, dismissOnOutsideTap: Boolean = true,
     body: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         // The usable area is the window minus the system bars and the keyboard; a tap on it outside the surface dismisses,
-        // as a platform dialog's outside tap does.
-        BoxWithConstraints(Modifier.fillMaxSize().pointerInput(onDismissRequest) { detectTapGestures { onDismissRequest() } }
+        // as a platform dialog's outside tap does, unless [dismissOnOutsideTap] is false (PL: a form where an accidental
+        // dismissal loses a choice or composed text): then it does nothing, with no feedback and no dismiss action.
+        // Back and the dialog's own buttons still close it.
+        BoxWithConstraints(Modifier.fillMaxSize()
+            .then(if (dismissOnOutsideTap) Modifier.pointerInput(onDismissRequest) { detectTapGestures { onDismissRequest() } }
+                else Modifier)
             .safeDrawingPadding().imePadding().testTag("form_dialog_area"), contentAlignment = Alignment.Center) {
             // The width an M3 AlertDialog gets: M3's 280 to 560dp inside the platform's preferred dialog width.
             val sized = Modifier.sizeIn(minWidth = minOf(280.dp, maxWidth), maxWidth = minOf(PlatformDialogWidth, 560.dp, maxWidth))
