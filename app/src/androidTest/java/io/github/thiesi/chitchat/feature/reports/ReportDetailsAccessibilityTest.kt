@@ -60,15 +60,32 @@ class ReportDetailsAccessibilityTest {
 
     @After fun tearDown() { InstrumentationRegistry.getInstrumentation().runOnMainSync { room.cancel() } }
 
-    /** The active window's editable node, as an accessibility service sees it; null until it's there. */
-    private fun editable(): AccessibilityNodeInfo? {
-        fun find(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
-            node ?: return null
-            if (node.isEditable) return node
-            for (index in 0 until node.childCount) find(node.getChild(index))?.let { return it }
-            return null
+    /**
+     * Every editable node in every interactive window, as an accessibility service sees them (run 44872841961 read the
+     * active window's first editable node, which needn't be the dialog's field: the conversation's composer is one too).
+     */
+    private fun editables(): List<AccessibilityNodeInfo> {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         }
-        return find(InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow)
+        val found = mutableListOf<AccessibilityNodeInfo>()
+        fun walk(node: AccessibilityNodeInfo?) {
+            node ?: return
+            if (node.isEditable) found += node
+            for (index in 0 until node.childCount) walk(node.getChild(index))
+        }
+        automation.windows.forEach { walk(it.root) }
+        return found
+    }
+
+    /** Waits for [what]; on timeout the failure lists what each editable node exposes (fixture text only). */
+    private fun exposed(what: String, condition: () -> Boolean) {
+        try { compose.waitUntil(5_000, condition) }
+        catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("Not exposed: $what. Editable nodes: " + editables().joinToString("; ") {
+                "text=${it.text} contentDescription=${it.contentDescription} hint=${it.hintText}" }, timeout)
+        }
     }
 
     @Test fun theFieldKeepsItsTypedTextBesideTheQuestionAsItsName() {
@@ -88,14 +105,21 @@ class ReportDetailsAccessibilityTest {
             compose.onNodeWithTag("message_report_action").performScrollTo().performClick()
             compose.waitUntil(5_000) { compose.onAllNodesWithTag("report_details").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("report_details").performScrollTo()
-            compose.waitUntil(5_000) { editable() != null }
-            val empty = checkNotNull(editable())
-            assertEquals("The empty field's name is the question", question, empty.contentDescription?.toString())
+            // The empty field: an editable node named by the question, with no typed text.
+            exposed("the empty field named by the question") { editables().any { it.contentDescription?.toString() == question } }
+            val empty = editables().first { it.contentDescription?.toString() == question }
+            // For the PL's J record: the matched node, as scalars the presentation collector allowlists.
+            io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=report-details-a11y-empty editable=${empty.isEditable} " +
+                "nameIsQuestion=${empty.contentDescription?.toString() == question} nameLength=${empty.contentDescription?.length} " +
+                "textLength=${empty.text?.length ?: 0}")
             assertTrue("The empty field has no typed text (${empty.text})", empty.text.isNullOrEmpty() || empty.text.toString() == question)
             val typed = "Posted the same link in 3 rooms"
             compose.onNodeWithTag("report_details").performTextInput(typed)
-            compose.waitUntil(5_000) { editable()?.text?.toString() == typed }
-            val filled = checkNotNull(editable())
+            exposed("the typed text") { editables().any { it.text?.toString() == typed } }
+            val filled = editables().first { it.text?.toString() == typed }
+            io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=report-details-a11y-filled editable=${filled.isEditable} " +
+                "nameIsQuestion=${filled.contentDescription?.toString() == question} nameLength=${filled.contentDescription?.length} " +
+                "text=${filled.text}")
             assertEquals("The typed text stays the node's text", typed, filled.text?.toString())
             assertEquals("The question stays the separate name", question, filled.contentDescription?.toString())
         }

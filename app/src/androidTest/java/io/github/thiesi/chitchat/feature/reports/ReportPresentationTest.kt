@@ -174,10 +174,11 @@ class ReportPresentationTest {
         choose(ReportCategory.HARASSMENT)
         compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms")
     }
-    // Scrolled to first: at 200% with the keyboard up the form is one column with Send below the fold, and a click at its
-    // unclipped centre landed outside the surface, dismissing the form (run 44859793565). The scaffold's outer column
-    // always scrolls, so this works pinned too.
-    private fun send() = compose.onNodeWithTag("report_send").performScrollTo().performClick()
+    // Captures don't test input (the layout tests keep native taps at 200% landscape): Send is scrolled to and clicked
+    // through its semantics action, with no geometry. A positional click raced the IME animation at 200% landscape and
+    // landed outside the shrinking viewport, where the report form ignores taps by design (run 44872841961, API36).
+    private fun send() = compose.onNodeWithTag("report_send").performScrollTo()
+        .performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
     private fun ReportPresentationTest.awaitUnknown() = await("report_send_again")
     /** A navigation departure and return: the screen leaves composition and comes back (no configuration change). */
     private fun away(fixture: Fixture) {
