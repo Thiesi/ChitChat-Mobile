@@ -93,6 +93,21 @@ internal fun focusedWindowIme(): FocusedWindowIme {
     return result
 }
 
+/**
+ * One native tap in the window's left margin, halfway between the window edge and [surface]'s left edge, at its middle
+ * height: outside the dialog surface, inside the dialog's own window (landscape leaves that margin at 320dp wide).
+ */
+internal fun tapOutsideSurface(surface: androidx.compose.ui.test.SemanticsNodeInteraction) {
+    val node = surface.fetchSemanticsNode()
+    val bounds = node.boundsInWindow
+    check(bounds.left >= 48f) { "No margin outside the surface to tap: $bounds" }
+    val offset = node.positionOnScreen - node.positionInWindow
+    val point = androidx.compose.ui.geometry.Offset(bounds.left / 2f, bounds.center.y) + offset
+    io.github.thiesi.chitchat.testing.injectNativeTap(point, android.os.SystemClock::uptimeMillis) {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.injectInputEvent(it, true)
+    }
+}
+
 /** One scalar line per measured case (TL: numbers for the J record; scalars only, no text). */
 internal fun recordFormDialogMetrics(line: String) {
     val instrumentation = InstrumentationRegistry.getInstrumentation()

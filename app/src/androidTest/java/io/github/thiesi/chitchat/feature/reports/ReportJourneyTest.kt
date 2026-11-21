@@ -25,6 +25,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
@@ -239,7 +240,9 @@ class ReportJourneyTest {
         compose.waitUntil(5_000) { present("room_person_dialog") }
         assertTrue("The sheet closes", !present("report_sheet"))
         assertTrue("Nothing applied before the dialog's own confirm", ignoreCalls.isEmpty())
-        compose.onNodeWithTag("room_ignore_change").performClick()
+        // As RoomIgnoreJourneyTest does: the button sits in the dialog's scrolling body (run 44859786709 tapped it below
+        // the fold: "Failed to inject touch input").
+        compose.onNodeWithTag("room_ignore_change").performScrollTo().assertIsDisplayed().assertIsEnabled().performClick()
         compose.waitUntil(5_000) { ignoreCalls.isNotEmpty() }
         assertEquals("The reported message's sender", listOf(8L), ignoreCalls.toList())
     }

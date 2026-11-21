@@ -215,7 +215,10 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
     val title = stringResource(R.string.report_title)
     // The form-dialog scaffold (#328): its own window above the keyboard, one scrolling column when a short window leaves
     // the body under 120dp, so Send and Cancel never sit under the IME or squeeze the form away.
-    FormDialog(onDismissRequest = { if (!sending) reports.close() },
+    // PL: an outside tap does nothing in every phase, so a stray tap never loses the chosen reason, the typed details or
+    // the Unknown summary (whose Close also dismisses its notice). Cancel, Close and Back still close it; while sending,
+    // close is refused.
+    FormDialog(onDismissRequest = { if (!sending) reports.close() }, dismissOnOutsideTap = false,
         modifier = Modifier.lanternDialogEdge().semantics { paneTitle = title }.testTag("report_dialog"),
         title = { Text(title, modifier = Modifier.semantics { heading() }) },
         body = {

@@ -60,3 +60,12 @@ the TL's R2 plan. The person report is R3; the captures for the PL's J follow in
   keyboard.
 - **`ReportViewModelTest`** (JVM, 28): R1's cases plus the sheet only in place, never for a refusal; leaving its own
   conversation versus another's; Review; the BUSY line's clearing.
+
+## On the form-dialog scaffold (#328)
+
+The report form uses `core/ui/FormDialog`. It has its own window above the keyboard, and becomes one scrolling column
+when a short window leaves the body under 120 dp. Send report and Cancel therefore stay reachable above the IME at 200%,
+in portrait and landscape: `ReportFormLayoutTest` asserts them against the dialog window's IME top and records the
+numbers. An outside tap does nothing in every phase (PL), so a stray tap never loses the chosen reason, the typed details
+or the Unknown summary. Cancel, Close and Back still close the form; while sending, close is refused.
+

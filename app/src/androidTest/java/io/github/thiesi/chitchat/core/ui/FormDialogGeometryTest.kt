@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -29,6 +30,7 @@ import io.github.thiesi.chitchat.feature.auth.StepUpDialog
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
 import io.github.thiesi.chitchat.testing.tapNativeInput
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -124,6 +126,20 @@ class FormDialogGeometryTest {
 
     private fun fixture(case: String, typed: String = "why") = aboveTheKeyboard(case, compose.onNodeWithTag("fixture_details"),
         "fixture_details", compose.onNodeWithTag("fixture_send"), compose.onNodeWithTag("fixture_cancel"), typed, fieldTopOnly = true)
+
+    /** PL: other form dialogs keep the platform behaviour: a native tap outside StepUp's surface cancels it. */
+    @Test fun anOutsideTapStillCancelsStepUp() {
+        var cancelled = 0
+        host(1f, landscape = true, {
+            StepUpDialog("Confirm it's you", VerificationMethods(false, true, 0), busy = false, errorMessage = null,
+                onVerify = { _, _ -> }, onCancel = { cancelled++ })
+        }) {
+            // The mode column fills the surface (its padding scrolls inside it).
+            tapOutsideSurface(compose.onNode(hasTestTag("form_dialog_column") or hasTestTag("form_dialog_pinned"), useUnmergedTree = true))
+            compose.waitForIdle()
+            assertEquals("One outside tap cancels", 1, cancelled)
+        }
+    }
 
     @Test fun stepUpAtDefaultSize() = stepUp(1f, landscape = false, "stepup-default-portrait")
     @Test fun stepUpAt200PercentPortrait() = stepUp(2f, landscape = false, "stepup-font200-portrait")
