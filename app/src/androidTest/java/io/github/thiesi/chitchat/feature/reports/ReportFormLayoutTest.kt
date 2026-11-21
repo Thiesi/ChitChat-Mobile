@@ -181,8 +181,8 @@ class ReportFormLayoutTest {
 
     /**
      * PL and TL: the details question is a separate label above the field. At 200% its bounds touch neither the last
-     * category row (with its helper) above nor the field below, and TalkBack hears the question exactly once, as the
-     * field's name, across the whole dialog.
+     * category row (with its helper) above nor the field below. The question is exposed exactly once, as the label's own
+     * text immediately before the field, which carries no contentDescription (Compose drops it on a text field).
      */
     @Test fun theDetailsQuestionIsALabelAboveTheFieldAnnouncedOnce() {
         val reports = ReportViewModel(operations)
@@ -210,8 +210,16 @@ class ReportFormLayoutTest {
                         .count { question in it }
                 }
             assertEquals("The question is announced exactly once", 1, spoken)
-            compose.onNodeWithTag("report_details").assert(
-                androidx.compose.ui.test.SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription, listOf(question)))
+            compose.onNodeWithTag("report_details").assert(androidx.compose.ui.test.SemanticsMatcher.keyNotDefined(
+                androidx.compose.ui.semantics.SemanticsProperties.ContentDescription))
+            // In traversal order, the text-bearing node right before the field is the question.
+            val textual = compose.onAllNodes(hasAnyAncestor(hasTestTag("report_dialog"))).fetchSemanticsNodes().filter {
+                it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text) != null ||
+                    it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.EditableText) != null }
+            val at = textual.indexOfFirst { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag) == "report_details" }
+            assertTrue("The field is in the dialog's text order", at > 0)
+            assertEquals("The question comes right before the field", listOf(question),
+                textual[at - 1].config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.map { it.text })
         }
     }
 
