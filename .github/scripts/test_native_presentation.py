@@ -353,6 +353,35 @@ class PresentationGateTests(unittest.TestCase):
         for path in files: self.copy.assert_any_call(path, runner.STEP_UP_DESTINATION / path.name)
         self.assertEqual(8, self.copy.call_count) # The seven captures and the completion capture.
 
+    def metrics_file(self, name, text):
+        import shutil, tempfile
+        folder = Path(tempfile.mkdtemp(prefix="ccm-form-dialog-test-"))
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        path = folder / name; path.write_bytes(text.encode("utf-8"))
+        self.glob.side_effect = lambda pattern: (iter([path]) if pattern == "ccm-form-dialog-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+        return path
+
+    METRICS = ("case=stepup-font200-portrait modeImeHidden=pinned modeImeUp=column window=640px imeVisible=true "
+        "imeBottom=283px imeTop=357px/357.0dp sendBottom=357.0px/357.0dp\n"
+        "case=fit-compare display=1079x2339px density=2.625 form=Rect.fromLTRB(0.0, 0.0, 840.0, 894.0);"
+        "Rect.fromLTRB(63.0, 63.0, 777.0, 231.0)\ncase=fixture-font200-portrait-6lines-caret caretBottom=244.0px imeTop=357px\n")
+
+    def test_form_dialog_metrics_are_copied_and_keep_the_original_status(self):
+        self.results(3)
+        path = self.metrics_file("form-dialog-metrics.txt", self.METRICS)
+        self.assertEqual(3, runner.main()); self.assert_once()
+        self.copy.assert_any_call(path, runner.FORM_DIALOG_DESTINATION / "form-dialog-metrics.txt")
+
+    def test_foreign_malformed_or_oversized_form_dialog_metrics_are_rejected_before_copy(self):
+        for name, text in (("other.txt", self.METRICS), ("form-dialog-metrics.txt", "secret=hunter2\n"),
+                ("form-dialog-metrics.txt", "case=a body=\"hello\"\n"), ("form-dialog-metrics.txt", ""),
+                ("form-dialog-metrics.txt", "case=a x=1\n" * 33), ("form-dialog-metrics.txt", "case=a " + "x" * 17000 + "\n")):
+            self.results(0); self.copy.reset_mock()
+            self.metrics_file(name, text)
+            self.assertEqual(0, runner.main())
+            self.assertFalse(any(call.args[1].parent == runner.FORM_DIALOG_DESTINATION for call in self.copy.call_args_list), name)
+
     def test_excess_ambiguous_or_foreign_step_up_output_is_rejected_before_copy(self):
         self.results(0)
         for files in ([Path(f"stepup-light-default-export-{n}.png") for n in range(23)],

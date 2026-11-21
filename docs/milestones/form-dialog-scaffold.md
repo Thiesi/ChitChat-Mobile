@@ -70,6 +70,14 @@ app window's bounds, not whether the keyboard covers a node.
 | Six lines, 200% portrait | pinned / column | 357 | 357 / 357 | caret bottom 244 |
 
 - **AlertDialog comparison:** identical at 320×640 dp and at 411×891 dp (1079×2339 px at 420 dpi, surface 840×894 px).
+- **Local procedure, not a CI setting:**
+  - **Size override:** the 411 dp run set `wm size 1079x2339` and `wm density 420` on an AVD whose override is
+    320×640 at 160 dpi, then restored it.
+  - **Keyboard setting:** the final 320 dp run was on an AVD with `show_ime_with_hard_keyboard` 0. It was set to 1 for
+    that run and restored to 0 afterwards. CI declares its own software-keyboard environment (`expectSoftKeyboard`).
+  - **Rotation and font:** the landscape cases used the documented `wm fixed-to-user-rotation` / `user-rotation lock 1`
+    procedure with a verified `get-config`. The recorded policies (fixed `default`, user `free`, font 1.0) were
+    restored afterwards.
 - **One local miss:** StepUp at 200% portrait once had an IME window with no surface. The IME server showed input as
   shown and requested; the IME window read `NO_SURFACE` and not visible. That's the known API36 strict-IME shape.
   Local evidence only; CI on the pushed head is the gate.

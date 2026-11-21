@@ -68,9 +68,10 @@ class StepUpPresentationTest {
             assertTrue("200% landscape is one column", compose.onAllNodesWithTag("form_dialog_column", useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty())
             capture("stepup-light-font200-landscape-top")
-            compose.onNode(hasText(context.getString(R.string.verify_and_continue)) and hasAnyAncestor(isDialog()))
-                .performScrollTo().assertIsDisplayed()
-            compose.onNode(hasText(context.getString(R.string.cancel)) and hasAnyAncestor(isDialog())).assertIsDisplayed()
+            // The buttons stack (primary on top), so the column's end is Cancel: scrolling to it shows both (run 44850760989
+            // scrolled to Verify, leaving Cancel just below the fold).
+            compose.onNode(hasText(context.getString(R.string.cancel)) and hasAnyAncestor(isDialog())).performScrollTo().assertIsDisplayed()
+            compose.onNode(hasText(context.getString(R.string.verify_and_continue)) and hasAnyAncestor(isDialog())).assertIsDisplayed()
             capture("stepup-light-font200-landscape-end")
         }
     }

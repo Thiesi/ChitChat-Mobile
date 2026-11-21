@@ -26,6 +26,10 @@ CLEANUP_LINE = re.compile(r"test=([A-Za-z][A-Za-z0-9_]{0,63}[.][A-Za-z][A-Za-z0-
     r"sample=last_wait_predicate compose=(?:unobserved|-?(?:0|[1-9][0-9]{0,9})) "
     r"native1=(?:unobserved|unknown|hidden|visible) native2=(?:unobserved|unknown|hidden|visible)\n")
 CLEANUP_MAX_FILES = 64
+FORM_DIALOG_DESTINATION = ROOT / "app/build/reports/androidTests/form-dialog-presentation"
+FORM_DIALOG_LINE = re.compile(r"case=[a-z0-9-]{1,64}(?: [A-Za-z0-9=.,;:()/ -]{1,1200})?")
+FORM_DIALOG_MAX_LINES = 32
+FORM_DIALOG_MAX_BYTES = 16384
 CLEANUP_MAX_BYTES = 256
 FIND_PEOPLE_DESTINATION = ROOT / "app/build/reports/androidTests/find-people-presentation"
 POLICY_DESTINATION = ROOT / "app/build/reports/androidTests/policy-presentation"
@@ -198,6 +202,22 @@ def collect_cleanup_samples():
     for path in files:
         shutil.copyfile(path, CLEANUP_DESTINATION / path.name)
     print(f"Completion cleanup samples collected: {len(files)}.")
+
+
+def collect_form_dialog_metrics():
+    # The form-dialog scaffold's measured keyboard geometry (form-dialog-scaffold.md), for the PL's J record: one file
+    # of scalar lines, each starting with its case; anything foreign, malformed, oversized or excess rejects it all.
+    files = list(islice(SOURCE.rglob("ccm-form-dialog-presentation/*"), 2))
+    if not files:
+        return
+    if len(files) != 1 or files[0].name != "form-dialog-metrics.txt" or files[0].stat().st_size > FORM_DIALOG_MAX_BYTES:
+        raise ValueError("Foreign, excess or oversized form-dialog metrics")
+    lines = files[0].read_text(encoding="utf-8").splitlines()
+    if not lines or len(lines) > FORM_DIALOG_MAX_LINES or any(FORM_DIALOG_LINE.fullmatch(line) is None for line in lines):
+        raise ValueError("Malformed form-dialog metrics")
+    FORM_DIALOG_DESTINATION.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(files[0], FORM_DIALOG_DESTINATION / files[0].name)
+    print(f"Form-dialog metrics collected: {len(lines)} lines.")
 
 
 def collect_policy():
@@ -472,6 +492,10 @@ def main() -> int:
         collect_step_up()
     except Exception:
         print("Step-up presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_form_dialog_metrics()
+    except Exception:
+        print("Form-dialog metrics unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_deletion()
     except Exception:
