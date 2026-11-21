@@ -232,7 +232,11 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             // The full-screen viewer is a modal too: no read proof and no typing while it's open (TL, F4).
             val viewerEntry = images?.viewer?.state?.collectAsStateWithLifecycle()?.value?.entry
             val viewerOpen = viewerEntry != null && viewerEntry == completionEntryId
-            val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null ||
+            // Reporting R2: this conversation's own report (its form or follow-up sheet) is a modal too.
+            val reportOrigin = io.github.thiesi.chitchat.feature.reports.ReportOrigin.Direct(peer)
+            val reportModal = io.github.thiesi.chitchat.feature.reports.reportModalOpen(reportOrigin)
+            val reports = io.github.thiesi.chitchat.feature.reports.LocalReports.current
+            val composerDialog = reportModal || actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null ||
                 attach.modalOpen || state.attachmentReview != null || viewerOpen ||
                 io.github.thiesi.chitchat.core.ui.LocalFileTransfers.current?.dialogOpen == true
             fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
@@ -410,6 +414,8 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             onReactionCheck = checkReactionHistory)
                     }
                     io.github.thiesi.chitchat.core.ui.TransferNotice(Modifier.padding(horizontal = 16.dp))
+                    // Reporting R2: this conversation's report lines (PL).
+                    io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Direct, Modifier.padding(horizontal = 16.dp))
                     LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("dm_timeline"), timeline,
                         contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item("older") { if (state.mayHaveOlder) TextButton(onClick = model::older, enabled = !state.busy && !state.stale) {
@@ -593,8 +599,28 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             model.canUseMessage(displayedSession, peer, message) && links.any { it.target == target }) {
                             openMessageLink(androidContext, target)
                         }
-                    })
+                    },
+                    // Reporting R2 (P-160): only messages you received, never deleted; text or an attachment (TL).
+                    onReport = message?.takeIf { reports != null && io.github.thiesi.chitchat.core.reports.canReportMessage(direct = true,
+                        own = it.outgoing, deleted = it.deleted, system = false, hasBody = !it.body.isNullOrBlank(),
+                        hasAttachment = it.attachment != null) }?.let { original -> {
+                        if (actions === request && interactive()) {
+                            actions = null
+                            reports?.request(io.github.thiesi.chitchat.core.reports.ReportTarget.DirectMessage(original.id), reportOrigin)
+                        }
+                    } })
             }
+            io.github.thiesi.chitchat.feature.reports.ReportHost(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Direct,
+                subject = { target ->
+                    (target as? io.github.thiesi.chitchat.core.reports.ReportTarget.DirectMessage)?.let { t -> state.messages.firstOrNull { it.id == t.messageId } }
+                        ?.let { m -> io.github.thiesi.chitchat.feature.reports.ReportSubject(m.sender.username.orEmpty(), io.github.thiesi.chitchat.feature.reports.reportExcerpt(m.body, m.attachment), m.attachment != null) }
+                },
+                // The follow-up only where Block applies: a known relationship and a peer not yet blocked (PL).
+                followUp = { _ ->
+                    val context = state.context
+                    if (context == null || context.relationship.blockedByMe) null
+                    else io.github.thiesi.chitchat.feature.reports.ReportFollowUp(context.peer.username.orEmpty(), direct = true) { blockConfirm = true }
+                })
             state.authorDialog?.takeIf { paneInteractive() }?.let { dialog ->
                 val request = dialog.request
                 val pending = state.authorUnknown?.takeIf { it.peerId == peer && it.messageId == request.original.id && it.kind == request.kind }

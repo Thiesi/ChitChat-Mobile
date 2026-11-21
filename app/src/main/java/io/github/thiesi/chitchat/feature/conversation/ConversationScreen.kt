@@ -178,7 +178,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     // The full-screen viewer is a modal too: no read proof and no typing while it's open (TL, F4).
     val viewerEntry = images?.viewer?.state?.collectAsStateWithLifecycle()?.value?.entry
     val viewerOpen = viewerEntry != null && viewerEntry == completionEntryId
-    val composerDialog = actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null ||
+    // Reporting R2: this room's own report (its form or follow-up sheet) is a modal too: no read proof, no typing.
+    val reportOrigin = io.github.thiesi.chitchat.feature.reports.ReportOrigin.Room(roomId)
+    val reportModal = io.github.thiesi.chitchat.feature.reports.reportModalOpen(reportOrigin)
+    val reports = io.github.thiesi.chitchat.feature.reports.LocalReports.current
+    val composerDialog = reportModal || actions != null || replyOptions != null || state.authorDialog != null || state.reactionDialog != null ||
         attach.modalOpen || state.attachmentReview != null || viewerOpen ||
         io.github.thiesi.chitchat.core.ui.LocalFileTransfers.current?.dialogOpen == true
     fun paneInteractive() = isCurrentEntry() && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && !obscured &&
@@ -486,6 +490,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         }
         // F5b: Save, Share and Open's notice in the conversation's stack (PL).
         io.github.thiesi.chitchat.core.ui.TransferNotice(Modifier.padding(horizontal = 16.dp))
+        // Reporting R2: this room's report lines (PL).
+        io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Room(state.context?.room?.name), Modifier.padding(horizontal = 16.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("conversation_timeline"), state = timeline,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "history_header") {
@@ -649,8 +655,36 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     // Keep the modal suppression while the external Activity takes over.
                     openMessageLink(androidContext, target)
                 }
-            })
+            },
+            // Reporting R2 (P-160): never your own, deleted or system messages; a room message is never refused for emptiness.
+            onReport = message?.takeIf { reports != null && io.github.thiesi.chitchat.core.reports.canReportMessage(direct = false,
+                own = it.senderId == displayedSession.user?.id, deleted = it.deleted, system = it.type == "system",
+                hasBody = !it.body.isNullOrBlank(), hasAttachment = it.attachment != null) }?.let { original -> {
+                if (actions === request && interactive()) {
+                    actions = null
+                    reports?.request(io.github.thiesi.chitchat.core.reports.ReportTarget.RoomMessage(original.id), reportOrigin)
+                }
+            } })
     }
+    val reportUnknownUser = stringResource(R.string.conversation_unknown_user)
+    io.github.thiesi.chitchat.feature.reports.ReportHost(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Room(state.context?.room?.name),
+        subject = { target ->
+            (target as? io.github.thiesi.chitchat.core.reports.ReportTarget.RoomMessage)?.let { t -> state.messages.firstOrNull { it.id == t.messageId } }
+                ?.let { m -> io.github.thiesi.chitchat.feature.reports.ReportSubject(m.username ?: reportUnknownUser,
+                    io.github.thiesi.chitchat.feature.reports.reportExcerpt(m.body, m.attachment), m.attachment != null) }
+        },
+        // The follow-up only where Ignore applies: a known policy, a sender not yet ignored, a member, the ignore control (PL).
+        // The session's policy, read as the sheet renders: the ignore dialog acts on it, so the two never disagree (TL: a
+        // loaded room context with an unknown session policy offered a dialog with no change button). Otherwise no sheet.
+        followUp = { target ->
+            val message = (target as? io.github.thiesi.chitchat.core.reports.ReportTarget.RoomMessage)?.let { t -> state.messages.firstOrNull { it.id == t.messageId } }
+            val sender = message?.senderId
+            val ignoring = session.chatPolicy?.ignoredUserIds
+            if (ignores == null || message == null || sender == null || ignoring == null || sender in ignoring || session.user?.guest != false) null
+            else io.github.thiesi.chitchat.feature.reports.ReportFollowUp(message.username ?: reportUnknownUser, direct = false) {
+                ignores.open(displayedSession, roomId, sender, message.username)
+            }
+        })
     state.reactionDialog?.takeIf { paneInteractive() }?.let { dialog ->
         val request = dialog.request
         val pending = state.reactionUnknown?.takeIf { it.roomId == roomId && it.messageId == request.original.id }
