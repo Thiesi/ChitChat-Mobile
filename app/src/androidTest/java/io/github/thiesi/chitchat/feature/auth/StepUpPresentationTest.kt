@@ -14,6 +14,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.unit.height
@@ -46,6 +47,34 @@ class StepUpPresentationTest {
 
     @Test fun presentationLight() = presentation(dark = false)
     @Test fun presentationDark() = presentation(dark = true)
+
+    /**
+     * The form-dialog scaffold at 200% landscape (TL, PL): too short for the pinned layout, so title, body and buttons
+     * scroll as one column. The top, then the end with Verify and continue and Cancel in view. The portrait captures
+     * above are the unchanged control.
+     */
+    @Test fun landscapeAt200Percent() {
+        FontScaleTestActivity.requestedFontScale = 2f
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+            compose.waitUntil(5_000) {
+                var orientation = 0
+                scenario.onActivity { orientation = it.resources.configuration.orientation }
+                orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            }
+            scenario.onActivity { it.setContent { ChitChatTheme(dark = false) { Scene("export") } } }
+            compose.waitForIdle()
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            assertTrue("200% landscape is one column", compose.onAllNodesWithTag("form_dialog_column", useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty())
+            capture("stepup-light-font200-landscape-top")
+            // The buttons stack (primary on top), so the column's end is Cancel: scrolling to it shows both (run 44850760989
+            // scrolled to Verify, leaving Cancel just below the fold).
+            compose.onNode(hasText(context.getString(R.string.cancel)) and hasAnyAncestor(isDialog())).performScrollTo().assertIsDisplayed()
+            compose.onNode(hasText(context.getString(R.string.verify_and_continue)) and hasAnyAncestor(isDialog())).assertIsDisplayed()
+            capture("stepup-light-font200-landscape-end")
+        }
+    }
 
     private fun presentation(dark: Boolean) {
         val label = if (dark) "dark" else "light"
