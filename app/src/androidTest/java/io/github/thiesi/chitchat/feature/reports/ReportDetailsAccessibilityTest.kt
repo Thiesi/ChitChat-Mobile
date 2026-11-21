@@ -76,6 +76,7 @@ class ReportDetailsAccessibilityTest {
         val found = mutableListOf<AccessibilityNodeInfo>()
         fun walk(node: AccessibilityNodeInfo?) {
             node ?: return
+            node.refresh() // The app's current state, not UiAutomation's cached node (run 44881894197, API36).
             if (node.isEditable) found += node
             for (index in 0 until node.childCount) walk(node.getChild(index))
         }
@@ -97,6 +98,7 @@ class ReportDetailsAccessibilityTest {
             val nodes = mutableListOf<AccessibilityNodeInfo>()
             fun walk(node: AccessibilityNodeInfo?) {
                 node ?: return
+            node.refresh() // The app's current state, not UiAutomation's cached node (run 44881894197, API36).
                 if (node.isEditable) nodes += node
                 for (index in 0 until node.childCount) walk(node.getChild(index))
             }
@@ -105,6 +107,7 @@ class ReportDetailsAccessibilityTest {
             val order = mutableListOf<String>()
             fun texts(node: AccessibilityNodeInfo?) {
                 node ?: return
+            node.refresh() // The app's current state, not UiAutomation's cached node (run 44881894197, API36).
                 if (!node.text.isNullOrEmpty() || !node.contentDescription.isNullOrEmpty() || node.isEditable)
                     order += (if (node.isEditable) "EDIT" else "") + "(${node.text ?: node.contentDescription})"
                 for (index in 0 until node.childCount) texts(node.getChild(index))
@@ -128,6 +131,7 @@ class ReportDetailsAccessibilityTest {
         val order = mutableListOf<AccessibilityNodeInfo>()
         fun walk(node: AccessibilityNodeInfo?) {
             node ?: return
+            node.refresh() // The app's current state, not UiAutomation's cached node (run 44881894197, API36).
             if (!node.text.isNullOrEmpty() || !node.contentDescription.isNullOrEmpty() || node.isEditable) order += node
             for (index in 0 until node.childCount) walk(node.getChild(index))
         }
@@ -142,6 +146,7 @@ class ReportDetailsAccessibilityTest {
         var count = 0
         fun walk(node: AccessibilityNodeInfo?) {
             node ?: return
+            node.refresh() // The app's current state, not UiAutomation's cached node (run 44881894197, API36).
             if (node.text?.toString() == text || node.contentDescription?.toString() == text) count++
             for (index in 0 until node.childCount) walk(node.getChild(index))
         }
