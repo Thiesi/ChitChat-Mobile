@@ -26,6 +26,10 @@ CLEANUP_LINE = re.compile(r"test=([A-Za-z][A-Za-z0-9_]{0,63}[.][A-Za-z][A-Za-z0-
     r"sample=last_wait_predicate compose=(?:unobserved|-?(?:0|[1-9][0-9]{0,9})) "
     r"native1=(?:unobserved|unknown|hidden|visible) native2=(?:unobserved|unknown|hidden|visible)\n")
 CLEANUP_MAX_FILES = 64
+FORM_DIALOG_DESTINATION = ROOT / "app/build/reports/androidTests/form-dialog-presentation"
+FORM_DIALOG_LINE = re.compile(r"case=[a-z0-9-]{1,64}(?: [A-Za-z0-9=.,;:()/ -]{1,1200})?")
+FORM_DIALOG_MAX_LINES = 32
+FORM_DIALOG_MAX_BYTES = 16384
 CLEANUP_MAX_BYTES = 256
 FIND_PEOPLE_DESTINATION = ROOT / "app/build/reports/androidTests/find-people-presentation"
 POLICY_DESTINATION = ROOT / "app/build/reports/androidTests/policy-presentation"
@@ -34,7 +38,8 @@ RECOVERY_DESTINATION = ROOT / "app/build/reports/androidTests/recovery-presentat
 STEP_UP_DESTINATION = ROOT / "app/build/reports/androidTests/step-up-presentation"
 DELETION_DESTINATION = ROOT / "app/build/reports/androidTests/deletion-presentation"
 DELETION_NAME = re.compile(r"deletion-(light|dark)-(default|font200)-(row|explanation|explanation-actions|dialog|stepup|unknown|notdeleted|waiting|endedunknown|checkfailed|signedout|scheduled|scheduled-longdate|endedrefusal)[.]png")
-STEP_UP_NAME = re.compile(r"stepup-(light|dark)-(default|font200)-(export|replace|create|transfer|recovery)[.]png")
+STEP_UP_NAME = re.compile(r"stepup-(?:(light|dark)-(default|font200)-(export|replace|create|transfer|recovery)|"
+    r"light-font200-landscape-(top|end))[.]png")
 RECOVERY_NAME = re.compile(r"recovery-(light|dark)-(default|font200)-(display(-api32|-reset)?(-end)?|dialog|exists|notset|notice)[.]png")
 RESET_DESTINATION = ROOT / "app/build/reports/androidTests/reset-presentation"
 RESET_NAME = re.compile(r"reset-(light|dark)-(default|font200)-(signin-forgot|form|mfa|stop|cancelled|passkey|failed|unknown|cancel-unknown)[.]png")
@@ -199,6 +204,22 @@ def collect_cleanup_samples():
     print(f"Completion cleanup samples collected: {len(files)}.")
 
 
+def collect_form_dialog_metrics():
+    # The form-dialog scaffold's measured keyboard geometry (form-dialog-scaffold.md), for the PL's J record: one file
+    # of scalar lines, each starting with its case; anything foreign, malformed, oversized or excess rejects it all.
+    files = list(islice(SOURCE.rglob("ccm-form-dialog-presentation/*"), 2))
+    if not files:
+        return
+    if len(files) != 1 or files[0].name != "form-dialog-metrics.txt" or files[0].stat().st_size > FORM_DIALOG_MAX_BYTES:
+        raise ValueError("Foreign, excess or oversized form-dialog metrics")
+    lines = files[0].read_text(encoding="utf-8").splitlines()
+    if not lines or len(lines) > FORM_DIALOG_MAX_LINES or any(FORM_DIALOG_LINE.fullmatch(line) is None for line in lines):
+        raise ValueError("Malformed form-dialog metrics")
+    FORM_DIALOG_DESTINATION.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(files[0], FORM_DIALOG_DESTINATION / files[0].name)
+    print(f"Form-dialog metrics collected: {len(lines)} lines.")
+
+
 def collect_policy():
     # Policy documents (O3a2): hosted, external, not published at both sizes; the http dialog, loading and failure at 2.0.
     files = list(islice(SOURCE.rglob("ccm-policy-presentation/*"), 19))
@@ -276,15 +297,15 @@ def collect_recovery():
 
 def collect_step_up():
     # Each step-up caller's own title (export, Replace key, Create key, room transfer) and the recovery-code warning, at
-    # default and 200%, light and dark (20).
-    files = list(islice(SOURCE.rglob("ccm-step-up-presentation/*"), 21))
-    if (not files or len(files) > 20 or len({p.name for p in files}) != len(files)
+    # default and 200%, light and dark (20), plus the form-dialog scaffold's 200% landscape top and end (2).
+    files = list(islice(SOURCE.rglob("ccm-step-up-presentation/*"), 23))
+    if (not files or len(files) > 22 or len({p.name for p in files}) != len(files)
         or any(STEP_UP_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous step-up presentation output")
     STEP_UP_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, STEP_UP_DESTINATION / path.name)
-    print(f"Step-up presentation captures collected: {len(files)} of 20.")
+    print(f"Step-up presentation captures collected: {len(files)} of 22.")
 
 
 def collect_deletion():
@@ -471,6 +492,10 @@ def main() -> int:
         collect_step_up()
     except Exception:
         print("Step-up presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_form_dialog_metrics()
+    except Exception:
+        print("Form-dialog metrics unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_deletion()
     except Exception:
