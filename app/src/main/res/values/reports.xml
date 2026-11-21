@@ -24,8 +24,8 @@
     <string name="report_counter">%1$d / 1000</string>
     <string name="report_counter_too_long">Too long: %1$d / 1000</string>
     <string name="report_who_room">%1$s’s owners and moderators, and the server’s moderation team, will see this message’s text, its time and your report. They won’t see other messages.</string>
-    <!-- The room’s name isn’t loaded yet (review): the same line without naming it. -->
-    <string name="report_who_room_unnamed">The room’s owners and moderators, and the server’s moderation team, will see this message’s text, its time and your report. They won’t see other messages.</string>
+    <!-- The room’s name isn’t loaded yet (review); PL: “this room’s”, chosen when the line shows. -->
+    <string name="report_who_room_unnamed">This room’s owners and moderators, and the server’s moderation team, will see this message’s text, its time and your report. They won’t see other messages.</string>
     <string name="report_who_dm">The server’s moderation team will see this message and your report. They won’t see the rest of your conversation.</string>
     <string name="report_who_attachment">They’ll see the file’s name, not the file itself.</string>
     <string name="report_send">Send report</string>
@@ -38,7 +38,7 @@
     <string name="report_sending_line">Sending your report…</string>
     <string name="report_busy">Your last report is still sending. Try again in a moment.</string>
     <string name="report_sent_room">Thanks. Your report was sent to %1$s’s moderators and the server’s moderation team.</string>
-    <string name="report_sent_room_unnamed">Thanks. Your report was sent to the room’s moderators and the server’s moderation team.</string>
+    <string name="report_sent_room_unnamed">Thanks. Your report was sent to this room’s moderators and the server’s moderation team.</string>
     <string name="report_sent_dm">Thanks. Your report was sent to the server’s moderation team.</string>
     <string name="report_already">You’ve already reported this message.</string>
     <string name="report_not_reportable">This message can’t be reported anymore. It may have been deleted.</string>

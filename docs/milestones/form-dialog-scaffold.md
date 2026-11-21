@@ -42,7 +42,9 @@ app window's bounds, not whether the keyboard covers a node.
   the keyboard up at 200% landscape only about 80 dp is left, and a fixed padding would have left 34 dp, too little for
   a 48 dp button.
 - **Buttons:** side by side when both fit, otherwise stacked with the primary on top, end-aligned, as M3 does.
-- **StepUpDialog** uses it. Tags, callbacks and copy are unchanged. #326's report form adopts it after merging main.
+- **By design (PL's rule):** in one-column mode the buttons are reached by scrolling while the field keeps focus. They
+  aren't pinned on screen with the keyboard up; every one is reachable above the IME by scroll. This isn't a regression.
+- **StepUpDialog and the report form (#326, R2)** use it. Tags, callbacks and copy are unchanged.
 
 ## Evidence
 

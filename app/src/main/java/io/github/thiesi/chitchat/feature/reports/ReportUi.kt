@@ -1,12 +1,12 @@
 package io.github.thiesi.chitchat.feature.reports
 
+import io.github.thiesi.chitchat.core.ui.FormDialog
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -213,11 +213,13 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
     if (until != null) LaunchedEffect(until) { while (now < until) { delay(minOf(1_000L, until - now)); now = System.currentTimeMillis() } }
     val waiting = until != null && now < until
     val title = stringResource(R.string.report_title)
-    AlertDialog(onDismissRequest = { if (!sending) reports.close() },
+    // The form-dialog scaffold (#328): its own window above the keyboard, one scrolling column when a short window leaves
+    // the body under 120dp, so Send and Cancel never sit under the IME or squeeze the form away.
+    FormDialog(onDismissRequest = { if (!sending) reports.close() },
         modifier = Modifier.lanternDialogEdge().semantics { paneTitle = title }.testTag("report_dialog"),
         title = { Text(title, modifier = Modifier.semantics { heading() }) },
-        text = {
-            DialogScrollBody(Modifier.imePadding().testTag("report_body"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        body = {
+            Column(Modifier.fillMaxWidth().testTag("report_body"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 subject?.let { ContextCard(it) }
                 if (unknown) Summary(state) else Form(reports, state, sending)
                 notice?.let { NoticeText(it, waitSeconds, waiting) }
