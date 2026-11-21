@@ -194,7 +194,9 @@ class ReportPresentationTest {
         for ((scaleName, fontScale) in scales) for (shot in shots().filter { (only == null || it.name in only) && (it.onlyAt == null || it.onlyAt == scaleName) }) {
             FontScaleTestActivity.requestedFontScale = fontScale
             dmScreen = shot.dm
-            val session = ReceivedFiles.session()
+            // The session's chat policy as a real bootstrap carries it, matching the room's: the Ignore follow-up reads it (TL).
+            val session = ReceivedFiles.session().apply { value = value.copy(chatPolicy =
+                io.github.thiesi.chitchat.core.conversation.ChatPolicy(shot.ignored, null, io.github.thiesi.chitchat.core.conversation.DisplayPreferences())) }
             val rooms = ReceivedRooms(session).apply { messages = shot.rooms; ignored = shot.ignored }
             val room = ConversationViewModel(rooms)
             val directs = ReceivedDirects(session).apply { rows = shot.dms }
