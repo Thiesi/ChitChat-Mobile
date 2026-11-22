@@ -188,10 +188,12 @@ class FormDialogGeometryTest {
         var hold by androidx.compose.runtime.mutableStateOf(false)
         var keyboard: androidx.compose.ui.platform.SoftwareKeyboardController? = null
         host(2f, landscape = false, {
-            keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
             FormDialog(onDismissRequest = {}, title = { androidx.compose.material3.Text("Hold") },
                 confirmButton = { androidx.compose.material3.TextButton(onClick = {}) { androidx.compose.material3.Text("OK") } },
                 holdFocusedInView = hold) {
+                // The dialog's own controller: the activity's would target the activity window, not the dialog's field
+                // (run 45075992645).
+                keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
                 androidx.compose.material3.Text("The top line", androidx.compose.ui.Modifier.testTag("hold_top"))
                 repeat(10) { androidx.compose.material3.Text("A line of body text that takes room, number $it") }
                 var text by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
