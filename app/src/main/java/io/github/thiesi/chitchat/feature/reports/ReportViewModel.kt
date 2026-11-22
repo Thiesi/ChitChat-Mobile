@@ -103,6 +103,12 @@ class ReportState internal constructor(
      * (a second snapshot refusal) is brought into view again, even when a fast reply leaves no Sending frame (TL).
      */
     val noticeSeq: Long = 0,
+    /**
+     * The phase's notice holds the form's view (PL and TL, 2026-11-22): set with each new occurrence, cleared at the
+     * person's next interaction: (a) the keyboard going from hidden to shown while the details field is focused, (b) the
+     * field gaining focus, (c) typing, (d) a category. Memory only.
+     */
+    val noticeHeld: Boolean = false,
 ) {
     val categories: List<ReportCategory>
         get() = if (target is ReportTarget.Person) ReportCategory.personCategories(pictureAvailable) else ReportCategory.messageCategories
@@ -111,12 +117,13 @@ class ReportState internal constructor(
 
     internal fun copy(category: ReportCategory? = this.category, details: String = this.details, phase: ReportPhase = this.phase,
         pictureAvailable: Boolean = this.pictureAvailable, afterUnknown: Boolean = this.afterUnknown,
-        presented: Boolean = this.presented, sheet: Boolean = this.sheet) =
-        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown, presented, sheet, name, settledAt, noticeSeq)
+        presented: Boolean = this.presented, sheet: Boolean = this.sheet, noticeHeld: Boolean = this.noticeHeld) =
+        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown, presented, sheet, name, settledAt, noticeSeq,
+            noticeHeld)
 
     /** The same state with a fresh notice occurrence (see [noticeSeq]). */
     internal fun withNoticeSeq(seq: Long) =
-        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown, presented, sheet, name, settledAt, seq)
+        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown, presented, sheet, name, settledAt, seq, true)
 
     override fun toString() = "ReportState(${target::class.simpleName}, phase=$phase)"
 }
@@ -250,12 +257,28 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
     fun choose(category: ReportCategory) {
         val current = mutable.value ?: return
         if (!current.editable || category !in current.categories) return
-        mutable.value = current.copy(category = category)
+        mutable.value = current.copy(category = category, noticeHeld = false)
+    }
+
+    /** (b) The details field gained focus: the person's next interaction, so a held notice lets go (PL, TL). */
+    fun fieldFocused() = release()
+
+    /**
+     * (a) The keyboard went from hidden to shown while the details field was focused (a tap, TalkBack's activation, any
+     * re-show): the person's next interaction. Returns whether a notice was held, so the form brings the field back.
+     */
+    fun keyboardShown(): Boolean = release()
+
+    private fun release(): Boolean {
+        val current = mutable.value ?: return false
+        if (!current.noticeHeld) return false
+        mutable.value = current.copy(noticeHeld = false)
+        return true
     }
 
     fun edit(details: String) {
         val current = mutable.value ?: return
-        if (current.editable) mutable.value = current.copy(details = details)
+        if (current.editable) mutable.value = current.copy(details = details, noticeHeld = false)
     }
 
     /** Send report: the first attempt, or a new one after Did not arrive or a refusal that kept the form. */

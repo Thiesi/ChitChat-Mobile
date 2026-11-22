@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -56,6 +58,15 @@ internal val PlatformDialogWidth: Dp = 320.dp
 internal val FormDialogMinimumBody: Dp = 120.dp
 
 /**
+ * The form dialog's current layout: the height above the keyboard, the mode and whether the keyboard shows (the dialog
+ * window's own insets). It changes when the keyboard shows or hides or the mode switches; a caller's in-form notice that
+ * must outlive such a change keys on it (see `holdFocusedInView`).
+ */
+internal data class FormDialogLayout(val height: Dp, val pinned: Boolean, val ime: Boolean)
+
+internal val LocalFormDialogLayout = androidx.compose.runtime.staticCompositionLocalOf<FormDialogLayout?> { null }
+
+/**
  * A form dialog (P-220 amendment, PL and TL of 2026-11-21): the AlertDialog look in its own window, laid out above the
  * keyboard, so the buttons never sit under it (the M5b2 own-window lesson).
  *
@@ -72,6 +83,7 @@ internal val FormDialogMinimumBody: Dp = 120.dp
 internal fun FormDialog(onDismissRequest: () -> Unit, title: @Composable () -> Unit, confirmButton: @Composable () -> Unit,
     modifier: Modifier = Modifier, dismissButton: (@Composable () -> Unit)? = null,
     bodyArrangement: Arrangement.Vertical = Arrangement.Top, dismissOnOutsideTap: Boolean = true,
+    holdFocusedInView: Boolean = false,
     body: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         // The usable area is the window minus the system bars and the keyboard; a tap on it outside the surface dismisses,
@@ -87,7 +99,7 @@ internal fun FormDialog(onDismissRequest: () -> Unit, title: @Composable () -> U
             Surface(modifier.then(sized).pointerInput(Unit) { detectTapGestures { } },
                 shape = AlertDialogDefaults.shape, color = AlertDialogDefaults.containerColor,
                 tonalElevation = AlertDialogDefaults.TonalElevation) {
-                FormDialogContent(title, confirmButton, dismissButton, bodyArrangement, body)
+                FormDialogContent(title, confirmButton, dismissButton, bodyArrangement, holdFocusedInView, body)
             }
         }
     }
@@ -96,7 +108,7 @@ internal fun FormDialog(onDismissRequest: () -> Unit, title: @Composable () -> U
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Composable () -> Unit,
-    dismissButton: (@Composable () -> Unit)?, bodyArrangement: Arrangement.Vertical,
+    dismissButton: (@Composable () -> Unit)?, bodyArrangement: Arrangement.Vertical, holdFocusedInView: Boolean,
     body: @Composable ColumnScope.() -> Unit) {
     val density = LocalDensity.current
     // The 24dp padding scrolls with the content, so a short window's viewport is the whole surface: with the keyboard
@@ -107,13 +119,19 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         // What the pinned layout leaves the body: the height above the keyboard less the title, the buttons and their gaps.
         val available = maxHeight - 48.dp - with(density) { (titleHeight + buttonsHeight).toDp() } - 16.dp - 24.dp
         val pinned = available >= FormDialogMinimumBody
+        // The layout callers' held notices key on (see holdFocusedInView), with the dialog window's own keyboard state.
+        val layoutKey = FormDialogLayout(maxHeight, pinned, WindowInsets.ime.getBottom(density) > 0)
         val outer = rememberScrollState()
         val inner = rememberScrollState()
         // Keep the focused field in view when the space changes (the keyboard shows or hides, or the mode switches): the
         // scroller in use scrolls to it. A scroll, never a focus request; typing then keeps the caret in view as usual.
         val focused = remember { FocusedChild() }
+        // The hook (PL and TL, 2026-11-22): while the caller holds an in-form notice, a layout change doesn't scroll back to
+        // the focused field; the notice keeps the view until the person's next interaction. Off by default: unchanged.
+        val held by androidx.compose.runtime.rememberUpdatedState(holdFocusedInView)
         LaunchedEffect(maxHeight, pinned) {
             withFrameNanos { } // After the layout at the new height.
+            if (held) return@LaunchedEffect
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return@LaunchedEffect
             val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
                 else Triple(outer, focused.outerContent, focused.outerViewport)
@@ -140,7 +158,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // whole dialog scrolls.
             Box(Modifier.padding(bottom = 24.dp).then(if (pinned) Modifier.heightIn(max = available) else Modifier)) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.textContentColor,
-                    LocalTextStyle provides MaterialTheme.typography.bodyMedium) {
+                    LocalTextStyle provides MaterialTheme.typography.bodyMedium,
+                    LocalFormDialogLayout provides layoutKey) {
                     Column(Modifier.onSizeChanged { focused.innerViewport = it.height }
                         .then(if (pinned) Modifier.scrollEdgeDividers(inner, MaterialTheme.colorScheme.outline)
                         .verticalScroll(inner) else Modifier).onGloballyPositioned { focused.innerContent = it },
