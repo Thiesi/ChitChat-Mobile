@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -18,7 +19,6 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -145,24 +145,28 @@ class FormDialogGeometryTest {
                 if (recovery) compose.onNode(hasText(context.getString(R.string.choose_emergency_recovery)) and hasAnyAncestor(isDialog()))
                     .performScrollTo().performClick()
                 val typed = if (recovery) "UNUSED-FIXTURE-CODE" else "fixture-password"
+                // Exactly the typed text, so a stray keystroke fails (run 45042310286: an outside tap computed from bounds read
+                // before the keyboard moved the dialog landed on the keyboard and typed a "w").
+                fun intact() = compose.onNodeWithTag("step_up_secret").assert(androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                    SemanticsProperties.InputText, androidx.compose.ui.text.AnnotatedString(typed)))
                 compose.onNodeWithTag("step_up_secret").performScrollTo().performTextInput(typed)
-                compose.waitForIdle()
-                // The mode column fills the surface (its padding scrolls inside it).
-                tapOutsideSurface(compose.onNode(hasTestTag("form_dialog_column") or hasTestTag("form_dialog_pinned"), useUnmergedTree = true))
-                compose.waitForIdle()
-                assertEquals("recovery=$recovery: an outside tap doesn't cancel", 0, cancelled)
-                assertEquals("recovery=$recovery: nothing verified", 0, verified)
-                assertTrue("recovery=$recovery: the dialog stays", compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty())
-                compose.onNodeWithTag("step_up_secret").assertTextContains(typed)
-                // Back with the keyboard up hides the keyboard first (the platform's Back; run 45038305185): close it, and
-                // closing it isn't a cancel. Then Back, or Cancel, cancels. Cancel by its action: the dialog moves back down
-                // as the keyboard hides, and this half checks that Cancel cancels, not where a tap lands.
+                // The keyboard goes first: in landscape it covers most of the window, so a tap "outside" with it up can land
+                // on it. Closing it isn't a cancel (Back with the keyboard up closes only the keyboard, the platform's Back).
                 androidx.test.espresso.Espresso.closeSoftKeyboard()
                 compose.waitForIdle()
                 assertEquals("recovery=$recovery: closing the keyboard doesn't cancel", 0, cancelled)
-                assertTrue("recovery=$recovery: the dialog stays with the keyboard closed",
-                    compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty())
-                compose.onNodeWithTag("step_up_secret").assertTextContains(typed)
+                intact()
+                // With no keyboard, any point in the window's left margin is outside the centred surface, on the dialog's
+                // own area. The mode column fills the surface (its padding scrolls inside it).
+                val surface = compose.onNode(hasTestTag("form_dialog_column") or hasTestTag("form_dialog_pinned"), useUnmergedTree = true)
+                val point = tapOutsideSurface(surface)
+                compose.waitForIdle()
+                assertTappedDialogArea(point, surface)
+                assertEquals("recovery=$recovery: an outside tap doesn't cancel", 0, cancelled)
+                assertEquals("recovery=$recovery: nothing verified", 0, verified)
+                assertTrue("recovery=$recovery: the dialog stays", compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty())
+                intact()
+                // Back, or Cancel by its action (this half checks that Cancel cancels, not where a tap lands), cancels.
                 if (recovery) compose.onNode(hasText(context.getString(R.string.cancel)) and hasAnyAncestor(isDialog()))
                     .performSemanticsAction(SemanticsActions.OnClick)
                 else androidx.test.espresso.Espresso.pressBack()
