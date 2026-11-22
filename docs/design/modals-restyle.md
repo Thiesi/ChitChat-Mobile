@@ -146,6 +146,7 @@ taller than the window. Then:
 - **Scope:** decision dialogs, the room detail dialog and other read-only dialogs. Form
   dialogs keep their window type, sizing and IME geometry (below). One of them adopts the
   slot only if its non-field text can overflow, and only after the M5b2 geometry tests pass.
+  A form dialog whose text or field can't fit uses the form-dialog scaffold instead (below).
 - **Sweep:** the remaining dialogs are converted in one A-floor slice. The inventory (the
   engineer's grep of AlertDialog `text` slots without a scrolling container, at 6ea3e52) is:
   1. Forget server confirmation (`forget_body`), app/ChitChatApp.kt;
@@ -174,6 +175,31 @@ taller than the window. Then:
     pinned actions. They keep their M5b2 geometry and get no dividers;
   - the registration date picker: a platform component, out of scope;
   - the P-217 transfer picker: a full-screen list that already scrolls.
+
+## Form-dialog scaffold (P-220 amendment, PL ruling, TL agreed 2026-11-21)
+
+Reporting R2 found the pinned P-220 layout failing inside a form dialog: at 200% landscape
+the report form's body got no height at all, and in portrait the keyboard covered Send and
+Cancel. `core/ui/FormDialog` (#328) is the shared answer; StepUp and the report form use it.
+Implementation and evidence: `docs/milestones/form-dialog-scaffold.md`.
+
+- **Buttons above the keyboard.** The dialog is laid out in the window space above the IME,
+  so its buttons always sit above the keyboard, reached by scrolling if need be.
+- **Pinned or one column, by measurement.** The pinned P-220 layout (title, scrolling body
+  with its edge dividers, buttons) holds while the body gets at least **120dp** of the height
+  above the keyboard. Below that, the title, body and buttons scroll as **one column**, with
+  the 1dp `outline` dividers at the edges where content is hidden. The title is never pinned
+  twice. The space is measured; nothing depends on the device or the orientation.
+- **Stable while typing.** The layout switches at most once when the keyboard shows or hides,
+  never while typing. Focus and the caret survive a switch.
+- **Visual order is reading order**, in both layouts.
+- **Buttons:** side by side when both fit unwrapped, otherwise stacked with the primary on top,
+  end-aligned (M3).
+- **Dialogs that fit are unchanged:** where a form fits, the scaffold looks like an M3
+  AlertDialog, pixel for pixel.
+- **Outside taps:** a form dialog where an accidental dismissal loses a choice or composed text
+  ignores outside taps (the report form, in every phase). Back and the dialog's own buttons
+  still close it. Other form dialogs (StepUp) and choice sheets keep the platform's dismissal.
 
 ## Form dialogs (restyle only)
 
@@ -214,4 +240,4 @@ taller than the window. Then:
 | P-113 | Decision dialogs use the specified button rules (`error` for destructive confirms, never persimmon-filled) and move accessibility focus to the title. | C |
 | P-114 | The profile card shows only existing facts and actions (Refresh, Close, and Report per reporting.md P-165), with guest dates as visit start. | C |
 | P-115 | The message actions sheet orders sections as specified, and every row uses the existing guarded callback. | C |
-| P-220 | When a dialog's text is taller than the window (200% font, landscape, split screen), only the text slot scrolls, while the title and buttons stay. A 1dp `outline` divider shows above the buttons while there is more below, and below the title once scrolled; there are no dividers otherwise. Every line and text action is reachable by scrolling and by TalkBack. One shared modifier serves all dialogs; form dialogs keep their geometry. Captures: each converted dialog at default and 200% in a short window, in light and dark, with the divider visible. | C, S |
+| P-220 | When a dialog's text is taller than the window (200% font, landscape, split screen), only the text slot scrolls, while the title and buttons stay. A 1dp `outline` divider shows above the buttons while there is more below, and below the title once scrolled; there are no dividers otherwise. Every line and text action is reachable by scrolling and by TalkBack. One shared modifier serves all dialogs; form dialogs keep their geometry. Captures: each converted dialog at default and 200% in a short window, in light and dark, with the divider visible. **Amendment (2026-11-21):** form dialogs on the scaffold keep their buttons above the keyboard, stay pinned while the body gets at least 120dp of the height above it and otherwise scroll as one column with edge dividers, switch at most once per keyboard show or hide, keep focus, and stack their buttons only when both don't fit. One that would lose a choice or composed text ignores outside taps. | C, S |
