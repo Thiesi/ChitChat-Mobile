@@ -51,7 +51,10 @@ and out of scope. Mockups: `ReportMessage` and `ReportPerson` on the canvas.
 ## Report form (form dialog)
 
 The report form contains a text field, so it is a **form dialog** under the modals spec: it
-keeps the dialog window type and the native input and IME rules.
+keeps the dialog window type and the native input and IME rules. It uses the form-dialog scaffold
+(modals-restyle.md, "Form dialogs"), so its buttons stay above the keyboard. An outside tap does
+nothing in any phase, because an accidental dismissal would lose the chosen category and the typed
+details (PL, 2026-11-21). Cancel, Close and Back still close it, except while sending.
 
 - **Title:** "Report this message".
 - **Context line:** a one-line excerpt of the message (plain text) and its sender, so the person
@@ -77,6 +80,15 @@ keeps the dialog window type and the native input and IME rules.
   counter "0 / 1000", following the native input contracts (48dp, one tap to focus, IME). For
   `other`, the hint encourages details, but the server doesn't require them, so the field stays
   optional.
+  - **The question is a visible label above the field** (PL, 2026-11-21), in `titleSmall` like
+    "What's wrong?". There's no floating label: at 200% one wrapped onto the field's border and
+    overlapped the helper text above it.
+  - **For TalkBack** the question is its own text node directly before the field, and the field
+    itself has no name. Compose UI 1.11.4 doesn't expose a text field's content description and has
+    no labeledBy or hint (measured on the real node). Swiping through, the question is read once, then
+    the field with its typed text. Touched directly, the field is announced as an unnamed edit box.
+    That's recorded debt (overhaul-handoff.md), revisited in the app-wide field audit (#331).
+  - The typed text and the caret survive configuration changes and recreation.
   - **Counting (PL, 2026-11-20):** the counter counts the server's way, in code points after trimming
     ASCII spaces, so the limit means the same on both sides.
   - **Over the limit:** there's no hard truncation, because a paste must never be cut silently. Above
@@ -85,7 +97,9 @@ keeps the dialog window type and the native input and IME rules.
     crosses the limit, not on every character.
 - **Who will see it**, plain text above the buttons:
   - room: "**{room}**'s owners and moderators, and the server's moderation team, will see
-    this message's text, its time and your report. They won't see other messages.";
+    this message's text, its time and your report. They won't see other messages." While the
+    room's name isn't known yet, it reads "This room's owners and moderators, …". The wording is
+    chosen at display, so the named line replaces it once the name arrives (PL, 2026-11-21);
   - DM: "The server's moderation team will see this message and your report. They won't see
     the rest of your conversation."
   - "The server's moderation team" means the global roles that review reports
@@ -103,11 +117,11 @@ keeps the dialog window type and the native input and IME rules.
 
 | Result | Shows | Then |
 |---|---|---|
-| 201 | The dialog closes. The level-1 confirmation "Thanks. Your report was sent to {room}'s moderators and the server's moderation team." (DM: "Thanks. Your report was sent to the server's moderation team.") | A follow-up sheet offers existing actions: rooms: **Ignore {name}** (existing M4c3 ignore), DMs: **Block {name}** (existing block confirmation). Plus **Done**. Nothing applies automatically |
+| 201 | The dialog closes. The level-1 confirmation "Thanks. Your report was sent to {room}'s moderators and the server's moderation team." (unnamed room: "… to this room's moderators …", chosen at display; DM: "Thanks. Your report was sent to the server's moderation team.") | The follow-up sheet (below) offers existing actions: rooms: **Ignore {name}** (existing M4c3 ignore), DMs: **Block {name}** (existing block confirmation). Plus **Done**. Nothing applies automatically |
 | `message_already_reported` | "You've already reported this message." Treated as success (the report exists): a level-1 line, never styled as an error. After **Send again** (Unknown, below) it means this flow's first attempt arrived, so it shows the 201 confirmation instead | Same follow-up sheet |
 | `message_not_reportable` | "This message can't be reported anymore. It may have been deleted." | Close |
 | `message_not_found`, `report_recipient_required`, `report_not_allowed`, or (until guests exist, M7) `guest_not_allowed` | "You can't report this message." | Close |
-| `rate_limited` | "You've sent a lot of reports recently. Try again in {wait}." (ChitChat#157, phrased per status-presentation "Waiting times"), or "… Try again later." when the delay is unknown. The form stays open with its content, and nothing is resubmitted automatically | — |
+| `rate_limited` | Inside the form, a level-1 muted line (not an input error): "You've sent a lot of reports recently. Try again in {wait}." (ChitChat#157, phrased per status-presentation "Waiting times"), or "… Try again later." only when the delay is unknown. A known wait clears its line when it ends (PL, 2026-11-21). The form stays open with its content, and nothing is resubmitted automatically | — |
 | Unknown (connection lost after sending, timeout) | The level-2 notice inside the dialog: "Not sure your report went through." with **Send again** | **Send again** is an explicit new submission of the same frozen category and details. It's safe: if the first one arrived, the server answers `message_already_reported`, which shows the 201 confirmation. Never resent automatically |
 
 **Where the lines show (PL, 2026-11-20):**
@@ -116,6 +130,22 @@ keeps the dialog window type and the native input and IME rules.
   - There are no disabled inputs: controls at 38% are hard to read and invite taps.
   - **Send report** becomes **Send again**. **Cancel** reads **Close**, since the report may already have arrived.
   - With no field, there's no keyboard. Configuration changes keep the summary, and the existing modal rules retire it.
+
+**The follow-up sheet (PL, 2026-11-20).** A choice sheet that opens only when a confirmation
+lands while the dialog is up, never on return to the conversation.
+- **Room:** title "**Stop seeing {name}'s messages?**", lead "Ignoring {name} hides their messages
+  from you. You can undo this later.", then **Ignore {name}** (outlined; the existing M4c3 ignore)
+  and **Done** (text button).
+- **DM:** title "**Stop hearing from {name}?**", lead "You can block {name}. You'll confirm before
+  anything changes.", then **Block {name}** (outlined; opens the existing block confirmation) and
+  **Done** (text button).
+- There's no `primary` button, because nothing is recommended. The title is the sheet's heading
+  and pane title. Back and the scrim mean Done.
+- **No sheet when the action doesn't apply:** the sender is already ignored or the peer blocked,
+  the session's ignore policy is unknown, the control is unavailable, or the person is a guest.
+  The confirmation line then shows alone.
+- Person reports reuse the same two variants by where the card was opened: a room gives Ignore,
+  a DM gives Block.
 
 **Sending, leaving and background (TL, R1 review; PL, 2026-11-20).** These apply to both message and person reports.
 - **While sending:** the report can't be closed. Send report shows its progress state, Cancel is disabled and Back does nothing. TalkBack hears "Sending report".
@@ -208,7 +238,7 @@ The same form dialog as message reporting, with the native input and IME rules:
 
 | Result | Shows | Then |
 |---|---|---|
-| 201 | The dialog closes. The level-1 confirmation "Thanks. Your report was sent to {room}'s moderators and the server's moderation team." (global: "Thanks. Your report was sent to the server's moderation team.") | The follow-up sheet: from a room, **Ignore {name}**; from a DM, **Block {name}**; plus **Done**. Nothing applies automatically. The card then shows "You've reported {name}." |
+| 201 | The dialog closes. The level-1 confirmation "Thanks. Your report was sent to {room}'s moderators and the server's moderation team." (global: "Thanks. Your report was sent to the server's moderation team.") | The follow-up sheet: from a room, **Ignore {name}**; from a DM, **Block {name}**; plus **Done**. Nothing applies automatically. The next card open shows "You've reported {name}." |
 | `409 already_reported` | "You've already reported {name}." Treated as success (the report exists): a level-1 line, never styled as an error | The same follow-up sheet |
 | `409 report_snapshot_unavailable` | Inside the dialog, a level-2 notice: "**Nothing was sent.** The server couldn't keep a copy of {name}'s profile picture just now. Try again later." | The form stays open with its content. Send report stays available as an explicit new attempt, never automatic |
 | `400 validation_error` on the picture category | "{name} no longer has a profile picture. Choose another reason." | The form stays open, the picture category is removed and the choice is cleared |
@@ -218,9 +248,16 @@ The same form dialog as message reporting, with the native input and IME rules:
 | `429` | "You've sent a lot of reports recently. Try again in {wait}." from `error.retry_after_seconds` (status-presentation "Waiting times"), or "… Try again later." when unknown | The form stays open. Nothing is resubmitted automatically |
 | Unknown (connection lost after sending, timeout) | Inside the dialog, a level-2 notice: "Not sure your report went through." with **Check** | **Check** re-reads the profile with the same `room_id`. If `reported_by_me` is true, show the 201 confirmation and the follow-up sheet. If it's false, the notice reads "Your report didn't arrive." and Send report is available again as an explicit choice. A new report is never sent before that re-read, and never automatically |
 
-**Where the lines show (PL, 2026-11-20):** outcomes after the dialog closes are level-1 lines in the
-profile card, in the Report row's place, when the card is still open under the form. Otherwise they
-show in the conversation's notice stack.
+**Where the lines show (TL, under the PL's stack fallback; PL agreed 2026-11-22):** only one dialog
+shows at a time.
+- **The card closes when the report form opens.** So the card is never open under the form, and the
+  "card's Report-row place" from the PL's ruling of 2026-11-20 doesn't arise.
+- **Outcomes after the form closes** (the confirmations and the refusals) are level-1 lines in the
+  conversation's notice stack, the same place as a message report's, followed by the follow-up sheet
+  for a confirmation.
+- **"You've reported {name}."** shows on the next card open, from the server's `reported_by_me`.
+- **Cancel** (and Close, Back) returns to the conversation, not to the card, just as a message
+  report's Cancel doesn't return to the actions sheet. The card is one tap away.
 
 The person's card, name and messages are otherwise **unchanged** after a report. The only
 change is the "You've reported {name}." caption, which comes from the server's
@@ -272,3 +309,4 @@ for it.
 | P-166 | Person reports offer the two person-only categories first (the picture one only with a current picture), state exactly who sees what for room and global scope, and map every error per the table. `already_reported` is success. `report_snapshot_unavailable` says nothing was sent. 429 shows the wait. | U, C |
 | P-167 | An unknown person-report result re-reads the profile (`reported_by_me`) before any new report and never resends automatically. Reporting is never gated by rules acceptance. | U |
 | P-225 | A sending report can't be closed, and leaving the conversation doesn't stop it. Its outcome shows once as a level-1 line in the conversation it came from (memory only, fenced, no follow-up sheet on return), or "Sending your report…" until it settles. A genuine background makes it Unknown, shown there as "Not sure your report went through." with Review. A waiting outcome never blocks a new report; a pending Unknown is dropped, unsent, when Report… opens elsewhere; only a report that's sending or checking blocks a new one, with "Your last report is still sending. Try again in a moment." | U, C |
+| P-226 | The follow-up sheet shows the specified title, lead, outlined Ignore or Block and text Done, with no `primary` button, and only when that action applies; otherwise the confirmation line shows alone. The details question is a visible label above the field, exposed once directly before it. The report form ignores outside taps in every phase. | C, S |

@@ -1,5 +1,7 @@
 package io.github.thiesi.chitchat.feature.account
 
+import io.github.thiesi.chitchat.testing.performNativeTap
+import io.github.thiesi.chitchat.testing.tapNativeInput
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsDisplayed
@@ -87,8 +89,13 @@ class AccountRecreationTest {
     }
     private fun verifyRecovery() {
         compose.onNodeWithText("Use an emergency recovery code").performScrollTo().performClick()
-        compose.onNodeWithText("Recovery code").performScrollTo().performTextInput("UNUSED-FIXTURE-CODE")
-        compose.onNodeWithText("Verify and continue").performClick()
+        compose.onNodeWithText("Recovery code").performScrollTo()
+        // The native input contract (#333's run 45032291123): one physical tap with the strict IME proof, then the text,
+        // then an OS-routed tap on Verify with its bounds read after the dialog moved above the keyboard.
+        compose.tapNativeInput("step_up_secret", imeBottom = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+        compose.onNodeWithTag("step_up_secret").performTextInput("UNUSED-FIXTURE-CODE")
+        compose.onNode(androidx.compose.ui.test.hasText("Verify and continue") and
+            androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.isDialog())).performNativeTap()
         compose.waitUntil(5_000) { fake.recoveries == 1 && account.state.value.verificationBusy }
     }
     private fun recreate() {
