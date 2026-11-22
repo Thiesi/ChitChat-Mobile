@@ -177,13 +177,35 @@ class ReportDetailsAccessibilityTest {
                 hasAnyAncestor(hasTestTag("message:3"))).performSemanticsAction(SemanticsActions.OnClick)
             compose.waitUntil(5_000) { compose.onAllNodesWithTag("message_report_action").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("message_report_action").performScrollTo().performClick()
+            questionBeforeField(question, "report-details-a11y")
+        }
+    }
+
+    /** R3c (PL): the person report's details field, the same real-node check (its question right before the field, once). */
+    @Test fun aPersonReportsFieldKeepsTheQuestionRightBeforeIt() {
+        val reports = ReportViewModel(operations)
+        val question = context.getString(R.string.report_details_label)
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
+                } } }
+            }
+            compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
+            compose.runOnIdle { reports.requestPerson(ReportTarget.Person(8, 42), ReportOrigin.Room(42), true, "Bob", reports.settled) }
+            questionBeforeField(question, "report-person-details-a11y")
+        }
+    }
+
+    /** The details field, empty then filled, as an accessibility service reads it; [case] names the metrics lines. */
+    private fun questionBeforeField(question: String, case: String) {
             compose.waitUntil(5_000) { compose.onAllNodesWithTag("report_details").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithTag("report_details").performScrollTo()
             // Candidate (a): the question is its own text node right before the field, which has no separate name; Compose
             // 1.11 exposes no hint or labeledBy for a text field, and a text field's contentDescription isn't exposed.
             exposed("the empty field preceded by the question") { before() == question }
             val empty = editables().single()
-            io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=report-details-a11y-empty editable=${empty.isEditable} " +
+            io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=$case-empty editable=${empty.isEditable} " +
                 "precededByQuestion=${before() == question} questionNodes=${spoken(question)} textLength=${empty.text?.length ?: 0}")
             assertTrue("The empty field has no typed text (${empty.text})", empty.text.isNullOrEmpty())
             assertEquals("The question is exposed exactly once", 1, spoken(question))
@@ -199,11 +221,10 @@ class ReportDetailsAccessibilityTest {
             }
             exposed("the typed text") { editables().any { it.text?.toString() == typed } }
             val filled = editables().first { it.text?.toString() == typed }
-            io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=report-details-a11y-filled editable=${filled.isEditable} " +
+            io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=$case-filled editable=${filled.isEditable} " +
                 "precededByQuestion=${before() == question} questionNodes=${spoken(question)} text=${filled.text}")
             assertEquals("The typed text stays the node's text", typed, filled.text?.toString())
             assertEquals("The question still comes right before the field", question, before())
             assertEquals("The question is still exposed exactly once", 1, spoken(question))
-        }
     }
 }
