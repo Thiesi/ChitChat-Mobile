@@ -254,7 +254,7 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
         title = { Text(title, modifier = Modifier.semantics { heading() }) },
         body = {
             Column(Modifier.fillMaxWidth().testTag("report_body"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (person != null) PersonContext(name) else subject?.let { ContextCard(it) }
+                if (person != null) PersonContext(name, person.userId) else subject?.let { ContextCard(it) }
                 if (unknown) Summary(state) else Form(reports, state, sending)
                 notice?.let { NoticeText(it, waitSeconds, waiting, name) }
                 Text(if (person != null) personWho(reportPlace(state, place), name, state.pictureAvailable) else when (place) {
@@ -310,16 +310,17 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
 }
 
 /**
- * R3: who is being reported, the person's pebble and username (reporting.md). The pebble is decoration only. The name is
- * server text, so it wraps and is never ellipsized (PL).
+ * R3: who is being reported, the person's pebble and username (reporting.md). The pebble is decoration only: the Lantern
+ * pebble, the person's identity hue with the initial in ink in both themes (PL: a `raised` fill vanished on the dialog's
+ * own `raised` container and left a stray letter). The name is server text, so it wraps and is never ellipsized (PL).
  */
 @Composable
-private fun PersonContext(name: String) = Row(Modifier.fillMaxWidth().testTag("report_context"),
+private fun PersonContext(name: String, userId: Long) = Row(Modifier.fillMaxWidth().testTag("report_context"),
     horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-    androidx.compose.foundation.layout.Box(Modifier.size(32.dp).background(ChitChatTheme.colors.raised, CircleShape)
+    androidx.compose.foundation.layout.Box(Modifier.size(32.dp).background(io.github.thiesi.chitchat.core.theme.identityHue(userId), CircleShape)
         .clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
         Text(io.github.thiesi.chitchat.feature.profile.profileInitial(name), style = MaterialTheme.typography.labelLarge,
-            color = ChitChatTheme.colors.text)
+            color = io.github.thiesi.chitchat.core.theme.Lantern.ink)
     }
     Text(name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
         modifier = Modifier.weight(1f).testTag("report_person"))
