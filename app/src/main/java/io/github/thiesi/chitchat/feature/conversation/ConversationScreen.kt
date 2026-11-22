@@ -676,13 +676,17 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         // The follow-up only where Ignore applies: a known policy, a sender not yet ignored, a member, the ignore control (PL).
         // The session's policy, read as the sheet renders: the ignore dialog acts on it, so the two never disagree (TL: a
         // loaded room context with an unknown session policy offered a dialog with no change button). Otherwise no sheet.
-        followUp = { target ->
-            val message = (target as? io.github.thiesi.chitchat.core.reports.ReportTarget.RoomMessage)?.let { t -> state.messages.firstOrNull { it.id == t.messageId } }
-            val sender = message?.senderId
+        // R3: a person reported from their card here is offered the same Ignore, by the name frozen from the card.
+        followUp = { reported ->
+            val person = reported.target as? io.github.thiesi.chitchat.core.reports.ReportTarget.Person
+            val message = (reported.target as? io.github.thiesi.chitchat.core.reports.ReportTarget.RoomMessage)?.let { t -> state.messages.firstOrNull { it.id == t.messageId } }
+            val sender = person?.userId ?: message?.senderId
+            val name = if (person != null) reported.name else message?.username
             val ignoring = session.chatPolicy?.ignoredUserIds
-            if (ignores == null || message == null || sender == null || ignoring == null || sender in ignoring || session.user?.guest != false) null
-            else io.github.thiesi.chitchat.feature.reports.ReportFollowUp(message.username ?: reportUnknownUser, direct = false) {
-                ignores.open(displayedSession, roomId, sender, message.username)
+            if (ignores == null || sender == null || (person == null && message == null) || ignoring == null || sender in ignoring ||
+                sender == session.user?.id || session.user?.guest != false) null
+            else io.github.thiesi.chitchat.feature.reports.ReportFollowUp(name ?: reportUnknownUser, direct = false) {
+                ignores.open(displayedSession, roomId, sender, name)
             }
         })
     state.reactionDialog?.takeIf { paneInteractive() }?.let { dialog ->

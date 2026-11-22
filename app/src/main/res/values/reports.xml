@@ -56,4 +56,27 @@
     <string name="report_sheet_dm_lead">You can block %1$s. You’ll confirm before anything changes.</string>
     <string name="report_sheet_block">Block %1$s</string>
     <string name="report_sheet_done">Done</string>
+    <!-- Reporting R3: a person, from their profile card (reporting.md "Report a person"; PL rulings of 2026-11-20). -->
+    <string name="report_person_action">Report %1$s…</string>
+    <string name="report_person_reported">You’ve reported %1$s.</string>
+    <string name="report_person_title">Report %1$s</string>
+    <string name="report_offensive_username">Offensive username</string>
+    <string name="report_offensive_username_help">The name itself is offensive</string>
+    <string name="report_offensive_picture">Offensive profile picture</string>
+    <string name="report_offensive_picture_help">The picture itself is offensive</string>
+    <string name="report_person_who_room">%1$s’s owners and moderators, and the server’s moderation team, will see your report and a copy of %2$s’s name and profile picture. They won’t see %2$s’s messages.</string>
+    <string name="report_person_who_room_unnamed">This room’s owners and moderators, and the server’s moderation team, will see your report and a copy of %1$s’s name and profile picture. They won’t see %1$s’s messages.</string>
+    <string name="report_person_who_room_no_picture">%1$s’s owners and moderators, and the server’s moderation team, will see your report and a copy of %2$s’s name. They won’t see %2$s’s messages.</string>
+    <string name="report_person_who_room_unnamed_no_picture">This room’s owners and moderators, and the server’s moderation team, will see your report and a copy of %1$s’s name. They won’t see %1$s’s messages.</string>
+    <string name="report_person_who_global">The server’s moderation team will see your report and a copy of %1$s’s name and profile picture. They won’t see %1$s’s messages.</string>
+    <string name="report_person_who_global_no_picture">The server’s moderation team will see your report and a copy of %1$s’s name. They won’t see %1$s’s messages.</string>
+    <string name="report_person_already">You’ve already reported %1$s.</string>
+    <string name="report_person_not_allowed">You can’t report %1$s here.</string>
+    <string name="report_person_not_found">This account isn’t available anymore.</string>
+    <string name="report_person_snapshot_lead">Nothing was sent.</string>
+    <string name="report_person_snapshot_body">The server couldn’t keep a copy of %1$s’s profile picture just now. Try again later.</string>
+    <string name="report_person_picture_gone">%1$s no longer has a profile picture. Choose another reason.</string>
+    <string name="report_person_did_not_arrive">Your report didn’t arrive.</string>
+    <string name="report_check">Check</string>
+    <string name="report_checking_spoken">Checking your report</string>
 </resources>

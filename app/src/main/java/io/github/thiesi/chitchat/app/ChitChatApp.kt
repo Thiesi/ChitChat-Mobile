@@ -885,10 +885,34 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             fun current() = nav.currentBackStackEntry === origin &&
                 origin.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
                 profileChoice.matches(auth.state.value) && profiles.state.value.selection === profileChoice
+            // R3 (P-165): Report {name}… from the card's own rendered facts, never your own card. The report belongs to the
+            // conversation the card is over (a room or a DM thread; anything else offers no entry), whose ReportHost shows
+            // the form, outcome and follow-up; the card closes as the form opens, in the same frame, so the modal
+            // suppression of read proof and typing never lapses in between (TL). Never gated by rules acceptance (P-167).
+            val reportModel = io.github.thiesi.chitchat.feature.reports.LocalReports.current
+            val route = origin?.destination?.route
+            val reportOrigin = io.github.thiesi.chitchat.feature.reports.profileReportOrigin(
+                room = route == "conversation/{roomId}" || route == NOTIFICATION_ROOM_ROUTE, direct = route == DIRECT_THREAD_ROUTE,
+                roomId = origin?.arguments?.getLong("roomId", -1), peerId = origin?.arguments?.getLong("peerId", -1))
+            val rendered = profileState.snapshot?.takeIf { !profileState.loading && profileState.error == null }
+            val own = rendered?.profile?.id == displayedSession.user?.id
+            // The card's outcomes so far when it opened: one that settles under the card is seen before a new form replaces it.
+            val cardOpenedAt = androidx.compose.runtime.saveable.rememberSaveable(profileChoice) { reportModel?.settled ?: 0L }
+            val onReport = rendered?.takeIf { reportModel != null && reportOrigin != null &&
+                io.github.thiesi.chitchat.core.reports.offersPersonReport(it.report, own) }?.let { snapshot -> {
+                    // Frozen at the tap from the profile this card rendered; a Refresh that replaced it fails closed.
+                    if (current() && profiles.state.value.snapshot === snapshot && reportModel != null && reportOrigin != null) {
+                        val person = io.github.thiesi.chitchat.feature.reports.personReport(snapshot)
+                        val opened = reportModel.requestPerson(person.target, reportOrigin, person.pictureAvailable, person.name, cardOpenedAt)
+                        if (opened != io.github.thiesi.chitchat.feature.reports.ReportOpen.UNAVAILABLE) profiles.close(profileChoice)
+                    }
+                } }
             ProfileDialog(profileState, !displayedSession.busy && !displayedSession.refreshRequired &&
                 !displayedSession.storageWarning,
                 onRefresh = { if (current()) profiles.refresh(profileChoice) },
-                onClose = { if (current()) profiles.close(profileChoice) })
+                onClose = { if (current()) profiles.close(profileChoice) },
+                onReport = onReport,
+                reported = io.github.thiesi.chitchat.core.reports.showsReportedCaption(rendered?.report, own))
         }
         if (messageTargets != null && targetState != null) {
             val route = entry?.destination?.route

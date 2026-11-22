@@ -616,9 +616,11 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         ?.let { m -> io.github.thiesi.chitchat.feature.reports.ReportSubject(m.sender.username.orEmpty(), io.github.thiesi.chitchat.feature.reports.reportExcerpt(m.body, m.attachment), m.attachment != null) }
                 },
                 // The follow-up only where Block applies: a known relationship and a peer not yet blocked (PL).
-                followUp = { _ ->
+                // R3: a person report from this thread's card is the peer's, and gets the same Block; any other person none.
+                followUp = { reported ->
                     val context = state.context
-                    if (context == null || context.relationship.blockedByMe) null
+                    val person = reported.target as? io.github.thiesi.chitchat.core.reports.ReportTarget.Person
+                    if (context == null || context.relationship.blockedByMe || person != null && person.userId != peer) null
                     else io.github.thiesi.chitchat.feature.reports.ReportFollowUp(context.peer.username.orEmpty(), direct = true) { blockConfirm = true }
                 })
             state.authorDialog?.takeIf { paneInteractive() }?.let { dialog ->

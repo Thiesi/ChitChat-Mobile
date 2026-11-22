@@ -49,6 +49,16 @@ class ProfileJourneyTest {
     private lateinit var thread: DirectThreadViewModel
     private lateinit var notices: NotificationCenterViewModel
     private lateinit var targets: MessageTargetViewModel
+    /** R3: the app-scoped report state, as MainActivity provides it; its POSTs only counted. */
+    private val reportSends=CopyOnWriteArrayList<io.github.thiesi.chitchat.core.reports.ReportTarget>()
+    private val reports=io.github.thiesi.chitchat.feature.reports.ReportViewModel(object: io.github.thiesi.chitchat.core.reports.ReportOperations {
+        override val session=sessions.state
+        override suspend fun send(expected: SessionState, target: io.github.thiesi.chitchat.core.reports.ReportTarget,
+            category: io.github.thiesi.chitchat.core.reports.ReportCategory, details: String?): io.github.thiesi.chitchat.core.reports.ReportResult {
+            reportSends+=target; return io.github.thiesi.chitchat.core.reports.ReportResult.Sent(1)
+        }
+        override suspend fun personFacts(expected: SessionState, target: io.github.thiesi.chitchat.core.reports.ReportTarget.Person)=null
+    })
     @Volatile private var ime=0
     private val settingsStore=object: SettingsStore {
         override val settings=MutableStateFlow(AppSettings(server=(ServerAddress.parse("chat.example.test") as AddressResult.Valid).address))
@@ -72,8 +82,9 @@ class ProfileJourneyTest {
         val auth=ViewModelProvider(activity,AuthViewModel.factory(sessions))[AuthViewModel::class.java]
         activity.setContent {
             val bottom=WindowInsets.ime.getBottom(LocalDensity.current); SideEffect { ime=bottom }
-            Box(Modifier.fillMaxSize()) { TestChitChatApp(settings,auth,conversationModel=room,directInbox=inbox,directThread=thread,
-                notifications=notices,messageTargets=targets,profiles=model) }
+            Box(Modifier.fillMaxSize()) { androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.feature.reports.LocalReports provides reports) {
+                TestChitChatApp(settings,auth,conversationModel=room,directInbox=inbox,directThread=thread,
+                notifications=notices,messageTargets=targets,profiles=model) } }
         }
     }
     private fun text(id: Int)=InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
@@ -119,6 +130,51 @@ class ProfileJourneyTest {
         profiles.gate?.complete(Unit); compose.waitForIdle()
         if (ime>0 || nativeInputWindow().imeVisible!=false) Espresso.closeSoftKeyboard()
         compose.waitUntil(5_000) { ime==0 }; assertEquals(false,nativeInputWindow().imeVisible)
+    }
+
+    /**
+     * R3 (P-165, TL): Report {name}… on a room card closes the card and opens the form in that room, frozen with the card's
+     * own room context; nothing is sent until Send report. Without facts the card shows neither the entry nor the caption.
+     */
+    @Test fun roomCardReportOpensTheFormInThatRoomWithTheCardsRoomAndClosesTheCard() {
+        profiles.facts=io.github.thiesi.chitchat.core.reports.ReportFacts(canReport=true,reportedByMe=false)
+        enter(roomTarget=true); openRoom(); loaded()
+        compose.onNodeWithTag("profile_report").performScrollTo().assertHeightIsAtLeast(48.dp).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("report_dialog").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("profile_dialog").assertDoesNotExist()
+        compose.runOnIdle {
+            val state=reports.state.value!!
+            assertEquals(io.github.thiesi.chitchat.core.reports.ReportTarget.Person(8,43),state.target)
+            assertEquals(io.github.thiesi.chitchat.feature.reports.ReportOrigin.Room(43),state.origin)
+            assertEquals("Profile peer",state.name)
+            assertTrue("Nothing sent by the tap",reportSends.isEmpty())
+            assertEquals("Kept room draft",room.state.value.draft)
+        }
+        compose.onNodeWithTag("report_cancel").performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("report_dialog").fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test fun dmCardReportIsGlobalAndAReportedPersonShowsOnlyTheCaption() {
+        profiles.facts=io.github.thiesi.chitchat.core.reports.ReportFacts(canReport=true,reportedByMe=false)
+        enter(); openDirect(); loaded()
+        compose.onNodeWithTag("profile_report").performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("report_dialog").fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle {
+            assertEquals("A DM card is global",io.github.thiesi.chitchat.core.reports.ReportTarget.Person(8,null),reports.state.value!!.target)
+            assertEquals(io.github.thiesi.chitchat.feature.reports.ReportOrigin.Direct(8),reports.state.value!!.origin)
+        }
+        compose.onNodeWithTag("report_cancel").performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("report_dialog").fetchSemanticsNodes().isEmpty() }
+        // The caption comes only from the server's reported_by_me, on the next fresh card GET.
+        profiles.facts=io.github.thiesi.chitchat.core.reports.ReportFacts(canReport=true,reportedByMe=true)
+        openDirect(); loaded()
+        compose.onNodeWithTag("profile_reported").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("profile_report").assertDoesNotExist()
+        close()
+        profiles.facts=null
+        openDirect(); loaded()
+        compose.onNodeWithTag("profile_report").assertDoesNotExist(); compose.onNodeWithTag("profile_reported").assertDoesNotExist()
+        close()
     }
 
     @Test fun collapsedIgnoredRoomAuthorCanOpenExactProfileWithoutRevealingBodyOrReading() {
@@ -201,11 +257,12 @@ class ProfileJourneyTest {
         val calls=CopyOnWriteArrayList<Pair<SessionState,ProfileRequest>>()
         var gate: CompletableDeferred<Unit>?=null; var failure: ApiFailure?=null
         var ignoreCancellation=false; var guest=false; var name="Profile peer"
+        @Volatile var facts: io.github.thiesi.chitchat.core.reports.ReportFacts?=null
         override suspend fun load(expected: SessionState, request: ProfileRequest): ProfileSnapshot {
             calls+=expected to request
             gate?.let { if (ignoreCancellation) withContext(NonCancellable) { it.await() } else it.await() }
             failure?.let { throw it }
-            return ProfileSnapshot(BasicProfile(request.userId,name,"2026-01-02T12:00:00Z","Fixture badge",guest,true,0,true),request.roomId,true)
+            return ProfileSnapshot(BasicProfile(request.userId,name,"2026-01-02T12:00:00Z","Fixture badge",guest,true,0,true),request.roomId,true,facts)
         }
     }
 }
