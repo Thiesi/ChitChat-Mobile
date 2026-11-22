@@ -443,11 +443,25 @@ private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolea
         ReportNotice.NotSent -> InlineError(stringResource(R.string.report_not_sent))
         // Person outcomes (reporting.md): a level-2 notice that nothing was sent; the picture gone, with its category
         // removed; and the Check that found nothing, after which Send report is an explicit choice again.
-        ReportNotice.SnapshotUnavailable -> WarningNotice(stringResource(R.string.report_person_snapshot_lead),
-            stringResource(R.string.report_person_snapshot_body, name), Modifier.testTag("report_notice"))
+        ReportNotice.SnapshotUnavailable -> InViewNotice(notice) { modifier ->
+            WarningNotice(stringResource(R.string.report_person_snapshot_lead), stringResource(R.string.report_person_snapshot_body, name),
+                modifier.testTag("report_notice")) }
         ReportNotice.PictureGone -> InlineError(stringResource(R.string.report_person_picture_gone, name))
-        ReportNotice.DidNotArrive -> WarningNotice(stringResource(R.string.report_person_did_not_arrive), "", Modifier.testTag("report_notice"))
+        ReportNotice.DidNotArrive -> InViewNotice(notice) { modifier ->
+            WarningNotice(stringResource(R.string.report_person_did_not_arrive), "", modifier.testTag("report_notice")) }
     }
+}
+
+/**
+ * A level-2 notice that appears after Send is brought into view when it appears, as InlineError and the wait line are
+ * (PL and TL, 2026-11-22; measured at 200% portrait: the WarningNotice lines ended out of view below the field). A scroll
+ * only: no focus or caret change and no extra announcement. One taller than the body shows from its top.
+ */
+@Composable
+private fun InViewNotice(notice: ReportNotice, content: @Composable (Modifier) -> Unit) {
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(notice) { requester.bringIntoView() }
+    content(Modifier.bringIntoViewRequester(requester))
 }
 
 /** The follow-up sheet (PL): a heading and pane title, the lead, the outlined action and Done. Back or scrim is Done. */
