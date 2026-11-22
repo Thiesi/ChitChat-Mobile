@@ -219,9 +219,10 @@ against current main before acting.
     `find-people-presentation` captures.
 14. **Long words and punctuation at 200%.** On narrow windows, a word longer than the line,
     such as the server's role name "Super-Administrator.", breaks with its trailing period
-    starting the next line (PR #300 `deletion` endedrefusal captures). The step-up form dialog
-    scrolls at 200% with no scroll-edge divider, and dialog Cancel uses the action colour beside
-    an `error` action (PRs #297, #300): both belong to the modals restyle. A file name can
+    starting the next line (PR #300 `deletion` endedrefusal captures). Dialog Cancel uses the
+    action colour beside an `error` action (PRs #297, #300), which belongs to the modals restyle.
+    The step-up form dialog's missing scroll-edge divider at 200% was fixed by the form-dialog
+    scaffold (PR #328). A file name can
     break at its extension's dot ("chitchat-release." / "apk", PR #310 `files` card-apk at 200%);
     the middle ellipsis keeps the extension visible, but the break still falls at the dot.
 15. **The viewer's chrome is cramped at 200% (overhaul polish, not an open usability defect).** Since F6, a tap
@@ -234,6 +235,19 @@ against current main before acting.
     - **The state line after an expanded caption:** in wide windows at 200%, it follows with only the 4dp column gap.
       In `viewer-failed-landscape`, "… stayed until the" runs straight into "Couldn't load the full image" in the same
       colour. Type size and the line break tell them apart (PR #313's J).
+16. **Form dialogs at 200% (reporting R2, PRs #326 and #328).**
+    - **The one-column edge divider barely reads.** When a form dialog scrolls as one column, the
+      scaffold's 1dp `outline` divider falls on the surface's own rounded edge. The line cut off
+      mid-way is the effective scroll cue today. Evidence: PR #328 `stepup-light-font200-landscape-top`.
+    - **Radio rows touch.** In the report form at 200%, one category's helper text runs straight
+      into the next category's label. The label and helper styles still tell them apart. Evidence:
+      PR #327 `report-presentation` font200 form captures.
+    - **The details field has no name of its own (accessibility debt).** The report form's question
+      is a visible label and its own text node directly before the field, so a linear swipe reads
+      the question, then the field. Touched directly, though, TalkBack announces an unnamed edit
+      box: Compose UI 1.11.4 doesn't expose a text field's content description and has no
+      labeledBy or hint. Revisit once Compose offers one; the app-wide field-naming audit is #331.
+      Don't fix it by putting the question back as a floating label, which overlapped at 200%.
 
 ## Evidence
 

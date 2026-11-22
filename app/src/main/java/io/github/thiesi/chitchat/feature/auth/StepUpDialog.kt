@@ -55,7 +55,10 @@ internal fun StepUpDialog(title: String, methods: VerificationMethods, busy: Boo
     }
     // A form dialog (P-220 amendment): its own window above the keyboard, so Verify and Cancel never sit under it, and one
     // scrolling column when a short window leaves the body under 120dp (PL, TL; #326's landscape finding).
-    io.github.thiesi.chitchat.core.ui.FormDialog(onDismissRequest = onCancel,
+    // PL (2026-11-22): an outside tap does nothing in every phase, empty included. The dialog moves up as the keyboard
+    // shows, so a tap meant for Verify could land beside it and discard a typed password or recovery code (#333's run
+    // 45032291123). Cancel and Back still cancel.
+    io.github.thiesi.chitchat.core.ui.FormDialog(onDismissRequest = onCancel, dismissOnOutsideTap = false,
         title = { Text(title) },
         modifier = Modifier.lanternDialogEdge(),
         bodyArrangement = Arrangement.spacedBy(16.dp),
