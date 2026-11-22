@@ -254,7 +254,7 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
         title = { Text(title, modifier = Modifier.semantics { heading() }) },
         body = {
             Column(Modifier.fillMaxWidth().testTag("report_body"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (person != null) PersonContext(name) else subject?.let { ContextCard(it) }
+                if (person != null) PersonContext(name, person.userId) else subject?.let { ContextCard(it) }
                 if (unknown) Summary(state) else Form(reports, state, sending)
                 notice?.let { NoticeText(it, waitSeconds, waiting, name) }
                 Text(if (person != null) personWho(reportPlace(state, place), name, state.pictureAvailable) else when (place) {
@@ -310,16 +310,17 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
 }
 
 /**
- * R3: who is being reported, the person's pebble and username (reporting.md). The pebble is decoration only. The name is
- * server text, so it wraps and is never ellipsized (PL).
+ * R3: who is being reported, the person's pebble and username (reporting.md). The pebble is decoration only: the Lantern
+ * pebble, the person's identity hue with the initial in ink in both themes (PL: a `raised` fill vanished on the dialog's
+ * own `raised` container and left a stray letter). The name is server text, so it wraps and is never ellipsized (PL).
  */
 @Composable
-private fun PersonContext(name: String) = Row(Modifier.fillMaxWidth().testTag("report_context"),
+private fun PersonContext(name: String, userId: Long) = Row(Modifier.fillMaxWidth().testTag("report_context"),
     horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-    androidx.compose.foundation.layout.Box(Modifier.size(32.dp).background(ChitChatTheme.colors.raised, CircleShape)
+    androidx.compose.foundation.layout.Box(Modifier.size(32.dp).background(io.github.thiesi.chitchat.core.theme.identityHue(userId), CircleShape)
         .clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
         Text(io.github.thiesi.chitchat.feature.profile.profileInitial(name), style = MaterialTheme.typography.labelLarge,
-            color = ChitChatTheme.colors.text)
+            color = io.github.thiesi.chitchat.core.theme.Lantern.ink)
     }
     Text(name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
         modifier = Modifier.weight(1f).testTag("report_person"))
@@ -442,11 +443,25 @@ private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolea
         ReportNotice.NotSent -> InlineError(stringResource(R.string.report_not_sent))
         // Person outcomes (reporting.md): a level-2 notice that nothing was sent; the picture gone, with its category
         // removed; and the Check that found nothing, after which Send report is an explicit choice again.
-        ReportNotice.SnapshotUnavailable -> WarningNotice(stringResource(R.string.report_person_snapshot_lead),
-            stringResource(R.string.report_person_snapshot_body, name), Modifier.testTag("report_notice"))
+        ReportNotice.SnapshotUnavailable -> InViewNotice(notice) { modifier ->
+            WarningNotice(stringResource(R.string.report_person_snapshot_lead), stringResource(R.string.report_person_snapshot_body, name),
+                modifier.testTag("report_notice")) }
         ReportNotice.PictureGone -> InlineError(stringResource(R.string.report_person_picture_gone, name))
-        ReportNotice.DidNotArrive -> WarningNotice(stringResource(R.string.report_person_did_not_arrive), "", Modifier.testTag("report_notice"))
+        ReportNotice.DidNotArrive -> InViewNotice(notice) { modifier ->
+            WarningNotice(stringResource(R.string.report_person_did_not_arrive), "", modifier.testTag("report_notice")) }
     }
+}
+
+/**
+ * A level-2 notice that appears after Send is brought into view when it appears, as InlineError and the wait line are
+ * (PL and TL, 2026-11-22; measured at 200% portrait: the WarningNotice lines ended out of view below the field). A scroll
+ * only: no focus or caret change and no extra announcement. One taller than the body shows from its top.
+ */
+@Composable
+private fun InViewNotice(notice: ReportNotice, content: @Composable (Modifier) -> Unit) {
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(notice) { requester.bringIntoView() }
+    content(Modifier.bringIntoViewRequester(requester))
 }
 
 /** The follow-up sheet (PL): a heading and pane title, the lead, the outlined action and Done. Back or scrim is Done. */

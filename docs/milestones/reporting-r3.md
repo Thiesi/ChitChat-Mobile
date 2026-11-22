@@ -44,6 +44,21 @@ person", P-165–P-167), the PL's rulings of 2026-11-20 and the TL's R3 plan and
     reads as the 201. Not found shows "Your report didn't arrive." and Send report is an explicit choice again. A failed
     read stays Unknown.
 
+## Notices after Send (PL and TL, 2026-11-22)
+
+Measured at 200% portrait: Send disables the details field, so its focus and the keyboard go before the outcome, and
+the form switches to its pinned layout. The two level-2 notices, "Nothing was sent." (snapshot) and "Your report didn't
+arrive.", ended out of view below the field, while InlineError and the wait line already brought themselves into view.
+- **The fix:** both now bring themselves into view when they appear, as a scroll only. A notice taller than the body
+  (the snapshot one at 200%) shows from its top.
+- **Precedence:** the notice holds the view until the person's next interaction, usually a tap on the field. The
+  keyboard then returns and the field's caret line is brought back.
+- **No focus return:** the app never brings focus or the keyboard back after a refusal that keeps the form, for message
+  and person reports alike. The person taps the field.
+- **`ReportNoticeViewportTest`** asserts each line in view when it appears (snapshot, picture gone, the wait line,
+  didn't arrive, R2's NotSent), no focus and no keyboard after the refusal, and, after a native tap on the field, the
+  caret line above the keyboard.
+
 ## A report already held in that conversation (TL condition 1)
 
 The entry stays enabled, and nothing held is replaced without the person seeing it:
