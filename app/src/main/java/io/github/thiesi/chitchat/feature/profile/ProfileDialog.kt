@@ -21,8 +21,14 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
+/**
+ * The read-only profile card. R3 (P-165): [onReport] is Report {name}…, passed only when the server allows a report and
+ * the card has a conversation to report from; [reported] shows "You've reported {name}." instead. Both come from the
+ * rendered profile's own facts. Neither shows while loading or after an error.
+ */
 @Composable
-fun ProfileDialog(state: ProfileState, canRefresh: Boolean, onRefresh: () -> Unit, onClose: () -> Unit) {
+fun ProfileDialog(state: ProfileState, canRefresh: Boolean, onRefresh: () -> Unit, onClose: () -> Unit,
+    onReport: (() -> Unit)? = null, reported: Boolean = false) {
     val locale = LocalConfiguration.current.locales[0]
     AlertDialog(onDismissRequest = onClose, modifier = Modifier.testTag("profile_dialog").lanternDialogEdge(),
         title = { Text(stringResource(R.string.profile_title)) }, text = {
@@ -39,6 +45,16 @@ fun ProfileDialog(state: ProfileState, canRefresh: Boolean, onRefresh: () -> Uni
                     if (date != null) Text(stringResource(if (person.guest) R.string.profile_visit_since else R.string.profile_member_since, date))
                     // Metadata is no permission or image URL. Do not describe an unloaded avatar as absent.
                     Text(stringResource(R.string.profile_read_only))
+                    // Reporting is a safety action, never destructive: a plain text row, not error-coloured (reporting.md).
+                    if (!state.loading && state.error == null) {
+                        if (onReport != null) TextButton(onClick = onReport, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("profile_report")) {
+                            Text(stringResource(R.string.report_person_action, person.username), modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.onSurface)
+                        } else if (reported) Text(stringResource(R.string.report_person_reported, person.username),
+                            color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.textMuted,
+                            modifier = Modifier.testTag("profile_reported"))
+                    }
                 }
                 state.error?.let { Text(profileError(it), color = MaterialTheme.colorScheme.error) }
             }

@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
@@ -173,6 +176,51 @@ class FormDialogGeometryTest {
                 compose.waitForIdle()
                 assertEquals("recovery=$recovery: ${if (recovery) "Cancel" else "Back"} still cancels", 1, cancelled)
             }
+        }
+    }
+
+    /**
+     * TL (2026-11-22): the hold hook. With a focused field scrolled out of view, a layout change (the keyboard closing)
+     * doesn't scroll back to it while the hold is on; released, the next layout change (the keyboard showing) does, as
+     * without a hold. Off by default: every other case here runs without it.
+     */
+    @Test fun theHoldSuppressesTheFocusedFieldScrollUntilReleased() {
+        var hold by androidx.compose.runtime.mutableStateOf(false)
+        var keyboard: androidx.compose.ui.platform.SoftwareKeyboardController? = null
+        host(2f, landscape = false, {
+            FormDialog(onDismissRequest = {}, title = { androidx.compose.material3.Text("Hold") },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = {}) { androidx.compose.material3.Text("OK") } },
+                holdFocusedInView = hold) {
+                // The dialog's own controller: the activity's would target the activity window, not the dialog's field
+                // (run 45075992645).
+                keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+                androidx.compose.material3.Text("The top line", androidx.compose.ui.Modifier.testTag("hold_top"))
+                repeat(10) { androidx.compose.material3.Text("A line of body text that takes room, number $it") }
+                var text by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+                androidx.compose.material3.OutlinedTextField(text, { text = it },
+                    androidx.compose.ui.Modifier.testTag("hold_field"))
+            }
+        }) {
+            compose.onNodeWithTag("hold_field").performScrollTo()
+            compose.tapNativeInput("hold_field", imeBottom = { focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+            compose.onNodeWithTag("hold_top").performScrollTo()
+            compose.waitForIdle()
+            fun visible(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInWindow.height
+            assertTrue("The top line is in view before the hold", visible("hold_top") > 0f)
+            compose.runOnIdle { hold = true }
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.waitForIdle()
+            val held = "top=${visible("hold_top")} field=${visible("hold_field")}"
+            recordFormDialogMetrics("case=hold-held $held")
+            assertTrue("Held: the keyboard closing didn't scroll back to the field ($held)", visible("hold_top") > 0f)
+            compose.runOnIdle { hold = false; keyboard?.show() }
+            compose.waitUntil(5_000) { focusedWindowIme().visible }
+            compose.waitForIdle()
+            val released = "top=${visible("hold_top")} field=${visible("hold_field")}"
+            recordFormDialogMetrics("case=hold-released $released")
+            assertTrue("Released: the keyboard showing scrolled back to the field ($released)", visible("hold_field") > 0f)
+            compose.onNodeWithTag("hold_field").assertIsFocused()
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
         }
     }
 

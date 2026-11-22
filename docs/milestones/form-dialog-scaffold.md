@@ -50,6 +50,21 @@ app window's bounds, not whether the keyboard covers a node.
   run 45032291123, where a test's click centre read before the move cancelled an export). Journeys that type into a
   form dialog and then press its button do so under the native input contract: one physical tap with the strict IME
   proof, then the text, then an OS-routed tap whose bounds are read after the move.
+- **Holding a notice (`holdFocusedInView`, PL and TL, 2026-11-22):** a hook for a caller whose in-form notice must outlive
+  a layout change. While it's true, the keep-the-focused-field-in-view effect does nothing on a keyboard show or hide or a
+  mode switch, and the caller's notice re-brings itself into view, keyed on `LocalFormDialogLayout`. The caller sets it
+  when a notice appears and clears it at the person's next interaction:
+  - (a) the IME going from hidden to shown while the field is focused (a finger tap, TalkBack's double-tap activation, any
+    re-show), read from the dialog window's own insets;
+  - (b) a focus gain on the field;
+  - (c) typing, IME composition included;
+  - (d) a choice (the report form's category).
+
+  An IME already up when the notice appears is no transition and doesn't clear it. After (a) the report form brings the
+  field back into view once, since the focused-field effect may have run while the hold was on; otherwise the
+  focused-field effect behaves as before. It's a scroll only: no focus, caret or accessibility-focus change, and no
+  announcement. Off by default, so StepUp and other form dialogs are unchanged. The report form uses it for every in-form
+  line after Send.
 - **By design (PL's rule):** in one-column mode the buttons are reached by scrolling while the field keeps focus. They
   aren't pinned on screen with the keyboard up; every one is reachable above the IME by scroll. This isn't a regression.
 - **StepUpDialog and the report form (#326, R2)** use it. Tags, callbacks and copy are unchanged.

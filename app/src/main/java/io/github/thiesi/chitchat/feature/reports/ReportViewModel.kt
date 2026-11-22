@@ -55,6 +55,12 @@ enum class ReportOpen {
     BUSY,
     /** No signed-in session for this model's identity. */
     UNAVAILABLE,
+    /**
+     * R3: Report {name}… found this conversation's own report held, so nothing new opens (TL): a pending Unknown for
+     * another target shows its read-only summary instead, and an outcome that settled while the card covered the
+     * conversation is left for its line to be seen. Neither is replaced without the person seeing it.
+     */
+    HELD,
 }
 
 sealed interface ReportPhase {
@@ -88,6 +94,21 @@ class ReportState internal constructor(
     val presented: Boolean = false,
     /** A finished outcome that arrived while the dialog was up: the follow-up sheet shows once, in place, never on return. */
     val sheet: Boolean = false,
+    /** A person report's display name, frozen from the card's rendered profile when Report {name}… was tapped (R3). */
+    val name: String? = null,
+    /** When a [ReportPhase.Done] settled, in [ReportViewModel.settled]'s count; 0 before. */
+    val settledAt: Long = 0,
+    /**
+     * Which occurrence of the phase's notice this is: each outcome that sets one counts afresh, so the same notice twice
+     * (a second snapshot refusal) is brought into view again, even when a fast reply leaves no Sending frame (TL).
+     */
+    val noticeSeq: Long = 0,
+    /**
+     * The phase's notice holds the form's view (PL and TL, 2026-11-22): set with each new occurrence, cleared at the
+     * person's next interaction: (a) the keyboard going from hidden to shown while the details field is focused, (b) the
+     * field gaining focus, (c) typing, (d) a category. Memory only.
+     */
+    val noticeHeld: Boolean = false,
 ) {
     val categories: List<ReportCategory>
         get() = if (target is ReportTarget.Person) ReportCategory.personCategories(pictureAvailable) else ReportCategory.messageCategories
@@ -96,8 +117,13 @@ class ReportState internal constructor(
 
     internal fun copy(category: ReportCategory? = this.category, details: String = this.details, phase: ReportPhase = this.phase,
         pictureAvailable: Boolean = this.pictureAvailable, afterUnknown: Boolean = this.afterUnknown,
-        presented: Boolean = this.presented, sheet: Boolean = this.sheet) =
-        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown, presented, sheet)
+        presented: Boolean = this.presented, sheet: Boolean = this.sheet, noticeHeld: Boolean = this.noticeHeld) =
+        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown, presented, sheet, name, settledAt, noticeSeq,
+            noticeHeld)
+
+    /** The same state with a fresh notice occurrence (see [noticeSeq]). */
+    internal fun withNoticeSeq(seq: Long) =
+        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown, presented, sheet, name, settledAt, seq, true)
 
     override fun toString() = "ReportState(${target::class.simpleName}, phase=$phase)"
 }
@@ -136,7 +162,7 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
      * does, and a pending Unknown for another target is dropped with nothing sent: the server's one-report-per-case
      * rule covers one that did arrive (TL, PL). Reopening the same target's Unknown keeps it (its Review).
      */
-    fun open(target: ReportTarget, origin: ReportOrigin, pictureAvailable: Boolean = false): ReportOpen {
+    fun open(target: ReportTarget, origin: ReportOrigin, pictureAvailable: Boolean = false, name: String? = null): ReportOpen {
         if (operations.session.value.identity() == null || operations.session.value.identity() != identity) return ReportOpen.UNAVAILABLE
         val current = mutable.value
         if (inFlight) return ReportOpen.BUSY
@@ -148,8 +174,41 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
         }
         drop()
         mutable.value = ReportState(target, origin, null, "", ReportPhase.Editing(), pictureAvailable && target is ReportTarget.Person, false,
-            presented = true)
+            presented = true, name = name?.takeIf { target is ReportTarget.Person })
         return ReportOpen.OPENED
+    }
+
+    private var settledCount = 0L
+
+    /** How many reports have settled into an outcome: a profile card records it when it opens (R3, [requestPerson]). */
+    val settled: Long get() = settledCount
+
+    /**
+     * Report {name}… on a profile card shown over conversation [origin] (R3, TL conditions). [target], [pictureAvailable]
+     * and [name] are frozen from the card's rendered profile at the tap. The card closes on anything but UNAVAILABLE.
+     * - A report sending or checking: BUSY, with the still-sending line in [origin] (the entry itself stays enabled).
+     * - This conversation's pending Unknown for this person: its summary again (as Report… on the same message).
+     * - This conversation's pending Unknown for another target: HELD, and its summary shows; Send again, Check or Close
+     *   settles it first. It's never dropped silently (R2's message Report… still replaces it: the server's
+     *   one-report-per-case rule covers one that arrived, and the person sees the summary go).
+     * - This conversation's finished outcome that settled after the card opened ([cardOpenedAt], from [settled]): HELD,
+     *   so its line is seen before anything replaces it. One that settled before was already on screen in the stack the
+     *   card was opened from, and the new form replaces it as R2 does.
+     */
+    fun requestPerson(target: ReportTarget.Person, origin: ReportOrigin, pictureAvailable: Boolean, name: String,
+        cardOpenedAt: Long): ReportOpen {
+        if (operations.session.value.identity() == null || operations.session.value.identity() != identity) return ReportOpen.UNAVAILABLE
+        if (inFlight) return request(target, origin, pictureAvailable, name)
+        val current = mutable.value
+        if (current != null && current.origin == origin) when (current.phase) {
+            is ReportPhase.Unknown -> if (current.target != target) {
+                mutable.value = current.copy(presented = true)
+                return ReportOpen.HELD
+            }
+            is ReportPhase.Done -> if (current.settledAt > cardOpenedAt) return ReportOpen.HELD
+            else -> Unit
+        }
+        return open(target, origin, pictureAvailable, name)
     }
 
     /** The UI showed the finished outcome's line once, in its origin conversation: it's gone now (PL). */
@@ -176,8 +235,8 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
     val busyNotice = busyMutable.asStateFlow()
 
     /** Report… from the message actions: [open], and a BUSY refusal shows its line in [origin]. */
-    fun request(target: ReportTarget, origin: ReportOrigin, pictureAvailable: Boolean = false): ReportOpen =
-        open(target, origin, pictureAvailable).also { if (it == ReportOpen.BUSY) busyMutable.value = origin }
+    fun request(target: ReportTarget, origin: ReportOrigin, pictureAvailable: Boolean = false, name: String? = null): ReportOpen =
+        open(target, origin, pictureAvailable, name).also { if (it == ReportOpen.BUSY) busyMutable.value = origin }
 
     /**
      * Leaving conversation [origin] (a navigation departure, not a configuration change or a background). Its own shown
@@ -198,12 +257,28 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
     fun choose(category: ReportCategory) {
         val current = mutable.value ?: return
         if (!current.editable || category !in current.categories) return
-        mutable.value = current.copy(category = category)
+        mutable.value = current.copy(category = category, noticeHeld = false)
+    }
+
+    /** (b) The details field gained focus: the person's next interaction, so a held notice lets go (PL, TL). */
+    fun fieldFocused() = release()
+
+    /**
+     * (a) The keyboard went from hidden to shown while the details field was focused (a tap, TalkBack's activation, any
+     * re-show): the person's next interaction. Returns whether a notice was held, so the form brings the field back.
+     */
+    fun keyboardShown(): Boolean = release()
+
+    private fun release(): Boolean {
+        val current = mutable.value ?: return false
+        if (!current.noticeHeld) return false
+        mutable.value = current.copy(noticeHeld = false)
+        return true
     }
 
     fun edit(details: String) {
         val current = mutable.value ?: return
-        if (current.editable) mutable.value = current.copy(details = details)
+        if (current.editable) mutable.value = current.copy(details = details, noticeHeld = false)
     }
 
     /** Send report: the first attempt, or a new one after Did not arrive or a refusal that kept the form. */
@@ -238,7 +313,7 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
             mutable.value = when (facts?.reportedByMe) {
                 true -> done(ReportOutcome.Sent)
                 // It didn't arrive: the form is editable again and Send report is an explicit choice.
-                false -> now.copy(phase = ReportPhase.Editing(ReportNotice.DidNotArrive), afterUnknown = false)
+                false -> now.copy(phase = ReportPhase.Editing(ReportNotice.DidNotArrive), afterUnknown = false).withNoticeSeq(++noticeCount)
                 // The read failed or said nothing: still Unknown, with Check still offered.
                 null -> now.copy(phase = ReportPhase.Unknown())
             }
@@ -295,7 +370,7 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
     private fun done(outcome: ReportOutcome) = mutable.value!!.let {
         // The follow-up sheet only for a success that lands while the dialog is up (PL: never on return).
         ReportState(it.target, it.origin, null, "", ReportPhase.Done(outcome), false, false, presented = false,
-            sheet = it.presented && outcome !is ReportOutcome.Refused)
+            sheet = it.presented && outcome !is ReportOutcome.Refused, name = it.name, settledAt = ++settledCount)
     }
 
     private fun launch(sending: ReportState) {
@@ -313,7 +388,16 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
         }
     }
 
-    private fun next(sent: ReportState, result: ReportResult): ReportState = when (result) {
+    private var noticeCount = 0L
+
+    /** The outcome's state; one that carries a notice counts as a new occurrence of it. */
+    private fun next(sent: ReportState, result: ReportResult): ReportState = outcome(sent, result).let { state ->
+        val phase = state.phase
+        val notice = (phase as? ReportPhase.Editing)?.notice ?: (phase as? ReportPhase.Unknown)?.notice
+        if (notice != null) state.withNoticeSeq(++noticeCount) else state
+    }
+
+    private fun outcome(sent: ReportState, result: ReportResult): ReportState = when (result) {
         is ReportResult.Sent -> done(ReportOutcome.Sent)
         // A Send again answered already-reported: the first attempt arrived, so it reads as sent (PL).
         ReportResult.AlreadyReported -> done(if (sent.afterUnknown) ReportOutcome.Sent else ReportOutcome.AlreadyReported)

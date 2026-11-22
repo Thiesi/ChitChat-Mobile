@@ -5,6 +5,12 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import io.github.thiesi.chitchat.core.ui.FormDialog
 import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -106,6 +112,9 @@ internal class ReportSubject(val sender: String, val excerpt: ReportExcerpt?, va
 /** The follow-up sheet's action when it applies (PL): Ignore in a room, Block in a DM. Null shows no sheet. */
 internal class ReportFollowUp(val name: String, val direct: Boolean, val act: () -> Unit)
 
+/** The follow-up's inputs: what was reported, and for a person (R3) the name frozen from their card. */
+internal class ReportFollowUpTarget(val target: ReportTarget, val name: String?)
+
 /**
  * A conversation's own report: the form dialog while it's presented, and the follow-up sheet once, in place (PL). Only
  * the report whose origin is [origin] shows here. Leaving the conversation (not a configuration change) consumes its shown
@@ -119,7 +128,7 @@ internal sealed interface ReportPlace {
 
 @Composable
 internal fun ReportHost(origin: ReportOrigin, place: ReportPlace, subject: (ReportTarget) -> ReportSubject?,
-    followUp: (ReportTarget) -> ReportFollowUp?) {
+    followUp: (ReportFollowUpTarget) -> ReportFollowUp?) {
     val reports = LocalReports.current ?: return
     val activity = LocalActivity.current
     DisposableEffect(reports, origin) {
@@ -127,9 +136,10 @@ internal fun ReportHost(origin: ReportOrigin, place: ReportPlace, subject: (Repo
     }
     val state by reports.state.collectAsState()
     val current = state?.takeIf { it.origin == origin } ?: return
-    if (current.presented) ReportDialog(reports, current, place, subject(current.target))
+    // A person report's context is the name frozen from their card (R3), not something the conversation looks up.
+    if (current.presented) ReportDialog(reports, current, place, if (current.target is ReportTarget.Person) null else subject(current.target))
     if (current.sheet) {
-        val action = followUp(current.target)
+        val action = followUp(ReportFollowUpTarget(current.target, current.name))
         // An action that doesn't apply (already ignored or blocked, unknown policy) shows no sheet at all (PL).
         if (action == null) LaunchedEffect(Unit) { reports.dismissSheet() } else FollowUpSheet(action) { reports.dismissSheet() }
     }
@@ -158,7 +168,7 @@ internal fun ReportNotices(origin: ReportOrigin, place: ReportPlace, modifier: M
         if (current == null) return@Column
         when (val phase = current.phase) {
             ReportPhase.Sending, ReportPhase.Checking -> if (!current.presented) NoticeLine(stringResource(R.string.report_sending_line), "report_sending_line")
-            is ReportPhase.Done -> NoticeLine(outcomeLine(phase.outcome, place), "report_outcome")
+            is ReportPhase.Done -> NoticeLine(outcomeLine(phase.outcome, current, place), "report_outcome")
             is ReportPhase.Unknown -> if (!current.presented) WarningNotice(stringResource(R.string.report_unknown), "",
                 Modifier.testTag("report_unknown_notice")) {
                 TextButton(onClick = reports::review, modifier = Modifier.heightIn(min = 48.dp).testTag("report_review")) {
@@ -170,16 +180,34 @@ internal fun ReportNotices(origin: ReportOrigin, place: ReportPlace, modifier: M
     }
 }
 
+/**
+ * Where a report's copy points. A person report (R3) uses its own frozen room context: none is global (the DM wording),
+ * and a context other than this conversation's room gets the neutral room wording, never another room's name.
+ */
+private fun reportPlace(state: ReportState, place: ReportPlace): ReportPlace {
+    val person = state.target as? ReportTarget.Person ?: return place
+    val room = person.roomId ?: return ReportPlace.Direct
+    return if ((state.origin as? ReportOrigin.Room)?.roomId == room && place is ReportPlace.Room) place else ReportPlace.Room(null)
+}
+
 @Composable
-private fun outcomeLine(outcome: ReportOutcome, place: ReportPlace) = when (outcome) {
-    // A room whose name isn't loaded yet gets the neutral room wording, never an empty name (review).
-    ReportOutcome.Sent -> when (place) {
-        is ReportPlace.Room -> place.name?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.report_sent_room, it) }
-            ?: stringResource(R.string.report_sent_room_unnamed)
-        ReportPlace.Direct -> stringResource(R.string.report_sent_dm)
+private fun outcomeLine(outcome: ReportOutcome, state: ReportState, place: ReportPlace): String {
+    val name = state.name?.takeIf { state.target is ReportTarget.Person }
+    return when (outcome) {
+        // A room whose name isn't loaded yet gets the neutral room wording, never an empty name (review).
+        ReportOutcome.Sent -> when (val shown = reportPlace(state, place)) {
+            is ReportPlace.Room -> shown.name?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.report_sent_room, it) }
+                ?: stringResource(R.string.report_sent_room_unnamed)
+            ReportPlace.Direct -> stringResource(R.string.report_sent_dm)
+        }
+        ReportOutcome.AlreadyReported -> name?.let { stringResource(R.string.report_person_already, it) } ?: stringResource(R.string.report_already)
+        // A person: "You can't report {name} here." (also guest_not_allowed, PL ruling 3), or the account is gone.
+        is ReportOutcome.Refused -> when {
+            name != null && outcome.reason == ReportRefusal.NOT_FOUND -> stringResource(R.string.report_person_not_found)
+            name != null -> stringResource(R.string.report_person_not_allowed, name)
+            else -> stringResource(if (outcome.reason == ReportRefusal.NOT_REPORTABLE) R.string.report_not_reportable else R.string.report_not_allowed)
+        }
     }
-    ReportOutcome.AlreadyReported -> stringResource(R.string.report_already)
-    is ReportOutcome.Refused -> stringResource(if (outcome.reason == ReportRefusal.NOT_REPORTABLE) R.string.report_not_reportable else R.string.report_not_allowed)
 }
 
 /** A level-1 line, announced politely once. */
@@ -196,6 +224,8 @@ private val categoryText = mapOf(
     ReportCategory.PRIVACY to (R.string.report_privacy to R.string.report_privacy_help),
     ReportCategory.IMPERSONATION to (R.string.report_impersonation to R.string.report_impersonation_help),
     ReportCategory.OTHER to (R.string.report_other to R.string.report_other_help),
+    ReportCategory.OFFENSIVE_USERNAME to (R.string.report_offensive_username to R.string.report_offensive_username_help),
+    ReportCategory.OFFENSIVE_PROFILE_PICTURE to (R.string.report_offensive_picture to R.string.report_offensive_picture_help),
 )
 
 /**
@@ -215,21 +245,25 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
     var now by remember(notice) { mutableLongStateOf(System.currentTimeMillis()) }
     if (until != null) LaunchedEffect(until) { while (now < until) { delay(minOf(1_000L, until - now)); now = System.currentTimeMillis() } }
     val waiting = until != null && now < until
-    val title = stringResource(R.string.report_title)
+    val person = state.target as? ReportTarget.Person
+    val name = state.name.orEmpty()
+    val title = if (person != null) stringResource(R.string.report_person_title, name) else stringResource(R.string.report_title)
     // The form-dialog scaffold (#328): its own window above the keyboard, one scrolling column when a short window leaves
     // the body under 120dp, so Send and Cancel never sit under the IME or squeeze the form away.
     // PL: an outside tap does nothing in every phase, so a stray tap never loses the chosen reason, the typed details or
     // the Unknown summary (whose Close also dismisses its notice). Cancel, Close and Back still close it; while sending,
     // close is refused.
+    // A shown notice holds the view until the person's next interaction (PL, TL): FormDialog's hook, scroll only.
     FormDialog(onDismissRequest = { if (!sending) reports.close() }, dismissOnOutsideTap = false,
+        holdFocusedInView = state.noticeHeld && notice != null,
         modifier = Modifier.lanternDialogEdge().semantics { paneTitle = title }.testTag("report_dialog"),
         title = { Text(title, modifier = Modifier.semantics { heading() }) },
         body = {
             Column(Modifier.fillMaxWidth().testTag("report_body"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                subject?.let { ContextCard(it) }
+                if (person != null) PersonContext(name, person.userId) else subject?.let { ContextCard(it) }
                 if (unknown) Summary(state) else Form(reports, state, sending)
-                notice?.let { NoticeText(it, waitSeconds, waiting) }
-                Text(when (place) {
+                notice?.let { NoticeText(it, waitSeconds, waiting, name, state.noticeSeq, state.noticeHeld) }
+                Text(if (person != null) personWho(reportPlace(state, place), name, state.pictureAvailable) else when (place) {
                     is ReportPlace.Room -> place.name?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.report_who_room, it) }
                         ?: stringResource(R.string.report_who_room_unnamed)
                     ReportPlace.Direct -> stringResource(R.string.report_who_dm)
@@ -242,8 +276,22 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
         },
         confirmButton = {
             when {
+                // A person's Unknown offers Check, one profile GET, never a POST (P-167); a message's offers Send again.
+                unknown && person != null -> TextButton(onClick = reports::check, modifier = Modifier.testTag("report_check")) {
+                    Text(stringResource(R.string.report_check))
+                }
                 unknown -> TextButton(onClick = reports::sendAgain, enabled = !waiting, modifier = Modifier.testTag("report_send_again")) {
                     Text(stringResource(R.string.report_send_again))
+                }
+                phase == ReportPhase.Checking -> {
+                    val spoken = stringResource(R.string.report_checking_spoken)
+                    TextButton(onClick = {}, enabled = false, modifier = Modifier.testTag("report_check")
+                        .clearAndSetSemantics { contentDescription = spoken; testTag = "report_check" }) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Text(stringResource(R.string.report_check))
+                        }
+                    }
                 }
                 sending -> {
                     val spoken = stringResource(R.string.report_sending_spoken)
@@ -265,6 +313,32 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
                 Text(stringResource(if (unknown) R.string.report_close else R.string.cancel))
             }
         })
+}
+
+/**
+ * R3: who is being reported, the person's pebble and username (reporting.md). The pebble is decoration only: the Lantern
+ * pebble, the person's identity hue with the initial in ink in both themes (PL: a `raised` fill vanished on the dialog's
+ * own `raised` container and left a stray letter). The name is server text, so it wraps and is never ellipsized (PL).
+ */
+@Composable
+private fun PersonContext(name: String, userId: Long) = Row(Modifier.fillMaxWidth().testTag("report_context"),
+    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    androidx.compose.foundation.layout.Box(Modifier.size(32.dp).background(io.github.thiesi.chitchat.core.theme.identityHue(userId), CircleShape)
+        .clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
+        Text(io.github.thiesi.chitchat.feature.profile.profileInitial(name), style = MaterialTheme.typography.labelLarge,
+            color = io.github.thiesi.chitchat.core.theme.Lantern.ink)
+    }
+    Text(name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+        modifier = Modifier.weight(1f).testTag("report_person"))
+}
+
+/** Who sees a person report (reporting.md): the room's owners and moderators too with a room context, else global. */
+@Composable
+private fun personWho(place: ReportPlace, name: String, picture: Boolean): String = when (place) {
+    is ReportPlace.Room -> place.name?.takeIf { it.isNotBlank() }?.let { room ->
+        stringResource(if (picture) R.string.report_person_who_room else R.string.report_person_who_room_no_picture, room, name)
+    } ?: stringResource(if (picture) R.string.report_person_who_room_unnamed else R.string.report_person_who_room_unnamed_no_picture, name)
+    ReportPlace.Direct -> stringResource(if (picture) R.string.report_person_who_global else R.string.report_person_who_global_no_picture, name)
 }
 
 @Composable
@@ -320,8 +394,25 @@ private fun Form(reports: ReportViewModel, state: ReportState, sending: Boolean)
     // The field's own value, seeded from the VM per form and pushed to it on every change: a value read back through
     // the StateFlow lags a frame and reset the caret or dropped input (TL). Memory only; a reopen or recreation reseeds.
     var field by remember(state.target) { mutableStateOf(TextFieldValue(state.details, TextRange(state.details.length))) }
+    // The person's next interaction lets a held notice go (TL, PL): (b) a focus gain on the field, and (a) the keyboard
+    // going from hidden to shown while the field is focused, read from the dialog window's own insets. Focus or a keyboard
+    // that is merely kept (an instant reply) is neither. Observed only: nothing is consumed or intercepted.
+    var hadFocus by remember { mutableStateOf(false) }
+    val imeShown = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+    var wasShown by remember { mutableStateOf(imeShown) }
+    val fieldInView = remember { BringIntoViewRequester() }
+    LaunchedEffect(imeShown) {
+        val shownNow = imeShown && !wasShown
+        wasShown = imeShown
+        // The form's own keep-the-field-in-view effect may have run while the hold was on, so the field is brought back
+        // here, once, as a scroll only.
+        if (shownNow && hadFocus && reports.keyboardShown()) { androidx.compose.runtime.withFrameNanos { }; fieldInView.bringIntoView() }
+    }
     OutlinedTextField(field, { field = it; reports.edit(it.text) }, enabled = !sending, minLines = 3,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("report_details"))
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).bringIntoViewRequester(fieldInView).onFocusChanged { focus ->
+            if (focus.isFocused && !hadFocus) reports.fieldFocused()
+            hadFocus = focus.isFocused
+        }.testTag("report_details"))
     Counter(state.details)
 }
 
@@ -355,26 +446,68 @@ private fun Summary(state: ReportState) {
 }
 
 @Composable
-private fun WaitLine(text: String) {
+private fun WaitLine(text: String, modifier: Modifier = Modifier) {
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(text) { requester.bringIntoView() }
     Text(text, color = ChitChatTheme.colors.textMuted, style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.bringIntoViewRequester(requester).semantics { liveRegion = LiveRegionMode.Polite }.testTag("report_wait"))
+        modifier = modifier.bringIntoViewRequester(requester).semantics { liveRegion = LiveRegionMode.Polite }.testTag("report_wait"))
 }
 
 @Composable
-private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolean) {
+private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolean, name: String, occurrence: Long, held: Boolean) {
     when (notice) {
         // Status ladder row 7: a wait is level 1, a muted line, never the person's error (PL). A known wait's line goes
         // when it ends, as Send re-enables; "Try again later." only when the delay was unknown from the start (PL).
         is ReportNotice.RateLimited -> when {
-            waitSeconds != null && waiting -> WaitLine(stringResource(R.string.report_rate_limited, waitText(Wait.of(waitSeconds * 1000))))
-            waitSeconds == null -> WaitLine(stringResource(R.string.report_rate_limited_unknown))
+            waitSeconds != null && waiting -> InViewNotice(occurrence, held) { modifier ->
+                WaitLine(stringResource(R.string.report_rate_limited, waitText(Wait.of(waitSeconds * 1000))), modifier) }
+            waitSeconds == null -> InViewNotice(occurrence, held) { modifier ->
+                WaitLine(stringResource(R.string.report_rate_limited_unknown), modifier) }
             else -> Unit
         }
-        ReportNotice.NotSent, ReportNotice.SnapshotUnavailable, ReportNotice.PictureGone, ReportNotice.DidNotArrive ->
-            InlineError(stringResource(R.string.report_not_sent))
+        ReportNotice.NotSent -> InViewNotice(occurrence, held) { modifier ->
+            Box(modifier) { InlineError(stringResource(R.string.report_not_sent)) } }
+        // Person outcomes (reporting.md): a level-2 notice that nothing was sent; the picture gone, with its category
+        // removed; and the Check that found nothing, after which Send report is an explicit choice again.
+        ReportNotice.SnapshotUnavailable -> InViewNotice(occurrence, held) { modifier ->
+            WarningNotice(stringResource(R.string.report_person_snapshot_lead), stringResource(R.string.report_person_snapshot_body, name),
+                modifier.testTag("report_notice")) }
+        ReportNotice.PictureGone -> InViewNotice(occurrence, held) { modifier ->
+            Box(modifier) { InlineError(stringResource(R.string.report_person_picture_gone, name)) } }
+        ReportNotice.DidNotArrive -> InViewNotice(occurrence, held) { modifier ->
+            WarningNotice(stringResource(R.string.report_person_did_not_arrive), "", modifier.testTag("report_notice")) }
     }
+}
+
+/**
+ * An in-form line that appears after Send is brought into view when it appears (PL and TL, 2026-11-22; measured at 200%
+ * portrait: the WarningNotice lines ended out of view below the field). While it's [held] (until the person's next
+ * interaction) it's brought back into view across a layout change too: the keyboard closing, a mode switch. A scroll
+ * only: no focus or caret change and no extra announcement. One taller than the body shows from its top edge: the whole
+ * line first, then its top edge, which is a no-op for a line that fits.
+ */
+@Composable
+private fun InViewNotice(occurrence: Long, held: Boolean, content: @Composable (Modifier) -> Unit) {
+    val requester = remember { BringIntoViewRequester() }
+    val holding by androidx.compose.runtime.rememberUpdatedState(held)
+    val layout = io.github.thiesi.chitchat.core.ui.LocalFormDialogLayout.current
+    suspend fun bring() {
+        requester.bringIntoView()
+        requester.bringIntoView(androidx.compose.ui.geometry.Rect(0f, 0f, 1f, 1f))
+    }
+    // Keyed on the occurrence, not the notice: a second identical refusal is brought into view again (TL).
+    LaunchedEffect(occurrence) { bring() }
+    // Ordering (TL): a keyboard going from hidden to shown while the details field is focused ends the hold, rule (a),
+    // so that layout change belongs to the field: the form brings the field into view once and this doesn't re-bring the
+    // notice for it, so the two scrolls never race. Only the details field can bring the keyboard up in this form. While
+    // held, every other layout change (the keyboard hiding, a mode switch) brings the notice back.
+    val previous = remember { java.util.concurrent.atomic.AtomicReference(layout) }
+    LaunchedEffect(layout) {
+        val before = previous.getAndSet(layout)
+        val keyboardShowing = before?.ime == false && layout?.ime == true
+        if (holding && !keyboardShowing) { androidx.compose.runtime.withFrameNanos { }; bring() }
+    }
+    content(Modifier.bringIntoViewRequester(requester))
 }
 
 /** The follow-up sheet (PL): a heading and pane title, the lead, the outlined action and Done. Back or scrim is Done. */
