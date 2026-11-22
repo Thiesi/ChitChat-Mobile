@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ActivityScenario
@@ -153,7 +154,17 @@ class FormDialogGeometryTest {
                 assertEquals("recovery=$recovery: nothing verified", 0, verified)
                 assertTrue("recovery=$recovery: the dialog stays", compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty())
                 compose.onNodeWithTag("step_up_secret").assertTextContains(typed)
-                if (recovery) compose.onNode(hasText(context.getString(R.string.cancel)) and hasAnyAncestor(isDialog())).performClick()
+                // Back with the keyboard up hides the keyboard first (the platform's Back; run 45038305185): close it, and
+                // closing it isn't a cancel. Then Back, or Cancel, cancels. Cancel by its action: the dialog moves back down
+                // as the keyboard hides, and this half checks that Cancel cancels, not where a tap lands.
+                androidx.test.espresso.Espresso.closeSoftKeyboard()
+                compose.waitForIdle()
+                assertEquals("recovery=$recovery: closing the keyboard doesn't cancel", 0, cancelled)
+                assertTrue("recovery=$recovery: the dialog stays with the keyboard closed",
+                    compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty())
+                compose.onNodeWithTag("step_up_secret").assertTextContains(typed)
+                if (recovery) compose.onNode(hasText(context.getString(R.string.cancel)) and hasAnyAncestor(isDialog()))
+                    .performSemanticsAction(SemanticsActions.OnClick)
                 else androidx.test.espresso.Espresso.pressBack()
                 compose.waitForIdle()
                 assertEquals("recovery=$recovery: ${if (recovery) "Cancel" else "Back"} still cancels", 1, cancelled)
