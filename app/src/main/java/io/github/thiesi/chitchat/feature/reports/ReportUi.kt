@@ -256,7 +256,7 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
             Column(Modifier.fillMaxWidth().testTag("report_body"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (person != null) PersonContext(name, person.userId) else subject?.let { ContextCard(it) }
                 if (unknown) Summary(state) else Form(reports, state, sending)
-                notice?.let { NoticeText(it, waitSeconds, waiting, name) }
+                notice?.let { NoticeText(it, waitSeconds, waiting, name, state.noticeSeq) }
                 Text(if (person != null) personWho(reportPlace(state, place), name, state.pictureAvailable) else when (place) {
                     is ReportPlace.Room -> place.name?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.report_who_room, it) }
                         ?: stringResource(R.string.report_who_room_unnamed)
@@ -431,7 +431,7 @@ private fun WaitLine(text: String) {
 }
 
 @Composable
-private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolean, name: String) {
+private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolean, name: String, occurrence: Long) {
     when (notice) {
         // Status ladder row 7: a wait is level 1, a muted line, never the person's error (PL). A known wait's line goes
         // when it ends, as Send re-enables; "Try again later." only when the delay was unknown from the start (PL).
@@ -443,11 +443,11 @@ private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolea
         ReportNotice.NotSent -> InlineError(stringResource(R.string.report_not_sent))
         // Person outcomes (reporting.md): a level-2 notice that nothing was sent; the picture gone, with its category
         // removed; and the Check that found nothing, after which Send report is an explicit choice again.
-        ReportNotice.SnapshotUnavailable -> InViewNotice(notice) { modifier ->
+        ReportNotice.SnapshotUnavailable -> InViewNotice(occurrence) { modifier ->
             WarningNotice(stringResource(R.string.report_person_snapshot_lead), stringResource(R.string.report_person_snapshot_body, name),
                 modifier.testTag("report_notice")) }
         ReportNotice.PictureGone -> InlineError(stringResource(R.string.report_person_picture_gone, name))
-        ReportNotice.DidNotArrive -> InViewNotice(notice) { modifier ->
+        ReportNotice.DidNotArrive -> InViewNotice(occurrence) { modifier ->
             WarningNotice(stringResource(R.string.report_person_did_not_arrive), "", modifier.testTag("report_notice")) }
     }
 }
@@ -458,9 +458,10 @@ private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolea
  * only: no focus or caret change and no extra announcement. One taller than the body shows from its top.
  */
 @Composable
-private fun InViewNotice(notice: ReportNotice, content: @Composable (Modifier) -> Unit) {
+private fun InViewNotice(occurrence: Long, content: @Composable (Modifier) -> Unit) {
     val requester = remember { BringIntoViewRequester() }
-    LaunchedEffect(notice) { requester.bringIntoView() }
+    // Keyed on the occurrence, not the notice: a second identical refusal is brought into view again (TL).
+    LaunchedEffect(occurrence) { requester.bringIntoView() }
     content(Modifier.bringIntoViewRequester(requester))
 }
 
