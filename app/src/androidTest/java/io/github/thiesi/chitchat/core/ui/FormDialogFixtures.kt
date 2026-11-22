@@ -96,8 +96,9 @@ internal fun focusedWindowIme(): FocusedWindowIme {
 /**
  * One native tap in the window's left margin, halfway between the window edge and [surface]'s left edge, at its middle
  * height: outside the dialog surface, inside the dialog's own window (landscape leaves that margin at 320dp wide).
+ * Returns the tapped point on screen, for a caller to check against the surface and window as they are after the tap.
  */
-internal fun tapOutsideSurface(surface: androidx.compose.ui.test.SemanticsNodeInteraction) {
+internal fun tapOutsideSurface(surface: androidx.compose.ui.test.SemanticsNodeInteraction): androidx.compose.ui.geometry.Offset {
     val node = surface.fetchSemanticsNode()
     val bounds = node.boundsInWindow
     check(bounds.left >= 48f) { "No margin outside the surface to tap: $bounds" }
@@ -106,6 +107,27 @@ internal fun tapOutsideSurface(surface: androidx.compose.ui.test.SemanticsNodeIn
     io.github.thiesi.chitchat.testing.injectNativeTap(point, android.os.SystemClock::uptimeMillis) {
         InstrumentationRegistry.getInstrumentation().uiAutomation.injectInputEvent(it, true)
     }
+    return point
+}
+
+/**
+ * TL: proves a [tapOutsideSurface] point hit the dialog's own area, re-reading [surface] after the tap. Only x matters: a
+ * form dialog's surface is centred horizontally, and the keyboard changes only the height it's laid out in, so its left
+ * edge is the same before and after any IME move. A point left of that edge and inside the dialog window's bounds is on
+ * the dialog's area, never on the surface or in another window (the keyboard's included, when it's hidden).
+ */
+internal fun assertTappedDialogArea(point: androidx.compose.ui.geometry.Offset, surface: androidx.compose.ui.test.SemanticsNodeInteraction) {
+    val node = surface.fetchSemanticsNode()
+    val surfaceLeft = node.boundsInWindow.left + (node.positionOnScreen - node.positionInWindow).x
+    val window = IntArray(2); var width = 0; var height = 0
+    InstrumentationRegistry.getInstrumentation().runOnMainSync {
+        val view = checkNotNull((node.root as? androidx.compose.ui.platform.ViewRootForTest)?.view) { "No dialog root" }
+        view.getLocationOnScreen(window); width = view.width; height = view.height
+    }
+    val detail = "point=$point surfaceLeft=$surfaceLeft window=(${window[0]}, ${window[1]}) ${width}x$height"
+    check(point.x < surfaceLeft) { "The tap wasn't left of the surface: $detail" }
+    check(point.x >= window[0] && point.x < window[0] + width && point.y >= window[1] && point.y < window[1] + height) {
+        "The tap wasn't inside the dialog window: $detail" }
 }
 
 /** One scalar line per measured case (TL: numbers for the J record; scalars only, no text). */
