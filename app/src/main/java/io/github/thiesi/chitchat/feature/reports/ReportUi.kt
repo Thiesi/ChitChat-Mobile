@@ -309,7 +309,10 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
         })
 }
 
-/** R3: who is being reported, the person's pebble and username (reporting.md). The pebble is decoration only. */
+/**
+ * R3: who is being reported, the person's pebble and username (reporting.md). The pebble is decoration only. The name is
+ * server text, so it wraps and is never ellipsized (PL).
+ */
 @Composable
 private fun PersonContext(name: String) = Row(Modifier.fillMaxWidth().testTag("report_context"),
     horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -318,7 +321,7 @@ private fun PersonContext(name: String) = Row(Modifier.fillMaxWidth().testTag("r
         Text(io.github.thiesi.chitchat.feature.profile.profileInitial(name), style = MaterialTheme.typography.labelLarge,
             color = ChitChatTheme.colors.text)
     }
-    Text(name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+    Text(name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
         modifier = Modifier.weight(1f).testTag("report_person"))
 }
 
