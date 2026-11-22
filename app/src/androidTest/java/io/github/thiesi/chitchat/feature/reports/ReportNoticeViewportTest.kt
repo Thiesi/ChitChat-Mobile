@@ -102,7 +102,7 @@ class ReportNoticeViewportTest {
      * taps the field again (native tap, strict focus and IME proof) and the caret line must be in view above the keyboard.
      */
     private fun measure(case: String, person: Boolean, category: ReportCategory, results: List<ReportResult>,
-        facts: ReportFacts? = null, thenTap: Boolean = false, line: () -> SemanticsNodeInteraction) {
+        facts: ReportFacts? = null, thenTap: Boolean = false, repeat: Boolean = false, line: () -> SemanticsNodeInteraction) {
         FontScaleTestActivity.requestedFontScale = 2f
         val session = ReceivedFiles.session()
         val rooms = ReceivedRooms(session).apply { messages = listOf(roomMessage(3, "hello")) }
@@ -152,6 +152,19 @@ class ReportNoticeViewportTest {
                 assertTrue("$case: the field has no focus after the refusal ($detail)", focused != true)
                 assertTrue("$case: the keyboard stays closed after the refusal ($detail)", !imeUp)
                 assertTrue("$case: the line is in view when it appears ($detail)", shown)
+                if (repeat) {
+                    // TL: the same refusal again. The person scrolls back up to the categories (the line leaves the view),
+                    // then Sends again; the second identical line must be brought into view again.
+                    compose.onNodeWithTag("report_category:${category.wire}").performScrollTo()
+                    compose.waitForIdle()
+                    facts(case, "scrolledAway", inView(line()).second)
+                    compose.onNodeWithTag("report_send").performScrollTo().performNativeTap()
+                    compose.waitUntil(5_000) { reports.state.value?.noticeSeq == 2L }
+                    compose.waitForIdle()
+                    val (again, againDetail) = inView(line())
+                    facts(case, "shownAgain", againDetail)
+                    assertTrue("$case: the same line is in view again after a second refusal ($againDetail)", again)
+                }
                 if (thenTap) {
                     // The person resumes: one native tap with the strict focus and IME proof; the caret line is then in view.
                     compose.onNodeWithTag("report_details").performScrollTo()
@@ -179,6 +192,10 @@ class ReportNoticeViewportTest {
 
     @Test fun personPictureGone() = measure("person-picture-gone", true, ReportCategory.OFFENSIVE_PROFILE_PICTURE,
         listOf(ReportResult.PictureGone)) { compose.onNode(hasText(context.getString(R.string.report_person_picture_gone, "Bob"))) }
+
+    /** TL: a second identical refusal is brought into view again (the effect keys on the occurrence, not the notice). */
+    @Test fun personSnapshotTwice() = measure("person-snapshot-twice", true, ReportCategory.OFFENSIVE_PROFILE_PICTURE,
+        listOf(ReportResult.SnapshotUnavailable, ReportResult.SnapshotUnavailable), repeat = true) { compose.onNodeWithTag("report_notice") }
 
     @Test fun personRate() = measure("person-rate", true, ReportCategory.OFFENSIVE_USERNAME,
         listOf(ReportResult.RateLimited(900))) { compose.onNodeWithTag("report_wait") }

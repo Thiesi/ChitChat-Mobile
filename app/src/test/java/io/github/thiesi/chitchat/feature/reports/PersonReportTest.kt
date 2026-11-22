@@ -158,6 +158,20 @@ class PersonReportTest {
         assertFalse("A refusal offers no follow-up", state().sheet)
     }
 
+    @Test fun theSameNoticeTwiceIsANewOccurrence() = runTest(dispatcher) {
+        advanceUntilIdle()
+        fake.results += ReportResult.SnapshotUnavailable
+        fake.results += ReportResult.SnapshotUnavailable
+        model.requestPerson(bob, room, true, "Bob", model.settled); model.choose(ReportCategory.OFFENSIVE_PROFILE_PICTURE)
+        model.send(); advanceUntilIdle()
+        val first = state().noticeSeq
+        assertEquals(ReportPhase.Editing(ReportNotice.SnapshotUnavailable), state().phase)
+        model.edit("more"); assertEquals("Typing keeps the occurrence", first, state().noticeSeq)
+        model.send(); advanceUntilIdle()
+        assertEquals(ReportPhase.Editing(ReportNotice.SnapshotUnavailable), state().phase)
+        assertTrue("A second identical refusal is a new occurrence (TL)", state().noticeSeq > first)
+    }
+
     @Test fun aMessageReportCarriesNoName() {
         model.open(ReportTarget.RoomMessage(148), room, name = "Bob")
         assertNull(state().name)

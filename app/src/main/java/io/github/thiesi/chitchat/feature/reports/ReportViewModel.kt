@@ -98,6 +98,11 @@ class ReportState internal constructor(
     val name: String? = null,
     /** When a [ReportPhase.Done] settled, in [ReportViewModel.settled]'s count; 0 before. */
     val settledAt: Long = 0,
+    /**
+     * Which occurrence of the phase's notice this is: each outcome that sets one counts afresh, so the same notice twice
+     * (a second snapshot refusal) is brought into view again, even when a fast reply leaves no Sending frame (TL).
+     */
+    val noticeSeq: Long = 0,
 ) {
     val categories: List<ReportCategory>
         get() = if (target is ReportTarget.Person) ReportCategory.personCategories(pictureAvailable) else ReportCategory.messageCategories
@@ -107,7 +112,11 @@ class ReportState internal constructor(
     internal fun copy(category: ReportCategory? = this.category, details: String = this.details, phase: ReportPhase = this.phase,
         pictureAvailable: Boolean = this.pictureAvailable, afterUnknown: Boolean = this.afterUnknown,
         presented: Boolean = this.presented, sheet: Boolean = this.sheet) =
-        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown, presented, sheet, name, settledAt)
+        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown, presented, sheet, name, settledAt, noticeSeq)
+
+    /** The same state with a fresh notice occurrence (see [noticeSeq]). */
+    internal fun withNoticeSeq(seq: Long) =
+        ReportState(target, origin, category, details, phase, pictureAvailable, afterUnknown, presented, sheet, name, settledAt, seq)
 
     override fun toString() = "ReportState(${target::class.simpleName}, phase=$phase)"
 }
@@ -281,7 +290,7 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
             mutable.value = when (facts?.reportedByMe) {
                 true -> done(ReportOutcome.Sent)
                 // It didn't arrive: the form is editable again and Send report is an explicit choice.
-                false -> now.copy(phase = ReportPhase.Editing(ReportNotice.DidNotArrive), afterUnknown = false)
+                false -> now.copy(phase = ReportPhase.Editing(ReportNotice.DidNotArrive), afterUnknown = false).withNoticeSeq(++noticeCount)
                 // The read failed or said nothing: still Unknown, with Check still offered.
                 null -> now.copy(phase = ReportPhase.Unknown())
             }
@@ -356,7 +365,16 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
         }
     }
 
-    private fun next(sent: ReportState, result: ReportResult): ReportState = when (result) {
+    private var noticeCount = 0L
+
+    /** The outcome's state; one that carries a notice counts as a new occurrence of it. */
+    private fun next(sent: ReportState, result: ReportResult): ReportState = outcome(sent, result).let { state ->
+        val phase = state.phase
+        val notice = (phase as? ReportPhase.Editing)?.notice ?: (phase as? ReportPhase.Unknown)?.notice
+        if (notice != null) state.withNoticeSeq(++noticeCount) else state
+    }
+
+    private fun outcome(sent: ReportState, result: ReportResult): ReportState = when (result) {
         is ReportResult.Sent -> done(ReportOutcome.Sent)
         // A Send again answered already-reported: the first attempt arrived, so it reads as sent (PL).
         ReportResult.AlreadyReported -> done(if (sent.afterUnknown) ReportOutcome.Sent else ReportOutcome.AlreadyReported)
