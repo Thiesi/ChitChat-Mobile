@@ -198,8 +198,9 @@ Implementation and evidence: `docs/milestones/form-dialog-scaffold.md`.
 - **Dialogs that fit are unchanged:** where a form fits, the scaffold looks like an M3
   AlertDialog, pixel for pixel.
 - **Outside taps:** a form dialog where an accidental dismissal loses a choice or composed text
-  ignores outside taps (the report form, in every phase). Back and the dialog's own buttons
-  still close it. Other form dialogs (StepUp) and choice sheets keep the platform's dismissal.
+  ignores outside taps: the report form and StepUp (PL, 2026-11-22: a typed password or recovery
+  code), in every phase. Back and the dialog's own buttons still close it. Choice sheets keep the
+  platform's dismissal.
 
 ## Form dialogs (restyle only)
 

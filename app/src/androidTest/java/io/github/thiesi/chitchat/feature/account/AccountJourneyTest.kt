@@ -27,7 +27,13 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import io.github.thiesi.chitchat.testing.performNativeTap
+import io.github.thiesi.chitchat.testing.tapNativeInput
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -54,7 +60,13 @@ class AccountJourneyTest {
     private var writes = 0
     private val destination = ExportDestination { bytes, current -> current(); check(bytes.isNotEmpty()); writes++ }
     private val empty = SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(""))
-    @After fun tearDown() { model.cancel() }
+    @After fun tearDown() {
+        model.cancel()
+        // The fixture's keyboard goes before its activity does (NativeInput's cleanup contract).
+        compose.waitForIdle()
+        if (io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible) androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+    }
 
     @Composable private fun FixtureScreen() {
         val current by session.collectAsState()
@@ -72,6 +84,20 @@ class AccountJourneyTest {
         compose.runOnIdle { assertTrue(model.chooseDestination()); model.destinationSelected(destination, 1) }
         compose.onNodeWithText("Confirm it's you to export your personal data").assertIsDisplayed()
     }
+    /**
+     * The step-up secret under the native input contract (#333's run 45032291123): one physical tap on the field, the
+     * strict focus, display and IME proof read from the dialog window's own insets, then the text. Only then is the
+     * dialog's place final: it sits above the keyboard and moves up as the keyboard shows.
+     */
+    private fun enterSecret(text: String) {
+        compose.tapNativeInput("step_up_secret", imeBottom = {
+            io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+        compose.onNodeWithTag("step_up_secret").performTextInput(text)
+    }
+    /** An OS-routed tap on the dialog's button, its bounds read at tap time, after the keyboard proof (no stale centre). */
+    private fun tapDialogButton(label: String) =
+        compose.onNode(hasText(label) and hasAnyAncestor(isDialog())).performNativeTap()
+
     private fun awaitExport() {
         compose.waitUntil(5_000) { model.state.value.stage in setOf(ExportStage.SAVED, ExportStage.FAILED, ExportStage.CANCELLED) }
         compose.runOnIdle { assertEquals("Export stage; error kind=${model.state.value.error?.kind}", ExportStage.SAVED, model.state.value.stage) }
@@ -80,14 +106,15 @@ class AccountJourneyTest {
     @Test fun wrongPasswordIsVisibleClearedAndCorrectableWithoutActionReplay() {
         fake.failPassword = true
         prompt()
-        compose.onNodeWithText("Current password").performTextInput("wrong-fixture-password")
-        compose.onNodeWithText("Verify and continue").performClick()
+        compose.onNodeWithText("Current password").assertIsDisplayed()
+        enterSecret("wrong-fixture-password")
+        tapDialogButton("Verify and continue")
         compose.onNodeWithText("The current password is incorrect.").assertIsDisplayed()
         compose.onNodeWithText("Current password").assert(empty)
         compose.onNodeWithText("Verify and continue").assertIsNotEnabled()
         compose.runOnIdle { assertEquals(1, fake.exports); fake.failPassword = false }
-        compose.onNodeWithText("Current password").performTextInput("correct-fixture-password")
-        compose.onNodeWithText("Verify and continue").performClick()
+        enterSecret("correct-fixture-password")
+        tapDialogButton("Verify and continue")
         awaitExport()
         compose.onNodeWithText("Your export was saved to the location you chose.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(2, fake.exports); assertEquals(2, fake.passwordChecks); assertEquals(1, writes) }
@@ -99,8 +126,9 @@ class AccountJourneyTest {
         compose.onNodeWithText("Recovery code").assertDoesNotExist()
         compose.onNodeWithText("Use an emergency recovery code").performScrollTo().performClick()
         compose.onNodeWithText("This is an emergency fallback", substring = true).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Recovery code").performScrollTo().performTextInput("UNUSED-FIXTURE-CODE")
-        compose.onNodeWithText("Verify and continue").performClick()
+        compose.onNodeWithText("Recovery code").performScrollTo()
+        enterSecret("UNUSED-FIXTURE-CODE")
+        tapDialogButton("Verify and continue")
         awaitExport()
         compose.onNodeWithText("Your export was saved to the location you chose.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, fake.recoveries); assertEquals(0, fake.passwordChecks); assertEquals(1, writes) }
@@ -123,8 +151,8 @@ class AccountJourneyTest {
 
     @Test fun cancelDoesNotRetryOrSavePrivateContent() {
         prompt()
-        compose.onNodeWithText("Current password").performTextInput("unsent-fixture-password")
-        compose.onNodeWithText("Cancel").performClick()
+        enterSecret("unsent-fixture-password")
+        tapDialogButton("Cancel")
         compose.onNodeWithText("Confirm it's you to export your personal data").assertDoesNotExist()
         compose.onNodeWithText("Export cancelled. A chosen file may be empty or incomplete.").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, fake.exports); assertEquals(0, fake.passwordChecks); assertEquals(0, writes) }
@@ -195,8 +223,8 @@ class AccountJourneyTest {
             compose.onNodeWithText("Export personal data").performScrollTo().performClick()
             compose.onNodeWithText("Confirm it's you to export your personal data").assertIsDisplayed()
             compose.runOnIdle { assertEquals(0, resolver.openInputStream(uri)!!.use { it.readBytes().size }) }
-            compose.onNodeWithText("Current password").performTextInput("fixture-password")
-            compose.onNodeWithText("Verify and continue").performClick()
+            enterSecret("fixture-password")
+            tapDialogButton("Verify and continue")
             awaitExport()
             compose.onNodeWithText("Your export was saved to the location you chose.").performScrollTo().assertIsDisplayed()
             compose.runOnIdle {

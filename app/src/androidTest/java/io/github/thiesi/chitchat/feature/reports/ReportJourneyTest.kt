@@ -57,6 +57,8 @@ import io.github.thiesi.chitchat.feature.direct.DirectThreadScreen
 import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.CompletableDeferred
+import io.github.thiesi.chitchat.testing.performNativeTap
+import io.github.thiesi.chitchat.testing.tapNativeInput
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -82,7 +84,12 @@ class ReportJourneyTest {
     /** Swapping the screen out stands in for a navigation departure (the composition leaves; no configuration change). */
     private var screen by mutableStateOf("room")
 
-    @After fun tearDown() { fake.hold?.complete(Unit); compose.runOnIdle { room.cancel(); direct.background(); reports.close() } }
+    @After fun tearDown() {
+        fake.hold?.complete(Unit); compose.runOnIdle { room.cancel(); direct.background(); reports.close() }
+        // A keyboard a native tap brought up goes before the fixture does (NativeInput's cleanup contract).
+        if (io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible) Espresso.closeSoftKeyboard()
+        compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+    }
 
     private fun text(id: Int, vararg args: Any) = context.getString(id, *args)
     /** The session's chat policy, as a real bootstrap carries it; the fixture session starts without one (unknown). */
@@ -303,8 +310,12 @@ class ReportJourneyTest {
         fake.results += ReportResult.AlreadyReported
         roomContent(); report(3)
         choose(ReportCategory.SPAM)
-        compose.onNodeWithTag("report_details").performScrollTo().performTextInput("why")
-        compose.onNodeWithTag("report_send").performClick()
+        // The native input contract (#333's run 45032291123): the details field by one physical tap with the strict IME
+        // proof, then an OS-routed tap on Send with its bounds read after the form moved above the keyboard.
+        compose.onNodeWithTag("report_details").performScrollTo()
+        compose.tapNativeInput("report_details", imeBottom = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+        compose.onNodeWithTag("report_details").performTextInput("why")
+        compose.onNodeWithTag("report_send").performScrollTo().performNativeTap()
         compose.waitUntil(5_000) { present("report_send_again") }
         compose.onNodeWithTag("report_reason").assertTextEquals(text(R.string.report_reason, text(R.string.report_spam)))
         compose.onNodeWithTag("report_summary_details").assertTextEquals("why")

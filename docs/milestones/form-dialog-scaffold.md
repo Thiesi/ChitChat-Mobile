@@ -44,8 +44,12 @@ app window's bounds, not whether the keyboard covers a node.
 - **Buttons:** side by side when both fit, otherwise stacked with the primary on top, end-aligned, as M3 does.
 - **Outside taps:** an outside tap dismisses, as a platform dialog's does, unless the caller passes
   `dismissOnOutsideTap = false`. That's for a form where an accidental dismissal loses a choice or composed text (PL);
-  the report form uses it in every phase. An ignored tap does nothing: no feedback and no dismiss action. Back and the
-  dialog's own buttons still close it.
+  the report form and StepUpDialog use it in every phase. An ignored tap does nothing: no feedback and no dismiss
+  action. Back and the dialog's own buttons still close it. StepUp joined on 2026-11-22 (PL): the dialog moves up as the
+  keyboard shows, so a tap meant for Verify could land beside it and discard a typed password or recovery code (#333's
+  run 45032291123, where a test's click centre read before the move cancelled an export). Journeys that type into a
+  form dialog and then press its button do so under the native input contract: one physical tap with the strict IME
+  proof, then the text, then an OS-routed tap whose bounds are read after the move.
 - **By design (PL's rule):** in one-column mode the buttons are reached by scrolling while the field keeps focus. They
   aren't pinned on screen with the keyboard up; every one is reachable above the IME by scroll. This isn't a regression.
 - **StepUpDialog and the report form (#326, R2)** use it. Tags, callbacks and copy are unchanged.
