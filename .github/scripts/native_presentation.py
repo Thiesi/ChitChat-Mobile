@@ -50,10 +50,11 @@ REPORT_NAME = re.compile(r"report-(?:light-(?:default|font200)-(?:actions-room|a
     r"dark-default-(?:form-room|sent-sheet-room))[.]png")
 PERSON_REPORT_DESTINATION = ROOT / "app/build/reports/androidTests/person-report-presentation"
 PERSON_REPORT_NAME = re.compile(r"report-person-(?:light-(?:default|font200)-(?:card-entry|card-reported|form-room|form-room-end|"
-    r"unknown|didnotarrive|sheet-room|sent-room|sheet-dm|sent-dm|already-sheet|already|refused|notfound|review|snapshot)|"
+    r"unknown|didnotarrive|didnotarrive-notice|sheet-room|sent-room|sheet-dm|sent-dm|already-sheet|already|refused|notfound|review|snapshot)|"
     r"light-default-(?:form-global|form-nopicture|sending|rate|failed|picture-gone)|"
-    r"light-font200-(?:form-room-landscape|form-room-landscape-end|form-room-keyboard|form-global-end|form-nopicture-end|form-longname)|"
-    r"dark-default-(?:card-entry|card-reported|form-room|form-room-end|unknown|didnotarrive|sheet-room|sheet-dm))[.]png")
+    r"light-font200-(?:form-room-landscape|form-room-landscape-end|form-room-keyboard|form-global-end|form-nopicture-end|form-longname|"
+    r"card-entry-end|card-reported-end)|"
+    r"dark-default-(?:card-entry|card-reported|form-room|form-room-end|unknown|didnotarrive|didnotarrive-notice|sheet-room|sheet-dm))[.]png")
 RESET_NAME = re.compile(r"reset-(light|dark)-(default|font200)-(signin-forgot|form|mfa|stop|cancelled|passkey|failed|unknown|cancel-unknown)[.]png")
 AUTH_DESTINATION = ROOT / "app/build/reports/androidTests/auth-presentation"
 AUTH_NAME = re.compile(r"auth-(light|dark)-((default|font200)-(signin|create)-keyboard|font200-create-block)[.]png")
@@ -382,15 +383,16 @@ def collect_report():
 def collect_person_report():
     # Reporting R3c: the person report (PL list of 2026-11-22). The card's entry and caption, the form in a room, global
     # and without a picture (top, end, landscape, keyboard, a long name), its in-form lines, Unknown with Check and its
-    # didn't-arrive, and the stack outcomes with their sheets: light at default and 200% (44), dark at default (8).
-    files = list(islice(SOURCE.rglob("ccm-person-report-presentation/*"), 53))
-    if (not files or len(files) > 52 or len({p.name for p in files}) != len(files)
+    # didn't-arrive (and its notice in full), the stack outcomes with their sheets, and the card's row and caption at
+    # 200% scrolled to: light at default and 200% (48), dark at default (9).
+    files = list(islice(SOURCE.rglob("ccm-person-report-presentation/*"), 58))
+    if (not files or len(files) > 57 or len({p.name for p in files}) != len(files)
         or any(PERSON_REPORT_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous person report presentation output")
     PERSON_REPORT_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, PERSON_REPORT_DESTINATION / path.name)
-    print(f"Person report presentation captures collected: {len(files)} of 52.")
+    print(f"Person report presentation captures collected: {len(files)} of 57.")
 
 
 def collect_onboarding():

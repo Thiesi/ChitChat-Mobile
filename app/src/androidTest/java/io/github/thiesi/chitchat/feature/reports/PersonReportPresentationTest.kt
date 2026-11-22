@@ -79,6 +79,11 @@ class PersonReportPresentationTest {
     private fun shots(): List<Shot> = listOf(
         Shot("card-entry", node = "profile_dialog", card = false),
         Shot("card-reported", node = "profile_dialog", card = true),
+        // PL: at 200% the row and the caption sit below the fold; scrolled to, to see them wrap.
+        Shot("card-entry-end", node = "profile_dialog", at = FONT200, card = false, act = {
+            compose.onNodeWithTag("profile_report").performScrollTo() }),
+        Shot("card-reported-end", node = "profile_dialog", at = FONT200, card = true, act = {
+            compose.onNodeWithTag("profile_reported").performScrollTo() }),
         Shot("form-room"),
         Shot("form-room-end", act = { end() }),
         Shot("form-room-landscape", at = FONT200, landscape = true),
@@ -97,7 +102,7 @@ class PersonReportPresentationTest {
         Shot("rate", at = DEFAULT, results = listOf(ReportResult.RateLimited(900)), act = { fill(); send(); notice(it) }),
         Shot("failed", at = DEFAULT, results = listOf(ReportResult.Invalid), act = { fill(); send(); notice(it) }),
         Shot("snapshot", at = DEFAULT + FONT200, results = listOf(ReportResult.SnapshotUnavailable), act = {
-            fill(); send(); await("report_notice"); compose.onNodeWithTag("report_notice").performScrollTo() }),
+            fill(); send(); await("report_notice"); toNotice() }),
         Shot("picture-gone", at = DEFAULT, results = listOf(ReportResult.PictureGone), act = {
             choose(ReportCategory.OFFENSIVE_PROFILE_PICTURE); send(); notice(it) }),
         Shot("unknown", results = listOf(unknown), act = { fill(); send(); await("report_check"); endAtFont200(it) }),
@@ -105,6 +110,12 @@ class PersonReportPresentationTest {
             fill(); send(); await("report_check")
             compose.onNodeWithTag("report_check").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
             await("report_notice"); endAtFont200(it)
+        }),
+        // PL: "Your report didn't arrive." shown in full (the didnotarrive shots show the form's top or its end).
+        Shot("didnotarrive-notice", results = listOf(unknown), facts = ReportFacts(canReport = true, reportedByMe = false), act = {
+            fill(); send(); await("report_check")
+            compose.onNodeWithTag("report_check").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+            await("report_notice"); toNotice()
         }),
         Shot("sheet-room", node = "report_sheet", act = { fill(); send(); await("report_sheet") }),
         Shot("sent-room", node = "report_host", at = LIGHT, act = { fill(); send(); done() }),
@@ -143,6 +154,11 @@ class PersonReportPresentationTest {
         }
     }
     private fun endAtFont200(@Suppress("UNUSED_PARAMETER") fixture: Fixture) { if (scale == "font200") end() }
+    /**
+     * The in-form notice as the person sees it: it brings itself into view when it appears (PL and TL, 2026-11-22), with
+     * no keyboard closing and no scroll by the test; at 200% the taller snapshot notice shows from its top.
+     */
+    private fun toNotice() = compose.waitForIdle()
     /** The sheet's Done: the line stays in the stack. */
     private fun done() { await("report_sheet"); compose.onNodeWithTag("report_sheet_done").performClick(); await("report_outcome")
         compose.waitUntil(5_000) { !present("report_sheet") } }
