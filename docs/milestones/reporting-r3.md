@@ -55,7 +55,7 @@ arrive.", ended out of view below the field, while InlineError and the wait line
   keyboard then returns and the field's caret line is brought back.
 - **No focus return:** the app never brings focus or the keyboard back after a refusal that keeps the form, for message
   and person reports alike. The person taps the field.
-- **`ReportNoticeViewportTest`** asserts each line in view when it appears (snapshot, picture gone, the wait line,
+- **`ReportNoticeViewportTest`** (in R3c, #334, kept out of this PR for its size cap) asserts each line in view when it appears (snapshot, picture gone, the wait line,
   didn't arrive, R2's NotSent), no focus and no keyboard after the refusal, and, after a native tap on the field, the
   caret line above the keyboard.
 

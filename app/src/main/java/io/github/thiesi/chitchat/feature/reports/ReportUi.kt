@@ -7,6 +7,10 @@ import io.github.thiesi.chitchat.core.ui.FormDialog
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -249,14 +253,16 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
     // PL: an outside tap does nothing in every phase, so a stray tap never loses the chosen reason, the typed details or
     // the Unknown summary (whose Close also dismisses its notice). Cancel, Close and Back still close it; while sending,
     // close is refused.
+    // A shown notice holds the view until the person's next interaction (PL, TL): FormDialog's hook, scroll only.
     FormDialog(onDismissRequest = { if (!sending) reports.close() }, dismissOnOutsideTap = false,
+        holdFocusedInView = state.noticeHeld && notice != null,
         modifier = Modifier.lanternDialogEdge().semantics { paneTitle = title }.testTag("report_dialog"),
         title = { Text(title, modifier = Modifier.semantics { heading() }) },
         body = {
             Column(Modifier.fillMaxWidth().testTag("report_body"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (person != null) PersonContext(name, person.userId) else subject?.let { ContextCard(it) }
                 if (unknown) Summary(state) else Form(reports, state, sending)
-                notice?.let { NoticeText(it, waitSeconds, waiting, name, state.noticeSeq) }
+                notice?.let { NoticeText(it, waitSeconds, waiting, name, state.noticeSeq, state.noticeHeld) }
                 Text(if (person != null) personWho(reportPlace(state, place), name, state.pictureAvailable) else when (place) {
                     is ReportPlace.Room -> place.name?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.report_who_room, it) }
                         ?: stringResource(R.string.report_who_room_unnamed)
@@ -388,8 +394,25 @@ private fun Form(reports: ReportViewModel, state: ReportState, sending: Boolean)
     // The field's own value, seeded from the VM per form and pushed to it on every change: a value read back through
     // the StateFlow lags a frame and reset the caret or dropped input (TL). Memory only; a reopen or recreation reseeds.
     var field by remember(state.target) { mutableStateOf(TextFieldValue(state.details, TextRange(state.details.length))) }
+    // The person's next interaction lets a held notice go (TL, PL): (b) a focus gain on the field, and (a) the keyboard
+    // going from hidden to shown while the field is focused, read from the dialog window's own insets. Focus or a keyboard
+    // that is merely kept (an instant reply) is neither. Observed only: nothing is consumed or intercepted.
+    var hadFocus by remember { mutableStateOf(false) }
+    val imeShown = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+    var wasShown by remember { mutableStateOf(imeShown) }
+    val fieldInView = remember { BringIntoViewRequester() }
+    LaunchedEffect(imeShown) {
+        val shownNow = imeShown && !wasShown
+        wasShown = imeShown
+        // The form's own keep-the-field-in-view effect may have run while the hold was on, so the field is brought back
+        // here, once, as a scroll only.
+        if (shownNow && hadFocus && reports.keyboardShown()) { androidx.compose.runtime.withFrameNanos { }; fieldInView.bringIntoView() }
+    }
     OutlinedTextField(field, { field = it; reports.edit(it.text) }, enabled = !sending, minLines = 3,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("report_details"))
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).bringIntoViewRequester(fieldInView).onFocusChanged { focus ->
+            if (focus.isFocused && !hadFocus) reports.fieldFocused()
+            hadFocus = focus.isFocused
+        }.testTag("report_details"))
     Counter(state.details)
 }
 
@@ -423,45 +446,67 @@ private fun Summary(state: ReportState) {
 }
 
 @Composable
-private fun WaitLine(text: String) {
+private fun WaitLine(text: String, modifier: Modifier = Modifier) {
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(text) { requester.bringIntoView() }
     Text(text, color = ChitChatTheme.colors.textMuted, style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.bringIntoViewRequester(requester).semantics { liveRegion = LiveRegionMode.Polite }.testTag("report_wait"))
+        modifier = modifier.bringIntoViewRequester(requester).semantics { liveRegion = LiveRegionMode.Polite }.testTag("report_wait"))
 }
 
 @Composable
-private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolean, name: String, occurrence: Long) {
+private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolean, name: String, occurrence: Long, held: Boolean) {
     when (notice) {
         // Status ladder row 7: a wait is level 1, a muted line, never the person's error (PL). A known wait's line goes
         // when it ends, as Send re-enables; "Try again later." only when the delay was unknown from the start (PL).
         is ReportNotice.RateLimited -> when {
-            waitSeconds != null && waiting -> WaitLine(stringResource(R.string.report_rate_limited, waitText(Wait.of(waitSeconds * 1000))))
-            waitSeconds == null -> WaitLine(stringResource(R.string.report_rate_limited_unknown))
+            waitSeconds != null && waiting -> InViewNotice(occurrence, held) { modifier ->
+                WaitLine(stringResource(R.string.report_rate_limited, waitText(Wait.of(waitSeconds * 1000))), modifier) }
+            waitSeconds == null -> InViewNotice(occurrence, held) { modifier ->
+                WaitLine(stringResource(R.string.report_rate_limited_unknown), modifier) }
             else -> Unit
         }
-        ReportNotice.NotSent -> InlineError(stringResource(R.string.report_not_sent))
+        ReportNotice.NotSent -> InViewNotice(occurrence, held) { modifier ->
+            Box(modifier) { InlineError(stringResource(R.string.report_not_sent)) } }
         // Person outcomes (reporting.md): a level-2 notice that nothing was sent; the picture gone, with its category
         // removed; and the Check that found nothing, after which Send report is an explicit choice again.
-        ReportNotice.SnapshotUnavailable -> InViewNotice(occurrence) { modifier ->
+        ReportNotice.SnapshotUnavailable -> InViewNotice(occurrence, held) { modifier ->
             WarningNotice(stringResource(R.string.report_person_snapshot_lead), stringResource(R.string.report_person_snapshot_body, name),
                 modifier.testTag("report_notice")) }
-        ReportNotice.PictureGone -> InlineError(stringResource(R.string.report_person_picture_gone, name))
-        ReportNotice.DidNotArrive -> InViewNotice(occurrence) { modifier ->
+        ReportNotice.PictureGone -> InViewNotice(occurrence, held) { modifier ->
+            Box(modifier) { InlineError(stringResource(R.string.report_person_picture_gone, name)) } }
+        ReportNotice.DidNotArrive -> InViewNotice(occurrence, held) { modifier ->
             WarningNotice(stringResource(R.string.report_person_did_not_arrive), "", modifier.testTag("report_notice")) }
     }
 }
 
 /**
- * A level-2 notice that appears after Send is brought into view when it appears, as InlineError and the wait line are
- * (PL and TL, 2026-11-22; measured at 200% portrait: the WarningNotice lines ended out of view below the field). A scroll
- * only: no focus or caret change and no extra announcement. One taller than the body shows from its top.
+ * An in-form line that appears after Send is brought into view when it appears (PL and TL, 2026-11-22; measured at 200%
+ * portrait: the WarningNotice lines ended out of view below the field). While it's [held] (until the person's next
+ * interaction) it's brought back into view across a layout change too: the keyboard closing, a mode switch. A scroll
+ * only: no focus or caret change and no extra announcement. One taller than the body shows from its top edge: the whole
+ * line first, then its top edge, which is a no-op for a line that fits.
  */
 @Composable
-private fun InViewNotice(occurrence: Long, content: @Composable (Modifier) -> Unit) {
+private fun InViewNotice(occurrence: Long, held: Boolean, content: @Composable (Modifier) -> Unit) {
     val requester = remember { BringIntoViewRequester() }
+    val holding by androidx.compose.runtime.rememberUpdatedState(held)
+    val layout = io.github.thiesi.chitchat.core.ui.LocalFormDialogLayout.current
+    suspend fun bring() {
+        requester.bringIntoView()
+        requester.bringIntoView(androidx.compose.ui.geometry.Rect(0f, 0f, 1f, 1f))
+    }
     // Keyed on the occurrence, not the notice: a second identical refusal is brought into view again (TL).
-    LaunchedEffect(occurrence) { requester.bringIntoView() }
+    LaunchedEffect(occurrence) { bring() }
+    // Ordering (TL): a keyboard going from hidden to shown while the details field is focused ends the hold, rule (a),
+    // so that layout change belongs to the field: the form brings the field into view once and this doesn't re-bring the
+    // notice for it, so the two scrolls never race. Only the details field can bring the keyboard up in this form. While
+    // held, every other layout change (the keyboard hiding, a mode switch) brings the notice back.
+    val previous = remember { java.util.concurrent.atomic.AtomicReference(layout) }
+    LaunchedEffect(layout) {
+        val before = previous.getAndSet(layout)
+        val keyboardShowing = before?.ime == false && layout?.ime == true
+        if (holding && !keyboardShowing) { androidx.compose.runtime.withFrameNanos { }; bring() }
+    }
     content(Modifier.bringIntoViewRequester(requester))
 }
 

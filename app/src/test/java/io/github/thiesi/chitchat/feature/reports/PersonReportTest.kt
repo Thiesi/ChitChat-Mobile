@@ -172,6 +172,26 @@ class PersonReportTest {
         assertTrue("A second identical refusal is a new occurrence (TL)", state().noticeSeq > first)
     }
 
+    /** PL and TL: a new notice holds the view; each of (a)-(d), the person's next interaction, lets it go. */
+    @Test fun aNoticeHoldsUntilTheNextInteraction() = runTest(dispatcher) {
+        advanceUntilIdle()
+        repeat(4) { fake.results += ReportResult.SnapshotUnavailable }
+        model.requestPerson(bob, room, true, "Bob", model.settled); model.choose(ReportCategory.OFFENSIVE_PROFILE_PICTURE)
+        assertFalse("No notice, no hold", state().noticeHeld)
+        val releases = listOf<Pair<String, () -> Unit>>(
+            "(a) keyboard shown" to { assertTrue(model.keyboardShown()); assertFalse("Only once", model.keyboardShown()) },
+            "(b) field focused" to { model.fieldFocused() },
+            "(c) typing" to { model.edit("more") },
+            "(d) a category" to { model.choose(ReportCategory.OFFENSIVE_USERNAME); model.choose(ReportCategory.OFFENSIVE_PROFILE_PICTURE) })
+        for ((name, release) in releases) {
+            model.send(); advanceUntilIdle()
+            assertTrue("$name: a new notice holds", state().noticeHeld)
+            release()
+            assertFalse("$name lets it go", state().noticeHeld)
+        }
+        assertFalse("The hold never reaches a string", state().toString().contains("Held"))
+    }
+
     @Test fun aMessageReportCarriesNoName() {
         model.open(ReportTarget.RoomMessage(148), room, name = "Bob")
         assertNull(state().name)
