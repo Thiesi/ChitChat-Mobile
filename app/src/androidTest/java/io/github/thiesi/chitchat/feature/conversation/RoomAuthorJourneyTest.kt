@@ -237,7 +237,8 @@ class RoomAuthorJourneyTest {
             fun bounds(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInWindow
             assertEquals("Unknown: no focused node in the dialog", 0, focused())
             // Check stable at rest: read after the inset reached 0, and once more after idle right before the tap.
-            val checkAtRest = bounds("author_check_history"); compose.waitForIdle()
+            fun cancel() = dialogText(R.string.cancel).fetchSemanticsNode().boundsInWindow
+            val checkAtRest = bounds("author_check_history"); val cancelAtCheck = cancel(); compose.waitForIdle()
             assertEquals("Check is at rest before its tap", checkAtRest, bounds("author_check_history"))
             compose.onNodeWithTag("author_check_history").assertIsDisplayed().assertIsEnabled().performNativeTap(); settle()
             assertEquals("Exactly one keyboard close between Save and Check, and no reopening: ${transitions.transitions}",
@@ -246,12 +247,28 @@ class RoomAuthorJourneyTest {
             val bodyText = compose.onNodeWithTag("author_edit_body").fetchSemanticsNode().config[SemanticsProperties.EditableText].text
             assertEquals("The read-only body stays readable (TalkBack)", "Already committed fixture", bodyText)
             compose.waitForIdle()
-            val saveBefore = bounds("author_change_confirm")
+            val saveBefore = bounds("author_change_confirm"); val cancelBefore = cancel()
+            assertEquals("TalkBack reads only the visible label", listOf(text(R.string.author_review_edit)),
+                compose.onNodeWithTag("author_change_confirm").fetchSemanticsNode().config[SemanticsProperties.Text].map { it.text })
             val confirmBefore = compose.onNodeWithTag("author_change_confirm").fetchSemanticsNode().id
             compose.onNodeWithTag("author_change_confirm").assertIsDisplayed().performNativeTap() // Review, no POST.
             compose.waitForIdle()
             assertEquals("Reviewed: no focused node in the dialog", 0, focused())
-            assertEquals("Save stays where Review was", saveBefore, bounds("author_change_confirm"))
+            // PL ruling B: across Check, Review and Save the confirm keeps identical bounds (it reserves the widest recovery
+            // label), and Cancel stays beside it, its position relative to the confirm unchanged.
+            val saveAfter = bounds("author_change_confirm"); val cancelAfter = cancel()
+            assertEquals("Save stays exactly where Review was", saveBefore, saveAfter)
+            assertEquals("Check, Review and Save share identical bounds", checkAtRest, saveBefore)
+            fun offset(cancel: androidx.compose.ui.geometry.Rect, confirm: androidx.compose.ui.geometry.Rect) =
+                androidx.compose.ui.geometry.Offset(cancel.left - confirm.left, cancel.top - confirm.top)
+            assertEquals("Cancel keeps its place relative to the confirm (Check to Review)", offset(cancelAtCheck, checkAtRest),
+                offset(cancelBefore, saveBefore))
+            assertEquals("Cancel keeps its place relative to the confirm (Review to Save)", offset(cancelBefore, saveBefore),
+                offset(cancelAfter, saveAfter))
+            assertTrue("Cancel sits beside the confirm, not above it (1.0 fit): cancel $cancelAfter, save $saveAfter",
+                kotlin.math.abs(cancelAfter.top - saveAfter.top) <= 0.5f && cancelAfter.right <= saveAfter.left)
+            assertEquals("TalkBack reads only the visible label", listOf(text(R.string.author_save)),
+                compose.onNodeWithTag("author_change_confirm").fetchSemanticsNode().config[SemanticsProperties.Text].map { it.text })
             assertEquals("Review and Save are one node (accessibility focus stays on it)", confirmBefore,
                 compose.onNodeWithTag("author_change_confirm").fetchSemanticsNode().id)
             assertEquals("The editable body keeps the proposal", "Already committed fixture",

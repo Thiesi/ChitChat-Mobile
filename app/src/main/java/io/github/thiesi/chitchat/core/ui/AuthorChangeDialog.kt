@@ -3,6 +3,7 @@ package io.github.thiesi.chitchat.core.ui
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.FlowRow
@@ -26,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.window.Dialog
@@ -39,7 +42,7 @@ import androidx.compose.ui.unit.Constraints
  * Private text is not saved or logged; intentionally no generated content string representation.
  */
 internal class AuthorDialogPresentation(val kind: AuthorChangeKind, val body: String, val originalBody: String,
-    val validationText: String?, val checked: Boolean, val pendingMessageId: Long?)
+    val validationText: String?, val checked: Boolean, val pendingMessageId: Long?, val recovery: Boolean = false)
 
 @Composable
 internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetCurrent: Boolean, available: Boolean,
@@ -139,11 +142,23 @@ private fun AuthorConfirm(dialog: AuthorDialogPresentation, enabled: Boolean, on
     val pending = dialog.pendingMessageId
     TextButton(onClick = onConfirm, enabled = enabled,
         modifier = Modifier.testTag(if (pending != null) "author_check_history" else "author_change_confirm")) {
-        Text(stringResource(when {
+        val label = stringResource(when {
             pending != null -> R.string.author_check_history
             dialog.checked -> R.string.author_review_edit
             dialog.kind == AuthorChangeKind.EDIT -> R.string.author_save
             else -> R.string.author_delete_confirm
-        }))
+        })
+        if (dialog.kind == AuthorChangeKind.EDIT && dialog.recovery) {
+            // #70/#284 (PL ruling B, 2026-11-23): on the recovery path (from the transition into unknown until the dialog
+            // closes) the confirm keeps the width of the widest recovery label, so the action row keeps one arrangement
+            // across Check, Review and Save. At 150% and 200% "Review edit" stacked under Cancel while "Save" fit beside
+            // it, so the row reflowed on Review and a tap aimed at Review landed between the buttons. A first edit keeps
+            // today's arrangement. The sizing labels are invisible and silent; the visible one is end-aligned and read.
+            Box(contentAlignment = androidx.compose.ui.Alignment.CenterEnd) {
+                for (sizing in listOf(R.string.author_check_history, R.string.author_review_edit, R.string.author_save))
+                    Text(stringResource(sizing), Modifier.alpha(0f).clearAndSetSemantics { })
+                Text(label)
+            }
+        } else Text(label)
     }
 }

@@ -14,8 +14,10 @@ class RoomAuthorRequest internal constructor(
     val kind: AuthorChangeKind,
 )
 
+/** [recovery]: on the unknown-outcome path from its transition into unknown until the dialog closes (#70/#284). */
 class RoomAuthorDialog internal constructor(
     val request: RoomAuthorRequest, val body: String, val validation: String? = null, val checked: Boolean = false,
+    val recovery: Boolean = false,
 )
 
 /** ID-only, account-scoped uncertainty; not an uncertain SEND and never a retry command. */

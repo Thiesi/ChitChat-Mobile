@@ -122,6 +122,26 @@ class RoomAuthorChangeTest {
         assertNotSame(old, model.state.value.authorDialog?.request); assertEquals(1, fake.writes)
     }
 
+    /** #70/#284 (PL ruling B): the dialog's recovery flag starts on entering unknown, survives Check, edits and Review. */
+    @Test fun theRecoveryPathIsMarkedFromUnknownUntilTheDialogCloses() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 500, "metadata_failed")
+        val old = begin()
+        assertFalse("A first edit isn't on the recovery path", checkNotNull(model.state.value.authorDialog).recovery)
+        model.updateAuthorBody(old, "Possibly committed"); model.submitAuthor(old); runCurrent()
+        val pending = checkNotNull(model.state.value.authorUnknown)
+        assertTrue("Unknown starts it", checkNotNull(model.state.value.authorDialog).recovery)
+        fake.writeFailure = null; model.checkAuthorHistory(fake.session.value, pending); runCurrent()
+        assertTrue("Check keeps it", checkNotNull(model.state.value.authorDialog).recovery)
+        assertTrue(model.reviewAuthorProposal(old)); val fresh = checkNotNull(model.state.value.authorDialog).request
+        assertTrue("Review carries it to the fresh dialog", checkNotNull(model.state.value.authorDialog).recovery)
+        model.updateAuthorBody(fresh, "Another choice")
+        assertTrue("An edit keeps it", checkNotNull(model.state.value.authorDialog).recovery)
+        model.dismissAuthor(fresh)
+        assertNull("It goes with the dialog", model.state.value.authorDialog)
+        begin()
+        assertFalse("A fresh first edit starts without it", checkNotNull(model.state.value.authorDialog).recovery)
+    }
+
     /** O3b3b: 403 rules_acceptance_required is definite. The edit dialog keeps its text, nothing is unknown, nothing resends. */
     @Test fun aRulesRefusedEditKeepsItsTextIsNotUnknownAndNeverResends() = runTest(dispatcher) {
         open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 403, "rules_acceptance_required")

@@ -15,7 +15,7 @@ The original local sequence stopped on a PowerShell parser error before layout/d
 After a Save whose outcome is unknown, the body is read-only (unknown, then checked). It used to keep its input focus
 there. Review swaps in a fresh request and makes the body editable, so the still-focused field restarted its input
 session: the keyboard came up unasked about 50–80 ms after Review, and when its inset landed about 400 ms later, Save
-moved 235 dp up. A tap aimed at Save in that window landed on the keyboard. That's #70's DM journey failure and #284's
+moved 235 px up (235 dp at 160 dpi). A tap aimed at Save in that window landed on the keyboard. That's #70's DM journey failure and #284's
 room one, measured locally (5 runs) and matching both CI occurrences.
 
 - **The rule (PL):** a state change inside a form dialog never gives focus or brings up the keyboard by itself. The
@@ -25,6 +25,14 @@ room one, measured locally (5 runs) and matching both CI occurrences.
   the unknown state, as before.
 - **Review** makes the body editable without focus or keyboard, and Save stays put. Only a tap on the body focuses it,
   through the normal one-tap path.
+- **One row arrangement on the recovery path (PL ruling B):** from the transition into unknown until the dialog closes
+  (unknown, checked, reviewed, unknown again), the confirm button keeps the width of its widest recovery label ("Check
+  history", "Review edit", "Save"). The sizing labels are invisible and silent; the visible label is end-aligned. A first
+  edit keeps today's arrangement at every scale. Measured on the CI AVD: at 150% and 200% "Review edit" stacked under
+  Cancel while "Save" fit beside it, so the row reflowed on Review and a tap aimed at Review's centre landed between the
+  buttons. Now the arrangement changes at most once per recovery, at the transition into unknown, together with the
+  keyboard closing, and never at Check, Review or Save. The dialog state carries a memory-only `recovery` flag (set on
+  entering unknown, kept through Check, edits and Review, and gone with the dialog). The delete dialog is unchanged.
 - **Accessibility:** the read-only body stays readable, and Review becomes Save in the same node, so accessibility focus
   stays on it.
 - **The look:** the body's decoration depends on `enabled` only, so it looks editable after Review.

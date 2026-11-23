@@ -15,6 +15,6 @@ internal fun RoomAuthorChangeDialog(dialog: RoomAuthorDialog, targetCurrent: Boo
         if (it == "message_unchanged") stringResource(R.string.author_unchanged) else validationMessage(it)
     }
     MessageAuthorChangeDialog(AuthorDialogPresentation(dialog.request.kind, dialog.body,
-        dialog.request.original.body.orEmpty(), validation, dialog.checked, pending?.messageId),
+        dialog.request.original.body.orEmpty(), validation, dialog.checked, pending?.messageId, dialog.recovery || pending != null),
         targetCurrent, available, busy, onChange, onConfirm, onDismiss, canConfirm, currentPreview, error)
 }
