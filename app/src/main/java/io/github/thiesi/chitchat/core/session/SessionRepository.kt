@@ -1243,7 +1243,11 @@ class SessionRepository internal constructor(
 
     private class Runtime(val server: ServerAddress, val api: SessionHttp) {
         var csrf: String? = null
-        /** #323: per-policy waits. They die with the runtime (sign-out, server forget, replacement). */
+        /**
+         * #323: per-policy waits. They die with the runtime (sign-out, server forget, replacement). A plain map: every
+         * read and write is under [lock] (authorized's pre-check and its failure path), which never spans the network
+         * call itself, so call sites on different dispatchers can't race.
+         */
         val budgets = HashMap<RateBudget, BudgetWait>()
         /**
          * The username of a registration whose result was ambiguous (O4a). Unlike `registrationMayHaveSucceeded`, it
