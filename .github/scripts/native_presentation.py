@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from itertools import islice
+import json
 import re
 import shutil
 import subprocess
@@ -30,6 +31,15 @@ FORM_DIALOG_DESTINATION = ROOT / "app/build/reports/androidTests/form-dialog-pre
 FORM_DIALOG_LINE = re.compile(r"case=[a-z0-9-]{1,64}(?: [A-Za-z0-9=.,;:()/ -]{1,1200})?")
 FORM_DIALOG_MAX_LINES = 32
 FORM_DIALOG_MAX_BYTES = 16384
+# #331a: the text-field accessibility node probe (text-field-names.md), one JSON file per API level, fixture strings only.
+A11Y_NODES_DESTINATION = ROOT / "app/build/reports/androidTests/a11y-nodes"
+A11Y_NODES_NAME = re.compile(r"text-field-nodes-api[0-9]{2}[.]json")
+A11Y_NODES_MAX_BYTES = 65536
+A11Y_NODES_MAX_ENTRIES = 64
+A11Y_NODES_KEYS = {"case", "kind", "state", "className", "text", "hintText", "contentDescription", "labeledBy",
+    "showingHintText", "password", "preceding"}
+# Fixture strings and the app's own string resources only (typographic quotes, ellipsis, bullet masks); never user text.
+A11Y_NODES_TEXT = re.compile(r"[A-Za-z0-9 .,:;!?'()/@*\u2018\u2019\u201c\u201d\u2026\u2022-]{0,160}")
 CLEANUP_MAX_BYTES = 256
 FIND_PEOPLE_DESTINATION = ROOT / "app/build/reports/androidTests/find-people-presentation"
 POLICY_DESTINATION = ROOT / "app/build/reports/androidTests/policy-presentation"
@@ -240,6 +250,33 @@ def collect_form_dialog_metrics():
     FORM_DIALOG_DESTINATION.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(files[0], FORM_DIALOG_DESTINATION / files[0].name)
     print(f"Form-dialog metrics collected: {len(lines)} lines.")
+
+
+def collect_a11y_nodes():
+    # #331a: the probe's measured node facts for each text-field pattern. One file, validated whole: a fixed name, a
+    # size cap, exact keys, scalar values and fixture-only text. Anything foreign, malformed or excess rejects it all.
+    files = list(islice(SOURCE.rglob("ccm-a11y-nodes/*"), 2))
+    if not files:
+        return
+    if len(files) != 1 or A11Y_NODES_NAME.fullmatch(files[0].name) is None or files[0].stat().st_size > A11Y_NODES_MAX_BYTES:
+        raise ValueError("Foreign, excess or oversized node probe output")
+    data = json.loads(files[0].read_text(encoding="utf-8"))
+    entries = data.get("entries") if isinstance(data, dict) else None
+    if (not isinstance(data, dict) or set(data) != {"api", "entries"} or not isinstance(data["api"], int)
+            or not isinstance(entries, list) or not entries or len(entries) > A11Y_NODES_MAX_ENTRIES):
+        raise ValueError("Malformed node probe output")
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != A11Y_NODES_KEYS:
+            raise ValueError("Malformed node probe entry")
+        for key, value in entry.items():
+            if key in ("showingHintText", "password"):
+                if not isinstance(value, bool):
+                    raise ValueError("Malformed node probe flag")
+            elif value is not None and (not isinstance(value, str) or A11Y_NODES_TEXT.fullmatch(value) is None):
+                raise ValueError("Malformed node probe text")
+    A11Y_NODES_DESTINATION.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(files[0], A11Y_NODES_DESTINATION / files[0].name)
+    print(f"Text-field node probe collected: {len(entries)} entries.")
 
 
 def collect_policy():
@@ -576,6 +613,10 @@ def main() -> int:
         collect_form_dialog_metrics()
     except Exception:
         print("Form-dialog metrics unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_a11y_nodes()
+    except Exception:
+        print("Text-field node probe unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_deletion()
     except Exception:
