@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -41,6 +42,7 @@ import io.github.thiesi.chitchat.testing.FontScaleTestActivity
 import io.github.thiesi.chitchat.testing.NativeChatFixtures
 import io.github.thiesi.chitchat.feature.auth.TestSessions
 import io.github.thiesi.chitchat.testing.nativeAuthorImeBottom
+import io.github.thiesi.chitchat.testing.nativeAuthorSaveGeometry
 import io.github.thiesi.chitchat.testing.openTab
 import io.github.thiesi.chitchat.testing.performNativeTap
 import io.github.thiesi.chitchat.testing.tapNativeInput
@@ -100,7 +102,9 @@ class AuthorPresentationTest {
                 lateinit var thread: DirectThreadViewModel
                 lateinit var notices: NotificationCenterViewModel
                 lateinit var targets: MessageTargetViewModel
+                lateinit var host: androidx.activity.ComponentActivity
                 scenario.onActivity { activity ->
+                    host = activity
                     activity.enableEdgeToEdge()
                     room = ViewModelProvider(activity, ConversationViewModel.factory(api.rooms, mutations = api.authorChanges))[ConversationViewModel::class.java]
                     thread = ViewModelProvider(activity, DirectThreadViewModel.factory(api.directs, mutations = api.authorChanges))[DirectThreadViewModel::class.java]
@@ -194,6 +198,18 @@ class AuthorPresentationTest {
                 if ("editing" in only) {
                     compose.tapNativeInput("author_edit_body", { compose.nativeAuthorImeBottom() })
                     compose.waitForIdle()
+                    if (landscape) {
+                        // PL J and TL (2026-11-23): in the compact layout (keyboard up, short and wide) the confirm shows its
+                        // own label, as on main. "Save edit" is displayed, whole, above the keyboard, on one line beside Cancel.
+                        val save = compose.onNodeWithTag("author_change_confirm").assertIsDisplayed().fetchSemanticsNode()
+                        val b = save.boundsInWindow; val c = cancel()
+                        check(b.width >= save.size.width - 1f && b.height >= save.size.height - 1f) { "$prefix: Save is clipped ($b, ${save.size})" }
+                        val geometry = compose.nativeAuthorSaveGeometry(host, compose.nativeAuthorImeBottom())
+                        check(geometry.keyboardTop != null && geometry.pointY < checkNotNull(geometry.keyboardTop)) {
+                            "$prefix: Save not above the keyboard (${geometry.details})" }
+                        check(kotlin.math.abs(c.top - b.top) <= 0.5f && c.right <= b.left && kotlin.math.abs(c.height - b.height) <= 0.5f) {
+                            "$prefix: Save isn't on one line beside Cancel (cancel $c, save $b)" }
+                    }
                     shot("editing")
                     androidx.test.espresso.Espresso.closeSoftKeyboard()
                 }
