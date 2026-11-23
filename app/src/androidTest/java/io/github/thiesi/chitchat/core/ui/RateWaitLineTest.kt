@@ -255,43 +255,49 @@ class RateWaitLineTest {
 
     private fun announcements() = LiveAnnouncements { node -> node.contentDescription?.toString() == "Send" }
 
-    /** TL/PL: exactly one announcement when a notice appears and per refused tap; none on clearing (unknown wait dropped). */
+    /**
+     * TL/PL: exactly one announcement when a notice appears and per refused tap; none on clearing (unknown wait dropped).
+     * Every count is between two delivered sentinels (the positive control).
+     */
     @Test fun sendAnnouncesOnceOnAppearanceAndPerRefusalAndClearsSilently() {
         announcements().use { heard ->
             send(paused = false)
-            heard.flush(compose, sentinel)
-            assertEquals(0, heard.count)
+            val start = heard.mark(compose, sentinel)
             compose.runOnIdle { notice = RateLimitNotice(RateBudget.ROOM_SEND, false) }
-            heard.flush(compose, sentinel)
-            assertEquals("Once on appearance: ${heard.spoken()}", 1, heard.count)
+            val appeared = heard.mark(compose, sentinel)
             // A refused tap during a server attempt: no live region while sending, then the flip lands with the refusal.
             compose.runOnIdle { sending = true }
-            heard.flush(compose, sentinel)
+            val sendingMark = heard.mark(compose, sentinel)
             compose.runOnIdle { sending = false; repeats++ }
-            heard.flush(compose, sentinel)
-            assertEquals("Once per refused tap: ${heard.spoken()}", 2, heard.count)
+            val firstTap = heard.mark(compose, sentinel)
             compose.runOnIdle { repeats++ }
-            heard.flush(compose, sentinel)
-            assertEquals("Once per refused tap: ${heard.spoken()}", 3, heard.count)
+            val secondTap = heard.mark(compose, sentinel)
             compose.runOnIdle { notice = null } // The unknown wait dropped on the next edit, or a successful send.
-            heard.flush(compose, sentinel)
-            assertEquals("Clearing is silent: ${heard.spoken()}", 3, heard.count)
+            val cleared = heard.mark(compose, sentinel)
+            heard.verify()
+            assertEquals("Nothing before the notice: ${heard.spoken()}", 0, start)
+            assertEquals("Once on appearance: ${heard.spoken()}", 1, appeared - start)
+            assertEquals("Silent while sending: ${heard.spoken()}", 0, sendingMark - appeared)
+            assertEquals("Once per refused tap: ${heard.spoken()}", 1, firstTap - sendingMark)
+            assertEquals("Once per refused tap: ${heard.spoken()}", 1, secondTap - firstTap)
+            assertEquals("Clearing is silent: ${heard.spoken()}", 0, cleared - secondTap)
         }
     }
 
-    /** PL condition 3: the known wait's deadline clears Send's state silently. */
+    /** PL condition 3: the known wait's deadline clears Send's state silently (between two delivered sentinels). */
     @Test fun theDeadlineClearsSendSilently() {
         announcements().use { heard ->
             notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
             deadline = base + compose.mainClock.currentTime + 2_000
             send(paused = false)
-            heard.flush(compose, sentinel)
-            val before = heard.count
+            val before = heard.mark(compose, sentinel)
             compose.mainClock.advanceTimeBy(2_500)
             compose.waitForIdle()
-            assertNull(compose.onNodeWithTag("send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription))
-            heard.flush(compose, sentinel)
-            assertEquals("The deadline is silent: ${heard.spoken()}", before, heard.count)
+            val stateAfter = compose.onNodeWithTag("send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+            val after = heard.mark(compose, sentinel)
+            heard.verify()
+            assertNull("Cleared at the deadline", stateAfter)
+            assertEquals("The deadline is silent: ${heard.spoken()}", 0, after - before)
         }
     }
 }
