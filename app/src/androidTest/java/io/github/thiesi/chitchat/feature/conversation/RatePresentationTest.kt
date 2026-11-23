@@ -177,12 +177,28 @@ class RatePresentationTest {
                 compose.waitUntil(5_000) { imeBottom == 0 }
             }
             compose.waitForIdle()
-            compose.onNodeWithTag("rate_wait_line").assertIsDisplayed()
+            // PL (J on af1481d): never assertIsDisplayed alone, which passes on a sliver. The line, the composer and Send are
+            // each unclipped (clipped size equals full size) and inside the window, and above the keyboard top when it's up.
+            unclipped(name, "rate_wait_line")
+            unclipped(name, input)
+            unclipped(name, if (dm) "dm_send" else "conversation_send")
             if (noStatusRow) check(compose.onAllNodesWithTag("status_slot").fetchSemanticsNodes().isEmpty()) {
                 "$name: a composer wait shows no status row" }
             capture(name)
             if (keyboard) { androidx.test.espresso.Espresso.closeSoftKeyboard(); compose.waitUntil(5_000) { imeBottom == 0 } }
         }
+    }
+
+    private fun unclipped(name: String, tag: String) {
+        val node = compose.onNodeWithTag(tag).fetchSemanticsNode()
+        val visible = node.boundsInWindow
+        val window = compose.onRoot().fetchSemanticsNode().size
+        val detail = "$name: $tag visible=$visible size=${node.size} window=$window ime=$imeBottom"
+        check(kotlin.math.abs(visible.width - node.size.width) <= 1f && kotlin.math.abs(visible.height - node.size.height) <= 1f) {
+            "Clipped ($detail)" }
+        check(visible.left >= 0f && visible.top >= 0f && visible.right <= window.width + 0.5f && visible.bottom <= window.height + 0.5f) {
+            "Outside the window ($detail)" }
+        if (imeBottom > 0) check(visible.bottom <= window.height - imeBottom + 0.5f) { "Under the keyboard ($detail)" }
     }
 
     private fun capture(name: String) {
