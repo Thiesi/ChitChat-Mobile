@@ -151,8 +151,8 @@ private fun AuthorConfirm(dialog: AuthorDialogPresentation, enabled: Boolean, on
         if (dialog.kind == AuthorChangeKind.EDIT && dialog.recovery) {
             // #70/#284 (PL ruling B, 2026-11-23): on the recovery path (from the transition into unknown until the dialog
             // closes) the confirm keeps the width of the widest recovery label, so the action row keeps one arrangement
-            // across Check, Review and Save. At 150% and 200% "Review edit" stacked under Cancel while "Save" fit beside
-            // it, so the row reflowed on Review and a tap aimed at Review landed between the buttons. A first edit keeps
+            // across Check, Review and Save. At 150% and 200% "Review proposed edit" stacked under Cancel while "Save edit"
+            // fit beside it, so the row reflowed on Review and a tap aimed at Review landed between the buttons. A first edit keeps
             // today's arrangement. The sizing labels are invisible and silent; the visible one is end-aligned and read.
             Box(contentAlignment = androidx.compose.ui.Alignment.CenterEnd) {
                 for (sizing in listOf(R.string.author_check_history, R.string.author_review_edit, R.string.author_save))
