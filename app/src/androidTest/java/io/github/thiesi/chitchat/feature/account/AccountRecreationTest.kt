@@ -88,7 +88,7 @@ class AccountRecreationTest {
         }
     }
     private fun verifyRecovery() {
-        compose.onNodeWithText("Use an emergency recovery code").performScrollTo().performClick()
+        compose.onNodeWithText("Use an emergency recovery code").performScrollTo().performNativeTap()
         compose.onNodeWithText("Recovery code").performScrollTo()
         // The native input contract (#333's run 45032291123): one physical tap with the strict IME proof, then the text,
         // then an OS-routed tap on Verify with its bounds read after the dialog moved above the keyboard.
@@ -140,8 +140,14 @@ class AccountRecreationTest {
     @Test fun recreationDuringWriteKeepsTheRequestedExportWithoutResubmitting() {
         val gate = CompletableDeferred<Unit>()
         start(ExportDestination { _, current -> writes++; gate.await(); current() })
-        compose.onNodeWithText("Current password").performTextInput("fixture-password")
-        compose.onNodeWithText("Verify and continue").performClick()
+        // The native input contract (#335's sweep, as in verifyRecovery): one physical tap with the strict IME proof, then
+        // the text, then an OS-routed tap on Verify with its bounds read at tap time, after the dialog moved above the
+        // keyboard. A Compose click there could land on a stale centre and never start the export (#344's API36 run
+        // 45255274566, recorded on #159).
+        compose.tapNativeInput("step_up_secret", imeBottom = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+        compose.onNodeWithTag("step_up_secret").performTextInput("fixture-password")
+        compose.onNode(androidx.compose.ui.test.hasText("Verify and continue") and
+            androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.isDialog())).performNativeTap()
         compose.waitUntil(5_000) { writes == 1 }
         recreate()
         compose.runOnIdle { assertEquals(ExportStage.RUNNING, account.state.value.stage) }
