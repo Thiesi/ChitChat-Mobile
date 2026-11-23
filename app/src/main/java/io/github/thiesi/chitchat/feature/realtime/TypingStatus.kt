@@ -29,7 +29,7 @@ import io.github.thiesi.chitchat.core.typing.typingAccount
 
 @Composable
 internal fun TypingStatus(controller: TypingController?, session: SessionState, target: TypingTarget,
-    viewing: Boolean, publishing: Boolean) {
+    viewing: Boolean, publishing: Boolean, modifier: Modifier = Modifier) {
     if (controller == null) return
     val state by controller.state.collectAsStateWithLifecycle()
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
@@ -52,7 +52,7 @@ internal fun TypingStatus(controller: TypingController?, session: SessionState, 
             2 -> stringResource(R.string.typing_two, people[0].username, people[1].username)
             else -> stringResource(R.string.typing_several)
         }
-        Text(label, Modifier.padding(horizontal = 12.dp).testTag("typing_status")
+        Text(label, modifier.padding(horizontal = 12.dp).testTag("typing_status")
             .semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.labelMedium,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
     }

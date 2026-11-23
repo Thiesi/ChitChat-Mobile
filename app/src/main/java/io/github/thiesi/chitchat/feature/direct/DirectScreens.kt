@@ -447,6 +447,10 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     io.github.thiesi.chitchat.core.ui.TransferNotice(Modifier.padding(horizontal = 16.dp))
                     // Reporting R2: this conversation's report lines (PL).
                     io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Direct, Modifier.padding(horizontal = 16.dp))
+                    val rateLimit = state.sendLimit
+                    // #323b (PL, TL): the timeline's block holds the typing line and the persistent wait line with their own top
+                    // spacing, so the always-present (zero-height when empty) wait line adds no gap; spacing is unchanged otherwise.
+                    Column(Modifier.weight(1f).fillMaxWidth()) {
                     LazyColumn(Modifier.weight(1f).fillMaxWidth().rateFitTimeline(rateFit, rateWindow).testTag("dm_timeline"), timeline,
                         contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item("older") { if (state.mayHaveOlder) TextButton(onClick = model::older, enabled = !state.busy && !state.stale) {
@@ -483,23 +487,23 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                             Spacer(Modifier.height(1.dp))
                         }
                     }
+                    TypingStatus(model.typing, session, TypingTarget.Direct(peer),
+                        viewing = state.loaded && !state.stale && !blockConfirm && !detailsOpen && !composerDialog && !obscured && state.context?.relationship?.messagingAvailable == true,
+                        publishing = ready && !composerDialog && !detailsOpen && !blockConfirm && !obscured && model.canSend(), modifier = Modifier.padding(top = 6.dp))
+                    // #323b (PL amendment): the send's own wait, directly above the composer block (above the reply chip),
+                    // outside the top block, full text in every layout; the timeline gives up the space.
+                    // PL refinement: the full line only where the timeline keeps one 48dp row beside it, else the short
+                    // form here and the full line first in Details; decided per notice and window, never per draft.
+                    io.github.thiesi.chitchat.core.ui.RateWaitSlot(rateFit, session, rateLimit, R.string.rate_wait_messages,
+                        R.string.rate_wait_messages_unknown, rateWindow, rateBoxWidth - 24.dp, 6.dp,
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp), parity = state.sendLimitRepeats % 2 == 1)
+                    }
                     io.github.thiesi.chitchat.core.ui.ReceivedViewerHost(received, settled = state.loaded && !state.busy) { id ->
                         state.messages.firstOrNull { it.attachment?.id == id && !it.deleted }?.let { message ->
                             Triple(message.sender.username ?: stringResource(R.string.conversation_unknown_user),
                                 messageTime(message.createdAt, state.context?.display), message.body)
                         }
                     }
-                    TypingStatus(model.typing, session, TypingTarget.Direct(peer),
-                        viewing = state.loaded && !state.stale && !blockConfirm && !detailsOpen && !composerDialog && !obscured && state.context?.relationship?.messagingAvailable == true,
-                        publishing = ready && !composerDialog && !detailsOpen && !blockConfirm && !obscured && model.canSend())
-                    // #323b (PL amendment): the send's own wait, directly above the composer block (above the reply chip),
-                    // outside the top block, full text in every layout; the timeline gives up the space.
-                    // PL refinement: the full line only where the timeline keeps one 48dp row beside it, else the short
-                    // form here and the full line first in Details; decided per notice and window, never per draft.
-                    val rateLimit = state.sendLimit
-                    io.github.thiesi.chitchat.core.ui.RateWaitSlot(rateFit, session, rateLimit, R.string.rate_wait_messages,
-                        R.string.rate_wait_messages_unknown, rateWindow, rateBoxWidth - 24.dp, 6.dp,
-                        Modifier.fillMaxWidth().padding(horizontal = 12.dp))
                     if (!replyInline) replyControl(false)
                     if (!compact) { attachNotices(headerLimit * 0.5f); attachmentCard(headerLimit * 0.5f) }
                     if (inlineCompletion && !detailsOpen) io.github.thiesi.chitchat.feature.completion.CompletionSuggestions(completionComposer)
@@ -594,9 +598,9 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 (attachment == null && model.canWaitToSend())),
                             // Waiting shows the clock glyph, not progress: nothing has been attempted yet.
                             sending = state.sending || state.waitingToSend, modifier = Modifier.testTag("dm_send").then(
-                                // #323b (PL, TL): Send carries the wait's announcements; see rateWaitState.
+                                // #323b (PL, TL): Send reads the wait on focus (no live region); see rateWaitState.
                                 Modifier.rateWaitState(io.github.thiesi.chitchat.core.ui.rateWaitSpoken(session, state.sendLimit, R.string.rate_wait_messages,
-                                    R.string.rate_wait_messages_unknown), state.sendLimitRepeats % 2 == 1, state.sending)),
+                                    R.string.rate_wait_messages_unknown))),
                             progress = attachment == null && !state.waitingToSend)
                     })
                 }

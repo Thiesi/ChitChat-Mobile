@@ -13,6 +13,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -105,21 +107,12 @@ fun RateWaitLine(session: SessionState, notice: RateLimitNotice, @StringRes know
 }
 
 /**
- * #323b (PL, TL): Send's spoken wait. While a notice is current, Send keeps its label ("Send") and its state description
- * is the full line; a polite live region makes Send the one carrier of every announcement, because Compose 1.11.4 diffs
- * semantics snapshots every 100 ms and a node that appears (the line) isn't reliably announced, while Send always exists.
- * - **First appearance:** the state description appears on an existing node: one announcement.
- * - **Each refused tap** flips [parity]: one trailing space, present or absent, on this state description only (never
- *   the visible line or Details), so each refusal is a real snapshot difference with no timer: one announcement.
- * - **Silent otherwise:** no live region while [sending] (so "Sending" isn't spoken), and clearing drops the state and
- *   the live region in the same change, so the cleared Send isn't announced. Keyboard, rotation and form swaps don't
- *   touch Send.
+ * #323b (PL, TL): Send's readable wait. While a notice is current, Send keeps its label ("Send") and its state description
+ * is the full line, so focusing Send reads "Send, You've sent…". No live region: a button changes several properties
+ * at once (label, enabled, progress), and on a live node each change is an announcement (run 45222016407: three per
+ * appearance). The composer's wait line carries the announcement ([RateWaitSlot]).
  */
-fun Modifier.rateWaitState(spoken: String?, parity: Boolean, sending: Boolean): Modifier =
-    if (spoken == null) this else semantics {
-        stateDescription = if (parity) "$spoken " else spoken
-        if (!sending) liveRegion = LiveRegionMode.Polite
-    }
+fun Modifier.rateWaitState(spoken: String?): Modifier = if (spoken == null) this else semantics { stateDescription = spoken }
 
 /** Send's spoken wait for [notice], or null when no notice is current (known wait over, none at all). */
 @Composable
@@ -152,35 +145,39 @@ fun Modifier.rateFitTimeline(fit: RateLineFit, window: Any): Modifier =
 
 /**
  * #323b refinement (PL, TL): the composer's wait line. The composer comes first. With the timeline's height with the
- * line absent (its measured height plus the drawn line's own slot, [spacing] included, from the same layout pass):
+ * line absent (its measured height plus the drawn line's own slot, its top [spacing] included, from the same layout
+ * pass):
  * - **FULL** only if the timeline keeps one 48dp row beside the full line;
  * - **SHORT** if the short form still leaves the composer its natural height (the timeline absorbs it);
- * - **HIDDEN** otherwise (compact with the keyboard up): no line above the composer; the screen lights the Details dot and
- *   puts the full line first there. A drawn line with the timeline at 0 may be hiding a squeeze, so that reads HIDDEN.
+ * - **HIDDEN** otherwise (compact with the keyboard up): nothing drawn; the screen lights the Details dot and puts the
+ *   full line first in Details. A drawn line with the timeline at 0 may be hiding a squeeze, so that reads HIDDEN.
  *
  * Decided once per notice and [window] (width, the height above the keyboard, font scale, and whether the reply chip and
- * the attachment card or notices are present: layout, never draft content), so it can't flip while typing; a re-decision
- * (the keyboard hiding, a reply started) can change the form. No frame wait: measurements are tagged with the window, so
- * a notice arriving in a laid-out window decides at once. While a measurement for the window is pending the previous
- * form holds; with none yet, SHORT. The line is silent text (see [RateWaitLine]).
+ * the attachment card or notices are present: layout, never draft content), so it can't flip while typing. No frame
+ * wait: measurements are tagged with the window. While one is pending the previous form holds; with none yet, SHORT.
+ *
+ * **The announcement carrier (PL and TL, after run 45222016407):** this line is ONE persistent node, always composed,
+ * zero height (no padding) when nothing is drawn. Its only semantics: a permanent polite live region, a description that
+ * is the full line while a notice is current (with or without one trailing space, flipped per refused tap: [parity])
+ * and nothing otherwise, and its test tag. So the notice appearing and each refused tap are one change on an existing
+ * node (one announcement), clearing empties it (silent), and full/short/hidden swaps change only its size and visible
+ * text, never its semantics. It's the one swipe stop on the wait, where the text is. The caller places it where a
+ * zero-height node adds no gap (inside the timeline's block, not as a spaced child).
  */
 @Composable
 fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotice?, @StringRes known: Int,
-    @StringRes unknown: Int, window: Any, availableWidth: Dp, spacing: Dp, modifier: Modifier = Modifier) {
+    @StringRes unknown: Int, window: Any, availableWidth: Dp, spacing: Dp, modifier: Modifier = Modifier,
+    parity: Boolean = false) {
     var last by remember(notice) { mutableStateOf<RateLineForm?>(null) }
     var decided by remember(notice, window) { mutableStateOf<RateLineForm?>(null) }
     val now = current(session, notice)
-    if (notice == null || now == null) {
-        SideEffect { fit.form = null; fit.settled = false; fit.lineSlot = 0 }
-        return
-    }
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val style = MaterialTheme.typography.bodyMedium
-    val full = fullText(now, known, unknown)
-    val short = now.words?.let { stringResource(R.string.rate_wait_short, it) } ?: stringResource(R.string.rate_wait_short_unknown)
+    val full = now?.let { fullText(it, known, unknown) }
+    val short = now?.let { it.words?.let { w -> stringResource(R.string.rate_wait_short, w) } ?: stringResource(R.string.rate_wait_short_unknown) }
     val timeline = fit.timeline
-    val fresh = decided ?: if (timeline?.first == window) {
+    val fresh = if (full == null || short == null) null else decided ?: if (timeline?.first == window) {
         val drawn = fit.lineSlot
         if (drawn > 0 && timeline.second == 0) RateLineForm.HIDDEN
         else with(density) {
@@ -195,15 +192,18 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
             }
         }
     } else null
-    if (decided == null && fresh != null) SideEffect { decided = fresh; last = fresh }
-    val form = fresh ?: last ?: RateLineForm.SHORT
+    if (fresh != null && decided == null) SideEffect { decided = fresh; last = fresh }
+    val form = if (full == null) null else fresh ?: last ?: RateLineForm.SHORT
     val settled = fresh != null
     SideEffect { fit.form = form; fit.settled = settled }
-    if (form == RateLineForm.HIDDEN) {
-        SideEffect { fit.lineSlot = 0 }
-        return
-    }
-    val spacingPx = with(density) { spacing.roundToPx() }
-    RateWaitLine(session, notice, known, unknown, modifier.onGloballyPositioned { fit.lineSlot = it.size.height + spacingPx },
-        short = form == RateLineForm.SHORT, tag = "rate_wait_line")
+    val shown = when (form) { RateLineForm.FULL -> full; RateLineForm.SHORT -> short; else -> null }
+    if (shown != null) LocalRateLineProbe.current?.let { probe -> SideEffect { probe(form == RateLineForm.SHORT, shown) } }
+    val spoken = full?.let { if (parity) "$it " else it }
+    Text(shown.orEmpty(), modifier.then(if (shown != null) Modifier.padding(top = spacing) else Modifier.height(0.dp))
+        .onGloballyPositioned { fit.lineSlot = if (shown != null) it.size.height else 0 }
+        .clearAndSetSemantics {
+            if (spoken != null) contentDescription = spoken
+            liveRegion = LiveRegionMode.Polite
+            testTag = "rate_wait_line"
+        }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
 }

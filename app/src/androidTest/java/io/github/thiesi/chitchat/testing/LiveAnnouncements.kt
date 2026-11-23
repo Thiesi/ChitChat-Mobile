@@ -66,11 +66,25 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
             liveSources.incrementAndGet()
             val description = source.contentDescription?.toString().orEmpty()
             if (description.startsWith(FLUSH)) description.removePrefix(FLUSH).toIntOrNull()?.let { flushed = maxOf(flushed, it) }
-            else if (carrier(source)) seen += "$description|${source.state()}"
+            // Measurement (TL): each counted event's change types and the carrier's scalar state at that moment, so a
+            // count above one shows which of the carrier's properties changed. No text beyond the carrier's own label.
+            else if (carrier(source)) {
+                val bounds = android.graphics.Rect().also { source.getBoundsInScreen(it) }
+                seen += "$description|${source.state()}|types=${changeTypes(event.contentChangeTypes)}|enabled=${source.isEnabled}" +
+                    "|live=${source.liveRegion}|bounds=${bounds.toShortString()}|t=${event.eventTime}"
+            }
         }
     }
 
-    /** Announcements counted so far (each "label|state"). */
+    private fun changeTypes(types: Int): String = if (types == 0) "UNDEFINED" else listOf(
+        AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE to "SUBTREE", AccessibilityEvent.CONTENT_CHANGE_TYPE_TEXT to "TEXT",
+        AccessibilityEvent.CONTENT_CHANGE_TYPE_CONTENT_DESCRIPTION to "CONTENT_DESCRIPTION",
+        AccessibilityEvent.CONTENT_CHANGE_TYPE_STATE_DESCRIPTION to "STATE_DESCRIPTION",
+        AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_TITLE to "PANE_TITLE", AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_APPEARED to "PANE_APPEARED",
+        AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED to "PANE_DISAPPEARED", 0x800 to "ERROR", 0x1000 to "ENABLED",
+    ).filter { (bit, _) -> types and bit != 0 }.joinToString("+") { it.second }.ifEmpty { "0x" + Integer.toHexString(types) }
+
+    /** Announcements counted so far (each "label|state|change types|scalars"). */
     val count get() = seen.size
     fun spoken(): List<String> = seen.toList()
 
