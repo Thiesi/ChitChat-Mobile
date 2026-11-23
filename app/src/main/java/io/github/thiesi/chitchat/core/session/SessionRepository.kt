@@ -193,6 +193,12 @@ class SessionRepository internal constructor(
     private val vault: SessionVault,
     private val clock: Clock = Clock.systemUTC(),
     private val push: PushTeardown = PushTeardown.NONE,
+    /**
+     * Monotonic milliseconds for [RateBudget] gates (#323), never wall time. Production passes
+     * `SystemClock::elapsedRealtime`, which keeps counting in deep sleep, so a local gate never outlasts the server's
+     * window. The default serves JVM tests. (Before [http], so the trailing-lambda constructions keep binding to it.)
+     */
+    private val elapsed: () -> Long = { System.nanoTime() / 1_000_000 },
     private val http: (ServerAddress) -> SessionHttp = { SessionHttp(it) },
 ) : SessionController, io.github.thiesi.chitchat.core.policies.PolicyReads, io.github.thiesi.chitchat.core.policies.RulesOperations {
     private val lock = Mutex()
@@ -912,10 +918,12 @@ class SessionRepository internal constructor(
     }
 
     /**
-     * [localFailure] marks a failure that belongs to its own screen and must not take the session-wide path: today only
-     * a report budget's `429 rate_limited` (TL ruling, reporting R1; #323 tracks the other per-action policies).
+     * [budget] (#323) opts a call site into its server policy's own limiter. Its `429 rate_limited` stays with that
+     * policy: no session-wide wait, and while the server's wait runs the same policy is refused locally (a typed 429
+     * with [ApiFailure.localGate], no request). An unknown wait sets no gate. Every other failure, a proxy's 429 included,
+     * takes the unchanged session-wide path; so does everything from a call site without a budget.
      */
-    internal suspend fun <T> authorized(access: SessionAccess, localFailure: (ApiFailure) -> Boolean = { false },
+    internal suspend fun <T> authorized(access: SessionAccess, budget: RateBudget? = null,
         operation: suspend SessionHttp.() -> T): T {
         lock.withLock {
             ensureCurrent(access)
@@ -927,6 +935,11 @@ class SessionRepository internal constructor(
             if (active.csrf != access.csrf) throw CancellationException("Session token changed")
             if (clock.millis() < mutable.value.retryAtMillis) throw ApiFailure(FailureKind.HTTP, 429,
                 retryAfterSeconds = (mutable.value.retryAtMillis - clock.millis() + 999) / 1000)
+            if (budget != null) active.budgets[budget]?.let { wait ->
+                val left = wait.untilElapsed - elapsed()
+                if (wait.generation != access.generation || wait.userId != access.userId || left <= 0) active.budgets.remove(budget)
+                else throw ApiFailure(FailureKind.HTTP, 429, "rate_limited", retryAfterSeconds = (left + 999) / 1000, localGate = true)
+            }
         }
         try {
             val result = access.api.operation()
@@ -941,8 +954,13 @@ class SessionRepository internal constructor(
                 if (mutable.value.generation != access.generation) throw CancellationException("Session retired")
                 else {
                     val active = runtime
+                    val budgeted = budget != null && failure.isServerRateBudget()
+                    // The server's wait (already capped, Retry-After first) on the monotonic clock; unknown sets no gate.
+                    if (budgeted && active != null) failure.retryAfterSeconds?.takeIf { it > 0 }?.let { seconds ->
+                        active.budgets[checkNotNull(budget)] = BudgetWait(access.generation, access.userId, elapsed() + seconds * 1000)
+                    }
                     // Resource validation/permission errors belong to that screen, not global logout.
-                    if (active != null && !localFailure(failure) && (failure.status == 401 || failure.status == 429 || failure.status == 503 ||
+                    if (active != null && !budgeted && (failure.status == 401 || failure.status == 429 || failure.status == 503 ||
                             failure.code == "csrf_failed" || failure.kind in setOf(FailureKind.NETWORK,
                             FailureKind.TIMEOUT, FailureKind.REDIRECT))) failLocked(active, failure)
                 }
@@ -1220,8 +1238,13 @@ class SessionRepository internal constructor(
     /** An Unknown reset attempt: the username and the server's `Date` from its challenge GET. No string form. */
     private class UncertainReset(val username: String, val serverDate: String?)
 
+    /** A [RateBudget]'s known server wait (#323): memory only, per runtime, for one generation and account. */
+    private class BudgetWait(val generation: Long, val userId: Long, val untilElapsed: Long)
+
     private class Runtime(val server: ServerAddress, val api: SessionHttp) {
         var csrf: String? = null
+        /** #323: per-policy waits. They die with the runtime (sign-out, server forget, replacement). */
+        val budgets = HashMap<RateBudget, BudgetWait>()
         /**
          * The username of a registration whose result was ambiguous (O4a). Unlike `registrationMayHaveSucceeded`, it
          * survives switching to the sign-in form; a later sign-in to that same username consumes it and marks the key

@@ -58,7 +58,9 @@ class RecoveryKeyTest {
         for ((failure, expected) in listOf(
             ApiFailure(FailureKind.HTTP, 409, "password_account_required") to RecoveryKeyResult.PasswordAccountRequired,
             ApiFailure(FailureKind.HTTP, 429, "rate_limited", retryAfterSeconds = 120) to RecoveryKeyResult.RateLimited(120),
-            ApiFailure(FailureKind.HTTP, 429, "rate_limited") to RecoveryKeyResult.RateLimited(null))) {
+            ApiFailure(FailureKind.HTTP, 429, "rate_limited") to RecoveryKeyResult.RateLimited(null),
+            // #323a: the local gate reads the same, with the remaining wait.
+            ApiFailure(FailureKind.HTTP, 429, "rate_limited", 119, localGate = true) to RecoveryKeyResult.RateLimited(119))) {
             var posts = 0
             assertEquals(expected, requestRecoveryKey({ posts++; throw failure }, { error("No step-up") }, null, { error("No read") }))
             assertEquals(1, posts)

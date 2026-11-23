@@ -166,14 +166,25 @@ class SessionReportRepositoryTest {
         assertEquals(before, server.requestCount)
     }
 
-    @Test fun anUpload429IsUnchanged() = runTest {
+    /** #323a: the upload policies have their own budgets now (attachment_upload, direct_message_attachment_upload). */
+    @Test fun anUpload429StaysWithItsOwnPolicy() = runTest {
         val state = signedIn("""{"max_bytes":1000,"allowed_mime_types":["text/plain"],"previewable_mime_types":[],"rate_limits":{"room":{"maximum_attempts":10,"window_seconds":3600},"direct_message":{"maximum_attempts":10,"window_seconds":3600}}}""")
         server.enqueue(error("rate_limited", 429, ""","retry_after_seconds":900"""))
         val upload = AttachmentUpload(PreparedAttachmentPayload.create("fixture.txt", "text/plain", byteArrayOf(1, 2, 3).toByteString()), "")
-        try { SessionAttachmentRepository(sessions).room(state, 4, upload); fail() } catch (expected: ApiFailure) { assertEquals(429, expected.status) }
+        val uploads = SessionAttachmentRepository(sessions)
+        try { uploads.room(state, 4, upload); fail() } catch (expected: ApiFailure) { assertEquals(429, expected.status); assertFalse(expected.localGate) }
         take()
-        assertTrue("An upload's 429 keeps the session-wide wait (#323 decides otherwise later)",
-            sessions.state.value.retryAtMillis > state.retryAtMillis)
+        assertEquals("No session-wide wait", state.retryAtMillis, sessions.state.value.retryAtMillis)
+        val before = server.requestCount
+        try { uploads.room(sessions.state.value, 4, upload); fail() } catch (gated: ApiFailure) {
+            assertTrue("The next room upload is refused locally", gated.localGate); assertEquals(429, gated.status)
+            assertTrue((gated.retryAfterSeconds ?: 0) in 1..900)
+        }
+        assertEquals(before, server.requestCount)
+        server.enqueue(error("validation_error", 400))
+        assertEquals("A report is another policy and reaches the server", ReportResult.Invalid,
+            reports.send(sessions.state.value, ReportTarget.RoomMessage(1), ReportCategory.SPAM, null))
+        assertEquals(before + 1, server.requestCount)
     }
 
     @Test fun personFactsReadTheProfileStrictly() = runTest {

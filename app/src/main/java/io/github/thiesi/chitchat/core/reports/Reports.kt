@@ -77,9 +77,6 @@ interface ReportOperations {
     suspend fun personFacts(expected: SessionState, target: ReportTarget.Person): ReportFacts?
 }
 
-/** The report endpoints' own 429: exactly the JSON code `rate_limited`. A 429 without it takes the session-wide path. */
-internal fun ApiFailure.isReportBudget() = status == 429 && code == "rate_limited"
-
 /** Maps a report POST's failure to its outcome (moderation-reports.md's error lists). */
 internal fun reportResult(failure: ApiFailure, category: ReportCategory): ReportResult = when {
     failure.kind in setOf(FailureKind.NETWORK, FailureKind.TIMEOUT) || (failure.status ?: 0) >= 500 -> ReportResult.Unknown(failure)
@@ -95,8 +92,8 @@ internal fun reportResult(failure: ApiFailure, category: ReportCategory): Report
         ReportResult.Refused(ReportRefusal.NOT_ALLOWED)
     failure.status == 400 && failure.code == "validation_error" ->
         if (category == ReportCategory.OFFENSIVE_PROFILE_PICTURE) ReportResult.PictureGone else ReportResult.Invalid
-    // Any 429 is a definite refusal: the report budget's own (kept local), or the session's wait already running, or a
-    // proxy's. Only isReportBudget decides whether the session-wide wait applies.
+    // Any 429 is a definite refusal: the report budget's own (kept local, #323's RateBudget), its local gate, the
+    // session's wait already running, or a proxy's. Only the budget decides whether the session-wide wait applies.
     failure.status == 429 -> ReportResult.RateLimited(failure.retryAfterSeconds?.takeIf { it > 0 })
     else -> ReportResult.Failed(failure)
 }

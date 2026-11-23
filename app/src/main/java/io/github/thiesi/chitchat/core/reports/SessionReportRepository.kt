@@ -1,12 +1,14 @@
 package io.github.thiesi.chitchat.core.reports
 
 import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.session.RateBudget
 import io.github.thiesi.chitchat.core.session.SessionRepository
 import io.github.thiesi.chitchat.core.session.SessionState
 
 /**
  * Reports through the original rendered session (reporting.md). Each POST is one request, never resent; its refusals
- * stay typed. A report budget's `429 rate_limited` stays local to the form (TL ruling): it doesn't lock the session.
+ * stay typed. A report budget's `429 rate_limited` stays local to the form (TL ruling; #323's [RateBudget], which also
+ * gates the same report policy locally during the server's wait): it doesn't lock the session.
  */
 internal class SessionReportRepository(private val sessions: SessionRepository) : ReportOperations {
     override val session = sessions.state
@@ -18,7 +20,7 @@ internal class SessionReportRepository(private val sessions: SessionRepository) 
             return if (failure.status == 429) ReportResult.RateLimited(failure.retryAfterSeconds?.takeIf { it > 0 }) else ReportResult.Failed(failure)
         }
         return try {
-            val caseId = sessions.authorized(access, localFailure = ApiFailure::isReportBudget) {
+            val caseId = sessions.authorized(access, if (target is ReportTarget.Person) RateBudget.USER_REPORT else RateBudget.MESSAGE_REPORT) {
                 when (target) {
                     is ReportTarget.RoomMessage -> reportMessage(false, target.messageId, category.wire, details, access.csrf)
                     is ReportTarget.DirectMessage -> reportMessage(true, target.messageId, category.wire, details, access.csrf)

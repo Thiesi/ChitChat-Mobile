@@ -4,6 +4,7 @@ import android.content.Context
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.session.PushTeardown
 import io.github.thiesi.chitchat.core.session.SessionPhase
+import io.github.thiesi.chitchat.core.session.RateBudget
 import io.github.thiesi.chitchat.core.session.SessionRepository
 import io.github.thiesi.chitchat.core.session.SessionState
 import java.io.IOException
@@ -222,7 +223,7 @@ class PushRegistrar(
             !record.belongsTo(current.server?.value.orEmpty(), current.user?.id ?: -1)) return false
         return try {
             val access = sessions.openAccess(current)
-            sessions.authorized(access) { revokePushDevice(id, access.csrf) }
+            sessions.authorized(access, RateBudget.PUSH_SUBSCRIPTION_MANAGEMENT) { revokePushDevice(id, access.csrf) }
             true
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: ApiFailure) { false }
@@ -270,7 +271,7 @@ class PushRegistrar(
             if (state.phase != SessionPhase.AUTHENTICATED || !forgotten.belongsTo(state.server?.value.orEmpty(), state.user?.id ?: -1)) return@launch
             try {
                 val access = sessions.openAccess(state)
-                sessions.authorized(access) { revokePushDevice(id, access.csrf) }
+                sessions.authorized(access, RateBudget.PUSH_SUBSCRIPTION_MANAGEMENT) { revokePushDevice(id, access.csrf) }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: ApiFailure) { /* The device list still shows it; the person can remove it there. */ }
         }

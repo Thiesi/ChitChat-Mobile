@@ -54,6 +54,19 @@ class NotificationSettingsViewModelTest {
         assertTrue(model.canChoose())
     }
 
+    /** #323a: push_subscription_management's 429 (server or local gate) is definite: no unknown, no replay. */
+    @Test fun aRateLimitedChoiceIsDefiniteAndNeverReplayed() {
+        for (failure in listOf(ApiFailure(FailureKind.HTTP, 429, "rate_limited", 600),
+            ApiFailure(FailureKind.HTTP, 429, "rate_limited", 599, localGate = true))) {
+            opened(); ops.failure = failure; val writes = ops.writes
+            model.choose(signedIn, prefs.copy(pinged = false)); dispatcher.scheduler.runCurrent()
+            assertTrue(prefs.pinged); assertFalse(model.state.value.unconfirmed); assertNotNull(model.state.value.error)
+            assertTrue(model.canChoose()); assertEquals(writes + 1, ops.writes)
+            dispatcher.scheduler.advanceTimeBy(1_000_000); dispatcher.scheduler.runCurrent()
+            assertEquals("Nothing resends", writes + 1, ops.writes)
+        }
+    }
+
     @Test fun anUncertainWriteNeedsAnExplicitGetBeforeANewChoiceAndIsNeverReplayed() {
         opened(); ops.failure = ApiFailure(FailureKind.TIMEOUT)
         model.choose(signedIn, prefs.copy(mentioned = false)); dispatcher.scheduler.runCurrent()

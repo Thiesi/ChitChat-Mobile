@@ -65,8 +65,10 @@ class SessionRepositoryTest {
         sessions = repository()
     }
     @After fun tearDown() { apis.forEach(SessionHttp::close); server.close() }
+    /** Monotonic milliseconds for #323's rate gates, moved by hand. */
+    private var elapsedNow = 1_000_000L
     private fun repository(push: PushTeardown = PushTeardown.NONE) =
-        SessionRepository(vault, clock, push) { SessionHttp(it, client).also(apis::add) }
+        SessionRepository(vault, clock, push, elapsed = { elapsedNow }) { SessionHttp(it, client).also(apis::add) }
     private fun address() = (ServerAddress.parse(server.url("/").toString()) as AddressResult.Valid).address
     private fun json(body: String, status: Int = 200, cookie: String? = null) = MockResponse.Builder()
         .code(status).body(body).addHeader("Content-Type", "application/json")
@@ -450,6 +452,95 @@ class SessionRepositoryTest {
         sessions.signIn("Alice", "fixture-password")
         assertEquals(c, server.takeRequest(5, TimeUnit.SECONDS)!!.headers["X-CSRF-Token"])
         assertEquals(SessionPhase.AUTHENTICATED, sessions.state.value.phase)
+    }
+
+    // #323: a policy limiter's own 429 stays with its RateBudget; everything else keeps the session-wide path.
+    private fun limited(seconds: Int?) = json("""{"error":{"code":"rate_limited","message":"x"""" +
+        (seconds?.let { ""","retry_after_seconds":$it""" } ?: "") + "}}", 429)
+    private suspend fun budgeted(access: SessionAccess, budget: RateBudget): ApiFailure? =
+        try { sessions.authorized(access, budget) { verificationMethods() }; null } catch (failure: ApiFailure) { failure }
+
+    @Test fun aBudgetedRateLimitGatesOnlyItsOwnPolicyAndNeverTheSession() = runTest {
+        login(); val access = sessions.openAccess()
+        server.enqueue(limited(30))
+        val first = checkNotNull(budgeted(access, RateBudget.PERSONAL_DATA_EXPORT)); server.takeRequest()
+        assertEquals(429, first.status); assertEquals(30L, first.retryAfterSeconds); assertFalse("The server's own refusal", first.localGate)
+        assertEquals("No session-wide wait", 0L, sessions.state.value.retryAtMillis)
+        assertNull("No session-wide error", sessions.state.value.error)
+        // Another policy and an unbudgeted read still reach the server.
+        server.enqueue(error("validation_error", 400)); var count = server.requestCount
+        assertEquals(400, budgeted(access, RateBudget.ATTACHMENT_UPLOAD)?.status); assertEquals(count + 1, server.requestCount); server.takeRequest()
+        server.enqueue(error("validation_error", 400)); count = server.requestCount
+        try { sessions.authorized(access) { verificationMethods() }; fail() } catch (_: ApiFailure) { }
+        assertEquals(count + 1, server.requestCount); server.takeRequest()
+        // The same policy is refused locally, typed and distinguishable, with no request.
+        elapsedNow += 10_500; count = server.requestCount
+        val gated = checkNotNull(budgeted(access, RateBudget.PERSONAL_DATA_EXPORT))
+        assertEquals(count, server.requestCount)
+        assertTrue(gated.localGate); assertEquals(429, gated.status); assertEquals("rate_limited", gated.code)
+        assertEquals("The remaining wait, rounded up", 20L, gated.retryAfterSeconds)
+        assertEquals(0L, sessions.state.value.retryAtMillis); assertNull(sessions.state.value.error)
+        // Wall-clock jumps don't matter; the monotonic deadline does.
+        clock.now += 3_600_000
+        assertTrue(checkNotNull(budgeted(access, RateBudget.PERSONAL_DATA_EXPORT)).localGate); assertEquals(count, server.requestCount)
+        elapsedNow += 19_500
+        server.enqueue(error("validation_error", 400))
+        assertEquals("At the deadline the next press goes to the server", 400, budgeted(access, RateBudget.PERSONAL_DATA_EXPORT)?.status)
+        assertEquals(count + 1, server.requestCount)
+    }
+
+    @Test fun aBudgetGateUsesRetryAfterFirstAndTheCap() = runTest {
+        login(); val access = sessions.openAccess()
+        server.enqueue(MockResponse.Builder().code(429).addHeader("Retry-After", "45").addHeader("Content-Type", "application/json")
+            .body("""{"error":{"code":"rate_limited","message":"x","retry_after_seconds":30}}""").build())
+        budgeted(access, RateBudget.MFA_RECOVERY); server.takeRequest()
+        assertEquals("Retry-After takes precedence", 45L, budgeted(access, RateBudget.MFA_RECOVERY)?.retryAfterSeconds)
+        server.enqueue(limited(200_000))
+        budgeted(access, RateBudget.RECOVERY_KEY_MANAGEMENT); server.takeRequest()
+        val capped = checkNotNull(budgeted(access, RateBudget.RECOVERY_KEY_MANAGEMENT))
+        assertTrue(capped.localGate); assertEquals("The 86,400 s cap", 86_400L, capped.retryAfterSeconds)
+    }
+
+    @Test fun anUnknownWaitSetsNoGateAndTheNextPressGoesToTheServer() = runTest {
+        login(); val access = sessions.openAccess()
+        server.enqueue(limited(null))
+        val first = checkNotNull(budgeted(access, RateBudget.PRIVILEGED_STEP_UP)); server.takeRequest()
+        assertNull(first.retryAfterSeconds); assertEquals(0L, sessions.state.value.retryAtMillis)
+        server.enqueue(error("validation_error", 400)); val count = server.requestCount
+        assertEquals(400, budgeted(access, RateBudget.PRIVILEGED_STEP_UP)?.status); assertEquals(count + 1, server.requestCount)
+    }
+
+    @Test fun aProxy429OrAnUnbudgetedCallSiteKeepsTheSessionWidePath() = runTest {
+        login(); val access = sessions.openAccess()
+        // A proxy's 429 (no rate_limited JSON) on a budgeted call: session-wide, exactly as before.
+        server.enqueue(MockResponse.Builder().code(429).addHeader("Retry-After", "40").body("Too Many Requests").build())
+        budgeted(access, RateBudget.ATTACHMENT_UPLOAD); server.takeRequest()
+        assertEquals(clock.now + 40_000, sessions.state.value.retryAtMillis)
+        assertEquals(429, sessions.state.value.error?.status)
+        clock.now += 40_000
+        // The policy's own 429 from a call site without a budget: session-wide too.
+        server.enqueue(limited(25))
+        try { sessions.authorized(access) { verificationMethods() }; fail() } catch (failure: ApiFailure) { assertFalse(failure.localGate) }
+        server.takeRequest()
+        assertEquals(clock.now + 25_000, sessions.state.value.retryAtMillis)
+    }
+
+    @Test fun budgetGatesAreFencedToTheirRuntimeAndClearedBySignOut() = runTest {
+        login(); val access = sessions.openAccess()
+        server.enqueue(limited(600))
+        budgeted(access, RateBudget.USER_REPORT); server.takeRequest()
+        assertTrue(checkNotNull(budgeted(access, RateBudget.USER_REPORT)).localGate)
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut(); server.takeRequest()
+        login(); val next = sessions.openAccess()
+        server.enqueue(error("validation_error", 400)); val count = server.requestCount
+        assertEquals("A new sign-in starts without the old gate", 400, budgeted(next, RateBudget.USER_REPORT)?.status)
+        assertEquals(count + 1, server.requestCount)
+        // Forgetting the server (a runtime replacement) drops it too.
+        server.enqueue(limited(600)); budgeted(next, RateBudget.MESSAGE_REPORT); server.takeRequest()
+        sessions.connect(null)
+        login(); val third = sessions.openAccess()
+        server.enqueue(error("validation_error", 400)); val after = server.requestCount
+        assertEquals(400, budgeted(third, RateBudget.MESSAGE_REPORT)?.status); assertEquals(after + 1, server.requestCount)
     }
 
     @Test fun rateLimitBlocksEarlyResubmission() = runTest {

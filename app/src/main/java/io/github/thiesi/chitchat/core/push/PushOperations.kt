@@ -3,6 +3,7 @@ package io.github.thiesi.chitchat.core.push
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.network.StrictJsonBoolean
+import io.github.thiesi.chitchat.core.session.RateBudget
 import io.github.thiesi.chitchat.core.session.SessionRepository
 import io.github.thiesi.chitchat.core.session.SessionState
 import kotlinx.coroutines.flow.StateFlow
@@ -59,12 +60,12 @@ internal class SessionPushRepository(private val sessions: SessionRepository) : 
     override suspend fun update(expected: SessionState, preferences: PushPreferences): PushPreferences {
         val body = pushPreferencesBody(preferences) // Freeze the choice before waiting for access.
         val access = sessions.openAccess(expected)
-        return sessions.authorized(access) { updatePushPreferences(body, access.csrf) }
+        return sessions.authorized(access, RateBudget.PUSH_SUBSCRIPTION_MANAGEMENT) { updatePushPreferences(body, access.csrf) }
     }
     override suspend fun revoke(expected: SessionState, deviceId: Long): List<PushDevice> {
         if (deviceId <= 0) throw ApiFailure(FailureKind.HTTP, 400, "validation_error")
         val access = sessions.openAccess(expected)
-        return sessions.authorized(access) { revokePushDevice(deviceId, access.csrf) }
+        return sessions.authorized(access, RateBudget.PUSH_SUBSCRIPTION_MANAGEMENT) { revokePushDevice(deviceId, access.csrf) }
     }
 }
 

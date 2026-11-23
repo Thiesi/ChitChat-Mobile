@@ -186,6 +186,12 @@ class ApiFailure(
     val code: String? = null,
     val retryAfterSeconds: Long? = null,
     val maxBytes: Long? = null,
+    /**
+     * #323: a local refusal by a [io.github.thiesi.chitchat.core.session.RateBudget] gate during a known server wait.
+     * No request was made. It reads like the server's `429 rate_limited` (with the remaining wait) but stays
+     * distinguishable in code and tests.
+     */
+    val localGate: Boolean = false,
 ) : java.io.IOException(kind.name)
 
 internal fun requireValidCsrf(value: String) {
