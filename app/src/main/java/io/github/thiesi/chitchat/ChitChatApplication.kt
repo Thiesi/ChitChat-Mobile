@@ -63,7 +63,8 @@ class ChitChatApplication : Application() {
             revoke = { io.github.thiesi.chitchat.core.media.ShareProvider.revoke(this, it) })
     }
     private val sessionRepository by lazy {
-        SessionRepository(KeystoreSessionVault(this), push = io.github.thiesi.chitchat.core.media.ShareCopyTeardown(pushLocal, shareCopies))
+        SessionRepository(KeystoreSessionVault(this), push = io.github.thiesi.chitchat.core.media.ShareCopyTeardown(pushLocal, shareCopies),
+            elapsed = android.os.SystemClock::elapsedRealtime) // #323: counts deep sleep, so a rate gate never outlasts the server's.
     }
     internal val pushRegistrar by lazy {
         io.github.thiesi.chitchat.core.push.PushRegistrar(pushLocal, pushConnector, sessionRepository, processScope,

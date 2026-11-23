@@ -15,7 +15,8 @@ limits and every write rule stay as they are.
   4. incompatible or redirect stream error;
   5. other stream error;
   6. refresh required;
-  7. rate-limited;
+  7. rate-limited (the session-wide wait only; since #323 a policy's own `429 rate_limited` on a call site with a
+     [RateBudget](rate-budgets.md) never reaches it);
   8. reconnecting for more than 5 s;
   9. Back online;
   10. the screen's uncertain state;
@@ -33,7 +34,9 @@ limits and every write rule stay as they are.
   - the row-8 five-second one-shot;
   - the Back online dismissal, after about 2 s, shown only for the first `LIVE` after rows 2–5 or 8.
 
-  The gate wakes the slot when the wait ends, so row 7 clears and Refresh session enables. Under a minute
+  The gate (P-25) covers only the session-wide wait (a proxy's or other non-`rate_limited` 429, a bootstrap or
+  revalidation 429, or a policy 429 on a call site without a budget yet; [rate budgets](rate-budgets.md)). It wakes
+  the slot when the wait ends, so row 7 clears and Refresh session enables. Under a minute
   it counts down each second; longer waits wake once when they drop under a minute. All of these are bound
   to the slot's composition, never run while the app isn't visible, and carry no elapsed time across the
   background.

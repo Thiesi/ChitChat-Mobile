@@ -1,5 +1,6 @@
 package io.github.thiesi.chitchat.core.media
 
+import io.github.thiesi.chitchat.core.session.RateBudget
 import io.github.thiesi.chitchat.core.session.SessionRepository
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.direct.validatedDirectPrivacy
@@ -37,7 +38,7 @@ internal class SessionAttachmentRepository(private val sessions: SessionReposito
 
     suspend fun room(expected: SessionState, roomId: Long, upload: AttachmentUpload): RoomUploadReceipt {
         val access = sessions.openAccess(expected)
-        return sessions.authorized(access) {
+        return sessions.authorized(access, RateBudget.ATTACHMENT_UPLOAD) {
             checkPolicy(upload)
             uploadRoomAttachment(roomId, upload, access.csrf, access.userId)
         }
@@ -45,7 +46,7 @@ internal class SessionAttachmentRepository(private val sessions: SessionReposito
 
     suspend fun direct(expected: SessionState, peerId: Long, upload: AttachmentUpload): DirectUploadReceipt {
         val access = sessions.openAccess(expected)
-        return sessions.authorized(access) {
+        return sessions.authorized(access, RateBudget.DIRECT_MESSAGE_ATTACHMENT_UPLOAD) {
             checkPolicy(upload)
             validatedDirectPrivacy(sessions.state.value.privacy)
             uploadDirectAttachment(peerId, upload, access.csrf, access.userId)

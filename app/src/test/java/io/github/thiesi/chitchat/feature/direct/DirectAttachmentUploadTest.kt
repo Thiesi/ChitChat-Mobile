@@ -160,6 +160,29 @@ class DirectAttachmentUploadTest {
         assertEquals(DirectAttachmentPhase.READY, view().phase)
     }
 
+    /**
+     * #323a: an upload's `429 rate_limited` (the server's, or the local gate's) is definite, like O3b3b's 403. The file
+     * and caption stay READY, nothing is unknown, reading continues, later edits survive and nothing is resent. A
+     * proxy's 429 keeps today's definite handling.
+     */
+    @Test fun aRateLimitedDirectUploadIsDefiniteKeepsTheFileAndNeverResends() = rateLimited(ApiFailure(FailureKind.HTTP, 429, "rate_limited", 900))
+    @Test fun aRateLimitedDirectUploadIsDefiniteKeepsTheFileAndNeverResendsAfterTheLocalGate() = rateLimited(ApiFailure(FailureKind.HTTP, 429, "rate_limited", 899, localGate = true))
+    @Test fun aRateLimitedDirectUploadIsDefiniteKeepsTheFileAndNeverResendsForAProxy429() = rateLimited(ApiFailure(FailureKind.HTTP, 429, null, 40))
+
+    private fun rateLimited(failure: ApiFailure) = runTest(dispatcher) {
+        val ready = prepared(); model.updateDraft("caption")
+        assertTrue(send(ready)); runCurrent()
+        wire.result.completeExceptionally(failure); runCurrent()
+        assertNotNull("Reading continues", model.state.value.context)
+        assertEquals("caption", model.state.value.draft)
+        assertEquals(DirectAttachmentPhase.READY, view().phase)
+        assertFalse(model.state.value.uncertainSend)
+        model.updateDraft("later caption"); advanceTimeBy(1_000_000); runCurrent()
+        assertEquals("Later content survives", "later caption", model.state.value.draft)
+        assertEquals("Nothing resends", 1, wire.calls)
+        assertEquals(DirectAttachmentPhase.READY, view().phase)
+    }
+
     @Test fun acknowledgedUploadNeverBecomesUnknownWhenCanonicalGetFails() = runTest(dispatcher) {
         val ready = prepared(); model.updateDraft("caption")
         assertTrue(send(ready)); runCurrent(); api.historyFailure = ApiFailure(FailureKind.NETWORK)

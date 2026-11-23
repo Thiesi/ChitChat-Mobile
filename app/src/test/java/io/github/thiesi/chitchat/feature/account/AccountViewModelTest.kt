@@ -178,6 +178,16 @@ class AccountViewModelTest {
         assertEquals(ExportStage.CHOOSING, model.state.value.stage)
     }
 
+    /** #323a: mfa_recovery's local gate (no request) is the same definite refusal: the code isn't spent. */
+    @Test fun aLocallyGatedRecoveryCodeIsDefiniteAndNotSpent() = runTest(dispatcher) {
+        fake.methods = VerificationMethods(true, true, 8)
+        fake.recoveryFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 30, localGate = true)
+        start(); advanceUntilIdle()
+        model.verify("UNUSED-FIXTURE-CODE", true); advanceUntilIdle()
+        assertEquals(ExportStage.FAILED, model.state.value.stage)
+        assertFalse(model.state.value.recoveryMayBeSpent)
+    }
+
     @Test fun definiteRecoveryRejectionDoesNotClaimTheCodeMayBeSpent() = runTest(dispatcher) {
         fake.methods = VerificationMethods(true, true, 8)
         fake.recoveryFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited")

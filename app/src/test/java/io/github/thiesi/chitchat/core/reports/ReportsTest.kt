@@ -3,6 +3,7 @@ package io.github.thiesi.chitchat.core.reports
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.network.reportFacts
+import io.github.thiesi.chitchat.core.session.isServerRateBudget
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
@@ -43,10 +44,13 @@ class ReportsTest {
         assertEquals(ReportResult.RateLimited(42), reportResult(http(429, "rate_limited", 42), ReportCategory.HATE))
         assertEquals("A non-positive wait is unknown", ReportResult.RateLimited(null), reportResult(http(429, "rate_limited", 0), ReportCategory.HATE))
         assertEquals("A proxy's 429 is still a refusal", ReportResult.RateLimited(null), reportResult(http(429, null), ReportCategory.HATE))
-        assertTrue(http(429, "rate_limited").isReportBudget())
-        assertFalse("A non-JSON 429 takes the session-wide path", http(429, null).isReportBudget())
-        assertFalse(http(429, "other_code").isReportBudget())
-        assertFalse(http(400, "rate_limited").isReportBudget())
+        assertTrue(http(429, "rate_limited").isServerRateBudget())
+        assertFalse("A non-JSON 429 takes the session-wide path", http(429, null).isServerRateBudget())
+        assertFalse(http(429, "other_code").isServerRateBudget())
+        assertFalse(http(400, "rate_limited").isServerRateBudget())
+        assertFalse("A local gate is no server refusal", ApiFailure(FailureKind.HTTP, 429, "rate_limited", 5, localGate = true).isServerRateBudget())
+        assertEquals("A local gate is the same wait", ReportResult.RateLimited(5),
+            reportResult(ApiFailure(FailureKind.HTTP, 429, "rate_limited", 5, localGate = true), ReportCategory.HATE))
     }
 
     @Test fun anythingThatMayHaveCommittedIsUnknownAndADefiniteRefusalIsFailed() {
