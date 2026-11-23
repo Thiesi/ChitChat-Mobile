@@ -60,6 +60,12 @@ import org.junit.Test
  * with the native keyboard, at a real Configuration font scale. The fake server refuses the send with `429 rate_limited`;
  * a known wait also has its deadline in the session (as the repository records it). `rate-{room|dm}-{send|ping}-…`.
  * Fake server writes, no live mutation.
+ *
+ * PL refinement (re-J on b2c34c4) and TL conditions: per capture, which form was chosen (full, or the short form where
+ * the full line doesn't leave the timeline a 48dp row), the line unclipped and above the keyboard, and the composer's
+ * field width and arrangement equal with and without the line; the line present after the keyboard hides (room and DM);
+ * the full line first in Details only while the short form shows; a reply started during the wait re-decides the form
+ * without changing the composer.
  */
 class RatePresentationTest {
     @get:Rule val compose = createEmptyComposeRule()
@@ -68,16 +74,21 @@ class RatePresentationTest {
     private fun text(id: Int) = context.getString(id)
     /** The activity window's IME inset, read in composition (as the conversation journeys do) for the one native tap. */
     @Volatile private var imeBottom = 0
+    /** The form the composer's wait line last drew (short?) and its visible text, from the observation-only probe. */
+    @Volatile private var form: Pair<Boolean, String>? = null
 
-    // 1. Room composer with the send line, a draft and a reply chip: light and dark × default and 200%.
-    @Test fun roomSendLight() = scales { name, factor -> flow("rate-room-send-light-$name", dm = false, dark = false, factor, reply = true) }
-    @Test fun roomSendDark() = scales { name, factor -> flow("rate-room-send-dark-$name", dm = false, dark = true, factor, reply = true) }
+    // 1. Room composer with the send line, a draft and a reply chip: light and dark × default and 200%. At 200% the full
+    // line doesn't fit beside the composer with the chip: the short form, and (light) Details with the full line first.
+    @Test fun roomSendLight() = scales { name, factor -> flow("rate-room-send-light-$name", dm = false, dark = false, factor,
+        reply = true, short = factor > 1f, details = true) }
+    @Test fun roomSendDark() = scales { name, factor -> flow("rate-room-send-dark-$name", dm = false, dark = true, factor,
+        reply = true, short = factor > 1f) }
     // 2. DM composer with the send line: light and dark × default and 200%.
     @Test fun dmSendLight() = scales { name, factor -> flow("rate-dm-send-light-$name", dm = true, dark = false, factor) }
     @Test fun dmSendDark() = scales { name, factor -> flow("rate-dm-send-dark-$name", dm = true, dark = true, factor) }
     // 3. Room composer at 200% landscape with the keyboard up.
     @Test fun roomSendLandscapeKeyboard() =
-        flow("rate-room-send-light-font200-landscape-ime", dm = false, dark = false, 2f, landscape = true, keyboard = true)
+        flow("rate-room-send-light-font200-landscape-ime", dm = false, dark = false, 2f, landscape = true, keyboard = true, short = true)
     // 4. The ping line (default light).
     @Test fun roomPing() = flow("rate-room-ping-light-default", dm = false, dark = false, 1f, ping = true)
     // 11. The unknown-wait send line (light default).
@@ -85,11 +96,18 @@ class RatePresentationTest {
     // 12. A conversation with a composer wait and no status row (asserted).
     @Test fun roomConversationNoStatusRow() =
         flow("rate-room-conversation-light-default", dm = false, dark = false, 1f, noStatusRow = true)
+    // PL: room at 200% with the notice shown and no chip, then a reply started: the composer stays equal and the form is
+    // re-decided (here, to short). Asserts only, no capture.
+    @Test fun roomReplyStartedDuringTheWait() =
+        flow(null, dm = false, dark = false, 2f, replyLater = true)
 
     private fun scales(run: (String, Float) -> Unit) { run("default", 1f); run("font200", 2f) }
 
-    private fun flow(name: String, dm: Boolean, dark: Boolean, fontScale: Float, reply: Boolean = false, ping: Boolean = false,
-        known: Boolean = true, landscape: Boolean = false, keyboard: Boolean = false, noStatusRow: Boolean = false) {
+    private fun flow(capture: String?, dm: Boolean, dark: Boolean, fontScale: Float, reply: Boolean = false, ping: Boolean = false,
+        known: Boolean = true, landscape: Boolean = false, keyboard: Boolean = false, noStatusRow: Boolean = false,
+        short: Boolean = false, details: Boolean = false, replyLater: Boolean = false) {
+        val name = capture ?: "rate-room-reply-during-wait"
+        form = null
         FontScaleTestActivity.requestedFontScale = fontScale
         val sessions = TestSessions()
         val api = NativeChatFixtures(sessions)
@@ -125,8 +143,11 @@ class RatePresentationTest {
                 activity.setContent {
                     val bottom = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
                     androidx.compose.runtime.SideEffect { imeBottom = bottom }
-                    Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, conversationModel = room, directInbox = inbox,
-                        directThread = thread, notifications = notices, messageTargets = targets) }
+                    androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalRateLineProbe provides
+                        { isShort, visible -> form = isShort to visible }) {
+                        Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, conversationModel = room, directInbox = inbox,
+                            directThread = thread, notifications = notices, messageTargets = targets) }
+                    }
                 }
             }
             // Into the conversation, as the journeys do: sign in, Activity, the notification for the room or the DM.
@@ -152,17 +173,18 @@ class RatePresentationTest {
                 compose.onNodeWithContentDescription(text(R.string.conversation_details)).performNativeTap()
                 compose.onNode(hasText(text(R.string.conversation_latest)) and hasAnyAncestor(isDialog())).performScrollTo().performNativeTap()
                 compose.waitUntil(5_000) { room.state.value.let { it.loaded && !it.busy && !it.stale && !it.reading } }
-                if (reply) {
-                    compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag("message:101"))
-                    compose.onNodeWithText("Authored fixture").performNativeTap()
-                    compose.onNodeWithTag("message_reply_action").performScrollTo().performNativeTap()
-                    compose.waitUntil(5_000) { room.state.value.composerReply != null }
-                }
+                if (reply) startReply(room)
             }
-            // The draft, then the server's own refusal; a known wait's deadline as the repository records it.
+            // The composer's arrangement without the line, the keyboard down (the captured state, except landscape-ime).
             val input = if (dm) "dm_composer" else "conversation_composer"
+            val send = if (dm) "dm_send" else "conversation_send"
+            compose.waitForIdle()
+            val before = arrangement(input, send)
+            // The draft, then the server's own refusal; a known wait's deadline as the repository records it.
             compose.tapNativeInput(input, { imeBottom }).performTextReplacement(
                 if (ping) "/ping Peer fixture" else if (dm) "Unsent direct fixture" else "Unsent fixture")
+            compose.waitForIdle()
+            val beforeKeyboard = arrangement(input, send) // The landscape-ime capture's state, still without the line.
             val budget = if (dm) RateBudget.DIRECT_MESSAGE_SEND else if (ping) RateBudget.ROOM_PING else RateBudget.ROOM_SEND
             compose.runOnIdle {
                 val refusal = ApiFailure(FailureKind.HTTP, 429, "rate_limited", if (known) 300 else null)
@@ -170,23 +192,70 @@ class RatePresentationTest {
                 if (known) sessions.state.value = sessions.state.value.copy(rateWaits = mapOf(budget to RateWait(
                     android.os.SystemClock.elapsedRealtime() + 300_000, sessions.state.value.generation, checkNotNull(sessions.state.value.user).id)))
             }
-            compose.onNodeWithTag(if (dm) "dm_send" else "conversation_send").performNativeTap()
+            compose.onNodeWithTag(send).performNativeTap()
             compose.waitUntil(5_000) { (if (dm) thread.state.value.sendLimit else room.state.value.sendLimit) != null }
+            compose.waitForIdle()
+            present(name, "with the keyboard up")
             if (!keyboard) {
                 androidx.test.espresso.Espresso.closeSoftKeyboard()
                 compose.waitUntil(5_000) { imeBottom == 0 }
+                compose.waitForIdle()
+                present(name, "after the keyboard hid") // TL condition 3.
             }
-            compose.waitForIdle()
+            if (replyLater) {
+                // PL: the notice shown with no chip, then a reply: re-decided from the new layout, the composer unchanged.
+                startReply(room)
+                androidx.test.espresso.Espresso.closeSoftKeyboard()
+                compose.waitUntil(5_000) { imeBottom == 0 }
+                compose.waitForIdle()
+                present(name, "after the reply started")
+            }
             // PL (J on af1481d): never assertIsDisplayed alone, which passes on a sliver. The line, the composer and Send are
             // each unclipped (clipped size equals full size) and inside the window, and above the keyboard top when it's up.
             unclipped(name, "rate_wait_line")
             unclipped(name, input)
-            unclipped(name, if (dm) "dm_send" else "conversation_send")
+            unclipped(name, send)
+            // PL refinement: which form, and the composer's arrangement and Send never changed because of the line.
+            check(form?.first == (short || replyLater)) { "$name: expected the ${if (short || replyLater) "short" else "full"} form, drew ${form?.first}" }
+            val after = arrangement(input, send)
+            check(after == (if (keyboard) beforeKeyboard else before)) {
+                "$name: the composer's arrangement changed (width, Send below) ${if (keyboard) beforeKeyboard else before} -> $after" }
             if (noStatusRow) check(compose.onAllNodesWithTag("status_slot").fetchSemanticsNodes().isEmpty()) {
                 "$name: a composer wait shows no status row" }
-            capture(name)
-            if (keyboard) { androidx.test.espresso.Espresso.closeSoftKeyboard(); compose.waitUntil(5_000) { imeBottom == 0 } }
+            if (capture != null) capture(capture)
+            if (details) {
+                // The full line is first in Details only while the short form shows; never twice.
+                compose.onNodeWithContentDescription(text(R.string.conversation_details)).performNativeTap()
+                compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty() }
+                compose.waitForIdle()
+                val inDetails = compose.onAllNodes(hasTestTag("rate_wait_line") and hasAnyAncestor(isDialog())).fetchSemanticsNodes().size
+                check(inDetails == (if (short) 1 else 0)) { "$name: Details has $inDetails wait lines, short=$short" }
+                if (short) capture("rate-room-send-light-font200-details", dialog = true)
+                androidx.test.espresso.Espresso.pressBack()
+                compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+            }
+            if (keyboard) { androidx.test.espresso.Espresso.closeSoftKeyboard(); compose.waitUntil(5_000) { imeBottom == 0 }; present(name, "after the keyboard hid") }
         }
+    }
+
+    private fun startReply(room: ConversationViewModel) {
+        compose.onNodeWithTag("conversation_timeline").performScrollToNode(hasTestTag("message:101"))
+        compose.onNodeWithText("Authored fixture").performNativeTap()
+        compose.onNodeWithTag("message_reply_action").performScrollTo().performNativeTap()
+        compose.waitUntil(5_000) { room.state.value.composerReply != null }
+    }
+
+    /** TL condition 3: while a notice exists the line is drawn (exactly one, in the conversation, not in a dialog). */
+    private fun present(name: String, moment: String) {
+        val lines = compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size
+        check(lines == 1 && form != null) { "$name: $lines wait lines $moment" }
+    }
+
+    /** The composer's field width and whether Send sits on a row below the field, in px. */
+    private fun arrangement(input: String, send: String): Pair<Int, Boolean> {
+        val field = compose.onNodeWithTag(input).fetchSemanticsNode().boundsInWindow
+        val button = compose.onNodeWithTag(send).fetchSemanticsNode().boundsInWindow
+        return kotlin.math.round(field.width).toInt() to (button.top >= field.bottom - 0.5f)
     }
 
     private fun unclipped(name: String, tag: String) {
@@ -201,13 +270,13 @@ class RatePresentationTest {
         if (imeBottom > 0) check(visible.bottom <= window.height - imeBottom + 0.5f) { "Under the keyboard ($detail)" }
     }
 
-    private fun capture(name: String) {
+    private fun capture(name: String, dialog: Boolean = false) {
         compose.waitForIdle()
         val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }
             ?: checkNotNull(context.getExternalFilesDir(null))
         val folder = java.io.File(output, "ccm-rate-presentation")
         check(folder.isDirectory || folder.mkdirs())
-        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        val bitmap = (if (dialog) compose.onNode(isDialog()) else compose.onRoot()).captureToImage().asAndroidBitmap()
         try {
             java.io.File(folder, "$name.png").outputStream().use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
         } finally { bitmap.recycle() }
