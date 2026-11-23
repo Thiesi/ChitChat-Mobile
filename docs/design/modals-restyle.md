@@ -218,6 +218,15 @@ Implementation and evidence: `docs/milestones/form-dialog-scaffold.md`.
   (`holdFocusedInView`, off by default), so StepUp is unchanged. Details:
   [form-dialog-scaffold.md](../milestones/form-dialog-scaffold.md); the report form's rules:
   reporting.md "Lines inside the form".
+- **A state change never gives focus or the keyboard (PL, 2026-11-23).** This applies to every
+  form dialog, on the scaffold or not. When a dialog changes state without the person touching
+  a field (a field turns read-only or editable, a notice appears, a button changes), no field
+  takes input focus and the keyboard doesn't come up. Only the person's tap on a field focuses
+  it. A field that turns read-only drops the focus it holds, in the same transition, so the
+  keyboard closes once. The dialog's initial open is unchanged: a form that focuses its first
+  field on open still does. The reason is #70 and #284. In the author dialog, Review turned the
+  focused read-only body editable, the keyboard came up unasked, and Save moved under the next
+  tap. Implementation: [shared-author-dialog.md](../milestones/shared-author-dialog.md).
 
 ## Form dialogs (restyle only)
 
@@ -227,6 +236,40 @@ Implementation and evidence: `docs/milestones/form-dialog-scaffold.md`.
   routing, or test tags. Any visual change that moves the Save button's on-screen position
   relative to the IME must be verified against the existing M5b2 geometry assertions before
   merging.
+- **Author edit: one button arrangement through a recovery (PL ruling B, 2026-11-23).** After an
+  edit's outcome is unknown, the person goes through Check author-change history, then Review
+  proposed edit, then Save edit, on the same button. Each label has its own width. At 150% and
+  200%, "Review proposed edit" stacked under Cancel while "Save edit" fit beside it, so the row
+  reflowed on Review, and a tap aimed at Review landed between the buttons (#70, #284). The
+  rules:
+  - **The reservation:** from the transition into unknown until the dialog closes, the confirm
+    button keeps the width of the widest recovery label. The other labels are drawn invisibly
+    and have no semantics. The visible label is end-aligned within that width.
+  - **When it doesn't fit:** where the reserved width doesn't fit beside Cancel, the recovery
+    row is stacked, Cancel above, from unknown entry through Save (amendment, 2026-11-23). On a
+    320dp window that's already true at 1.0: "Check author-change history" is too wide beside
+    Cancel, and main stacked the unknown state there too. The arrangement changes at most once
+    per recovery, at unknown entry, when the keyboard closes.
+  - **Not while the keyboard is up in a short, wide window.** In the compact layout, where the
+    actions sit beside the field and get half the width, the confirm shows its own label, as
+    on main (PL, 2026-11-23). Compact exists only while the keyboard is up. On the recovery
+    path that means editing after Review, where the label is always "Save edit". There the
+    reservation would push Save onto a second line the shortened window can't show. Compact
+    switches only with the keyboard showing or hiding, never as an extra step.
+  - **Unchanged:** the first edit keeps today's arrangement (side by side when both fit), and
+    the delete dialog is unchanged.
+  - **Verification:** the confirm keeps identical bounds across Check, Review and Save, and
+    Cancel keeps its offset from it, at 1.0, 1.5 and 2.0. At 2.0 the first edit is side by
+    side. At 2.0 in landscape with the keyboard up, Save is whole, above the keyboard, on one
+    line beside Cancel. Captures: `author-presentation/` (#338). Mechanism:
+    [shared-author-dialog.md](../milestones/shared-author-dialog.md).
+  - **For this restyle:** consider a dialog-only label "Check history" for the recovery check.
+    It matches the notice right above it ("Check history before choosing another edit or
+    deletion") and would let the recovery row sit side by side at 1.0 on narrow windows. The
+    shared `author_check_history` string stays "Check author-change history", because the
+    conversation-level check buttons stand beside the reaction and attachment "Check history"
+    buttons, and there "author-change" tells them apart. It's a new string, decided with this
+    restyle, not before.
 
 ## Tests
 
@@ -259,3 +302,4 @@ Implementation and evidence: `docs/milestones/form-dialog-scaffold.md`.
 | P-114 | The profile card shows only existing facts and actions (Refresh, Close, and Report per reporting.md P-165), with guest dates as visit start. | C |
 | P-115 | The message actions sheet orders sections as specified, and every row uses the existing guarded callback. | C |
 | P-220 | When a dialog's text is taller than the window (200% font, landscape, split screen), only the text slot scrolls, while the title and buttons stay. A 1dp `outline` divider shows above the buttons while there is more below, and below the title once scrolled; there are no dividers otherwise. Every line and text action is reachable by scrolling and by TalkBack. One shared modifier serves all dialogs; form dialogs keep their geometry. Captures: each converted dialog at default and 200% in a short window, in light and dark, with the divider visible. **Amendment (2026-11-21):** form dialogs on the scaffold keep their buttons above the keyboard, stay pinned while the body gets at least 120dp of the height above it and otherwise scroll as one column with edge dividers, switch at most once per keyboard show or hide, keep focus, and stack their buttons only when both don't fit. One that would lose a choice or composed text ignores outside taps. | C, S |
+| P-228 | A state change inside a form dialog never gives a field input focus or brings up the keyboard; only the person's tap does, and the initial open is unchanged. In the author edit dialog, the confirm keeps one arrangement from unknown entry until the dialog closes (the widest recovery label's width, visible label end-aligned, stacked where it doesn't fit beside Cancel), except in the compact keyboard-up layout, where it shows its own label. The first edit and the delete dialog are unchanged. | C, S |
