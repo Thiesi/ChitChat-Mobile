@@ -59,19 +59,33 @@ class FormDialogGeometryTest {
     private fun host(fontScale: Float, landscape: Boolean, content: @Composable () -> Unit, block: () -> Unit) {
         FontScaleTestActivity.requestedFontScale = fontScale
         ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
-            if (landscape) {
-                scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
-                compose.waitUntil(5_000) {
-                    var orientation = 0
-                    scenario.onActivity { orientation = it.resources.configuration.orientation }
-                    orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            try {
+                if (landscape) {
+                    scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                    compose.waitUntil(5_000) {
+                        var orientation = 0
+                        scenario.onActivity { orientation = it.resources.configuration.orientation }
+                        orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    }
                 }
+                // #159 (run 45157052097: stepUpAt200PercentPortrait failed right after the landscape case): each case checks
+                // the activity's ACTUAL configuration before anything else, per the landscape rule in AGENTS.md. An assert,
+                // never a wait: a configuration left over from the previous case fails here, saying so.
+                var orientation = 0; var actualScale = 0f
+                scenario.onActivity { orientation = it.resources.configuration.orientation; actualScale = it.resources.configuration.fontScale }
+                val expected = if (landscape) android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    else android.content.res.Configuration.ORIENTATION_PORTRAIT
+                assertTrue("Actual orientation $orientation, expected $expected (landscape=$landscape)", orientation == expected)
+                assertTrue("Actual font scale $actualScale, expected $fontScale", kotlin.math.abs(actualScale - fontScale) < 0.01f)
+                scenario.onActivity { it.setContent { ChitChatTheme(dark = false) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
+                } } }
+                compose.waitForIdle()
+                block()
+            } finally {
+                // Hand the next case an unrequested orientation, on success and on failure.
+                if (landscape) scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
             }
-            scenario.onActivity { it.setContent { ChitChatTheme(dark = false) {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
-            } } }
-            compose.waitForIdle()
-            block()
         }
     }
 
