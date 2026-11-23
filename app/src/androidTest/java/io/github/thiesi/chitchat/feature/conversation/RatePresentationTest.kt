@@ -6,10 +6,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import io.github.thiesi.chitchat.core.ui.RateLineForm
+import io.github.thiesi.chitchat.core.ui.RateLineForm.FULL
+import io.github.thiesi.chitchat.core.ui.RateLineForm.HIDDEN
+import io.github.thiesi.chitchat.core.ui.RateLineForm.SHORT
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -45,6 +52,8 @@ import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import io.github.thiesi.chitchat.feature.notifications.NotificationCenterViewModel
 import io.github.thiesi.chitchat.feature.targets.MessageTargetViewModel
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
+import io.github.thiesi.chitchat.testing.LiveAnnouncements
+import io.github.thiesi.chitchat.testing.LiveFlushSentinel
 import io.github.thiesi.chitchat.testing.NativeChatFixtures
 import io.github.thiesi.chitchat.testing.openTab
 import io.github.thiesi.chitchat.testing.performNativeTap
@@ -61,11 +70,13 @@ import org.junit.Test
  * a known wait also has its deadline in the session (as the repository records it). `rate-{room|dm}-{send|ping}-…`.
  * Fake server writes, no live mutation.
  *
- * PL refinement (re-J on b2c34c4) and TL conditions: per capture, which form was chosen (full, or the short form where
- * the full line doesn't leave the timeline a 48dp row), the line unclipped and above the keyboard, and the composer's
- * field width and arrangement equal with and without the line; the line present after the keyboard hides (room and DM);
- * the full line first in Details only while the short form shows; a reply started during the wait re-decides the form
- * without changing the composer.
+ * PL refinements (re-Js on b2c34c4 and 12c3a36) and TL conditions: per capture, which form was chosen (full; short where
+ * the full line doesn't leave the timeline a 48dp row; hidden with the Details dot where not even the short form fits at
+ * the composer's natural height), the line unclipped and above the keyboard, and the composer's field width, arrangement
+ * and field height equal with and without the line; the line or the dot after the keyboard hides (room and DM); the full
+ * line first in Details only while short or hidden; a reply started during the wait re-decides the form; Send's
+ * announcements counted from real accessibility events: one on appearance, one per refused tap, none on swaps; a refused
+ * tap while hidden hides the keyboard, shows the line and clears the dot, keeping focus, draft and reply.
  */
 class RatePresentationTest {
     @get:Rule val compose = createEmptyComposeRule()
@@ -77,35 +88,43 @@ class RatePresentationTest {
     /** The form the composer's wait line last drew (short?) and its visible text, from the observation-only probe. */
     @Volatile private var form: Pair<Boolean, String>? = null
 
+    private val sentinel = androidx.compose.runtime.mutableIntStateOf(0)
+
     // 1. Room composer with the send line, a draft and a reply chip: light and dark × default and 200%. At 200% the full
     // line doesn't fit beside the composer with the chip: the short form, and (light) Details with the full line first.
+    // Light default also takes a refused tap with the line visible: one more announcement, the line unchanged.
     @Test fun roomSendLight() = scales { name, factor -> flow("rate-room-send-light-$name", dm = false, dark = false, factor,
-        reply = true, short = factor > 1f, details = true) }
+        reply = true, expect = if (factor > 1f) SHORT else FULL, details = true, visibleTap = factor == 1f) }
     @Test fun roomSendDark() = scales { name, factor -> flow("rate-room-send-dark-$name", dm = false, dark = true, factor,
-        reply = true, short = factor > 1f) }
-    // 2. DM composer with the send line: light and dark × default and 200%.
-    @Test fun dmSendLight() = scales { name, factor -> flow("rate-dm-send-light-$name", dm = true, dark = false, factor) }
-    @Test fun dmSendDark() = scales { name, factor -> flow("rate-dm-send-dark-$name", dm = true, dark = true, factor) }
-    // 3. Room composer at 200% landscape with the keyboard up.
+        reply = true, expect = if (factor > 1f) SHORT else FULL) }
+    // 2. DM composer with the send line: light and dark × default and 200% (short at 200%, as the rule picks).
+    @Test fun dmSendLight() = scales { name, factor -> flow("rate-dm-send-light-$name", dm = true, dark = false, factor,
+        expect = if (factor > 1f) SHORT else FULL) }
+    @Test fun dmSendDark() = scales { name, factor -> flow("rate-dm-send-dark-$name", dm = true, dark = true, factor,
+        expect = if (factor > 1f) SHORT else FULL) }
+    // 3. Room composer at 200% landscape with the keyboard up: no line, the Details dot (hidden). Then a refused tap:
+    // the keyboard hides and the line shows (rate-room-send-light-font200-landscape-after-tap).
     @Test fun roomSendLandscapeKeyboard() =
-        flow("rate-room-send-light-font200-landscape-ime", dm = false, dark = false, 2f, landscape = true, keyboard = true, short = true)
+        flow("rate-room-send-light-font200-landscape-ime", dm = false, dark = false, 2f, landscape = true, keyboard = true,
+            expect = HIDDEN, hiddenTap = true)
     // 4. The ping line (default light).
-    @Test fun roomPing() = flow("rate-room-ping-light-default", dm = false, dark = false, 1f, ping = true)
+    @Test fun roomPing() = flow("rate-room-ping-light-default", dm = false, dark = false, 1f, ping = true, expect = FULL)
     // 11. The unknown-wait send line (light default).
-    @Test fun roomSendUnknownWait() = flow("rate-room-send-unknown-light-default", dm = false, dark = false, 1f, known = false)
+    @Test fun roomSendUnknownWait() = flow("rate-room-send-unknown-light-default", dm = false, dark = false, 1f, known = false, expect = FULL)
     // 12. A conversation with a composer wait and no status row (asserted).
     @Test fun roomConversationNoStatusRow() =
-        flow("rate-room-conversation-light-default", dm = false, dark = false, 1f, noStatusRow = true)
+        flow("rate-room-conversation-light-default", dm = false, dark = false, 1f, noStatusRow = true, expect = FULL)
     // PL: room at 200% with the notice shown and no chip, then a reply started: the composer stays equal and the form is
     // re-decided (here, to short). Asserts only, no capture.
     @Test fun roomReplyStartedDuringTheWait() =
-        flow(null, dm = false, dark = false, 2f, replyLater = true)
+        flow(null, dm = false, dark = false, 2f, replyLater = true, expect = SHORT)
 
     private fun scales(run: (String, Float) -> Unit) { run("default", 1f); run("font200", 2f) }
 
-    private fun flow(capture: String?, dm: Boolean, dark: Boolean, fontScale: Float, reply: Boolean = false, ping: Boolean = false,
-        known: Boolean = true, landscape: Boolean = false, keyboard: Boolean = false, noStatusRow: Boolean = false,
-        short: Boolean = false, details: Boolean = false, replyLater: Boolean = false) {
+    private fun flow(capture: String?, dm: Boolean, dark: Boolean, fontScale: Float, expect: RateLineForm, reply: Boolean = false,
+        ping: Boolean = false, known: Boolean = true, landscape: Boolean = false, keyboard: Boolean = false,
+        noStatusRow: Boolean = false, details: Boolean = false, replyLater: Boolean = false, visibleTap: Boolean = false,
+        hiddenTap: Boolean = false) {
         val name = capture ?: "rate-room-reply-during-wait"
         form = null
         FontScaleTestActivity.requestedFontScale = fontScale
@@ -119,6 +138,10 @@ class RatePresentationTest {
             override suspend fun savePureBlack(enabled: Boolean) = Unit
             override suspend fun saveTheme(theme: ThemePreference) { settings.value = settings.value.copy(theme = theme) }
         }
+        val sendLabel = text(if (dm) R.string.dm_send else R.string.conversation_send)
+        val detailsLabel = text(if (dm) R.string.dm_details else R.string.conversation_details)
+        // TL/PL: Send carries every announcement; counted from real accessibility events, connected before launch.
+        LiveAnnouncements { node -> node.contentDescription?.toString() == sendLabel }.use { heard ->
         ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
             if (landscape) {
                 scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
@@ -145,8 +168,11 @@ class RatePresentationTest {
                     androidx.compose.runtime.SideEffect { imeBottom = bottom }
                     androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalRateLineProbe provides
                         { isShort, visible -> form = isShort to visible }) {
-                        Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, conversationModel = room, directInbox = inbox,
-                            directThread = thread, notifications = notices, messageTargets = targets) }
+                        Box(Modifier.fillMaxSize()) {
+                            TestChitChatApp(settings, auth, conversationModel = room, directInbox = inbox,
+                                directThread = thread, notifications = notices, messageTargets = targets)
+                            LiveFlushSentinel(sentinel.intValue, Modifier.align(androidx.compose.ui.Alignment.TopStart))
+                        }
                     }
                 }
             }
@@ -175,10 +201,10 @@ class RatePresentationTest {
                 compose.waitUntil(5_000) { room.state.value.let { it.loaded && !it.busy && !it.stale && !it.reading } }
                 if (reply) startReply(room)
             }
-            // The composer's arrangement without the line, the keyboard down (the captured state, except landscape-ime).
+            // The composer's arrangement without the line: the chip settled, the keyboard confirmed down, idle (TL).
             val input = if (dm) "dm_composer" else "conversation_composer"
             val send = if (dm) "dm_send" else "conversation_send"
-            compose.waitForIdle()
+            keyboardDown()
             val before = arrangement(input, send)
             // The draft, then the server's own refusal; a known wait's deadline as the repository records it.
             compose.tapNativeInput(input, { imeBottom }).performTextReplacement(
@@ -192,49 +218,104 @@ class RatePresentationTest {
                 if (known) sessions.state.value = sessions.state.value.copy(rateWaits = mapOf(budget to RateWait(
                     android.os.SystemClock.elapsedRealtime() + 300_000, sessions.state.value.generation, checkNotNull(sessions.state.value.user).id)))
             }
+            heard.flush(compose, sentinel)
+            check(heard.count == 0) { "$name: announced before the refusal ${heard.spoken()}" }
             compose.onNodeWithTag(send).performNativeTap()
             compose.waitUntil(5_000) { (if (dm) thread.state.value.sendLimit else room.state.value.sendLimit) != null }
             compose.waitForIdle()
-            present(name, "with the keyboard up")
+            lineOrDot(name, "with the keyboard up", detailsLabel)
+            // TL condition (a) and PL: one announcement when the notice appears, visible or hidden.
+            heard.flush(compose, sentinel)
+            check(heard.count == 1) { "$name: ${heard.count} announcements on appearance ${heard.spoken()}" }
             if (!keyboard) {
-                androidx.test.espresso.Espresso.closeSoftKeyboard()
-                compose.waitUntil(5_000) { imeBottom == 0 }
-                compose.waitForIdle()
-                present(name, "after the keyboard hid") // TL condition 3.
+                keyboardDown()
+                lineOrDot(name, "after the keyboard hid", detailsLabel) // TL condition 3.
             }
             if (replyLater) {
                 // PL: the notice shown with no chip, then a reply: re-decided from the new layout, the composer unchanged.
                 startReply(room)
-                androidx.test.espresso.Espresso.closeSoftKeyboard()
-                compose.waitUntil(5_000) { imeBottom == 0 }
-                compose.waitForIdle()
-                present(name, "after the reply started")
+                keyboardDown()
+                lineOrDot(name, "after the reply started", detailsLabel)
             }
-            // PL (J on af1481d): never assertIsDisplayed alone, which passes on a sliver. The line, the composer and Send are
-            // each unclipped (clipped size equals full size) and inside the window, and above the keyboard top when it's up.
-            unclipped(name, "rate_wait_line")
+            heard.flush(compose, sentinel)
+            check(heard.count == 1) { "$name: a keyboard or form swap announced ${heard.spoken()}" }
+            val expectedArrangement = if (keyboard) beforeKeyboard else before
+            // Capture first, so a failing assert still leaves its image (PL).
+            if (capture != null) capture(capture)
+            // PL (J on af1481d): never assertIsDisplayed alone, which passes on a sliver. The line (when drawn), the composer
+            // and Send are each unclipped and inside the window, and above the keyboard top when it's up.
+            formIs(name, expect, detailsLabel)
+            if (expect != HIDDEN) unclipped(name, "rate_wait_line")
             unclipped(name, input)
             unclipped(name, send)
-            // PL refinement: which form, and the composer's arrangement and Send never changed because of the line.
-            check(form?.first == (short || replyLater)) { "$name: expected the ${if (short || replyLater) "short" else "full"} form, drew ${form?.first}" }
+            // PL refinement: the composer's field width, arrangement and field height never change because of the line.
             val after = arrangement(input, send)
-            check(after == (if (keyboard) beforeKeyboard else before)) {
-                "$name: the composer's arrangement changed (width, Send below) ${if (keyboard) beforeKeyboard else before} -> $after" }
+            check(after == expectedArrangement) {
+                "$name: the composer changed (width, Send below, field height) $expectedArrangement -> $after" }
             if (noStatusRow) check(compose.onAllNodesWithTag("status_slot").fetchSemanticsNodes().isEmpty()) {
                 "$name: a composer wait shows no status row" }
-            if (capture != null) capture(capture)
             if (details) {
-                // The full line is first in Details only while the short form shows; never twice.
-                compose.onNodeWithContentDescription(text(R.string.conversation_details)).performNativeTap()
+                // The full line is first in Details only while the short form (or none) shows; never twice.
+                compose.onNodeWithContentDescription(detailsLabel).performNativeTap()
                 compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty() }
                 compose.waitForIdle()
-                val inDetails = compose.onAllNodes(hasTestTag("rate_wait_line") and hasAnyAncestor(isDialog())).fetchSemanticsNodes().size
-                check(inDetails == (if (short) 1 else 0)) { "$name: Details has $inDetails wait lines, short=$short" }
-                if (short) capture("rate-room-send-light-font200-details", dialog = true)
+                val inDetails = compose.onAllNodes(hasContentDescription(fullLine(dm, ping, known)) and hasAnyAncestor(isDialog()))
+                    .fetchSemanticsNodes().size
+                val shortShown = expect != FULL
+                if (shortShown) capture("rate-room-send-light-font200-details", dialog = true)
+                check(inDetails == (if (shortShown) 1 else 0)) { "$name: Details has $inDetails wait lines, form=$expect" }
                 androidx.test.espresso.Espresso.pressBack()
                 compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
             }
-            if (keyboard) { androidx.test.espresso.Espresso.closeSoftKeyboard(); compose.waitUntil(5_000) { imeBottom == 0 }; present(name, "after the keyboard hid") }
+            if (visibleTap) {
+                // PL ruling (a): a refused tap with the line visible re-announces once; the line stays as it is.
+                val shown = form
+                compose.onNodeWithTag(send).performNativeTap()
+                compose.waitUntil(5_000) { room.state.value.sendLimitRepeats == 1 && !room.state.value.busy }
+                compose.waitForIdle()
+                heard.flush(compose, sentinel)
+                check(heard.count == 2) { "$name: ${heard.count} announcements after one refused tap ${heard.spoken()}" }
+                check(form == shown && compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) {
+                    "$name: the line changed on a refused tap: $shown -> $form" }
+            }
+            if (hiddenTap) {
+                // PL ruling (b): a refused tap while hidden hides the keyboard (focus, draft and reply kept), the line shows
+                // by the rule and the dot clears; one announcement.
+                check(detailsState(detailsLabel) != null) { "$name: no Details dot while hidden" }
+                compose.onNodeWithTag(send).performNativeTap()
+                compose.waitUntil(5_000) { room.state.value.sendLimitRepeats == 1 && !room.state.value.busy }
+                compose.waitUntil(5_000) { imeBottom == 0 }
+                compose.waitForIdle()
+                capture("rate-room-send-light-font200-landscape-after-tap")
+                check(compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) { "$name: no line after the tap" }
+                unclipped(name, "rate_wait_line")
+                unclipped(name, input)
+                unclipped(name, send)
+                check(detailsState(detailsLabel) == null) { "$name: the Details dot stayed: ${detailsState(detailsLabel)}" }
+                check(room.state.value.draft == "Unsent fixture") { "$name: the draft changed" }
+                check(compose.onNodeWithTag(input).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) == true) {
+                    "$name: focus left the field" }
+                check(arrangement(input, send) == before) { "$name: the composer changed after the tap ${arrangement(input, send)} vs $before" }
+                heard.flush(compose, sentinel)
+                check(heard.count == 2) { "$name: ${heard.count} announcements after one refused tap ${heard.spoken()}" }
+            }
+            if (keyboard && !hiddenTap) keyboardDown()
+        }
+        }
+    }
+
+    private fun keyboardDown() {
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.waitUntil(5_000) { imeBottom == 0 }
+        compose.waitForIdle()
+    }
+
+    private fun fullLine(dm: Boolean, ping: Boolean, known: Boolean): String {
+        val wait = context.resources.getQuantityString(R.plurals.wait_about_minutes, 5, 5)
+        return when {
+            !known -> text(R.string.rate_wait_messages_unknown)
+            ping && !dm -> context.getString(R.string.rate_wait_pings, wait)
+            else -> context.getString(R.string.rate_wait_messages, wait)
         }
     }
 
@@ -245,17 +326,27 @@ class RatePresentationTest {
         compose.waitUntil(5_000) { room.state.value.composerReply != null }
     }
 
-    /** TL condition 3: while a notice exists the line is drawn (exactly one, in the conversation, not in a dialog). */
-    private fun present(name: String, moment: String) {
+    private fun detailsState(label: String) =
+        compose.onNodeWithContentDescription(label).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+
+    /** TL condition 3 as amended: while a notice exists, the line is drawn, or hidden with the Details dot showing. */
+    private fun lineOrDot(name: String, moment: String, detailsLabel: String) {
         val lines = compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size
-        check(lines == 1 && form != null) { "$name: $lines wait lines $moment" }
+        check(lines == 1 || (lines == 0 && detailsState(detailsLabel) != null)) { "$name: $lines wait lines and no Details dot $moment" }
     }
 
-    /** The composer's field width and whether Send sits on a row below the field, in px. */
-    private fun arrangement(input: String, send: String): Pair<Int, Boolean> {
+    private fun formIs(name: String, expect: RateLineForm, detailsLabel: String) {
+        val lines = compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size
+        val drawn = when { lines == 0 -> HIDDEN; form?.first == true -> SHORT; else -> FULL }
+        check(drawn == expect) { "$name: expected $expect, drew $drawn (lines=$lines, form=$form)" }
+        if (expect == HIDDEN) check(detailsState(detailsLabel) != null) { "$name: hidden without the Details dot" }
+    }
+
+    /** The composer's field width, whether Send sits on a row below the field, and the field's height, in px. */
+    private fun arrangement(input: String, send: String): Triple<Int, Boolean, Int> {
         val field = compose.onNodeWithTag(input).fetchSemanticsNode().boundsInWindow
         val button = compose.onNodeWithTag(send).fetchSemanticsNode().boundsInWindow
-        return kotlin.math.round(field.width).toInt() to (button.top >= field.bottom - 0.5f)
+        return Triple(kotlin.math.round(field.width).toInt(), button.top >= field.bottom - 0.5f, kotlin.math.round(field.height).toInt())
     }
 
     private fun unclipped(name: String, tag: String) {

@@ -69,7 +69,7 @@ PERSON_REPORT_NAME = re.compile(r"report-person-(?:light-(?:default|font200)-(?:
 RATE_DESTINATION = ROOT / "app/build/reports/androidTests/rate-presentation"
 RATE_NAME = re.compile(r"rate-(?:room-send-(?:light|dark)-(?:default|font200)|dm-send-(?:light|dark)-(?:default|font200)|"
     r"room-send-light-font200-landscape-ime|room-ping-light-default|room-send-unknown-light-default|"
-    r"room-conversation-light-default|room-send-light-font200-details)[.]png")
+    r"room-conversation-light-default|room-send-light-font200-details|room-send-light-font200-landscape-after-tap)[.]png")
 AUTHOR_DESTINATION = ROOT / "app/build/reports/androidTests/author-presentation"
 AUTHOR_NAME = re.compile(r"author-edit-(?:room-(?:light|dark)-(?:default|font200)-(?:unknown|reviewed|editing)|"
     r"room-light-(?:default|font200)-first|room-dark-font200-first|room-light-font150-(?:unknown|reviewed)|"
@@ -459,15 +459,15 @@ def collect_rate():
     # #323b1 (PL list, 2026-11-23): room send with a draft and reply chip and DM send, light and dark at default and 200%
     # (8); room send at 200% landscape with the keyboard up (1); the ping line (1); the unknown-wait send line (1); a
     # conversation with a composer wait and no status row (1); PL refinement: Details at 200% with the full line first,
-    # while the composer shows the short form (1).
-    files = list(islice(SOURCE.rglob("ccm-rate-presentation/*"), 14))
-    if (not files or len(files) > 13 or len({p.name for p in files}) != len(files)
+    # while the composer shows the short form (1); the 200% landscape case after a refused tap hid the keyboard (1).
+    files = list(islice(SOURCE.rglob("ccm-rate-presentation/*"), 15))
+    if (not files or len(files) > 14 or len({p.name for p in files}) != len(files)
         or any(RATE_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous rate presentation output")
     RATE_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, RATE_DESTINATION / path.name)
-    print(f"Rate presentation captures collected: {len(files)} of 13.")
+    print(f"Rate presentation captures collected: {len(files)} of 14.")
 
 
 def collect_onboarding():
