@@ -1,5 +1,6 @@
 package io.github.thiesi.chitchat.feature.direct
 
+import io.github.thiesi.chitchat.testing.recordAuthorImeTransitions
 import androidx.activity.ComponentActivity
 import io.github.thiesi.chitchat.testing.openTab
 import androidx.activity.compose.setContent
@@ -227,6 +228,66 @@ class DirectAuthorJourneyTest {
         compose.runOnIdle { assertEquals(1, api.authorChanges.directWrites.size) }
         dialogText(R.string.cancel).performNativeTap()
     }
+    /**
+     * #70/#284 (PL, TL 2026-11-23): a read-only body (unknown, checked) holds no input focus, so the keyboard closes once
+     * on entering it and Review neither focuses the body nor brings up the keyboard; Save stays where it was. Only a tap
+     * on the body focuses it, through the normal one-tap path. Deterministic asserts; the one fixed delay is labelled.
+     */
+    @Test fun aReadOnlyBodyHoldsNoFocusSoReviewBringsNoKeyboardAndSaveStaysPut() {
+        enterThread(); compose.runOnIdle { api.authorChanges.failure = ApiFailure(FailureKind.HTTP, 500, "metadata_failed") }
+        choose(); edit("Already committed direct fixture")
+        val transitions = compose.recordAuthorImeTransitions()
+        try {
+            compose.onNodeWithTag("author_change_confirm").assertIsDisplayed().performNativeTap()
+            compose.waitUntil(5_000) { thread.state.value.authorUnknown != null && !thread.state.value.busy }
+            compose.runOnIdle { api.authorChanges.failure = null }
+            hideIme() // The existing wait: the editor window's inset at 0 before tapping Check.
+            val dialog = hasAnyAncestor(hasTestTag("author_change_dialog"))
+            fun focused() = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Focused, true) and dialog,
+                useUnmergedTree = true).fetchSemanticsNodes().size
+            fun bounds(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInWindow
+            assertEquals("Unknown: no focused node in the dialog", 0, focused())
+            // Check stable at rest: read after the inset reached 0, and once more after idle right before the tap.
+            val checkAtRest = bounds("author_check_history"); compose.waitForIdle()
+            assertEquals("Check is at rest before its tap", checkAtRest, bounds("author_check_history"))
+            compose.onNodeWithTag("author_check_history").assertIsDisplayed().assertIsEnabled().performNativeTap(); settle()
+            assertEquals("Exactly one keyboard close between Save and Check, and no reopening: ${transitions.transitions}",
+                listOf(false), transitions.transitions.toList())
+            assertEquals("Checked: no focused node in the dialog", 0, focused())
+            val bodyText = compose.onNodeWithTag("author_edit_body").fetchSemanticsNode().config[SemanticsProperties.EditableText].text
+            assertEquals("The read-only body stays readable (TalkBack)", "Already committed direct fixture", bodyText)
+            compose.waitForIdle()
+            val saveBefore = bounds("author_change_confirm")
+            val confirmBefore = compose.onNodeWithTag("author_change_confirm").fetchSemanticsNode().id
+            compose.onNodeWithTag("author_change_confirm").assertIsDisplayed().performNativeTap() // Review, no POST.
+            compose.waitForIdle()
+            assertEquals("Reviewed: no focused node in the dialog", 0, focused())
+            assertEquals("Save stays where Review was", saveBefore, bounds("author_change_confirm"))
+            assertEquals("Review and Save are one node (accessibility focus stays on it)", confirmBefore,
+                compose.onNodeWithTag("author_change_confirm").fetchSemanticsNode().id)
+            assertEquals("The editable body keeps the proposal", "Already committed direct fixture",
+                compose.onNodeWithTag("author_edit_body").fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+            // The single fixed observation (TL, PL): one re-read about 500 ms after Review, never a poll or a loop. The
+            // primary proof is the no-focus semantics above; this only checks no keyboard came up meanwhile.
+            Thread.sleep(500)
+            assertEquals("No keyboard about 500 ms after Review", 0, compose.nativeAuthorImeBottom())
+            assertTrue("No keyboard reopening after Review: ${transitions.transitions}", transitions.transitions.none { it })
+            // Only a tap focuses the body: the normal one-tap path, with the strict focus, display and IME proof.
+            compose.tapNativeInput("author_edit_body", { compose.nativeAuthorImeBottom() })
+            compose.waitForIdle()
+            val save = compose.nativeAuthorSaveGeometry(compose.activity, ime)
+            assertNotNull("Keyboard boundary after the tap: ${save.details}", save.keyboardTop)
+            assertTrue("Save above the keyboard after the tap: ${save.details}", save.pointY < checkNotNull(save.keyboardTop))
+            val field = compose.onNodeWithTag("author_edit_body").fetchSemanticsNode()
+            assertTrue("The body is whole and its caret line in view", field.boundsInWindow.height >= field.size.height - 1f)
+            compose.runOnIdle {
+                assertEquals("No write beyond the committed one", 1, api.authorChanges.directWrites.size)
+                assertEquals("The draft is intact", "Kept unsent direct draft", thread.state.value.draft)
+            }
+            dialogText(R.string.cancel).performNativeTap()
+        } finally { transitions.detach() }
+    }
+
     @Test fun singleNativeSaveProvesOwnWindowKeyboardGeometryAndANewCanonicalOutcome() {
         enterThread(); choose(); edit("Direct geometry fixture\nsecond line")
         val before = compose.nativeAuthorSaveGeometry(compose.activity, ime)

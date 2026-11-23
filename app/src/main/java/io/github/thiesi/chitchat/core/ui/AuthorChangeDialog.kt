@@ -19,6 +19,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
@@ -108,9 +111,20 @@ private fun AuthorChangeText(dialog: AuthorDialogPresentation, targetCurrent: Bo
     if (dialog.checked) Text(if (currentPreview == null) stringResource(R.string.author_current_unavailable)
         else stringResource(R.string.author_current_message, messageExcerpt(currentPreview)))
     if (editing && (targetCurrent || pending != null || dialog.checked)) {
+        // #70/#284 (PL, TL 2026-11-23): a state change never gives focus or brings up the keyboard by itself. A read-only
+        // body (unknown, checked) holds no input focus: focus clears on the same transition that makes it read-only, so
+        // the keyboard closes once, as before. Review then makes it editable without focus; only a tap on it focuses it.
+        // Otherwise Review restarted the focused field's input session, the keyboard came up unasked and Save moved
+        // under the next tap. The initial open is unchanged. Input focus only: accessibility focus isn't touched.
+        val focus = LocalFocusManager.current
+        val readOnly = !available
+        // canFocus = false keeps a read-only body from taking focus; the clear below drops focus it already holds, on the
+        // read-only transition itself. It's a plain clear (no moveFocus), so no other node takes input focus. It stays
+        // because a canFocus change isn't guaranteed to release focus that's already held.
+        LaunchedEffect(readOnly) { if (readOnly) focus.clearFocus() }
         MessageInput(dialog.body, onChange, !busy,
             stringResource(if (pending != null || dialog.checked) R.string.author_proposed_text else R.string.author_edit_body), compact,
-            Modifier.fillMaxWidth().testTag("author_edit_body"), readOnly = !available)
+            Modifier.fillMaxWidth().focusProperties { canFocus = !readOnly }.testTag("author_edit_body"), readOnly = readOnly)
         Text(stringResource(R.string.author_character_count, dialog.body.codePointCount(0, dialog.body.length)))
     } else if (!targetCurrent) Text(stringResource(R.string.message_actions_unavailable))
     else if (pending == null) Text(messageExcerpt(dialog.originalBody))

@@ -47,3 +47,31 @@ internal fun ComposeTestRule.nativeAuthorSaveGeometry(activity: ComponentActivit
     }
     return checkNotNull(result)
 }
+
+/**
+ * #70/#284: the editor window's keyboard visibility, recorded as transitions on its layout passes. Observation only: a
+ * global-layout listener, which never replaces the dialog's own insets handling, requests focus or touches the IME.
+ * [transitions] holds each new visibility (true = shown) after the state at attach time.
+ */
+internal class AuthorImeTransitions(private val view: android.view.View) : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+    private var last: Boolean? = null
+    val transitions = java.util.concurrent.CopyOnWriteArrayList<Boolean>()
+    fun visible() = ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+    override fun onGlobalLayout() {
+        val now = visible()
+        if (last != null && now != last) transitions += now
+        last = now
+    }
+    fun attach() = InstrumentationRegistry.getInstrumentation().runOnMainSync {
+        last = visible(); view.viewTreeObserver.addOnGlobalLayoutListener(this)
+    }
+    fun detach() = InstrumentationRegistry.getInstrumentation().runOnMainSync {
+        if (view.viewTreeObserver.isAlive) view.viewTreeObserver.removeOnGlobalLayoutListener(this)
+    }
+}
+
+/** The editor window's transitions recorder, attached now (its window is the author body's). */
+internal fun ComposeTestRule.recordAuthorImeTransitions(): AuthorImeTransitions {
+    val view = checkNotNull((onNodeWithTag("author_edit_body").fetchSemanticsNode().root as? ViewRootForTest)?.view) { "No editor window" }
+    return AuthorImeTransitions(view).also { it.attach() }
+}
