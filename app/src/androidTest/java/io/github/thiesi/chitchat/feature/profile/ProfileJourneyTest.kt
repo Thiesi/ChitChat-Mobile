@@ -152,6 +152,41 @@ class ProfileJourneyTest {
         }
         compose.onNodeWithTag("report_cancel").performScrollTo().performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("report_dialog").fetchSemanticsNodes().isEmpty() }
+        // R3c (PL): Cancel goes back to the conversation with no card; so does Back on a reopened form.
+        compose.onNodeWithTag("profile_dialog").assertDoesNotExist()
+        openRoom(); loaded()
+        compose.onNodeWithTag("profile_report").performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("report_dialog").fetchSemanticsNodes().isNotEmpty() }
+        Espresso.pressBack()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("report_dialog").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag("profile_dialog").assertDoesNotExist()
+    }
+
+    /** R3c (PL): after a 201 the next card open shows the caption, from the server's reported_by_me alone (no local mark). */
+    @Test fun afterA201TheNextCardShowsTheCaptionFromTheServer() {
+        profiles.facts=io.github.thiesi.chitchat.core.reports.ReportFacts(canReport=true,reportedByMe=false)
+        enter(roomTarget=true); openRoom(); loaded()
+        compose.onNodeWithTag("profile_report").performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("report_dialog").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("report_category:offensive_username").performScrollTo().performClick()
+        compose.onNodeWithTag("report_send").performScrollTo().performClick()
+        compose.waitUntil(5_000) { reportSends.isNotEmpty() && compose.onAllNodesWithTag("report_dialog").fetchSemanticsNodes().isEmpty() }
+        compose.runOnIdle { reports.consume(); reports.dismissSheet() }
+        compose.waitForIdle()
+        // The fake still says not reported: the card offers Report again, since nothing local marks the person.
+        openRoom(); loaded()
+        compose.onNodeWithTag("profile_report").assertExists(); compose.onNodeWithTag("profile_reported").assertDoesNotExist()
+        close()
+        profiles.facts=io.github.thiesi.chitchat.core.reports.ReportFacts(canReport=true,reportedByMe=true)
+        openRoom(); loaded()
+        compose.onNodeWithTag("profile_reported").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("profile_report").assertDoesNotExist()
+        close()
+        // can_report false: neither.
+        profiles.facts=io.github.thiesi.chitchat.core.reports.ReportFacts(canReport=false,reportedByMe=false)
+        openRoom(); loaded()
+        compose.onNodeWithTag("profile_report").assertDoesNotExist(); compose.onNodeWithTag("profile_reported").assertDoesNotExist()
+        close()
     }
 
     @Test fun dmCardReportIsGlobalAndAReportedPersonShowsOnlyTheCaption() {

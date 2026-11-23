@@ -184,6 +184,45 @@ class ReportFormLayoutTest {
         }
     }
 
+    /** R3c (PL): a person report's form ignores an outside tap too, while editing and in its Unknown summary. */
+    @Test fun anOutsideTapLeavesAPersonReportAloneInEveryPhase() {
+        val reports = ReportViewModel(object : ReportOperations {
+            override val session = this@ReportFormLayoutTest.session
+            override suspend fun send(expected: SessionState, target: ReportTarget, category: ReportCategory, details: String?) =
+                ReportResult.Unknown(io.github.thiesi.chitchat.core.network.ApiFailure(io.github.thiesi.chitchat.core.network.FailureKind.TIMEOUT))
+            override suspend fun personFacts(expected: SessionState, target: ReportTarget.Person): ReportFacts? = null
+        })
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+            compose.waitUntil(5_000) {
+                var orientation = 0
+                scenario.onActivity { orientation = it.resources.configuration.orientation }
+                orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            }
+            scenario.onActivity { activity ->
+                activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
+                } } }
+            }
+            compose.waitUntil(5_000) { room.state.value.loaded && !room.state.value.busy }
+            compose.runOnIdle { reports.requestPerson(ReportTarget.Person(8, 42), ReportOrigin.Room(42), true, "Bob", reports.settled) }
+            compose.waitUntil(5_000) { present("report_dialog") }
+            compose.onNodeWithTag("report_category:${ReportCategory.OFFENSIVE_USERNAME.wire}").performScrollTo().performClick()
+            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("kept why")
+            compose.waitForIdle()
+            io.github.thiesi.chitchat.core.ui.tapOutsideSurface(compose.onNodeWithTag("report_dialog", useUnmergedTree = true))
+            compose.waitForIdle()
+            assertTrue("Editing: the form stays open", present("report_dialog"))
+            assertEquals("kept why", reports.state.value?.details)
+            compose.onNodeWithTag("report_send").performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+            compose.waitUntil(5_000) { present("report_check") }
+            io.github.thiesi.chitchat.core.ui.tapOutsideSurface(compose.onNodeWithTag("report_dialog", useUnmergedTree = true))
+            compose.waitForIdle()
+            assertTrue("Unknown: the summary stays", present("report_check"))
+            assertTrue(reports.state.value?.phase is ReportPhase.Unknown)
+        }
+    }
+
     /**
      * PL and TL: the details question is a separate label above the field. At 200% its bounds touch neither the last
      * category row (with its helper) above nor the field below. The question is exposed exactly once, as the label's own
