@@ -201,6 +201,17 @@ Implementation and evidence: `docs/milestones/form-dialog-scaffold.md`.
   ignores outside taps: the report form and StepUp (PL, 2026-11-22: a typed password or recovery
   code), in every phase. Back and the dialog's own buttons still close it. Choice sheets keep the
   platform's dismissal.
+- **A shown notice wins over the focused field (PL and TL, 2026-11-22).** Normally the scaffold
+  keeps the focused field in view when the space changes. A form that shows a notice after its
+  action (the report form, for every line after Send) holds that notice in view instead, through
+  a keyboard close or a layout switch, until the person's next interaction: the keyboard opening
+  on the focused field, a focus gain, typing or a choice. A keyboard already up when the notice
+  appears doesn't end it. The notice comes into view on each occurrence, from its top edge when
+  it's taller than the space. It's a scroll only, with no focus, caret or announcement change,
+  and it only matters when the notice and the field can't both fit. It's opt-in
+  (`holdFocusedInView`, off by default), so StepUp is unchanged. Details:
+  [form-dialog-scaffold.md](../milestones/form-dialog-scaffold.md); the report form's rules:
+  reporting.md "Lines inside the form".
 
 ## Form dialogs (restyle only)
 
