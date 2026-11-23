@@ -199,7 +199,8 @@ Mockup: `ReportPerson` on the canvas.
   `check` icon: "**You've reported {name}.**" No second report is offered.
 - **Icons wait for the modals restyle (PL, 2026-11-22).** R3 ships the row and the caption as
   text only: the row in `onSurface`, the caption in `textMuted`. The `report` and `check` icons
-  arrive with the profile card's restyle (modals-restyle.md), not before.
+  arrive with the profile card's restyle (modals-restyle.md), together with the card's other
+  row icons, not before (overhaul-handoff.md debt 17).
 - `can_report` false or missing: nothing is shown. Never your own card.
 - **Room context:** a card opened from a room (room author, presence list) loads the profile
   with that room's `room_id`, and the report sends **the same `room_id`**. A card opened from a
@@ -278,11 +279,11 @@ validation lines, "Not sure your report went through." and "Your report didn't a
   A line taller than the space shows from its top edge, so it's read from its start.
 - **It stays in view until the person's next interaction.** The keyboard closing or the
   dialog's layout switch doesn't scroll it away. The hold ends at the first of:
-  - the keyboard opening while the details field has focus (a tap, TalkBack's double-tap, any
-    re-show);
-  - the details field gaining focus;
-  - typing;
-  - choosing a category.
+  - (a) the keyboard going from hidden to shown while the details field has focus (a tap,
+    TalkBack's double-tap, any re-show);
+  - (b) the details field gaining focus;
+  - (c) typing;
+  - (d) choosing a category.
 
   A keyboard that's already up when the line appears doesn't end the hold.
 - **Scroll only.** Focus, the caret and TalkBack's focus don't move, and nothing extra is
