@@ -26,7 +26,8 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
@@ -96,15 +97,18 @@ class RatePresentationTest {
     // 1. Room composer with the send line, a draft and a reply chip: light and dark × default and 200%. At 200% the full
     // line doesn't fit beside the composer with the chip: the short form, and (light) Details with the full line first.
     // Light default also takes a refused tap with the line visible: one more announcement, the line unchanged.
-    @Test fun roomSendLight() = scales { name, factor -> flow("rate-room-send-light-$name", dm = false, dark = false, factor,
-        reply = true, expect = if (factor > 1f) SHORT else FULL, details = true, visibleTap = factor == 1f) }
-    @Test fun roomSendDark() = scales { name, factor -> flow("rate-room-send-dark-$name", dm = false, dark = true, factor,
-        reply = true, expect = if (factor > 1f) SHORT else FULL) }
+    // One test per scale (PL): a failure in one never skips another's capture.
+    @Test fun roomSendLightDefault() = flow("rate-room-send-light-default", dm = false, dark = false, 1f, reply = true,
+        expect = FULL, details = true, visibleTap = true)
+    @Test fun roomSendLightFont200() = flow("rate-room-send-light-font200", dm = false, dark = false, 2f, reply = true,
+        expect = SHORT, details = true)
+    @Test fun roomSendDarkDefault() = flow("rate-room-send-dark-default", dm = false, dark = true, 1f, reply = true, expect = FULL)
+    @Test fun roomSendDarkFont200() = flow("rate-room-send-dark-font200", dm = false, dark = true, 2f, reply = true, expect = SHORT)
     // 2. DM composer with the send line: light and dark × default and 200% (short at 200%, as the rule picks).
-    @Test fun dmSendLight() = scales { name, factor -> flow("rate-dm-send-light-$name", dm = true, dark = false, factor,
-        expect = if (factor > 1f) SHORT else FULL) }
-    @Test fun dmSendDark() = scales { name, factor -> flow("rate-dm-send-dark-$name", dm = true, dark = true, factor,
-        expect = if (factor > 1f) SHORT else FULL) }
+    @Test fun dmSendLightDefault() = flow("rate-dm-send-light-default", dm = true, dark = false, 1f, expect = FULL)
+    @Test fun dmSendLightFont200() = flow("rate-dm-send-light-font200", dm = true, dark = false, 2f, expect = SHORT)
+    @Test fun dmSendDarkDefault() = flow("rate-dm-send-dark-default", dm = true, dark = true, 1f, expect = FULL)
+    @Test fun dmSendDarkFont200() = flow("rate-dm-send-dark-font200", dm = true, dark = true, 2f, expect = SHORT)
     // 3. Room composer at 200% landscape (PL ruling; TL: first taps on an unfocused field only, never the already-focused
     // re-tap). Case A: the keyboard up, the first refusal resolves to hidden and hides it once (…-landscape-after-tap).
     // Case B: the refusal with the keyboard down shows the line; a first tap on the field then brings the keyboard up,
@@ -125,7 +129,6 @@ class RatePresentationTest {
     @Test fun roomReplyStartedDuringTheWait() =
         flow(null, dm = false, dark = false, 2f, replyLater = true, expect = SHORT)
 
-    private fun scales(run: (String, Float) -> Unit) { run("default", 1f); run("font200", 2f) }
 
     private fun flow(capture: String?, dm: Boolean, dark: Boolean, fontScale: Float, expect: RateLineForm, reply: Boolean = false,
         ping: Boolean = false, known: Boolean = true, landscape: Boolean = false, keyboard: Boolean = false,
@@ -184,6 +187,8 @@ class RatePresentationTest {
             }
             // Into the conversation, as the journeys do: sign in, Activity, the notification for the room or the DM.
             compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.ANONYMOUS }
+            // Compose's accessibility-event gate on the attached screen, before any counted change (reset on close).
+            scenario.onActivity { heard.attach(it.window.decorView) }
             compose.runOnIdle {
                 runBlocking { sessions.signIn("Viewer", "fixture-password") }
                 sessions.state.value = sessions.state.value.copy(chatPolicy = api.policy, privacy = api.privacy)
@@ -207,18 +212,22 @@ class RatePresentationTest {
                 compose.waitUntil(5_000) { room.state.value.let { it.loaded && !it.busy && !it.stale && !it.reading } }
                 if (reply) startReply(room)
             }
-            // The composer's arrangement without the line: the chip settled, the keyboard confirmed down, idle (TL).
+            // The draft is prefilled through the model, so the baseline already holds text (PL: an empty field measures
+            // shorter) and the field is never focused before its first tap. Then the composer's arrangement without the
+            // line: the chip settled, the keyboard confirmed down, idle (TL).
             val input = if (dm) "dm_composer" else "conversation_composer"
             val send = if (dm) "dm_send" else "conversation_send"
+            val draft = if (ping) "/ping Peer fixture" else if (dm) "Unsent direct fixture" else "Unsent fixture"
+            compose.runOnIdle { if (dm) thread.updateDraft(draft) else room.updateDraft(draft) }
             keyboardDown()
             val before = arrangement(input, send)
             if (landscapeCase != null) {
                 landscape(landscapeCase, room, sessions, api, heard, input, send, detailsLabel, before)
                 return@use
             }
-            // The draft, then the server's own refusal; a known wait's deadline as the repository records it.
-            compose.tapNativeInput(input, { imeBottom }).performTextReplacement(
-                if (ping) "/ping Peer fixture" else if (dm) "Unsent direct fixture" else "Unsent fixture")
+            // A native first tap brings the keyboard up; then the server's own refusal, with a known wait's deadline as the
+            // repository records it.
+            compose.tapNativeInput(input, { imeBottom })
             compose.waitForIdle()
             val beforeKeyboard = arrangement(input, send) // The landscape-ime capture's state, still without the line.
             val budget = if (dm) RateBudget.DIRECT_MESSAGE_SEND else if (ping) RateBudget.ROOM_PING else RateBudget.ROOM_SEND
@@ -303,9 +312,8 @@ class RatePresentationTest {
     private fun landscape(case: Char, room: ConversationViewModel, sessions: TestSessions, api: NativeChatFixtures,
         heard: LiveAnnouncements, input: String, send: String, detailsLabel: String, before: Triple<Int, Boolean, Int>) {
         val name = if (case == 'A') "rate-room-send-light-font200-landscape-after-tap" else "rate-room-send-light-font200-landscape-ime"
-        // A prefilled draft through the model, so the field is never focused before the first tap.
+        // The draft was prefilled through the model before the baseline, so the field is never focused before the first tap.
         compose.runOnIdle {
-            room.updateDraft("Unsent fixture")
             api.rooms.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 300)
             sessions.state.value = sessions.state.value.copy(rateWaits = mapOf(RateBudget.ROOM_SEND to RateWait(
                 android.os.SystemClock.elapsedRealtime() + 300_000, sessions.state.value.generation, checkNotNull(sessions.state.value.user).id)))
@@ -435,7 +443,7 @@ class RatePresentationTest {
     private fun unclipped(name: String, tag: String) {
         val node = compose.onNodeWithTag(tag).fetchSemanticsNode()
         val visible = node.boundsInWindow
-        val window = compose.onRoot().fetchSemanticsNode().size
+        val window = appRoot().fetchSemanticsNode().size
         val detail = "$name: $tag visible=$visible size=${node.size} window=$window ime=$imeBottom"
         check(kotlin.math.abs(visible.width - node.size.width) <= 1f && kotlin.math.abs(visible.height - node.size.height) <= 1f) {
             "Clipped ($detail)" }
@@ -444,13 +452,19 @@ class RatePresentationTest {
         if (imeBottom > 0) check(visible.bottom <= window.height - imeBottom + 0.5f) { "Under the keyboard ($detail)" }
     }
 
+    /**
+     * The activity's own root (PL): after the keyboard hides, a text-handle popup can add a second, tiny root (21×25 px on
+     * run 45211530633), which made the plain root ambiguous for the capture.
+     */
+    private fun appRoot() = compose.onNode(isRoot() and hasAnyDescendant(hasTestTag("conversation_composer") or hasTestTag("dm_composer")))
+
     private fun capture(name: String, dialog: Boolean = false) {
         compose.waitForIdle()
         val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }
             ?: checkNotNull(context.getExternalFilesDir(null))
         val folder = java.io.File(output, "ccm-rate-presentation")
         check(folder.isDirectory || folder.mkdirs())
-        val bitmap = (if (dialog) compose.onNode(isDialog()) else compose.onRoot()).captureToImage().asAndroidBitmap()
+        val bitmap = (if (dialog) compose.onNode(isDialog()) else appRoot()).captureToImage().asAndroidBitmap()
         try {
             java.io.File(folder, "$name.png").outputStream().use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
         } finally { bitmap.recycle() }
