@@ -62,15 +62,20 @@ class AuthorPresentationTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private fun text(id: Int) = context.getString(id)
 
-    @Test fun roomLight() = flow(dm = false, dark = false, scales = listOf("default" to 1f, "font200" to 2f))
-    @Test fun roomDark() = flow(dm = false, dark = true, scales = listOf("default" to 1f, "font200" to 2f))
-    @Test fun roomLandscapeEditing() = flow(dm = false, dark = false, scales = listOf("font200" to 2f), landscape = true,
-        only = setOf("editing"))
-    @Test fun dmReviewed() = flow(dm = true, dark = false, scales = listOf("default" to 1f), only = setOf("reviewed"))
+    private val all = setOf("first", "unknown", "reviewed", "editing")
+    @Test fun roomLight() = flow(dm = false, dark = false, scales = listOf(Scale("default", 1f, all), Scale("font150", 1.5f,
+        setOf("unknown", "reviewed")), Scale("font200", 2f, all)))
+    @Test fun roomDark() = flow(dm = false, dark = true, scales = listOf(Scale("default", 1f, all - "first"), Scale("font200", 2f, all)))
+    @Test fun roomLandscapeEditing() = flow(dm = false, dark = false, scales = listOf(Scale("font200", 2f, setOf("editing"))),
+        landscape = true)
+    @Test fun dmReviewed() = flow(dm = true, dark = false, scales = listOf(Scale("default", 1f, setOf("reviewed"))))
 
-    private fun flow(dm: Boolean, dark: Boolean, scales: List<Pair<String, Float>>, landscape: Boolean = false,
-        only: Set<String>? = null) {
-        for ((scaleName, fontScale) in scales) {
+    /** A font scale and the states captured at it (the PL's list). */
+    private class Scale(val name: String, val factor: Float, val shots: Set<String>)
+
+    private fun flow(dm: Boolean, dark: Boolean, scales: List<Scale>, landscape: Boolean = false) {
+        for (scale in scales) {
+            val scaleName = scale.name; val fontScale = scale.factor; val only = scale.shots
             FontScaleTestActivity.requestedFontScale = fontScale
             val sessions = TestSessions()
             val api = NativeChatFixtures(sessions)
@@ -139,6 +144,18 @@ class AuthorPresentationTest {
                 }
                 compose.onNodeWithTag("message_edit_action").performScrollTo().performNativeTap()
                 compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("author_change_dialog").fetchSemanticsNode() }.isSuccess }
+                val theme = if (dark) "dark" else "light"
+                val prefix = "author-edit-${if (dm) "dm" else "room"}-$theme-$scaleName"
+                fun shot(state: String) { if (state in only) capture("$prefix-$state" + if (landscape) "-landscape" else "") }
+                fun cancel() = compose.onNode(hasText(text(R.string.cancel)) and hasAnyAncestor(isDialog())).fetchSemanticsNode().boundsInWindow
+                fun confirm() = compose.onNodeWithTag("author_change_confirm").fetchSemanticsNode()
+                compose.waitForIdle()
+                if (!landscape && fontScale == 2f) {
+                    // PL ruling B: a first edit keeps main's arrangement; at 200% "Save" fits beside Cancel (measured on main).
+                    val c = cancel(); val save = confirm().boundsInWindow
+                    check(kotlin.math.abs(c.top - save.top) <= 0.5f && c.right <= save.left) { "$prefix: a first edit's row changed ($c, $save)" }
+                }
+                shot("first")
                 // A Save whose outcome is unknown, then Check (a GET): the read-only, checked body with Review.
                 compose.runOnIdle { api.authorChanges.failure = ApiFailure(FailureKind.HTTP, 500, "metadata_failed") }
                 compose.onNodeWithTag("author_edit_body").performScrollTo()
@@ -150,18 +167,31 @@ class AuthorPresentationTest {
                 }
                 compose.runOnIdle { api.authorChanges.failure = null }
                 compose.waitUntil(5_000) { compose.nativeAuthorImeBottom() == 0 } // The read-only body's keyboard closes by itself.
+                compose.waitForIdle()
+                val checkBounds = compose.onNodeWithTag("author_check_history").fetchSemanticsNode().boundsInWindow
+                val cancelAtCheck = cancel()
                 compose.onNodeWithTag("author_check_history").performNativeTap()
                 compose.waitUntil(5_000) {
                     if (dm) thread.state.value.let { it.authorUnknown == null && !it.busy && !it.stale } else room.state.value.let { it.authorUnknown == null && !it.busy && !it.stale }
                 }
-                val theme = if (dark) "dark" else "light"
-                val prefix = "author-edit-${if (dm) "dm" else "room"}-$theme-$scaleName"
-                fun shot(state: String) { if (only == null || state in only) capture("$prefix-$state" + if (landscape) "-landscape" else "") }
                 shot("unknown")
+                compose.waitForIdle()
+                val before = confirm(); val cancelBefore = cancel()
                 compose.onNodeWithTag("author_change_confirm").performNativeTap() // Review, no POST.
                 compose.waitForIdle()
+                val after = confirm(); val cancelAfter = cancel()
+                if (!landscape) {
+                    // PL ruling B: across Check, Review and Save the confirm keeps identical bounds (it reserves the widest
+                    // recovery label) and Cancel keeps its position relative to it, at every scale.
+                    val b0 = before.boundsInWindow; val b1 = after.boundsInWindow
+                    check(before.id == after.id) { "$prefix: Review and Save are one node" }
+                    check(checkBounds == b0 && b0 == b1) { "$prefix: the confirm moved across Check, Review and Save ($checkBounds, $b0, $b1)" }
+                    check(cancelAtCheck.left - checkBounds.left == cancelBefore.left - b0.left && cancelBefore.left - b0.left == cancelAfter.left - b1.left &&
+                        cancelAtCheck.top - checkBounds.top == cancelBefore.top - b0.top && cancelBefore.top - b0.top == cancelAfter.top - b1.top) {
+                        "$prefix: Cancel moved relative to the confirm ($cancelAtCheck, $cancelBefore, $cancelAfter)" }
+                }
                 shot("reviewed")
-                if (only == null || "editing" in only) {
+                if ("editing" in only) {
                     compose.tapNativeInput("author_edit_body", { compose.nativeAuthorImeBottom() })
                     compose.waitForIdle()
                     shot("editing")
