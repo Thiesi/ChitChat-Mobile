@@ -277,6 +277,7 @@ class RatePresentationTest {
             check(opened == 0) { "$name: $opened announcements before the refusal ${heard.spoken()}" }
             check(appeared - opened == 1) { "$name: ${appeared - opened} announcements for the appearance ${heard.spoken()}" }
             check(swapped - appeared == 0) { "$name: ${swapped - appeared} announcements for the keyboard or form swaps ${heard.spoken()}" }
+            check(heard.texts() == listOf(waitText)) { "$name: the counted texts ${heard.texts()} (expected the full line once) ${heard.spoken()}" }
             // PL (J on af1481d): never assertIsDisplayed alone, which passes on a sliver. The line (when drawn), the composer
             // and Send are each unclipped and inside the window, and above the keyboard top when it's up.
             formIs(name, expect, detailsLabel)
@@ -301,6 +302,7 @@ class RatePresentationTest {
                 val afterTap = heard.mark(compose, sentinel)
                 heard.verify()
                 check(afterTap - beforeTap == 1) { "$name: ${afterTap - beforeTap} announcements for one refused tap ${heard.spoken()}" }
+                check(heard.texts() == listOf(waitText, "$waitText ")) { "$name: appearance plus one refused tap, in order: ${heard.texts()}" }
                 check(form == shown && lineDrawn()) {
                     "$name: the line changed on a refused tap: $shown -> $form" }
             }
@@ -337,6 +339,8 @@ class RatePresentationTest {
             heard.verify()
             check(opened == 0) { "$name: $opened announcements before the refusal ${heard.spoken()}" }
             check(refused - opened == 1) { "$name: ${refused - opened} announcements for the first refusal ${heard.spoken()}" }
+            val full = fullLine(dm = false, ping = false, known = true)
+            check(heard.texts() == listOf(full)) { "$name: the counted texts ${heard.texts()} (expected the full line once)" }
             check(lineDrawn()) { "$name: no line after the hide" }
             unclipped(name, "rate_wait_line")
             unclipped(name, input)
@@ -377,6 +381,8 @@ class RatePresentationTest {
             check(opened == 0) { "$name: $opened announcements before the refusal ${heard.spoken()}" }
             check(refused - opened == 1) { "$name: ${refused - opened} announcements for the refusal ${heard.spoken()}" }
             check(returned - refused == 0) { "$name: ${returned - refused} announcements for the keyboard's return ${heard.spoken()}" }
+            val full = fullLine(dm = false, ping = false, known = true)
+            check(heard.texts() == listOf(full)) { "$name: the counted texts ${heard.texts()} (expected the full line once)" }
             // A refused Send while hidden hides the keyboard once and announces once.
             compose.onNodeWithTag(send).performNativeTap()
             compose.waitUntil(5_000) { room.state.value.sendLimitRefusals == 2 && !room.state.value.busy }
@@ -385,6 +391,7 @@ class RatePresentationTest {
             val tapped = heard.mark(compose, sentinel)
             heard.verify()
             check(tapped - returned == 1) { "$name: ${tapped - returned} announcements for the refused tap ${heard.spoken()}" }
+            check(heard.texts() == listOf(full, "$full ")) { "$name: refusal plus one refused tap, in order: ${heard.texts()}" }
             check(lineDrawn()) { "$name: no line after the hide" }
             check(detailsState(detailsLabel) == null) { "$name: the Details dot stayed after the hide" }
             focusedOnly(name, input, "after the refused tap's hide")
@@ -423,8 +430,9 @@ class RatePresentationTest {
     private fun detailsState(label: String) =
         compose.onNodeWithContentDescription(label).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
 
-    /** The persistent wait line (one node, zero height when nothing is drawn) is drawn. */
-    private fun lineDrawn() = compose.onNodeWithTag("rate_wait_line").fetchSemanticsNode().size.height > 0
+    /** The persistent wait line (one node: zero height with no notice, a 1dp strip while hidden) shows its text. */
+    private fun lineDrawn() =
+        compose.onNodeWithTag("rate_wait_line").fetchSemanticsNode().size.height > 2 * context.resources.displayMetrics.density
 
     /**
      * PL and TL: outside Send's state description and Details, exactly one node in the conversation exposes the wait text
