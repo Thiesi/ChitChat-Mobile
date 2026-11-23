@@ -35,6 +35,11 @@ import org.junit.Test
  * #331b turns these into strict asserts or removes the probe. It reads nodes only: no keyboard, IME or focus request.
  * It fails only if a field's node can't be obtained or the file can't be written, so an empty result never passes.
  *
+ * #331b step 0 (TL, 2026-11-23): also the field node's stateDescription, tooltipText and error, and its full descendant
+ * subtree (each node's class, text, contentDescription, importantForAccessibility, visibleToUser and whether it's
+ * focusable to a screen reader). That answers whether the label Text reaches an accessibility service on the field, as a
+ * focusable descendant or merged into the node. Still measurement only.
+ *
  * Cases (see docs/milestones/text-field-names.md for the call sites each covers):
  * - real: the app's own composables, reusable in isolation (MessageInput in both overloads, StepUpDialog's secret).
  * - material: the Material OutlinedTextField with exactly the parameters the call sites pass (label, singleLine,
@@ -137,6 +142,33 @@ class TextFieldNodeNamesTest {
             .put("showingHintText", node.isShowingHintText)
             .put("password", node.isPassword)
             .put("preceding", (preceding?.text ?: preceding?.contentDescription).fact() ?: JSONObject.NULL)
+            .put("stateDescription", (if (android.os.Build.VERSION.SDK_INT >= 30) node.stateDescription else null).fact() ?: JSONObject.NULL)
+            .put("tooltipText", node.tooltipText.fact() ?: JSONObject.NULL)
+            .put("error", node.error.fact() ?: JSONObject.NULL)
+            .put("descendants", descendants(node))
+    }
+
+    /** The field node's whole subtree in pre-order (bounded), as an accessibility service would find it. */
+    private fun descendants(field: AccessibilityNodeInfo): JSONArray {
+        val out = JSONArray()
+        fun walk(node: AccessibilityNodeInfo, depth: Int) {
+            for (index in 0 until node.childCount) {
+                if (out.length() >= 32) return
+                val child = node.getChild(index) ?: continue
+                child.refresh()
+                out.put(JSONObject().put("depth", depth)
+                    .put("className", child.className.fact() ?: JSONObject.NULL)
+                    .put("text", child.text.fact() ?: JSONObject.NULL)
+                    .put("contentDescription", child.contentDescription.fact() ?: JSONObject.NULL)
+                    .put("important", child.isImportantForAccessibility)
+                    .put("visible", child.isVisibleToUser)
+                    .put("focusable", child.isFocusable)
+                    .put("screenReaderFocusable", child.isScreenReaderFocusable))
+                if (depth < 16) walk(child, depth + 1)
+            }
+        }
+        walk(field, 1)
+        return out
     }
 
     @Test fun recordEachTextFieldPatternsAccessibilityNode() {
