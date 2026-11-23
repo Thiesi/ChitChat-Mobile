@@ -228,15 +228,14 @@ class RatePresentationTest {
                 if (known) sessions.state.value = sessions.state.value.copy(rateWaits = mapOf(budget to RateWait(
                     android.os.SystemClock.elapsedRealtime() + 300_000, sessions.state.value.generation, checkNotNull(sessions.state.value.user).id)))
             }
-            heard.flush(compose, sentinel)
-            check(heard.count == 0) { "$name: announced before the refusal ${heard.spoken()}" }
+            // Announcements are counted between delivered sentinels (PL, TL: the positive control). A mark that times out is
+            // recorded and only fails after the capture (verify), so it can't cost the J its images.
+            val opened = heard.mark(compose, sentinel)
             compose.onNodeWithTag(send).performNativeTap()
             compose.waitUntil(5_000) { (if (dm) thread.state.value.sendLimit else room.state.value.sendLimit) != null }
             compose.waitForIdle()
             lineOrDot(name, "with the keyboard up", detailsLabel)
-            // TL condition (a) and PL: one announcement when the notice appears, visible or hidden.
-            heard.flush(compose, sentinel)
-            check(heard.count == 1) { "$name: ${heard.count} announcements on appearance ${heard.spoken()}" }
+            val appeared = heard.mark(compose, sentinel)
             if (!keyboard) {
                 keyboardDown()
                 lineOrDot(name, "after the keyboard hid", detailsLabel) // TL condition 3.
@@ -247,11 +246,16 @@ class RatePresentationTest {
                 keyboardDown()
                 lineOrDot(name, "after the reply started", detailsLabel)
             }
-            heard.flush(compose, sentinel)
-            check(heard.count == 1) { "$name: a keyboard or form swap announced ${heard.spoken()}" }
+            val swapped = heard.mark(compose, sentinel)
             val expectedArrangement = if (keyboard) beforeKeyboard else before
-            // Capture first, so a failing assert still leaves its image (PL).
+            // Capture first, so a failing assert (announcements included) still leaves its image (PL).
             if (capture != null) capture(capture)
+            // TL condition (a) and PL: none before the notice, exactly one for its appearance, none for the keyboard or form
+            // swaps since, each between two delivered sentinels.
+            heard.verify()
+            check(opened == 0) { "$name: $opened announcements before the refusal ${heard.spoken()}" }
+            check(appeared - opened == 1) { "$name: ${appeared - opened} announcements for the appearance ${heard.spoken()}" }
+            check(swapped - appeared == 0) { "$name: ${swapped - appeared} announcements for the keyboard or form swaps ${heard.spoken()}" }
             // PL (J on af1481d): never assertIsDisplayed alone, which passes on a sliver. The line (when drawn), the composer
             // and Send are each unclipped and inside the window, and above the keyboard top when it's up.
             formIs(name, expect, detailsLabel)
@@ -280,11 +284,13 @@ class RatePresentationTest {
             if (visibleTap) {
                 // PL ruling (a): a refused tap with the line visible re-announces once; the line stays as it is.
                 val shown = form
+                val beforeTap = heard.mark(compose, sentinel)
                 compose.onNodeWithTag(send).performNativeTap()
                 compose.waitUntil(5_000) { room.state.value.sendLimitRepeats == 1 && !room.state.value.busy }
                 compose.waitForIdle()
-                heard.flush(compose, sentinel)
-                check(heard.count == 2) { "$name: ${heard.count} announcements after one refused tap ${heard.spoken()}" }
+                val afterTap = heard.mark(compose, sentinel)
+                heard.verify()
+                check(afterTap - beforeTap == 1) { "$name: ${afterTap - beforeTap} announcements for one refused tap ${heard.spoken()}" }
                 check(form == shown && compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) {
                     "$name: the line changed on a refused tap: $shown -> $form" }
             }
@@ -306,8 +312,8 @@ class RatePresentationTest {
         }
         compose.waitForIdle()
         check(compose.onAllNodes(isFocused()).fetchSemanticsNodes().isEmpty()) { "$name: something is focused before the first tap" }
-        heard.flush(compose, sentinel)
-        check(heard.count == 0) { "$name: announced before the refusal ${heard.spoken()}" }
+        // Counted between delivered sentinels; a timed-out mark fails only after the capture (verify).
+        val opened = heard.mark(compose, sentinel)
         if (case == 'A') {
             // Case A: a native first tap on the unfocused field brings the keyboard up (the strict proof); the refusal's
             // form resolves to hidden, so the one-shot hide runs.
@@ -318,8 +324,10 @@ class RatePresentationTest {
             compose.waitUntil(5_000) { imeBottom == 0 }
             compose.waitForIdle()
             capture(name)
-            heard.flush(compose, sentinel)
-            check(heard.count == 1) { "$name: ${heard.count} announcements for the first refusal ${heard.spoken()}" }
+            val refused = heard.mark(compose, sentinel)
+            heard.verify()
+            check(opened == 0) { "$name: $opened announcements before the refusal ${heard.spoken()}" }
+            check(refused - opened == 1) { "$name: ${refused - opened} announcements for the first refusal ${heard.spoken()}" }
             check(compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) { "$name: no line after the hide" }
             unclipped(name, "rate_wait_line")
             unclipped(name, input)
@@ -333,31 +341,39 @@ class RatePresentationTest {
             compose.onNodeWithTag(send).performNativeTap()
             compose.waitUntil(5_000) { room.state.value.sendLimit != null }
             compose.waitForIdle()
-            check(compose.onAllNodes(isFocused()).fetchSemanticsNodes().isEmpty()) { "$name: tapping Send moved focus" }
-            check(imeBottom == 0) { "$name: the keyboard came up on Send" }
-            check(compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) { "$name: no line with the keyboard down" }
-            check(arrangement(input, send) == before) { "$name: the composer changed with the line ${arrangement(input, send)} vs $before" }
-            heard.flush(compose, sentinel)
-            check(heard.count == 1) { "$name: ${heard.count} announcements for the refusal ${heard.spoken()}" }
+            // Observed now, asserted after the capture (PL: capture before the asserts).
+            val focusAfterSend = compose.onAllNodes(isFocused()).fetchSemanticsNodes().size
+            val imeAfterSend = imeBottom
+            val linesAfterSend = compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size
+            val arrangementAfterSend = arrangement(input, send)
+            val refused = heard.mark(compose, sentinel)
             // A native first tap on the never-focused field: the keyboard comes up, the line hides behind the dot, no hide.
             compose.tapNativeInput(input, { imeBottom })
             compose.waitForIdle()
             capture(name)
+            val returned = heard.mark(compose, sentinel)
+            check(focusAfterSend == 0) { "$name: tapping Send moved focus ($focusAfterSend focused nodes)" }
+            check(imeAfterSend == 0) { "$name: the keyboard came up on Send" }
+            check(linesAfterSend == 1) { "$name: no line with the keyboard down" }
+            check(arrangementAfterSend == before) { "$name: the composer changed with the line $arrangementAfterSend vs $before" }
             check(imeBottom > 0) { "$name: the keyboard was hidden without a refusal" }
             formIs(name, HIDDEN, detailsLabel)
             unclipped(name, input)
             unclipped(name, send)
             val floor = kotlin.math.round(48 * context.resources.displayMetrics.density).toInt()
             check(arrangement(input, send).third >= floor - 1) { "$name: the field is below 48dp: ${arrangement(input, send)}" }
-            heard.flush(compose, sentinel)
-            check(heard.count == 1) { "$name: the keyboard's return announced ${heard.spoken()}" }
+            heard.verify()
+            check(opened == 0) { "$name: $opened announcements before the refusal ${heard.spoken()}" }
+            check(refused - opened == 1) { "$name: ${refused - opened} announcements for the refusal ${heard.spoken()}" }
+            check(returned - refused == 0) { "$name: ${returned - refused} announcements for the keyboard's return ${heard.spoken()}" }
             // A refused Send while hidden hides the keyboard once and announces once.
             compose.onNodeWithTag(send).performNativeTap()
             compose.waitUntil(5_000) { room.state.value.sendLimitRefusals == 2 && !room.state.value.busy }
             compose.waitUntil(5_000) { imeBottom == 0 }
             compose.waitForIdle()
-            heard.flush(compose, sentinel)
-            check(heard.count == 2) { "$name: ${heard.count} announcements after the refused tap ${heard.spoken()}" }
+            val tapped = heard.mark(compose, sentinel)
+            heard.verify()
+            check(tapped - returned == 1) { "$name: ${tapped - returned} announcements for the refused tap ${heard.spoken()}" }
             check(compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) { "$name: no line after the hide" }
             check(detailsState(detailsLabel) == null) { "$name: the Details dot stayed after the hide" }
             focusedOnly(name, input, "after the refused tap's hide")
