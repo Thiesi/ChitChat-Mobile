@@ -64,11 +64,52 @@ such as TalkBack uses, as `ReportDetailsAccessibilityTest` does), empty and fill
 **Coverage:** every call site maps to a case. The search screens and the server editor aren't reusable in isolation
 without a production change, so they're represented by the Material cases with their exact parameters.
 
-## Results
+## Results (run 45140319444, head aadb8b8; API35 and API36)
 
-Pending the first CI run of #331a (API35 and API36). The per-field facts, the verdict per pattern and the fixes #331b
-needs go here.
+Both levels returned 21 entries each, and **every fact agrees between API35 and API36** for every case and state. The
+probe passed on both levels.
+
+| Case | Kind | State | text | hintText | contentDescription | labeledBy | showingHint | password | preceding node |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `message-input-string` | real | empty / filled | "" / typed | null | null | null | false | false | none |
+| `message-input-value` | real | empty / filled | "" / typed | null | null | null | false | false | none |
+| `step-up-password` | real | empty | "" | null | null | null | false | **true** | the dialog's explanation text, not its label |
+| `outlined-label-single-line` | material | empty / filled | "" / typed | null | null | null | false | false | none |
+| `outlined-label-password` | material | empty / filled | "" / masked | null | null | null | false | **true** | none |
+| `outlined-label-supporting` | material | empty / filled | "" / typed | null | null | null | false | false | none |
+| `outlined-label-supporting-password` | material | empty / filled | "" / masked | null | null | null | false | **true** | none |
+| `outlined-label-multiline` | material | empty / filled | "" / typed | null | null | null | false | false | none |
+| `synthetic-placeholder-only` | synthetic | empty / filled | "" / typed | null | null | null | false | false | none |
+| `synthetic-content-description-only` | synthetic | empty / filled | "" / typed | null | **null** | null | false | false | none |
+| `synthetic-visible-label-before` | synthetic | empty / filled | "" / typed | null | null | null | false | false | **"Fixture question"** |
+
+(The class is `android.widget.EditText` throughout. "typed" is the fixture text and "masked" its bullets; the typed text
+is the node's text in every filled case.)
+
+**What this shows, with Compose UI 1.11.4:**
+- **The Material `label` slot reaches none of the node's name properties:** no hintText, no contentDescription, no
+  labeledBy, empty or filled, in MessageInput and in every OutlinedTextField pattern. Neither does `placeholder`.
+- **`contentDescription` on the field doesn't reach the node either** (the synthetic case), confirming #326.
+- **The only pattern with a readable name nearby** is a visible label kept in semantics directly before the field (the
+  report pattern): it's the preceding text node in traversal order.
+- **Not recorded:** whether the label's text exists as a descendant node inside the field, and whether TalkBack reads
+  it when it lands on the field. The CI images have no TalkBack, and the probe records only the field and the node
+  before it. That decides whether the label-slot fields are actually unnamed to a TalkBack user, so it should be
+  measured before any fix (see #331b below).
+
+## Gaps and the fix pattern proposed for each
+
+| Call sites | Measured | Proposed |
+| --- | --- | --- |
+| every `label`-slot OutlinedTextField (19 call sites: auth 11, step-up, server address, DM people search, message search, push, rooms 2, transfer) and MessageInput (its 2 definitions; the room and DM composers and the author edit body) | no name on the node; nothing named before it (step-up: its explanation) | **#331b step 0:** add the field's descendant text nodes to the probe (no other change), and run it. If the label is a descendant that an accessibility service reads with the field, the gap is smaller than this table. Otherwise the fix pattern is the report's: the visible label kept in semantics directly before the field. That's a visible layout change for the label slot, so it needs the PL's ruling and J. |
+| report details (`ReportUi.kt:411`) | already the visible-label-before pattern (#326), with its own real-node test | none |
+
+**Not proposed here:** contentDescription or placeholder (measured not to reach the node), and any Compose bump (see
+below). Spoken output stays with the owner's manual TalkBack checks; nothing here claims it.
 
 ## Compose versions
 
-A recorded finding only (TL condition 4); any bump is a separate proposal as a compatible toolchain set. Pending.
+A recorded finding only (TL condition 4). The app uses BOM 2026.06.01 (Compose UI 1.11.4). Google's Maven metadata now
+lists Compose UI 1.13.0 stable (1.14.0-alpha01 newest) and BOM 2026.11.01. Whether a newer version maps the label to
+hintText or labeledBy is **not verified**. If proposed, it's a separate compatible-set change (with Kotlin 2.3, AGP and
+API 36), measured by re-running this same probe; never a single version bump.
