@@ -31,7 +31,10 @@ room one, measured locally (5 runs) and matching both CI occurrences.
   edit keeps today's arrangement at every scale. Measured on the CI AVD: at 150% and 200% "Review edit" stacked under
   Cancel while "Save" fit beside it, so the row reflowed on Review and a tap aimed at Review's centre landed between the
   buttons. Now the arrangement changes at most once per recovery, at the transition into unknown, together with the
-  keyboard closing, and never at Check, Review or Save. The dialog state carries a memory-only `recovery` flag (set on
+  keyboard closing, and never at Check, Review or Save. Where the reserved width doesn't fit beside Cancel, the recovery
+  row stacks and stays stacked from unknown entry through Save (PL amendment, 2026-11-23). On the 320 px CI window
+  that's already at 1.0: the widest label, "Check history", is 211 px, and 70 + 8 + 211 = 289 against 288 px, as
+  main's unknown state already did. Review no longer reflows it back to side by side. The dialog state carries a memory-only `recovery` flag (set on
   entering unknown, kept through Check, edits and Review, and gone with the dialog). The delete dialog is unchanged.
 - **Accessibility:** the read-only body stays readable, and Review becomes Save in the same node, so accessibility focus
   stays on it.
