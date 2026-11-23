@@ -149,15 +149,17 @@ fun Modifier.rateFitTimeline(fit: RateLineFit, window: Any): Modifier =
  * pass):
  * - **FULL** only if the timeline keeps one 48dp row beside the full line;
  * - **SHORT** if the short form still leaves the composer its natural height (the timeline absorbs it);
- * - **HIDDEN** otherwise (compact with the keyboard up): nothing drawn; the screen lights the Details dot and puts the
- *   full line first in Details. A drawn line with the timeline at 0 may be hiding a squeeze, so that reads HIDDEN.
+ * - **HIDDEN** otherwise (compact with the keyboard up): no text drawn; the screen lights the Details dot and puts the
+ *   full line first in Details. A drawn line with the timeline at 0 may be hiding a squeeze, so that reads HIDDEN. The
+ *   node stays the carrier as a 1dp full-width strip at its place, directly above the composer block (TL's branch 2: a
+ *   zero-height node announced nothing on run 45233308933); the one accepted extra swipe stop, in this rare state.
  *
  * Decided once per notice and [window] (width, the height above the keyboard, font scale, and whether the reply chip and
  * the attachment card or notices are present: layout, never draft content), so it can't flip while typing. No frame
  * wait: measurements are tagged with the window. While one is pending the previous form holds; with none yet, SHORT.
  *
  * **The announcement carrier (PL and TL, after run 45222016407):** this line is ONE persistent node, always composed,
- * zero height (no padding) when nothing is drawn. Its only semantics: a permanent polite live region, a description that
+ * zero height (no padding) with no notice, 1dp while hidden. Its only semantics: a permanent polite live region, a description that
  * is the full line while a notice is current (with or without one trailing space, flipped per refused tap: [parity])
  * and nothing otherwise, and its test tag. So the notice appearing and each refused tap are one change on an existing
  * node (one announcement), clearing empties it (silent), and full/short/hidden swaps change only its size and visible
@@ -199,8 +201,10 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     val shown = when (form) { RateLineForm.FULL -> full; RateLineForm.SHORT -> short; else -> null }
     if (shown != null) LocalRateLineProbe.current?.let { probe -> SideEffect { probe(form == RateLineForm.SHORT, shown) } }
     val spoken = full?.let { if (parity) "$it " else it }
-    Text(shown.orEmpty(), modifier.then(if (shown != null) Modifier.padding(top = spacing) else Modifier.height(0.dp))
-        .onGloballyPositioned { fit.lineSlot = if (shown != null) it.size.height else 0 }
+    val strip = shown == null && form == RateLineForm.HIDDEN
+    Text(shown.orEmpty(), modifier.then(when { shown != null -> Modifier.padding(top = spacing); strip -> Modifier.height(1.dp)
+        else -> Modifier.height(0.dp) })
+        .onGloballyPositioned { fit.lineSlot = if (shown != null || strip) it.size.height else 0 }
         .clearAndSetSemantics {
             if (spoken != null) contentDescription = spoken
             liveRegion = LiveRegionMode.Polite

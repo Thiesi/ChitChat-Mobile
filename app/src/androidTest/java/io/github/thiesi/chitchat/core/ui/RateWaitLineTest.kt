@@ -163,7 +163,7 @@ class RateWaitLineTest {
 
     private fun settle() { repeat(2) { compose.mainClock.advanceTimeByFrame(); compose.waitForIdle() } }
     private fun known5() = base + compose.mainClock.currentTime + 5 * 60_000
-    private fun drawn() = line().size.height > 0
+    private fun drawn() = line().size.height > 2 * context.resources.displayMetrics.density // The hidden strip is 1dp.
     private fun lineDescription() = line().config.getOrNull(SemanticsProperties.ContentDescription)?.singleOrNull()
 
     /** TL condition 1: a late or missing measurement gives the short form, never a missing line and never the full one. */
@@ -300,14 +300,16 @@ class RateWaitLineTest {
             assertEquals("Short to hidden is silent: $all", 0, toHidden - toShort)
             assertEquals("Hidden to full is silent: $all", 0, back - toHidden)
             assertEquals("Clearing is silent: $all", 0, cleared - back)
+            assertEquals("Appearance and two refused taps, in order: $all", listOf(unknown, "$unknown ", unknown), heard.texts())
         }
     }
 
     /**
-     * TL's branch measurement for the hidden state (compact with the keyboard): a notice appearing while nothing can be
-     * drawn still announces once on the zero-height carrier, and that node is no swipe stop (not visible to the user).
+     * TL's branch 2 for the hidden state (compact with the keyboard): a zero-height node announced nothing (run
+     * 45233308933), so the line is a 1dp full-width strip at its place while hidden; a notice appearing then announces
+     * once, and a refused tap once more.
      */
-    @Test fun aNoticeAppearingHiddenAnnouncesOnceAndIsNoSwipeStop() {
+    @Test fun aNoticeAppearingHiddenAnnouncesOnceOnTheStrip() {
         announcements { full5() }.use { heard ->
             columnHeight = 70.dp; window = "keyboard"
             slot(paused = false)
@@ -315,11 +317,18 @@ class RateWaitLineTest {
             val start = heard.mark(compose, sentinel)
             compose.runOnIdle { deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true) }
             val appeared = heard.mark(compose, sentinel)
+            compose.runOnIdle { repeats++ }
+            val tapped = heard.mark(compose, sentinel)
             heard.verify()
             assertEquals(RateLineForm.HIDDEN, fit?.form)
+            val strip = line()
+            val dp = context.resources.displayMetrics.density
+            assertEquals("A 1dp strip", kotlin.math.round(dp), strip.size.height.toFloat(), 1f)
+            assertEquals("Full width", kotlin.math.round(320 * dp), strip.size.width.toFloat(), 1f)
             val facts = nodeFacts(full5())
-            assertEquals("Once on appearance while hidden: ${heard.spoken()}", 1, appeared - start)
-            assertEquals("The hidden carrier's node facts: $facts", false, facts?.visibleToUser)
+            assertEquals("Once on appearance while hidden: ${heard.spoken()} facts=$facts", 1, appeared - start)
+            assertEquals("Once per refused tap while hidden: ${heard.spoken()}", 1, tapped - appeared)
+            assertEquals(listOf(full5(), "${full5()} "), heard.texts())
         }
     }
 

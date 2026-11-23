@@ -29,6 +29,12 @@ private const val FLUSH = "ccm-live-flush-"
  * whose source, queried as the event arrives (as TalkBack does), has a live region and matches [carrier]. A source that
  * has lost its live region by then counts as silent, as it would for TalkBack.
  *
+ * **What counts (TL and PL rule, a model of TalkBack, not a proof):** an announcement is a carrier event with a
+ * non-empty spoken text (its contentDescription) that differs from the last counted one. Clearing to empty counts 0; a
+ * move or a resize with identical text is an event (Compose sends `SUBTREE` changes, run 45234305565) but isn't
+ * counted; every raw event stays listed in [spoken]. A zero-size node sends nothing at all (run 45233308933). Real speech is gated by the owner's TalkBack check: no speech on a keyboard swap, rotation or full/short
+ * swap; one per appearance and per refused tap.
+ *
  * Every count is bracketed by delivered sentinels (PL, TL): [mark] changes the test-only [LiveFlushSentinel] twice, each
  * awaited before the next, so every change made before it has been delivered, and returns the count at that point. A
  * delivered sentinel is the positive control: a listener that receives nothing fails the mark, so "0 between mark N and
@@ -46,6 +52,11 @@ private const val FLUSH = "ccm-live-flush-"
 class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean) : AutoCloseable {
     private val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
     private val seen = CopyOnWriteArrayList<String>()
+    private val counted = CopyOnWriteArrayList<String>()
+    private val raw = CopyOnWriteArrayList<String>()
+    @Volatile private var lastCounted: String? = null
+    // The counted total at each sentinel's delivery (in the listener), so a bracket ends exactly at its second sentinel.
+    private val countAt = java.util.concurrent.ConcurrentHashMap<Int, Int>()
     @Volatile private var flushed = -1
     // Diagnostic scalars only (no text): what reached the listener, for a flush that times out.
     private val events = AtomicInteger()
@@ -65,13 +76,21 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
             if (source.liveRegion == View.ACCESSIBILITY_LIVE_REGION_NONE) return@setOnAccessibilityEventListener
             liveSources.incrementAndGet()
             val description = source.contentDescription?.toString().orEmpty()
-            if (description.startsWith(FLUSH)) description.removePrefix(FLUSH).toIntOrNull()?.let { flushed = maxOf(flushed, it) }
+            if (description.startsWith(FLUSH)) description.removePrefix(FLUSH).toIntOrNull()?.let {
+                countAt[it] = counted.size
+                flushed = maxOf(flushed, it)
+            }
             // Measurement (TL): each counted event's change types and the carrier's scalar state at that moment, so a
             // count above one shows which of the carrier's properties changed. No text beyond the carrier's own label.
-            else if (carrier(source)) {
-                val bounds = android.graphics.Rect().also { source.getBoundsInScreen(it) }
-                seen += "$description|${source.state()}|types=${changeTypes(event.contentChangeTypes)}|enabled=${source.isEnabled}" +
-                    "|live=${source.liveRegion}|bounds=${bounds.toShortString()}|t=${event.eventTime}"
+            else {
+                if (carrier(source)) {
+                    val bounds = android.graphics.Rect().also { source.getBoundsInScreen(it) }
+                    val entry = "$description|${source.state()}|types=${changeTypes(event.contentChangeTypes)}|enabled=${source.isEnabled}" +
+                        "|live=${source.liveRegion}|bounds=${bounds.toShortString()}|t=${event.eventTime}"
+                    raw += entry
+                    // The rule: non-empty (the carrier matches only its full line) and different from the last counted.
+                    if (description.isNotEmpty() && description != lastCounted) { lastCounted = description; counted += description; seen += entry }
+                }
             }
         }
     }
@@ -84,9 +103,12 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
         AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED to "PANE_DISAPPEARED", 0x800 to "ERROR", 0x1000 to "ENABLED",
     ).filter { (bit, _) -> types and bit != 0 }.joinToString("+") { it.second }.ifEmpty { "0x" + Integer.toHexString(types) }
 
-    /** Announcements counted so far (each "label|state|change types|scalars"). */
-    val count get() = seen.size
-    fun spoken(): List<String> = seen.toList()
+    /** Announcements counted so far (rule 1). */
+    val count get() = counted.size
+    /** The counted spoken texts, in order. */
+    fun texts(): List<String> = counted.toList()
+    /** Diagnostics: the counted events, then every raw carrier event (text, change types, scalars). */
+    fun spoken(): String = "counted=${seen.toList()} raw=${raw.toList()}"
 
     @Volatile private var failure: AssertionError? = null
 
@@ -109,7 +131,9 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
                 failure = AssertionError("Live sentinel $next not delivered: ${diagnostics()}", timeout)
             }
         }
-        return seen.size
+        // TL: the bracket ends at this mark's second sentinel; the first was set after the counted action, so every diff
+        // holding the action had been processed before the second was even set.
+        return countAt[sentinel.intValue] ?: counted.size
     }
 
     /** Fails with the first recorded mark timeout, if any: call before asserting any count. */
@@ -120,7 +144,7 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
         val services = manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK).size
         return "managerEnabled=${manager.isEnabled}, enabledServices=$services, touchExploration=${manager.isTouchExplorationEnabled}, " +
             "events=${events.get()}, contentChanges=${contentChanges.get()}, nullSources=${nullSources.get()}, " +
-            "liveSources=${liveSources.get()}, flushed=$flushed, counted=${seen.size}"
+            "liveSources=${liveSources.get()}, flushed=$flushed, counted=${counted.size}"
     }
 
     /**
