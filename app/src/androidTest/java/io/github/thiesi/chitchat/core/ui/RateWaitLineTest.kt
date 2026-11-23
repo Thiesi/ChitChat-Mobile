@@ -34,8 +34,6 @@ import io.github.thiesi.chitchat.core.session.RateWait
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
-import io.github.thiesi.chitchat.testing.LiveAnnouncements
-import io.github.thiesi.chitchat.testing.LiveFlushSentinel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -49,9 +47,9 @@ import org.junit.Test
  *
  * #323b refinement (PL, TL): the line is silent text whose description is the full line in both forms; the composer slot
  * picks FULL (a 48dp timeline row left), SHORT or HIDDEN (not even the short form fits at the composer's natural height),
- * once per notice and window, never from the draft, SHORT while no measurement exists. Send carries every announcement:
- * its label stays, its state description is the full line with a polite live region, one trailing space flips per
- * refused tap, and clearing is silent. The announcement counts use real accessibility events (UiAutomation).
+ * once per notice and window, never from the draft, SHORT while no measurement exists. The line is the one persistent
+ * carrier node (identical semantics in all forms, empty with no notice); Send reads the line as its state without a live
+ * region. The announcement counts (real accessibility events) live in #344's RateLineAnnouncementTest.
  */
 class RateWaitLineTest {
     @get:Rule val compose = createComposeRule()
@@ -136,7 +134,8 @@ class RateWaitLineTest {
     }
 
     // The composer slot laid out as the screens do: the timeline's block (a weighted timeline, then the persistent wait
-    // line) above a composer of a given height, in a column spaced by 6dp; plus the test-only live sentinel.
+    // line) above a composer of a given height, in a column spaced by 6dp. (Announcement counts: #344's
+    // RateLineAnnouncementTest, kept there for #342's review budget.)
     private var columnHeight by mutableStateOf(600.dp)
     private var composerHeight by mutableStateOf(48.dp)
     private var window by mutableStateOf<Any>("portrait")
@@ -144,7 +143,6 @@ class RateWaitLineTest {
     private var notice by mutableStateOf<RateLimitNotice?>(null)
     private var deadline by mutableStateOf<Long?>(null)
     private var repeats by mutableIntStateOf(0)
-    private val sentinel = mutableIntStateOf(0)
 
     private fun slot(measured: Boolean = true, paused: Boolean = true) = host(paused) {
         val held = remember { RateLineFit() }.also { fit = it }
@@ -157,7 +155,6 @@ class RateWaitLineTest {
                 }
                 Box(Modifier.fillMaxWidth().height(composerHeight))
             }
-            LiveFlushSentinel(sentinel.intValue)
         }
     }
 
@@ -256,116 +253,5 @@ class RateWaitLineTest {
         assertEquals(listOf("Send"), node[SemanticsProperties.ContentDescription])
         assertEquals(full5(), node[SemanticsProperties.StateDescription])
         assertFalse(node.contains(SemanticsProperties.LiveRegion))
-    }
-
-    private fun announcements(text: () -> String) = LiveAnnouncements { node -> node.contentDescription?.toString()?.trimEnd() == text() }
-
-    /** Opens Compose's accessibility-event gate on this test's window (see ComposeAccessibilityForcing). */
-    private fun LiveAnnouncements.attachHost() {
-        val activity = (compose as androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>).activity as android.app.Activity
-        compose.runOnUiThread { attach(activity.window.decorView) }
-    }
-
-    /**
-     * TL/PL: exactly one announcement when a notice appears and per refused tap; none for full/short/hidden swaps or on
-     * clearing. Every count is between two delivered sentinels (the positive control).
-     */
-    @Test fun theLineAnnouncesOnceOnAppearanceAndPerRefusalAndIsSilentOtherwise() {
-        val unknown = context.getString(R.string.rate_wait_messages_unknown)
-        announcements { unknown }.use { heard ->
-            slot(paused = false)
-            heard.attachHost()
-            val start = heard.mark(compose, sentinel)
-            compose.runOnIdle { notice = RateLimitNotice(RateBudget.ROOM_SEND, false) }
-            val appeared = heard.mark(compose, sentinel)
-            compose.runOnIdle { repeats++ }
-            val firstTap = heard.mark(compose, sentinel)
-            compose.runOnIdle { repeats++ }
-            val secondTap = heard.mark(compose, sentinel)
-            compose.runOnIdle { columnHeight = 120.dp; window = "tight" }
-            val toShort = heard.mark(compose, sentinel)
-            compose.runOnIdle { columnHeight = 70.dp; window = "keyboard" }
-            val toHidden = heard.mark(compose, sentinel)
-            compose.runOnIdle { columnHeight = 600.dp; window = "no keyboard" }
-            val back = heard.mark(compose, sentinel)
-            compose.runOnIdle { notice = null } // The unknown wait dropped on the next edit, or a successful send.
-            val cleared = heard.mark(compose, sentinel)
-            heard.verify()
-            val all = heard.spoken()
-            assertEquals("Nothing before the notice: $all", 0, start)
-            assertEquals("Once on appearance: $all", 1, appeared - start)
-            assertEquals("Once per refused tap: $all", 1, firstTap - appeared)
-            assertEquals("Once per refused tap: $all", 1, secondTap - firstTap)
-            assertEquals("Full to short is silent: $all", 0, toShort - secondTap)
-            assertEquals("Short to hidden is silent: $all", 0, toHidden - toShort)
-            assertEquals("Hidden to full is silent: $all", 0, back - toHidden)
-            assertEquals("Clearing is silent: $all", 0, cleared - back)
-            assertEquals("Appearance and two refused taps, in order: $all", listOf(unknown, "$unknown ", unknown), heard.texts())
-        }
-    }
-
-    /**
-     * TL's branch 2 for the hidden state (compact with the keyboard): a zero-height node announced nothing (run
-     * 45233308933), so the line is a 1dp full-width strip at its place while hidden; a notice appearing then announces
-     * once, and a refused tap once more.
-     */
-    @Test fun aNoticeAppearingHiddenAnnouncesOnceOnTheStrip() {
-        announcements { full5() }.use { heard ->
-            columnHeight = 70.dp; window = "keyboard"
-            slot(paused = false)
-            heard.attachHost()
-            val start = heard.mark(compose, sentinel)
-            compose.runOnIdle { deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true) }
-            val appeared = heard.mark(compose, sentinel)
-            compose.runOnIdle { repeats++ }
-            val tapped = heard.mark(compose, sentinel)
-            heard.verify()
-            assertEquals(RateLineForm.HIDDEN, fit?.form)
-            val strip = line()
-            val dp = context.resources.displayMetrics.density
-            assertEquals("A 1dp strip", kotlin.math.round(dp), strip.size.height.toFloat(), 1f)
-            assertEquals("Full width", kotlin.math.round(320 * dp), strip.size.width.toFloat(), 1f)
-            val facts = nodeFacts(full5())
-            assertEquals("Once on appearance while hidden: ${heard.spoken()} facts=$facts", 1, appeared - start)
-            assertEquals("Once per refused tap while hidden: ${heard.spoken()}", 1, tapped - appeared)
-            assertEquals(listOf(full5(), "${full5()} "), heard.texts())
-        }
-    }
-
-    private data class NodeFacts(val visibleToUser: Boolean, val important: Boolean, val focusable: Boolean,
-        val screenReaderFocusable: Boolean, val bounds: String)
-
-    /** The accessibility node (as a screen reader sees it) whose description is [text]; null if there's none. */
-    private fun nodeFacts(text: String): NodeFacts? {
-        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow ?: return null
-        val queue = ArrayDeque(listOf(root))
-        while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-            if (node.contentDescription?.toString()?.trimEnd() == text) {
-                val bounds = android.graphics.Rect().also { node.getBoundsInScreen(it) }
-                return NodeFacts(node.isVisibleToUser, node.isImportantForAccessibility, node.isFocusable,
-                    android.os.Build.VERSION.SDK_INT >= 28 && node.isScreenReaderFocusable, bounds.toShortString())
-            }
-            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.addLast(it) }
-        }
-        return null
-    }
-
-    /** PL condition 3: the known wait's deadline clears the carrier silently (between two delivered sentinels). */
-    @Test fun theDeadlineClearsTheLineSilently() {
-        announcements { full5() }.use { heard ->
-            notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
-            deadline = base + compose.mainClock.currentTime + 2_000
-            slot(paused = false)
-            heard.attachHost()
-            val before = heard.mark(compose, sentinel)
-            compose.mainClock.advanceTimeBy(2_500)
-            compose.waitForIdle()
-            val descriptionAfter = lineDescription()
-            val after = heard.mark(compose, sentinel)
-            heard.verify()
-            assertNull("Cleared at the deadline", descriptionAfter)
-            assertEquals("The deadline is silent: ${heard.spoken()}", 0, after - before)
-        }
     }
 }
