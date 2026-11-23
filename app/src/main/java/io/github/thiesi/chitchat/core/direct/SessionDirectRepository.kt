@@ -4,6 +4,7 @@ import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.network.SessionHttp
 import io.github.thiesi.chitchat.core.session.SessionAccess
+import io.github.thiesi.chitchat.core.session.RateBudget
 import io.github.thiesi.chitchat.core.session.SessionRepository
 
 /** Client protocol prerequisite. No native DM screen is claimed by this repository alone. */
@@ -33,14 +34,15 @@ internal class SessionDirectRepository(private val sessions: SessionRepository) 
             directHistory(peerId, before, limit, access.userId).also { sessions.ensureCurrent(access) }
         }
     }
-    override suspend fun send(peerId: Long, body: String, replyId: Long?) = using { directSend(peerId, body, replyId, it.csrf, it.userId) }
+    override suspend fun send(peerId: Long, body: String, replyId: Long?) =
+        using(RateBudget.DIRECT_MESSAGE_SEND) { directSend(peerId, body, replyId, it.csrf, it.userId) }
     override suspend fun read(peerId: Long) = using { directRead(peerId, it.csrf, it.userId) }
     override suspend fun setBlocked(peerId: Long, blocked: Boolean) = using { directBlock(peerId, blocked, it.csrf, it.userId) }
 
-    private suspend fun <T> using(operation: suspend SessionHttp.(SessionAccess) -> T): T {
+    private suspend fun <T> using(budget: RateBudget? = null, operation: suspend SessionHttp.(SessionAccess) -> T): T {
         val access = sessions.openAccess()
         privacy() // Missing/unsupported disclosure disables DMs, never substitutes an E2EE/privacy promise.
-        return sessions.authorized(access) { operation(access) }
+        return sessions.authorized(access, budget) { operation(access) }
     }
     private fun privacy() = validatedDirectPrivacy(session.value.privacy)
 }

@@ -118,7 +118,9 @@ returns the draft to normal with that guard's message.
   treated as ambiguous.
 - **429 on the revalidation:** the known local deadline is waited out while on screen, then it revalidates
   once more. Without a known deadline, the draft waits for the next reconnect.
-- **429 on the send itself:** a definite refusal with the wait shown. Nothing is resent.
+- **429 on the send itself:** a definite refusal with the wait shown. Nothing is resent. Since #323b1 the send's own
+  `429 rate_limited` shows on the composer's line ([rate budgets](rate-budgets.md)), not row 7; a proxy's 429 still
+  reaches row 7.
 - **Timers:** only that known 429 deadline, and only while on screen.
 - **Dropping the flag:** leaving the conversation, opening another one, background, sign-out, a generation
   change or process death drops it. The text stays an ordinary draft, and nothing is saved.

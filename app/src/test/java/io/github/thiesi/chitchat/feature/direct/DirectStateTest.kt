@@ -463,6 +463,39 @@ class DirectStateTest {
         assertEquals("Nothing resends after I agree", 1, api.sends)
     }
 
+    /** #323b1: direct_message_send's own 429 (server or local gate) is definite: its line, the draft kept, no resend. */
+    @Test fun aRateLimitedDirectSendShowsItsLineKeepsTheDraftAndNeverResends() = runTest(dispatcher) {
+        open(); thread.updateDraft("Unsent fixture")
+        api.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120); thread.send(); runCurrent()
+        assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(io.github.thiesi.chitchat.core.session.RateBudget.DIRECT_MESSAGE_SEND, true),
+            thread.state.value.sendLimit)
+        assertNull("The line, not the error", thread.state.value.error)
+        assertFalse("Definite, never unknown", thread.state.value.uncertainSend)
+        assertEquals("The draft stays", "Unsent fixture", thread.state.value.draft)
+        assertNotNull("Reading continues", thread.state.value.context)
+        // Nothing changed on the server: history isn't stale and Send stays enabled (PL, TL).
+        assertFalse("Not stale", thread.state.value.stale)
+        assertTrue("Send stays enabled", thread.canSend())
+        assertEquals("The first refusal is the notice's appearance, not a repeat", 0, thread.state.value.sendLimitRepeats)
+        api.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 119, localGate = true); thread.send(); runCurrent()
+        assertNotNull("A tap during the wait keeps the line", thread.state.value.sendLimit)
+        assertEquals("Each refused tap flips Send's spoken parity once", 1, thread.state.value.sendLimitRepeats)
+        assertEquals("Every refusal is one keyboard-hide check, the first included", 2, thread.state.value.sendLimitRefusals)
+        thread.updateDraft("Edited fixture"); advanceTimeBy(1_000_000); runCurrent()
+        assertNotNull(thread.state.value.sendLimit); assertEquals("Edited fixture", thread.state.value.draft)
+        assertEquals("Each send was one explicit press", 2, api.sends)
+    }
+
+    @Test fun anUnknownDirectWaitEndsAtTheNextEditAndAProxy429KeepsTodaysHandling() = runTest(dispatcher) {
+        open(); thread.updateDraft("Unsent fixture")
+        api.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited"); thread.send(); runCurrent()
+        assertEquals(false, thread.state.value.sendLimit?.knownWait)
+        thread.updateDraft("Unsent fixture!"); assertNull(thread.state.value.sendLimit)
+        api.sendFailure = ApiFailure(FailureKind.HTTP, 429, null, 40); thread.send(); runCurrent()
+        assertNull(thread.state.value.sendLimit); assertEquals(429, thread.state.value.error?.status)
+        assertFalse(thread.state.value.uncertainSend); assertEquals("Unsent fixture!", thread.state.value.draft)
+    }
+
     @Test fun removingARejectedReplyKeepsItsTextButDoesNotResetStalenessOrSend() = runTest(dispatcher) {
         open(); val owner = api.session.value
         assertTrue(thread.replyTo(owner, 8, thread.state.value.messages.first()))
