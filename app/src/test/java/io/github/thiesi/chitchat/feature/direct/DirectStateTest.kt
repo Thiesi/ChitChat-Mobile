@@ -480,6 +480,7 @@ class DirectStateTest {
         api.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 119, localGate = true); thread.send(); runCurrent()
         assertNotNull("A tap during the wait keeps the line", thread.state.value.sendLimit)
         assertEquals("Each refused tap flips Send's spoken parity once", 1, thread.state.value.sendLimitRepeats)
+        assertEquals("Every refusal is one keyboard-hide check, the first included", 2, thread.state.value.sendLimitRefusals)
         thread.updateDraft("Edited fixture"); advanceTimeBy(1_000_000); runCurrent()
         assertNotNull(thread.state.value.sendLimit); assertEquals("Edited fixture", thread.state.value.draft)
         assertEquals("Each send was one explicit press", 2, api.sends)

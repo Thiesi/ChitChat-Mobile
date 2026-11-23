@@ -139,6 +139,9 @@ class RateLineFit {
     internal var lineSlot by mutableIntStateOf(0)
     var form by mutableStateOf<RateLineForm?>(null)
         internal set
+    /** True when [form] was decided for the current window (not a held or fallback form): a decision after layout. */
+    var settled by mutableStateOf(false)
+        internal set
     val hidden get() = form == RateLineForm.HIDDEN
     val detailsFirst get() = form == RateLineForm.SHORT || form == RateLineForm.HIDDEN
 }
@@ -168,7 +171,7 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     var decided by remember(notice, window) { mutableStateOf<RateLineForm?>(null) }
     val now = current(session, notice)
     if (notice == null || now == null) {
-        SideEffect { fit.form = null; fit.lineSlot = 0 }
+        SideEffect { fit.form = null; fit.settled = false; fit.lineSlot = 0 }
         return
     }
     val measurer = rememberTextMeasurer()
@@ -194,7 +197,8 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     } else null
     if (decided == null && fresh != null) SideEffect { decided = fresh; last = fresh }
     val form = fresh ?: last ?: RateLineForm.SHORT
-    SideEffect { fit.form = form }
+    val settled = fresh != null
+    SideEffect { fit.form = form; fit.settled = settled }
     if (form == RateLineForm.HIDDEN) {
         SideEffect { fit.lineSlot = 0 }
         return

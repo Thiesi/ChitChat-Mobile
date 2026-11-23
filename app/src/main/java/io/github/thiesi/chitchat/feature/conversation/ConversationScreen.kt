@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.feature.conversation
 
 import io.github.thiesi.chitchat.core.ui.rateFitTimeline
 import io.github.thiesi.chitchat.core.ui.rateWaitState
+import androidx.compose.ui.focus.onFocusChanged
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
 
@@ -367,15 +368,23 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     }
     // #323b refinement: the short wait line shows when the full one doesn't fit; Details then shows the full line first.
     val rateFit = remember { io.github.thiesi.chitchat.core.ui.RateLineFit() }
-    // PL ruling (b): a send refused for its rate wait while the line is hidden (compact with the keyboard up) also hides
-    // the soft keyboard, a plain hide answering the tap: focus, draft, caret and reply stay; the window re-decides and the
-    // line shows by the rule. Only a repeat refusal (the notice already showing), never the first or a restored count.
+    // PL rulings (b) and its amendment: each send refused for its rate wait, first or repeat, hides the soft keyboard at
+    // most once, and only if that notice's form in the current window, decided after the refusal (post-layout), is
+    // HIDDEN: a plain hide answering the tap; focus, draft, caret and reply stay, and the line then shows by the rule.
+    // One pending flag per refusal event (sendLimitRefusals), consumed at the first settled decision; only a refusal ever
+    // hides, so a field tap bringing the keyboard back just hides the line behind the dot. Guards: the notice is still
+    // current, the composer still has focus, no dialog is open. A restored count (configuration change, re-entry) is
+    // only seen, never acted on. No polling, no timer.
     val rateKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    var rateRepeatsSeen by remember { androidx.compose.runtime.mutableIntStateOf(state.sendLimitRepeats) }
-    LaunchedEffect(state.sendLimitRepeats) {
-        if (state.sendLimitRepeats != rateRepeatsSeen) {
-            rateRepeatsSeen = state.sendLimitRepeats
-            if (rateFit.hidden) rateKeyboard?.hide()
+    var rateComposerFocused by remember { mutableStateOf(false) }
+    var rateRefusalsSeen by remember { androidx.compose.runtime.mutableIntStateOf(state.sendLimitRefusals) }
+    var rateHidePending by remember { mutableStateOf(false) }
+    LaunchedEffect(state.sendLimitRefusals, rateFit.settled, rateFit.form, state.sendLimit) {
+        if (state.sendLimitRefusals != rateRefusalsSeen) { rateRefusalsSeen = state.sendLimitRefusals; rateHidePending = true }
+        if (state.sendLimit == null) rateHidePending = false
+        if (rateHidePending && rateFit.settled) {
+            rateHidePending = false
+            if (rateFit.hidden && rateComposerFocused && !composerDialog && !detailsOpen && !obscured) rateKeyboard?.hide()
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
@@ -630,7 +639,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             MessageInput(completionComposer.value, completionComposer::input,
                 !state.sending && model.canEditDraft() && !composerDialog && !obscured,
                 stringResource(if (attachment != null) R.string.attach_caption else R.string.conversation_message), compact,
-                Modifier.onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).testTag("conversation_composer"),
+                Modifier.onPreInterceptKeyBeforeSoftKeyboard(completionComposer::key).onPreviewKeyEvent(completionComposer::navigationKey).focusRequester(composerFocus).onFocusChanged { rateComposerFocused = it.hasFocus }.testTag("conversation_composer"),
                 // Waiting text is read-only (selectable, normal ink), not a disabled field.
                 readOnly = state.waitingToSend)
             }, trailing = {

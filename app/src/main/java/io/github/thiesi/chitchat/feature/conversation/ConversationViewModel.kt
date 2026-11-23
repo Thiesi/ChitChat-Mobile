@@ -100,6 +100,8 @@ data class ConversationUiState(
     val sendLimit: RateLimitNotice? = null,
     /** #323b: refusals while a notice already showed; each flips Send's spoken parity (one announcement per refused tap). */
     val sendLimitRepeats: Int = 0,
+    /** #323b: every refusal for the rate wait, first or repeat; each is one keyboard-hide check on the screen. */
+    val sendLimitRefusals: Int = 0,
     val attachmentReview: RoomAttachmentReview? = null,
 ) { override fun toString() = "ConversationUiState" }
 
@@ -1537,7 +1539,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
                     // wait is refused locally with no request and keeps the line.
                     if (rateBudget != null && failure.isRateBudgetRefusal())
                         mutable.value = mutable.value.copy(sendLimit = RateLimitNotice(rateBudget, failure.retryAfterSeconds != null),
-                            sendLimitRepeats = mutable.value.sendLimitRepeats + if (mutable.value.sendLimit != null) 1 else 0)
+                            sendLimitRepeats = mutable.value.sendLimitRepeats + if (mutable.value.sendLimit != null) 1 else 0,
+                            sendLimitRefusals = mutable.value.sendLimitRefusals + 1)
                     else if (failure.status in setOf(403, 404) && failure.code != "csrf_failed" &&
                         (!postInFlight || failure.code in setOf("room_forbidden", "room_not_found")))
                         // A definitive rejection of this request. A send refused with room_not_found says so
