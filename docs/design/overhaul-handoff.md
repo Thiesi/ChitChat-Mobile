@@ -248,6 +248,12 @@ against current main before acting.
       box: Compose UI 1.11.4 doesn't expose a text field's content description and has no
       labeledBy or hint. Revisit once Compose offers one; the app-wide field-naming audit is #331.
       Don't fix it by putting the question back as a floating label, which overlapped at 200%.
+17. **The profile card's rows have no icons yet (reporting R3, PR #333).** The card is still an
+    `AlertDialog`, and its Report {name}… row and "You've reported {name}." caption ship as text
+    only (`onSurface` and `textMuted`). The `report` and `check` icons that reporting.md specifies,
+    and the 24dp leading icons of every card row, wait for the card's move to a choice sheet
+    (modals-restyle.md, "Profile card"). Add them together, not one row at a time. Evidence:
+    PR #334 `person-report-presentation` `card-entry` and `card-reported` captures.
 
 ## Evidence
 
