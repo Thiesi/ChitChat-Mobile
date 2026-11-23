@@ -71,7 +71,9 @@ data class DirectThreadState(val peerId: Long? = null, val context: DirectContex
      * the draft, reply and attachment stay, nothing is unknown, nothing resends. A known wait shows until its deadline;
      * an unknown one until the next draft edit. Kept while a send is attempted, so a tap during the wait keeps the line.
      */
-    val sendLimit: RateLimitNotice? = null) { override fun toString() = "DirectThreadState" }
+    val sendLimit: RateLimitNotice? = null,
+    /** #323b: refusals while a notice already showed; each flips Send's spoken parity (one announcement per refused tap). */
+    val sendLimitRepeats: Int = 0) { override fun toString() = "DirectThreadState" }
 
 /** One serialized operation per thread: hints queue behind writes, never cancel/replay a POST. */
 class DirectThreadViewModel internal constructor(private val operations: DirectOperations,
@@ -569,7 +571,8 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
                 // on the server, so history isn't marked stale and Send stays enabled (PL).
                 if (pending == Write.SEND && failure.isRateBudgetRefusal()) {
                     mutable.value = mutable.value.copy(
-                        sendLimit = RateLimitNotice(RateBudget.DIRECT_MESSAGE_SEND, failure.retryAfterSeconds != null))
+                        sendLimit = RateLimitNotice(RateBudget.DIRECT_MESSAGE_SEND, failure.retryAfterSeconds != null),
+                        sendLimitRepeats = mutable.value.sendLimitRepeats + if (mutable.value.sendLimit != null) 1 else 0)
                     return@launch
                 }
                 val inaccessible = pending == null && (failure.status == 404 ||

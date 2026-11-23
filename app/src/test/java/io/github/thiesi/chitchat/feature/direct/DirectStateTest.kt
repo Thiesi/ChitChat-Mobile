@@ -476,8 +476,10 @@ class DirectStateTest {
         // Nothing changed on the server: history isn't stale and Send stays enabled (PL, TL).
         assertFalse("Not stale", thread.state.value.stale)
         assertTrue("Send stays enabled", thread.canSend())
+        assertEquals("The first refusal is the notice's appearance, not a repeat", 0, thread.state.value.sendLimitRepeats)
         api.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 119, localGate = true); thread.send(); runCurrent()
         assertNotNull("A tap during the wait keeps the line", thread.state.value.sendLimit)
+        assertEquals("Each refused tap flips Send's spoken parity once", 1, thread.state.value.sendLimitRepeats)
         thread.updateDraft("Edited fixture"); advanceTimeBy(1_000_000); runCurrent()
         assertNotNull(thread.state.value.sendLimit); assertEquals("Edited fixture", thread.state.value.draft)
         assertEquals("Each send was one explicit press", 2, api.sends)

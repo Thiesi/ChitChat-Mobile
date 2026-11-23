@@ -67,32 +67,52 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
   account. Screens read the same monotonic clock as the gate through `LocalMonotonicClock`, never wall time.
 - **The composer line** (`RateWaitLine`, PL copy): "You've sent a lot of messages recently. Try again in {wait}. Your
   message is kept." and "You've sent a lot of pings recently. Try again in {wait}." A level-1 muted line, never error
-  colour, announced once politely.
+  colour; Send announces it (below).
   - **Placement (PL amendment after the J on 3f0b798):** directly above the composer block (above the reply chip when
-    there is one), outside the room's bounded header and the DM's top block, in full width. It shows its full text,
-    wrapping and never clipped, in every layout including compact with the keyboard up; the timeline gives up the
-    space. In the header it was invisible at 1.0 in the room, clipped in the DM, and not displayed at 200% or in
-    landscape with the keyboard up.
-  - **Composer first (PL refinement after the re-J on b2c34c4, PL- and TL-approved rule):** the full line shows only where
-    the timeline keeps one 48dp row beside it, measured with the line absent (the timeline's height plus the line's own
-    slot) against the full line's measured height at its real width. The timeline is the column's only weighted block and
-    the composer is unweighted, so the composer's arrangement and Send never change because of the line. Otherwise the
-    short form, "Try again in {wait}." / "Try again later.", shows in the same place, and the full line comes first in
-    Details (left out of Details while the full line is visible, so it isn't shown twice).
-    - **Stable:** `RateWaitSlot` decides once per notice and window: width, the height above the keyboard, font scale,
-      and whether the reply chip and the attachment card or notices are present (PL: layout, not draft content; a reply
-      started during the wait re-decides). Never from the draft, so it can't flip while typing; a tall draft at decision
-      time only makes it more conservative.
-    - **No frame wait (TL condition):** measurements are tagged with the notice and window they were taken in
-      (`onGloballyPositioned`), and the slot decides as soon as a layout pass supplies them for the current key. While
-      they're pending the previous form holds; with none yet, the short form shows. The line is never absent while a
-      notice exists, apart from its deadline one-shot. Measuring inside the column's own layout pass would have meant a
-      custom layout in both screens' composer columns; the tagged measurement needs no restructuring and no timer.
-  - **Spoken text (PL ruling, 2026-11-23):** always the full line, in both forms. The line's only semantics are the full
-    line as its description, a polite live region and one test tag, identical in both forms, so it's announced once when
-    the notice appears and a full/short swap (the keyboard, a rotation, a reply chip) is silent. TalkBack users always
-    hear "Your message is kept." It's static text, not a control, so visible and spoken text may differ, as with the
-    status slot under P-25.
+    there is one), outside the room's bounded header and the DM's top block, in full width. In the header it was
+    invisible at 1.0 in the room, clipped in the DM, and not displayed at 200% or in landscape with the keyboard up.
+  - **Composer first: full, short or hidden** (PL refinements after the re-Js on b2c34c4 and 12c3a36; TL-approved, the
+    TL's condition 3 amended for the hidden state). With the timeline's height measured with the line absent (its height
+    plus the drawn line's own slot, both from the same layout pass; the timeline is the column's only weighted block and
+    the composer is unweighted):
+    - **Full** only where the timeline keeps one 48dp row beside the full line.
+    - **Short**, "Try again in {wait}." / "Try again later.", where the short form still leaves the composer its natural
+      height (field at least 48dp, never shorter than without the line).
+    - **Hidden** otherwise (compact with the keyboard up; on 12c3a36 the short line squeezed the 200% landscape field to
+      about 30 dp): no line above the composer, the Details control shows its compact attention dot.
+    - Short or hidden puts the full line first in Details (silent text, no tag); it's left out while the full line shows.
+    - A drawn line with the timeline at 0 may be hiding a squeeze, so that measurement reads hidden.
+  - **Stable:** `RateWaitSlot` decides once per notice and window: width, the height above the keyboard, font scale, and
+    whether the reply chip and the attachment card or notices are present (PL: layout, not draft content). Never from the
+    draft, so it can't flip while typing; the keyboard hiding or a reply started re-decides.
+  - **No frame wait (TL condition):** timeline measurements are tagged with the window (`onGloballyPositioned`), so a
+    notice arriving in a laid-out window decides at once. While a measurement for a new window is pending the previous
+    form holds; with none yet, the short form shows. Measuring inside the column's own layout pass would have meant a
+    custom layout in both screens' composer columns.
+  - **A refused Send while hidden (PL ruling, TL-approved):** besides the announcement below, it hides the soft keyboard,
+    a plain hide answering the tap: focus, draft, caret and reply stay. The window re-decides, the line shows by the rule
+    and the dot clears. Tapping the field again brings the keyboard back and the line hides again behind the dot, silently.
+    Only a repeat refusal does this (`sendLimitRepeats`), never the notice's first appearance.
+  - **Send carries every announcement (PL and TL, 2026-11-23).** The line and the Details copy are silent text; their
+    description is the full line, in both forms (static text, so visible and spoken text may differ, as under P-25).
+    - **Why Send:** Compose UI 1.11.4's accessibility delegate reads `LiveRegion` only to fill in node info and diffs
+      semantics snapshots every 100 ms (`SendRecurringAccessibilityEventsIntervalMillis`). A node that appears (the line,
+      when a notice arrives or when the keyboard hides) looks new with its final text, so it isn't reliably announced.
+      Only a content change on a node from the previous snapshot is. Send exists in every state.
+    - **Label and state:** the label stays "Send"; while a notice is current its state description is the full line, with
+      a polite live region (dropped while sending, so "Sending" isn't spoken). TalkBack says roughly "Send, You've sent a
+      lot of messages recently. Try again in about 5 minutes. Your message is kept."
+    - **Once on appearance, once per refused tap:** the state description appearing is one change. Each refused tap (the
+      local gate or a repeated server 429) flips one trailing space, present or absent, on that state description only,
+      never on a timer and never on the visible line or Details, so each refusal is a real snapshot difference.
+    - **Silent otherwise:** clearing (the deadline one-shot, an unknown notice dropped on the next edit, a successful
+      send) removes the state and the live region in the same change; typing, keyboard, rotation and form swaps don't
+      touch Send.
+    - **Tested** with real accessibility events (`LiveAnnouncements`: UiAutomation, content changes from a source that
+      still has its live region, flushed through a test-only sentinel, no sleeps). On the owner's TalkBack list: two
+      refused taps give two announcements with nothing extra spoken; if TalkBack drops the parity, the fallback is another
+      inaudible variant under the same limits, never a timed change. Also for that check: emptying the draft during a
+      known wait disables Send, a state change that its live region may voice.
   - **Unknown wait:** the send line keeps "Your message is kept." ("Try again later." replaces only "Try again in
     {wait}."); the ping line has neither.
   - **{wait}:** computed from the stored deadline at render and frozen until the notice changes; minutes and hours never
