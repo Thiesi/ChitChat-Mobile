@@ -35,6 +35,25 @@ import org.junit.Test
  * #331b turns these into strict asserts or removes the probe. It reads nodes only: no keyboard, IME or focus request.
  * It fails only if a field's node can't be obtained or the file can't be written, so an empty result never passes.
  *
+ * #331b step 0 (TL, 2026-11-23): also the field node's stateDescription, tooltipText and error, and its full descendant
+ * subtree (each node's class, text, contentDescription, importantForAccessibility, visibleToUser and whether it's
+ * focusable to a screen reader). That answers whether the label Text reaches an accessibility service on the field, as a
+ * focusable descendant or merged into the node. Still measurement only.
+ *
+ * #331b mechanisms (TL, 2026-11-23): what puts a name on the EditText node itself with no visible change. Compose UI
+ * 1.11.4 has no semantics property for a hint or labeledBy (its accessibility delegate only calls setContentDescription,
+ * setError and setStateDescription), so the candidate is a contentDescription on the field's own node, measured here
+ * with the visible label still showing: MessageInput (both overloads) with it passed as the modifier, which lands on the
+ * inner BasicTextField, and an OutlinedTextField with a label and the same modifier.
+ *
+ * #331b second signal (TL, 2026-11-23): the Accessibility Test Framework (ATF 4.1.1, which Compose ui-test's
+ * enableAccessibilityChecks uses), run with that integration's own validator settings (checks from the root view) on
+ * each root's view (API 34+), recording ATF's SpeakableTextPresentCheck verdict for the field per case and state, never
+ * failing on it. It calls ATF's `checkAndReturnResults` directly: the results listener hands back a Guava type that
+ * isn't on our test compile classpath, and adding Guava would change the compatible set. ATF composes a node's description from its children much as TalkBack does, so it's
+ * evidence, not proof of spoken output. `synthetic-unnamed` (no label, placeholder or description) is the control: ATF
+ * must flag it, or its silence on the other cases proves nothing.
+ *
  * Cases (see docs/milestones/text-field-names.md for the call sites each covers):
  * - real: the app's own composables, reusable in isolation (MessageInput in both overloads, StepUpDialog's secret).
  * - material: the Material OutlinedTextField with exactly the parameters the call sites pass (label, singleLine,
@@ -59,6 +78,18 @@ class TextFieldNodeNamesTest {
         Case("message-input-value", "real") { filled ->
             MessageInput(TextFieldValue(if (filled) typed else ""), {}, enabled = true, label = label, compact = false)
         },
+        Case("mechanism-message-input-description", "mechanism") { filled ->
+            MessageInput(if (filled) typed else "", {}, enabled = true, label = label, compact = false,
+                modifier = Modifier.semantics { contentDescription = label })
+        },
+        Case("mechanism-message-input-value-description", "mechanism") { filled ->
+            MessageInput(TextFieldValue(if (filled) typed else ""), {}, enabled = true, label = label, compact = false,
+                modifier = Modifier.semantics { contentDescription = label })
+        },
+        Case("mechanism-outlined-label-description", "mechanism") { filled ->
+            OutlinedTextField(if (filled) typed else "", {}, Modifier.semantics { contentDescription = label },
+                label = { Text(label) }, singleLine = true)
+        },
         // The secret lives in the dialog's own state; filling it needs text input, which requests focus. Empty only.
         Case("step-up-password", "real", canFill = false) { _ ->
             StepUpDialog("Fixture step-up title", VerificationMethods(false, true, 8), busy = false, errorMessage = null,
@@ -81,6 +112,9 @@ class TextFieldNodeNamesTest {
         },
         Case("outlined-label-multiline", "material") { filled ->
             OutlinedTextField(if (filled) typed else "", {}, label = { Text(label) }, singleLine = false, minLines = 3)
+        },
+        Case("synthetic-unnamed", "synthetic") { filled ->
+            OutlinedTextField(if (filled) typed else "", {})
         },
         Case("synthetic-placeholder-only", "synthetic") { filled ->
             OutlinedTextField(if (filled) typed else "", {}, placeholder = { Text("Fixture placeholder") })
@@ -137,6 +171,65 @@ class TextFieldNodeNamesTest {
             .put("showingHintText", node.isShowingHintText)
             .put("password", node.isPassword)
             .put("preceding", (preceding?.text ?: preceding?.contentDescription).fact() ?: JSONObject.NULL)
+            .put("stateDescription", (if (android.os.Build.VERSION.SDK_INT >= 30) node.stateDescription else null).fact() ?: JSONObject.NULL)
+            // tooltipText and isScreenReaderFocusable are API 28+; minSdk is 26 (review of 23bf3d6).
+            .put("tooltipText", (if (android.os.Build.VERSION.SDK_INT >= 28) node.tooltipText else null).fact() ?: JSONObject.NULL)
+            .put("error", node.error.fact() ?: JSONObject.NULL)
+            .put("descendants", descendants(node))
+            .put("atfSpeakable", atfVerdict())
+    }
+
+    /** ATF's validator with enableAccessibilityChecks' default settings, and never throwing (the probe records). */
+    private val atf by lazy {
+        com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator()
+            .setRunChecksFromRootView(true).setThrowExceptionForErrors(false)
+    }
+
+    /**
+     * Runs ATF on every root (a dialog has its own) and reports the worst SpeakableTextPresentCheck finding for an
+     * editable element: "error", "warning", "info", or "pass" when none. "notrun" below API 34, where the checks aren't
+     * enabled.
+     */
+    private fun atfVerdict(): String {
+        if (android.os.Build.VERSION.SDK_INT < 34) return "notrun"
+        val results = mutableListOf<com.google.android.apps.common.testing.accessibility.framework.AccessibilityViewCheckResult>()
+        val views = compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes()
+            .mapNotNull { (it.root as? androidx.compose.ui.platform.ViewRootForTest)?.view }
+        check(views.isNotEmpty()) { "No root view for ATF" }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { views.forEach { results += atf.checkAndReturnResults(it) } }
+        val types = results.filter {
+            it.sourceCheckClass.simpleName == "SpeakableTextPresentCheck" &&
+                it.element?.className?.toString()?.contains("EditText") == true
+        }.map { it.type.name }
+        return when {
+            "ERROR" in types -> "error"
+            "WARNING" in types -> "warning"
+            "INFO" in types -> "info"
+            else -> "pass"
+        }
+    }
+
+    /** The field node's whole subtree in pre-order (bounded), as an accessibility service would find it. */
+    private fun descendants(field: AccessibilityNodeInfo): JSONArray {
+        val out = JSONArray()
+        fun walk(node: AccessibilityNodeInfo, depth: Int) {
+            for (index in 0 until node.childCount) {
+                if (out.length() >= 32) return
+                val child = node.getChild(index) ?: continue
+                child.refresh()
+                out.put(JSONObject().put("depth", depth)
+                    .put("className", child.className.fact() ?: JSONObject.NULL)
+                    .put("text", child.text.fact() ?: JSONObject.NULL)
+                    .put("contentDescription", child.contentDescription.fact() ?: JSONObject.NULL)
+                    .put("important", child.isImportantForAccessibility)
+                    .put("visible", child.isVisibleToUser)
+                    .put("focusable", child.isFocusable)
+                    .put("screenReaderFocusable", android.os.Build.VERSION.SDK_INT >= 28 && child.isScreenReaderFocusable))
+                if (depth < 16) walk(child, depth + 1)
+            }
+        }
+        walk(field, 1)
+        return out
     }
 
     @Test fun recordEachTextFieldPatternsAccessibilityNode() {

@@ -34,10 +34,16 @@ FORM_DIALOG_MAX_BYTES = 16384
 # #331a: the text-field accessibility node probe (text-field-names.md), one JSON file per API level, fixture strings only.
 A11Y_NODES_DESTINATION = ROOT / "app/build/reports/androidTests/a11y-nodes"
 A11Y_NODES_NAME = re.compile(r"text-field-nodes-api[0-9]{2}[.]json")
-A11Y_NODES_MAX_BYTES = 65536
+A11Y_NODES_MAX_BYTES = 262144
 A11Y_NODES_MAX_ENTRIES = 64
 A11Y_NODES_KEYS = {"case", "kind", "state", "className", "text", "hintText", "contentDescription", "labeledBy",
-    "showingHintText", "password", "preceding"}
+    "showingHintText", "password", "preceding", "stateDescription", "tooltipText", "error", "descendants", "atfSpeakable"}
+# #331b: ATF's SpeakableTextPresentCheck verdict for the field.
+A11Y_NODES_ATF = {"pass", "error", "warning", "info", "notrun"}
+# #331b step 0: each field's descendant subtree, bounded.
+A11Y_NODES_CHILD_KEYS = {"depth", "className", "text", "contentDescription", "important", "visible", "focusable",
+    "screenReaderFocusable"}
+A11Y_NODES_MAX_CHILDREN = 32
 # Fixture strings and the app's own string resources only (typographic quotes, ellipsis, bullet masks); never user text.
 A11Y_NODES_TEXT = re.compile(r"[A-Za-z0-9 .,:;!?'()/@*\u2018\u2019\u201c\u201d\u2026\u2022-]{0,160}")
 CLEANUP_MAX_BYTES = 256
@@ -272,6 +278,24 @@ def collect_a11y_nodes():
             if key in ("showingHintText", "password"):
                 if not isinstance(value, bool):
                     raise ValueError("Malformed node probe flag")
+            elif key == "atfSpeakable":
+                if value not in A11Y_NODES_ATF:
+                    raise ValueError("Malformed node probe ATF verdict")
+            elif key == "descendants":
+                if not isinstance(value, list) or len(value) > A11Y_NODES_MAX_CHILDREN:
+                    raise ValueError("Malformed node probe subtree")
+                for child in value:
+                    if not isinstance(child, dict) or set(child) != A11Y_NODES_CHILD_KEYS:
+                        raise ValueError("Malformed node probe child")
+                    for ckey, cvalue in child.items():
+                        if ckey == "depth":
+                            if not isinstance(cvalue, int) or isinstance(cvalue, bool) or not 1 <= cvalue <= 16:
+                                raise ValueError("Malformed node probe depth")
+                        elif ckey in ("important", "visible", "focusable", "screenReaderFocusable"):
+                            if not isinstance(cvalue, bool):
+                                raise ValueError("Malformed node probe child flag")
+                        elif cvalue is not None and (not isinstance(cvalue, str) or A11Y_NODES_TEXT.fullmatch(cvalue) is None):
+                            raise ValueError("Malformed node probe child text")
             elif value is not None and (not isinstance(value, str) or A11Y_NODES_TEXT.fullmatch(value) is None):
                 raise ValueError("Malformed node probe text")
     A11Y_NODES_DESTINATION.mkdir(parents=True, exist_ok=True)

@@ -107,6 +107,56 @@ is the node's text in every filled case.)
 **Not proposed here:** contentDescription or placeholder (measured not to reach the node), and any Compose bump (see
 below). Spoken output stays with the owner's manual TalkBack checks; nothing here claims it.
 
+## #331b step 0: each field's subtree (run 45149411286, head 99bd19f; API35 and API36)
+
+Both levels returned identical facts for all 21 entries. On the field node, stateDescription, tooltipText and error are
+null throughout, except stateDescription "Empty" on the synthetic visible-label-before field while empty.
+
+| Pattern | Where the label is | Reaches the field? |
+| --- | --- | --- |
+| OutlinedTextField with `label` (single-line, password, supporting, supporting with password, multiline), and step-up's secret | a depth-1 descendant TextView of the EditText node, important for accessibility and visible, **not focusable** (focusable and screenReaderFocusable false), empty and filled. Supporting text is another such child. | **Not merged into the node** (no hint, contentDescription or labeledBy) and **not a focusable descendant.** Whether TalkBack speaks a non-focusable child's text on the focused field is spoken output: the owner's check. |
+| MessageInput (both overloads: the room and DM composers, the author edit body) | the same TextView while empty; **once filled it's not visible to the user** | **No label anywhere on a filled MessageInput's node or visible subtree:** a real gap, whatever TalkBack does with children. |
+| placeholder only | a descendant TextView while empty; gone when filled | not when filled |
+| contentDescription only (on the OutlinedTextField's modifier) | on a **child View**, not on the field | no; this is why #326 saw name=null |
+| a visible label kept before the field (report details) | no label child; the label is the preceding node | as the preceding node in traversal |
+
+**The owner's TalkBack checks** (TL): a label-slot field (sign-in Username) empty and filled, and the room composer with
+text in it.
+
+## #331b mechanisms: a name on the field node itself, with no visible change
+
+- **What Compose UI 1.11.4 offers**, read from its classes (not guessed):
+  - `SemanticsProperties` has no property for a hint or labeledBy. The text-related ones are ContentDescription, Text,
+    EditableText, InputText, StateDescription, Error and PaneTitle.
+  - The accessibility delegate (`AndroidComposeViewAccessibilityDelegateCompat`) calls `setContentDescription`,
+    `setError` and `setStateDescription`, and never `setHintText` or `setLabeledBy`.
+  - So the one candidate is (i), a contentDescription on the field's own node. Error and stateDescription carry other
+    meanings.
+- **Measured cases (kind `mechanism`):**
+  - `mechanism-message-input-description` and `-value-description`: the real MessageInput with
+    `Modifier.semantics { contentDescription = label }` passed as its modifier, which lands on the inner BasicTextField
+    (not the decoration container).
+  - `mechanism-outlined-label-description`: an OutlinedTextField with its label and the same modifier.
+  - For comparison, (iii) the report pattern: `synthetic-visible-label-before`.
+- **For each, the run reports:**
+  - what lands on the node (hintText, contentDescription, labeledBy);
+  - that the typed text stays the node's text, and the name doesn't replace it;
+  - whether the visible label also shows as a child, which would duplicate it.
+- **Results:** pending this push's run.
+
+## #331b: ATF as a second signal (run 45169512402, head 23bf3d6) is a documented negative
+
+The probe also runs the Accessibility Test Framework 4.1.1 (the one Compose ui-test's `enableAccessibilityChecks` uses)
+on each root's view, per case and state, and records its SpeakableTextPresentCheck verdict for the field. It calls
+`AccessibilityValidator.checkAndReturnResults` directly: the results listener returns a Guava type that isn't on the test
+compile classpath. ATF is a test-only dependency already in the build.
+
+**The control failed.** `synthetic-unnamed` (no label, placeholder or description) passed, empty and filled, on API35
+and API36. So did every other case. ATF 4.1.1 gives no signal for Compose editable fields here: either it doesn't
+evaluate them through this path, or its speakable-text check exempts editable fields. The code stays inside the probe as
+a canary, with no assert (TL): if a future ATF or Compose version flags the control, revisit. The owner's TalkBack check
+remains the decider.
+
 ## Compose versions
 
 A recorded finding only (TL condition 4). The app uses BOM 2026.06.01 (Compose UI 1.11.4). Google's Maven metadata now
