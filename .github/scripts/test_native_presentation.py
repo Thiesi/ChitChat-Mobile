@@ -483,6 +483,33 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def person_report_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-person-report-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_person_report_captures_are_copied_and_keep_the_original_status(self):
+        self.results(5)
+        files = [Path("report-person-light-default-card-entry.png"), Path("report-person-light-font200-form-longname.png"),
+            Path("report-person-dark-default-sheet-dm.png"), Path("report-person-light-default-picture-gone.png"),
+            Path("report-person-light-font200-form-room-landscape-end.png"), Path("report-person-dark-default-didnotarrive-notice.png"),
+            Path("report-person-light-font200-card-reported-end.png")]
+        self.person_report_files(files)
+        self.assertEqual(5, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.PERSON_REPORT_DESTINATION / path.name)
+        self.assertEqual(8, self.copy.call_count) # Seven captures and the completion capture.
+
+    def test_excess_ambiguous_or_foreign_person_report_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"report-person-light-default-form-room-{n}.png") for n in range(58)],
+            [Path("a/report-person-light-default-review.png"), Path("b/report-person-light-default-review.png")],
+            # Not taken in these variants: dark review, a default-only shot at 200%, a 200%-only shot at default.
+            [Path("report-person-dark-default-review.png")], [Path("report-person-light-font200-sending.png")],
+            [Path("report-person-light-default-form-longname.png")], [Path("report-person-light-default-card-entry-end.png")],
+            [Path("report-light-default-form-room.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.person_report_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def auth_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-auth-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
