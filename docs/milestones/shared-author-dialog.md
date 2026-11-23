@@ -37,6 +37,10 @@ room one, measured locally (5 runs) and matching both CI occurrences.
   history" (`author_check_history`), is 211 px, and 70 + 8 + 211 = 289 against 288 px, as main's unknown state already
   did. Review no longer reflows it back to side by side. The dialog state carries a memory-only `recovery` flag (set on
   entering unknown, kept through Check, edits and Review, and gone with the dialog). The delete dialog is unchanged.
+  The reservation never applies in the compact layout (PL J, 2026-11-23). Compact exists only while the keyboard is up
+  in a short, wide window, which on the recovery path means editing after Review, where the label is always "Save edit".
+  There the actions get half the width, and reserving "Check author-change history" at 200% pushed "Save edit" onto a
+  second line the shortened window couldn't show. In compact the confirm shows its own label, as on main.
 - **Accessibility:** the read-only body stays readable, and Review becomes Save in the same node, so accessibility focus
   stays on it.
 - **The look:** the body's decoration depends on `enabled` only, so it looks editable after Review.
