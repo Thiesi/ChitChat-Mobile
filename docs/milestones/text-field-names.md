@@ -144,6 +144,19 @@ text in it.
   - whether the visible label also shows as a child, which would duplicate it.
 - **Results:** pending this push's run.
 
+## #331b: ATF as a second signal (run 45169512402, head 23bf3d6) is a documented negative
+
+The probe also runs the Accessibility Test Framework 4.1.1 (the one Compose ui-test's `enableAccessibilityChecks` uses)
+on each root's view, per case and state, and records its SpeakableTextPresentCheck verdict for the field. It calls
+`AccessibilityValidator.checkAndReturnResults` directly: the results listener returns a Guava type that isn't on the test
+compile classpath. ATF is a test-only dependency already in the build.
+
+**The control failed.** `synthetic-unnamed` (no label, placeholder or description) passed, empty and filled, on API35
+and API36. So did every other case. ATF 4.1.1 gives no signal for Compose editable fields here: either it doesn't
+evaluate them through this path, or its speakable-text check exempts editable fields. The code stays inside the probe as
+a canary, with no assert (TL): if a future ATF or Compose version flags the control, revisit. The owner's TalkBack check
+remains the decider.
+
 ## Compose versions
 
 A recorded finding only (TL condition 4). The app uses BOM 2026.06.01 (Compose UI 1.11.4). Google's Maven metadata now

@@ -172,7 +172,8 @@ class TextFieldNodeNamesTest {
             .put("password", node.isPassword)
             .put("preceding", (preceding?.text ?: preceding?.contentDescription).fact() ?: JSONObject.NULL)
             .put("stateDescription", (if (android.os.Build.VERSION.SDK_INT >= 30) node.stateDescription else null).fact() ?: JSONObject.NULL)
-            .put("tooltipText", node.tooltipText.fact() ?: JSONObject.NULL)
+            // tooltipText and isScreenReaderFocusable are API 28+; minSdk is 26 (review of 23bf3d6).
+            .put("tooltipText", (if (android.os.Build.VERSION.SDK_INT >= 28) node.tooltipText else null).fact() ?: JSONObject.NULL)
             .put("error", node.error.fact() ?: JSONObject.NULL)
             .put("descendants", descendants(node))
             .put("atfSpeakable", atfVerdict())
@@ -223,7 +224,7 @@ class TextFieldNodeNamesTest {
                     .put("important", child.isImportantForAccessibility)
                     .put("visible", child.isVisibleToUser)
                     .put("focusable", child.isFocusable)
-                    .put("screenReaderFocusable", child.isScreenReaderFocusable))
+                    .put("screenReaderFocusable", android.os.Build.VERSION.SDK_INT >= 28 && child.isScreenReaderFocusable))
                 if (depth < 16) walk(child, depth + 1)
             }
         }
