@@ -147,10 +147,10 @@ class RatePresentationTest {
             override suspend fun savePureBlack(enabled: Boolean) = Unit
             override suspend fun saveTheme(theme: ThemePreference) { settings.value = settings.value.copy(theme = theme) }
         }
-        val sendLabel = text(if (dm) R.string.dm_send else R.string.conversation_send)
+        val waitText = fullLine(dm, ping, known)
         val detailsLabel = text(if (dm) R.string.dm_details else R.string.conversation_details)
-        // TL/PL: Send carries every announcement; counted from real accessibility events, connected before launch.
-        LiveAnnouncements { node -> node.contentDescription?.toString() == sendLabel }.use { heard ->
+        // TL/PL: the wait line carries every announcement; counted from real accessibility events, connected before launch.
+        LiveAnnouncements { node -> node.contentDescription?.toString()?.trimEnd() == waitText }.use { heard ->
         ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
             if (landscape) {
                 scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
@@ -259,6 +259,18 @@ class RatePresentationTest {
             val expectedArrangement = if (keyboard) beforeKeyboard else before
             // Capture first, so a failing assert (announcements included) still leaves its image (PL).
             if (capture != null) capture(capture)
+            // Details is captured before any assert too (PL): the full line first only while short or hidden, never twice.
+            var inDetails = -1
+            if (details) {
+                compose.onNodeWithContentDescription(detailsLabel).performNativeTap()
+                compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty() }
+                compose.waitForIdle()
+                inDetails = compose.onAllNodes(hasContentDescription(fullLine(dm, ping, known)) and hasAnyAncestor(isDialog()))
+                    .fetchSemanticsNodes().size
+                if (expect != FULL) capture("rate-room-send-light-font200-details", dialog = true)
+                androidx.test.espresso.Espresso.pressBack()
+                compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
+            }
             // TL condition (a) and PL: none before the notice, exactly one for its appearance, none for the keyboard or form
             // swaps since, each between two delivered sentinels.
             heard.verify()
@@ -268,6 +280,7 @@ class RatePresentationTest {
             // PL (J on af1481d): never assertIsDisplayed alone, which passes on a sliver. The line (when drawn), the composer
             // and Send are each unclipped and inside the window, and above the keyboard top when it's up.
             formIs(name, expect, detailsLabel)
+            oneWaitNode(name, waitText)
             if (expect != HIDDEN) unclipped(name, "rate_wait_line")
             unclipped(name, input)
             unclipped(name, send)
@@ -277,19 +290,7 @@ class RatePresentationTest {
                 "$name: the composer changed (width, Send below, field height) $expectedArrangement -> $after" }
             if (noStatusRow) check(compose.onAllNodesWithTag("status_slot").fetchSemanticsNodes().isEmpty()) {
                 "$name: a composer wait shows no status row" }
-            if (details) {
-                // The full line is first in Details only while the short form (or none) shows; never twice.
-                compose.onNodeWithContentDescription(detailsLabel).performNativeTap()
-                compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty() }
-                compose.waitForIdle()
-                val inDetails = compose.onAllNodes(hasContentDescription(fullLine(dm, ping, known)) and hasAnyAncestor(isDialog()))
-                    .fetchSemanticsNodes().size
-                val shortShown = expect != FULL
-                if (shortShown) capture("rate-room-send-light-font200-details", dialog = true)
-                check(inDetails == (if (shortShown) 1 else 0)) { "$name: Details has $inDetails wait lines, form=$expect" }
-                androidx.test.espresso.Espresso.pressBack()
-                compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
-            }
+            if (details) check(inDetails == (if (expect != FULL) 1 else 0)) { "$name: Details has $inDetails wait lines, form=$expect" }
             if (visibleTap) {
                 // PL ruling (a): a refused tap with the line visible re-announces once; the line stays as it is.
                 val shown = form
@@ -300,7 +301,7 @@ class RatePresentationTest {
                 val afterTap = heard.mark(compose, sentinel)
                 heard.verify()
                 check(afterTap - beforeTap == 1) { "$name: ${afterTap - beforeTap} announcements for one refused tap ${heard.spoken()}" }
-                check(form == shown && compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) {
+                check(form == shown && lineDrawn()) {
                     "$name: the line changed on a refused tap: $shown -> $form" }
             }
             if (keyboard) keyboardDown()
@@ -336,13 +337,14 @@ class RatePresentationTest {
             heard.verify()
             check(opened == 0) { "$name: $opened announcements before the refusal ${heard.spoken()}" }
             check(refused - opened == 1) { "$name: ${refused - opened} announcements for the first refusal ${heard.spoken()}" }
-            check(compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) { "$name: no line after the hide" }
+            check(lineDrawn()) { "$name: no line after the hide" }
             unclipped(name, "rate_wait_line")
             unclipped(name, input)
             unclipped(name, send)
             check(detailsState(detailsLabel) == null) { "$name: the Details dot stayed: ${detailsState(detailsLabel)}" }
             check(room.state.value.draft == "Unsent fixture") { "$name: the draft changed" }
             focusedOnly(name, input, "after the hide")
+            oneWaitNode(name, fullLine(dm = false, ping = false, known = true))
             check(arrangement(input, send) == before) { "$name: the composer changed after the hide ${arrangement(input, send)} vs $before" }
         } else {
             // Case B: the refusal with the keyboard down shows the line; tapping Send moves no focus.
@@ -352,7 +354,7 @@ class RatePresentationTest {
             // Observed now, asserted after the capture (PL: capture before the asserts).
             val focusAfterSend = compose.onAllNodes(isFocused()).fetchSemanticsNodes().size
             val imeAfterSend = imeBottom
-            val linesAfterSend = compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size
+            val linesAfterSend = if (lineDrawn()) 1 else 0
             val arrangementAfterSend = arrangement(input, send)
             val refused = heard.mark(compose, sentinel)
             // A native first tap on the never-focused field: the keyboard comes up, the line hides behind the dot, no hide.
@@ -366,6 +368,7 @@ class RatePresentationTest {
             check(arrangementAfterSend == before) { "$name: the composer changed with the line $arrangementAfterSend vs $before" }
             check(imeBottom > 0) { "$name: the keyboard was hidden without a refusal" }
             formIs(name, HIDDEN, detailsLabel)
+            oneWaitNode(name, fullLine(dm = false, ping = false, known = true))
             unclipped(name, input)
             unclipped(name, send)
             val floor = kotlin.math.round(48 * context.resources.displayMetrics.density).toInt()
@@ -382,7 +385,7 @@ class RatePresentationTest {
             val tapped = heard.mark(compose, sentinel)
             heard.verify()
             check(tapped - returned == 1) { "$name: ${tapped - returned} announcements for the refused tap ${heard.spoken()}" }
-            check(compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) { "$name: no line after the hide" }
+            check(lineDrawn()) { "$name: no line after the hide" }
             check(detailsState(detailsLabel) == null) { "$name: the Details dot stayed after the hide" }
             focusedOnly(name, input, "after the refused tap's hide")
         }
@@ -420,16 +423,30 @@ class RatePresentationTest {
     private fun detailsState(label: String) =
         compose.onNodeWithContentDescription(label).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
 
+    /** The persistent wait line (one node, zero height when nothing is drawn) is drawn. */
+    private fun lineDrawn() = compose.onNodeWithTag("rate_wait_line").fetchSemanticsNode().size.height > 0
+
+    /**
+     * PL and TL: outside Send's state description and Details, exactly one node in the conversation exposes the wait text
+     * (the line, drawn or not).
+     */
+    private fun oneWaitNode(name: String, text: String) {
+        val nodes = compose.onAllNodes(hasContentDescription(text, substring = false) and !hasAnyAncestor(isDialog()))
+            .fetchSemanticsNodes() + compose.onAllNodes(hasContentDescription("$text ", substring = false) and !hasAnyAncestor(isDialog()))
+            .fetchSemanticsNodes()
+        check(nodes.size == 1 && nodes.single().config.getOrNull(SemanticsProperties.TestTag) == "rate_wait_line") {
+            "$name: ${nodes.size} nodes expose the wait text: ${nodes.map { it.config.getOrNull(SemanticsProperties.TestTag) }}" }
+    }
+
     /** TL condition 3 as amended: while a notice exists, the line is drawn, or hidden with the Details dot showing. */
     private fun lineOrDot(name: String, moment: String, detailsLabel: String) {
-        val lines = compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size
-        check(lines == 1 || (lines == 0 && detailsState(detailsLabel) != null)) { "$name: $lines wait lines and no Details dot $moment" }
+        val drawn = lineDrawn()
+        check(drawn || detailsState(detailsLabel) != null) { "$name: no wait line and no Details dot $moment" }
     }
 
     private fun formIs(name: String, expect: RateLineForm, detailsLabel: String) {
-        val lines = compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size
-        val drawn = when { lines == 0 -> HIDDEN; form?.first == true -> SHORT; else -> FULL }
-        check(drawn == expect) { "$name: expected $expect, drew $drawn (lines=$lines, form=$form)" }
+        val drawn = when { !lineDrawn() -> HIDDEN; form?.first == true -> SHORT; else -> FULL }
+        check(drawn == expect) { "$name: expected $expect, drew $drawn (form=$form)" }
         if (expect == HIDDEN) check(detailsState(detailsLabel) != null) { "$name: hidden without the Details dot" }
     }
 
