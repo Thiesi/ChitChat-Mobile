@@ -40,6 +40,12 @@ import org.junit.Test
  * focusable to a screen reader). That answers whether the label Text reaches an accessibility service on the field, as a
  * focusable descendant or merged into the node. Still measurement only.
  *
+ * #331b mechanisms (TL, 2026-11-23): what puts a name on the EditText node itself with no visible change. Compose UI
+ * 1.11.4 has no semantics property for a hint or labeledBy (its accessibility delegate only calls setContentDescription,
+ * setError and setStateDescription), so the candidate is a contentDescription on the field's own node, measured here
+ * with the visible label still showing: MessageInput (both overloads) with it passed as the modifier, which lands on the
+ * inner BasicTextField, and an OutlinedTextField with a label and the same modifier.
+ *
  * Cases (see docs/milestones/text-field-names.md for the call sites each covers):
  * - real: the app's own composables, reusable in isolation (MessageInput in both overloads, StepUpDialog's secret).
  * - material: the Material OutlinedTextField with exactly the parameters the call sites pass (label, singleLine,
@@ -63,6 +69,18 @@ class TextFieldNodeNamesTest {
         },
         Case("message-input-value", "real") { filled ->
             MessageInput(TextFieldValue(if (filled) typed else ""), {}, enabled = true, label = label, compact = false)
+        },
+        Case("mechanism-message-input-description", "mechanism") { filled ->
+            MessageInput(if (filled) typed else "", {}, enabled = true, label = label, compact = false,
+                modifier = Modifier.semantics { contentDescription = label })
+        },
+        Case("mechanism-message-input-value-description", "mechanism") { filled ->
+            MessageInput(TextFieldValue(if (filled) typed else ""), {}, enabled = true, label = label, compact = false,
+                modifier = Modifier.semantics { contentDescription = label })
+        },
+        Case("mechanism-outlined-label-description", "mechanism") { filled ->
+            OutlinedTextField(if (filled) typed else "", {}, Modifier.semantics { contentDescription = label },
+                label = { Text(label) }, singleLine = true)
         },
         // The secret lives in the dialog's own state; filling it needs text input, which requests focus. Empty only.
         Case("step-up-password", "real", canFill = false) { _ ->
