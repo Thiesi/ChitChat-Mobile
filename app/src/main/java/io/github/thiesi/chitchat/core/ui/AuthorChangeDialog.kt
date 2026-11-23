@@ -69,7 +69,7 @@ internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetC
                         horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End),
                         verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.cancel)) }
-                        AuthorConfirm(dialog, canConfirm && !busy, onConfirm)
+                        AuthorConfirm(dialog, canConfirm && !busy, onConfirm, compact)
                     }
                     }
                 }
@@ -138,7 +138,7 @@ private fun AuthorChangeText(dialog: AuthorDialogPresentation, targetCurrent: Bo
 }
 
 @Composable
-private fun AuthorConfirm(dialog: AuthorDialogPresentation, enabled: Boolean, onConfirm: () -> Unit) {
+private fun AuthorConfirm(dialog: AuthorDialogPresentation, enabled: Boolean, onConfirm: () -> Unit, compact: Boolean = false) {
     val pending = dialog.pendingMessageId
     TextButton(onClick = onConfirm, enabled = enabled,
         modifier = Modifier.testTag(if (pending != null) "author_check_history" else "author_change_confirm")) {
@@ -148,12 +148,15 @@ private fun AuthorConfirm(dialog: AuthorDialogPresentation, enabled: Boolean, on
             dialog.kind == AuthorChangeKind.EDIT -> R.string.author_save
             else -> R.string.author_delete_confirm
         })
-        if (dialog.kind == AuthorChangeKind.EDIT && dialog.recovery) {
+        if (dialog.kind == AuthorChangeKind.EDIT && dialog.recovery && !compact) {
             // #70/#284 (PL ruling B, 2026-11-23): on the recovery path (from the transition into unknown until the dialog
             // closes) the confirm keeps the width of the widest recovery label, so the action row keeps one arrangement
             // across Check, Review and Save. At 150% and 200% "Review proposed edit" stacked under Cancel while "Save edit"
             // fit beside it, so the row reflowed on Review and a tap aimed at Review landed between the buttons. A first edit keeps
             // today's arrangement. The sizing labels are invisible and silent; the visible one is end-aligned and read.
+            // Not in the compact layout (PL J, 2026-11-23): it exists only while the keyboard is up, which on the recovery
+            // path means editing after Review, always "Save edit". There the actions get half the width, and the reserved
+            // label pushed "Save edit" onto a second line that the shortened window can't show.
             Box(contentAlignment = androidx.compose.ui.Alignment.CenterEnd) {
                 for (sizing in listOf(R.string.author_check_history, R.string.author_review_edit, R.string.author_save))
                     Text(stringResource(sizing), Modifier.alpha(0f).clearAndSetSemantics { })
