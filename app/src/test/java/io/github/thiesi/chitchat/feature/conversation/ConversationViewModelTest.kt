@@ -304,12 +304,14 @@ class ConversationViewModelTest {
         assertFalse("Not stale", model.state.value.stale)
         assertTrue("Send stays enabled", model.canSend())
         assertEquals("The first refusal is the notice's appearance, not a repeat", 0, model.state.value.sendLimitRepeats)
+        assertEquals("Every refusal is one keyboard-hide check, the first included", 1, model.state.value.sendLimitRefusals)
         // A tap during the wait: the local gate refuses, nothing is sent, and the line stays.
         fake.sendFailure = limited(119, local = true); model.send(); advanceUntilIdle()
         assertNotNull(model.state.value.sendLimit); assertEquals("Unsent fixture", model.state.value.draft)
         assertEquals("Each refused tap flips Send's spoken parity once", 1, model.state.value.sendLimitRepeats)
         model.send(); advanceUntilIdle()
         assertEquals(2, model.state.value.sendLimitRepeats)
+        assertEquals(3, model.state.value.sendLimitRefusals)
         // A known wait isn't dropped by an edit; nothing resends by itself.
         model.updateDraft("Edited fixture"); advanceTimeBy(1_000_000); advanceUntilIdle()
         assertNotNull("A known wait stays until its deadline", model.state.value.sendLimit)

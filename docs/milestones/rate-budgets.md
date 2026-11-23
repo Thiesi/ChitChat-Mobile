@@ -89,10 +89,14 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
     notice arriving in a laid-out window decides at once. While a measurement for a new window is pending the previous
     form holds; with none yet, the short form shows. Measuring inside the column's own layout pass would have meant a
     custom layout in both screens' composer columns.
-  - **A refused Send while hidden (PL ruling, TL-approved):** besides the announcement below, it hides the soft keyboard,
-    a plain hide answering the tap: focus, draft, caret and reply stay. The window re-decides, the line shows by the rule
-    and the dot clears. Tapping the field again brings the keyboard back and the line hides again behind the dot, silently.
-    Only a repeat refusal does this (`sendLimitRepeats`), never the notice's first appearance.
+  - **A refusal that resolves to hidden hides the keyboard (PL rulings, TL-approved):** each refusal event, first or
+    repeat (`sendLimitRefusals`), hides the soft keyboard at most once, and only if that notice's form in the current
+    window, decided after the refusal (post-layout, `RateLineFit.settled`), is hidden. It's a plain hide answering the
+    tap: focus, draft, caret and reply stay; the window re-decides, the line shows by the rule and the dot clears.
+    - One pending flag per refusal event, consumed at the first settled decision; no polling, no timer.
+    - Guards: the notice is still current, the composer still has focus, no dialog is open; otherwise nothing hides.
+    - Only a refusal ever hides: tapping the field brings the keyboard back and the line hides behind the dot, with no
+      hide and no announcement. A restored count (configuration change, re-entry) is seen, never acted on.
   - **Send carries every announcement (PL and TL, 2026-11-23).** The line and the Details copy are silent text; their
     description is the full line, in both forms (static text, so visible and spoken text may differ, as under P-25).
     - **Why Send:** Compose UI 1.11.4's accessibility delegate reads `LiveRegion` only to fill in node info and diffs
