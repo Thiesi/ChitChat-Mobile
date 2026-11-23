@@ -461,6 +461,12 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     TypingStatus(model.typing, session, TypingTarget.Direct(peer),
                         viewing = state.loaded && !state.stale && !blockConfirm && !detailsOpen && !composerDialog && !obscured && state.context?.relationship?.messagingAvailable == true,
                         publishing = ready && !composerDialog && !detailsOpen && !blockConfirm && !obscured && model.canSend())
+                    // #323b (PL amendment): the send's own wait, directly above the composer block (above the reply chip),
+                    // outside the top block, full text in every layout; the timeline gives up the space.
+                    state.sendLimit?.let { limit ->
+                        io.github.thiesi.chitchat.core.ui.RateWaitLine(session, limit, R.string.rate_wait_messages,
+                            R.string.rate_wait_messages_unknown, Modifier.fillMaxWidth().padding(horizontal = 12.dp))
+                    }
                     if (!replyInline) replyControl(false)
                     if (!compact) { attachNotices(headerLimit * 0.5f); attachmentCard(headerLimit * 0.5f) }
                     if (inlineCompletion && !detailsOpen) io.github.thiesi.chitchat.feature.completion.CompletionSuggestions(completionComposer)
@@ -685,11 +691,6 @@ private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadStat
     if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
     if (state.anchorLost) Text(stringResource(R.string.conversation_anchor_unavailable))
     if (state.incompleteRange) Text(stringResource(R.string.conversation_range_unavailable))
-    // #323b (PL): the send's own wait, a level-1 muted line on the composer's error line.
-    state.sendLimit?.let { limit ->
-        val session by model.session.collectAsState()
-        io.github.thiesi.chitchat.core.ui.RateWaitLine(session, limit, R.string.rate_wait_messages, R.string.rate_wait_messages_unknown)
-    }
     state.error?.let { InlineError(directError(it)) }
     state.validation?.let { InlineError(stringResource(if (it == "empty_message") R.string.dm_empty_body else R.string.dm_long_body)) }
     if (state.confirmedSendId != null && (state.error != null || state.stale)) Text(stringResource(R.string.dm_confirmed))

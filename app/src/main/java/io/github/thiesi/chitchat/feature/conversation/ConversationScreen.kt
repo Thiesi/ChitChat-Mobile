@@ -433,13 +433,6 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (draftCount > 0) TextButton(onClick = { close(); model.showDrafts(displayedSession) }) {
                 Text(stringResource(R.string.room_drafts_count, draftCount))
             }
-            // #323b (PL): the send's or ping's own wait, a level-1 muted line on the composer's error line.
-            state.sendLimit?.let { limit ->
-                val ping = limit.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
-                io.github.thiesi.chitchat.core.ui.RateWaitLine(displayedSession, limit,
-                    if (ping) R.string.rate_wait_pings else R.string.rate_wait_messages,
-                    if (ping) R.string.rate_wait_pings_unknown else R.string.rate_wait_messages_unknown)
-            }
             state.error?.let { InlineError(conversationError(it)) }
             state.syncError?.let {
                 InlineError(if (it.code == "history_range_unavailable") stringResource(R.string.conversation_range_unavailable)
@@ -570,6 +563,15 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         TypingStatus(model.typing, session, TypingTarget.Room(roomId),
             viewing = state.loaded && !state.stale && state.context != null && !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured,
             publishing = ready && !state.busy && !composerDialog && !obscured && model.canSend())
+        // #323b (PL amendment): the send's or ping's own wait, a level-1 muted line directly above the composer block
+        // (above the reply chip), outside the bounded header, full text in every layout; the timeline gives up the space.
+        state.sendLimit?.let { limit ->
+            val ping = limit.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
+            io.github.thiesi.chitchat.core.ui.RateWaitLine(session, limit,
+                if (ping) R.string.rate_wait_pings else R.string.rate_wait_messages,
+                if (ping) R.string.rate_wait_pings_unknown else R.string.rate_wait_messages_unknown,
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+        }
         if (!replyInline) replyControl(false)
         if (!compact) { attachNotices(headerLimit * 0.5f); attachmentCard(headerLimit * 0.5f) }
         if (inlineCompletion && !detailsOpen) CompletionSuggestions(completionComposer)
