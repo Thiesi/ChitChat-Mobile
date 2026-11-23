@@ -46,6 +46,14 @@ import org.junit.Test
  * with the visible label still showing: MessageInput (both overloads) with it passed as the modifier, which lands on the
  * inner BasicTextField, and an OutlinedTextField with a label and the same modifier.
  *
+ * #331b second signal (TL, 2026-11-23): the Accessibility Test Framework (ATF 4.1.1, which Compose ui-test's
+ * enableAccessibilityChecks uses), run with that integration's own validator settings (checks from the root view) on
+ * each root's view (API 34+), recording ATF's SpeakableTextPresentCheck verdict for the field per case and state, never
+ * failing on it. It calls ATF's `checkAndReturnResults` directly: the results listener hands back a Guava type that
+ * isn't on our test compile classpath, and adding Guava would change the compatible set. ATF composes a node's description from its children much as TalkBack does, so it's
+ * evidence, not proof of spoken output. `synthetic-unnamed` (no label, placeholder or description) is the control: ATF
+ * must flag it, or its silence on the other cases proves nothing.
+ *
  * Cases (see docs/milestones/text-field-names.md for the call sites each covers):
  * - real: the app's own composables, reusable in isolation (MessageInput in both overloads, StepUpDialog's secret).
  * - material: the Material OutlinedTextField with exactly the parameters the call sites pass (label, singleLine,
@@ -104,6 +112,9 @@ class TextFieldNodeNamesTest {
         },
         Case("outlined-label-multiline", "material") { filled ->
             OutlinedTextField(if (filled) typed else "", {}, label = { Text(label) }, singleLine = false, minLines = 3)
+        },
+        Case("synthetic-unnamed", "synthetic") { filled ->
+            OutlinedTextField(if (filled) typed else "", {})
         },
         Case("synthetic-placeholder-only", "synthetic") { filled ->
             OutlinedTextField(if (filled) typed else "", {}, placeholder = { Text("Fixture placeholder") })
@@ -164,6 +175,37 @@ class TextFieldNodeNamesTest {
             .put("tooltipText", node.tooltipText.fact() ?: JSONObject.NULL)
             .put("error", node.error.fact() ?: JSONObject.NULL)
             .put("descendants", descendants(node))
+            .put("atfSpeakable", atfVerdict())
+    }
+
+    /** ATF's validator with enableAccessibilityChecks' default settings, and never throwing (the probe records). */
+    private val atf by lazy {
+        com.google.android.apps.common.testing.accessibility.framework.integrations.espresso.AccessibilityValidator()
+            .setRunChecksFromRootView(true).setThrowExceptionForErrors(false)
+    }
+
+    /**
+     * Runs ATF on every root (a dialog has its own) and reports the worst SpeakableTextPresentCheck finding for an
+     * editable element: "error", "warning", "info", or "pass" when none. "notrun" below API 34, where the checks aren't
+     * enabled.
+     */
+    private fun atfVerdict(): String {
+        if (android.os.Build.VERSION.SDK_INT < 34) return "notrun"
+        val results = mutableListOf<com.google.android.apps.common.testing.accessibility.framework.AccessibilityViewCheckResult>()
+        val views = compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes()
+            .mapNotNull { (it.root as? androidx.compose.ui.platform.ViewRootForTest)?.view }
+        check(views.isNotEmpty()) { "No root view for ATF" }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { views.forEach { results += atf.checkAndReturnResults(it) } }
+        val types = results.filter {
+            it.sourceCheckClass.simpleName == "SpeakableTextPresentCheck" &&
+                it.element?.className?.toString()?.contains("EditText") == true
+        }.map { it.type.name }
+        return when {
+            "ERROR" in types -> "error"
+            "WARNING" in types -> "warning"
+            "INFO" in types -> "info"
+            else -> "pass"
+        }
     }
 
     /** The field node's whole subtree in pre-order (bounded), as an accessibility service would find it. */

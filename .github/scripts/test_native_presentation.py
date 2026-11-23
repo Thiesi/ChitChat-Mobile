@@ -396,7 +396,7 @@ class PresentationGateTests(unittest.TestCase):
         "password": False, "preceding": "Fixture heading", "stateDescription": None, "tooltipText": None, "error": None,
         "descendants": [{"depth": 1, "className": "android.widget.TextView", "text": "Fixture label",
             "contentDescription": None, "important": True, "visible": True, "focusable": False,
-            "screenReaderFocusable": False}]}
+            "screenReaderFocusable": False}], "atfSpeakable": "pass"}
 
     def test_the_node_probe_is_copied_and_keeps_the_original_status(self):
         import json
@@ -417,6 +417,7 @@ class PresentationGateTests(unittest.TestCase):
                 ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": [self.NODE] * 65})),
                 ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": [dict(self.NODE, text="x" * 70000)]})),
                 ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": [dict(self.NODE, descendants="none")]})),
+                ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": [dict(self.NODE, atfSpeakable="maybe")]})),
                 ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": [dict(self.NODE,
                     descendants=[dict(self.NODE["descendants"][0], depth=0)])]})),
                 ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": [dict(self.NODE,

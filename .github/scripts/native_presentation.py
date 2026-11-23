@@ -37,7 +37,9 @@ A11Y_NODES_NAME = re.compile(r"text-field-nodes-api[0-9]{2}[.]json")
 A11Y_NODES_MAX_BYTES = 262144
 A11Y_NODES_MAX_ENTRIES = 64
 A11Y_NODES_KEYS = {"case", "kind", "state", "className", "text", "hintText", "contentDescription", "labeledBy",
-    "showingHintText", "password", "preceding", "stateDescription", "tooltipText", "error", "descendants"}
+    "showingHintText", "password", "preceding", "stateDescription", "tooltipText", "error", "descendants", "atfSpeakable"}
+# #331b: ATF's SpeakableTextPresentCheck verdict for the field.
+A11Y_NODES_ATF = {"pass", "error", "warning", "info", "notrun"}
 # #331b step 0: each field's descendant subtree, bounded.
 A11Y_NODES_CHILD_KEYS = {"depth", "className", "text", "contentDescription", "important", "visible", "focusable",
     "screenReaderFocusable"}
@@ -271,6 +273,9 @@ def collect_a11y_nodes():
             if key in ("showingHintText", "password"):
                 if not isinstance(value, bool):
                     raise ValueError("Malformed node probe flag")
+            elif key == "atfSpeakable":
+                if value not in A11Y_NODES_ATF:
+                    raise ValueError("Malformed node probe ATF verdict")
             elif key == "descendants":
                 if not isinstance(value, list) or len(value) > A11Y_NODES_MAX_CHILDREN:
                     raise ValueError("Malformed node probe subtree")
