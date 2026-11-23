@@ -55,6 +55,10 @@ PERSON_REPORT_NAME = re.compile(r"report-person-(?:light-(?:default|font200)-(?:
     r"light-font200-(?:form-room-landscape|form-room-landscape-end|form-room-keyboard|form-global-end|form-nopicture-end|form-longname|"
     r"card-entry-end|card-reported-end)|"
     r"dark-default-(?:card-entry|card-reported|form-room|form-room-end|unknown|didnotarrive|didnotarrive-notice|sheet-room|sheet-dm))[.]png")
+AUTHOR_DESTINATION = ROOT / "app/build/reports/androidTests/author-presentation"
+AUTHOR_NAME = re.compile(r"author-edit-(?:room-(?:light|dark)-(?:default|font200)-(?:unknown|reviewed|editing)|"
+    r"room-light-(?:default|font200)-first|room-dark-font200-first|room-light-font150-(?:unknown|reviewed)|"
+    r"room-light-font200-editing-landscape|dm-light-default-reviewed)[.]png")
 RESET_NAME = re.compile(r"reset-(light|dark)-(default|font200)-(signin-forgot|form|mfa|stop|cancelled|passkey|failed|unknown|cancel-unknown)[.]png")
 AUTH_DESTINATION = ROOT / "app/build/reports/androidTests/auth-presentation"
 AUTH_NAME = re.compile(r"auth-(light|dark)-((default|font200)-(signin|create)-keyboard|font200-create-block)[.]png")
@@ -395,6 +399,20 @@ def collect_person_report():
     print(f"Person report presentation captures collected: {len(files)} of 57.")
 
 
+def collect_author():
+    # #70/#284 (PL list and ruling B, 2026-11-23): the author edit dialog in the real app root. Room light and dark at
+    # default and 200% (unknown, reviewed, editing: 12), first edits (light default and 200%, dark 200%: 3), light 150%
+    # unknown and reviewed (2), the 200% landscape editing (1) and a DM reviewed (1).
+    files = list(islice(SOURCE.rglob("ccm-author-presentation/*"), 20))
+    if (not files or len(files) > 19 or len({p.name for p in files}) != len(files)
+        or any(AUTHOR_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous author presentation output")
+    AUTHOR_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, AUTHOR_DESTINATION / path.name)
+    print(f"Author presentation captures collected: {len(files)} of 19.")
+
+
 def collect_onboarding():
     # Onboarding O2a: Welcome, Where do you chat?, Server found (top and scrolled), default and 2.0 font, light and dark,
     # plus a step 2 failure notice at 2.0.
@@ -559,6 +577,10 @@ def main() -> int:
         collect_person_report()
     except Exception:
         print("Person report presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_author()
+    except Exception:
+        print("Author presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_onboarding()
     except Exception:
