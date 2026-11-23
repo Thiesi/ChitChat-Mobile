@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.direct
 
 import io.github.thiesi.chitchat.core.ui.rateFitTimeline
+import androidx.compose.foundation.layout.heightIn
 import io.github.thiesi.chitchat.core.ui.rateWaitState
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.LaunchedEffect
@@ -450,7 +451,8 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     val rateLimit = state.sendLimit
                     // #323b (PL, TL): the timeline's block holds the typing line and the persistent wait line with their own top
                     // spacing, so the always-present (zero-height when empty) wait line adds no gap; spacing is unchanged otherwise.
-                    Column(Modifier.weight(1f).fillMaxWidth()) {
+                    // At least 1dp (TL, run 45244641951): squeezed to 0, the hidden 1dp strip had zero size and announced nothing.
+                    Column(Modifier.weight(1f).fillMaxWidth().heightIn(min = 1.dp)) {
                     LazyColumn(Modifier.weight(1f).fillMaxWidth().rateFitTimeline(rateFit, rateWindow).testTag("dm_timeline"), timeline,
                         contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item("older") { if (state.mayHaveOlder) TextButton(onClick = model::older, enabled = !state.busy && !state.stale) {

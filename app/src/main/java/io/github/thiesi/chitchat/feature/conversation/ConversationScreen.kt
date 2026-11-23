@@ -528,7 +528,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         val rateUnknown = if (ratePing) R.string.rate_wait_pings_unknown else R.string.rate_wait_messages_unknown
         // #323b (PL, TL): the timeline's block holds the typing line and the persistent wait line with their own top
         // spacing, so the always-present (zero-height when empty) wait line adds no gap; spacing is unchanged otherwise.
-        Column(Modifier.weight(1f).fillMaxWidth()) {
+        // At least 1dp (TL, run 45244641951): squeezed to 0, the hidden 1dp strip had zero size and announced nothing.
+        Column(Modifier.weight(1f).fillMaxWidth().heightIn(min = 1.dp)) {
         LazyColumn(Modifier.weight(1f).fillMaxWidth().rateFitTimeline(rateFit, rateWindow).testTag("conversation_timeline"), state = timeline,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "history_header") {
