@@ -73,6 +73,26 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
     wrapping and never clipped, in every layout including compact with the keyboard up; the timeline gives up the
     space. In the header it was invisible at 1.0 in the room, clipped in the DM, and not displayed at 200% or in
     landscape with the keyboard up.
+  - **Composer first (PL refinement after the re-J on b2c34c4, PL- and TL-approved rule):** the full line shows only where
+    the timeline keeps one 48dp row beside it, measured with the line absent (the timeline's height plus the line's own
+    slot) against the full line's measured height at its real width. The timeline is the column's only weighted block and
+    the composer is unweighted, so the composer's arrangement and Send never change because of the line. Otherwise the
+    short form, "Try again in {wait}." / "Try again later.", shows in the same place, and the full line comes first in
+    Details (left out of Details while the full line is visible, so it isn't shown twice).
+    - **Stable:** `RateWaitSlot` decides once per notice and window: width, the height above the keyboard, font scale,
+      and whether the reply chip and the attachment card or notices are present (PL: layout, not draft content; a reply
+      started during the wait re-decides). Never from the draft, so it can't flip while typing; a tall draft at decision
+      time only makes it more conservative.
+    - **No frame wait (TL condition):** measurements are tagged with the notice and window they were taken in
+      (`onGloballyPositioned`), and the slot decides as soon as a layout pass supplies them for the current key. While
+      they're pending the previous form holds; with none yet, the short form shows. The line is never absent while a
+      notice exists, apart from its deadline one-shot. Measuring inside the column's own layout pass would have meant a
+      custom layout in both screens' composer columns; the tagged measurement needs no restructuring and no timer.
+  - **Spoken text (PL ruling, 2026-11-23):** always the full line, in both forms. The line's only semantics are the full
+    line as its description, a polite live region and one test tag, identical in both forms, so it's announced once when
+    the notice appears and a full/short swap (the keyboard, a rotation, a reply chip) is silent. TalkBack users always
+    hear "Your message is kept." It's static text, not a control, so visible and spoken text may differ, as with the
+    status slot under P-25.
   - **Unknown wait:** the send line keeps "Your message is kept." ("Try again later." replaces only "Try again in
     {wait}."); the ping line has neither.
   - **{wait}:** computed from the stored deadline at render and frozen until the notice changes; minutes and hours never

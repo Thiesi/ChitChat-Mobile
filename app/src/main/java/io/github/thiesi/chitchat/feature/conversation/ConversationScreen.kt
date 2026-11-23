@@ -1,5 +1,6 @@
 package io.github.thiesi.chitchat.feature.conversation
 
+import io.github.thiesi.chitchat.core.ui.rateFitTimeline
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
 
@@ -363,8 +364,16 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             attachPolicy == AttachmentPolicy.Invalid, canCheckAgain = !session.busy && now >= session.retryAtMillis,
             onCheckAgain = { if (isCurrentEntry()) onRefreshSession() }, maxHeight = noticeLimit)
     }
+    // #323b refinement: the short wait line shows when the full one doesn't fit; Details then shows the full line first.
+    val rateFit = remember { io.github.thiesi.chitchat.core.ui.RateLineFit() }
     BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
     val compact = maxHeight < 240.dp
+    // The timeline's measured height, for the wait line's fit decision (it excludes the composer and every other block).
+    // The fit decision's window: width, the height above the keyboard, font scale, and the reply chip's and the attachment
+    // card's or notices' presence (layout, never draft content).
+    val rateBoxWidth = maxWidth
+    val rateWindow = listOf(maxWidth, maxHeight, androidx.compose.ui.platform.LocalDensity.current.fontScale,
+        selectedReply != null, attachment != null || attach.notice != null || attach.picked != null)
     val replyInline = compact
     val replyControl: @Composable (Boolean) -> Unit = { inline -> selectedReply?.let { choice ->
         ComposerReplyControl(inline, replyTitle, replyPreview, !state.sending && !obscured,
@@ -492,7 +501,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         io.github.thiesi.chitchat.core.ui.TransferNotice(Modifier.padding(horizontal = 16.dp))
         // Reporting R2: this room's report lines (PL).
         io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Room(state.context?.room?.name), Modifier.padding(horizontal = 16.dp))
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("conversation_timeline"), state = timeline,
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().rateFitTimeline(rateFit, state.sendLimit, rateWindow).testTag("conversation_timeline"), state = timeline,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "history_header") {
                 Column(Modifier.padding(horizontal = 16.dp)) {
@@ -565,13 +574,14 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             publishing = ready && !state.busy && !composerDialog && !obscured && model.canSend())
         // #323b (PL amendment): the send's or ping's own wait, a level-1 muted line directly above the composer block
         // (above the reply chip), outside the bounded header, full text in every layout; the timeline gives up the space.
-        state.sendLimit?.let { limit ->
-            val ping = limit.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
-            io.github.thiesi.chitchat.core.ui.RateWaitLine(session, limit,
-                if (ping) R.string.rate_wait_pings else R.string.rate_wait_messages,
-                if (ping) R.string.rate_wait_pings_unknown else R.string.rate_wait_messages_unknown,
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-        }
+        // PL refinement: the composer comes first. The full line only where the timeline keeps one 48dp row beside it,
+        // else the short form here and the full line first in Details; decided per notice and window, never per draft.
+        val rateLimit = state.sendLimit
+        val ratePing = rateLimit?.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
+        val rateKnown = if (ratePing) R.string.rate_wait_pings else R.string.rate_wait_messages
+        val rateUnknown = if (ratePing) R.string.rate_wait_pings_unknown else R.string.rate_wait_messages_unknown
+        io.github.thiesi.chitchat.core.ui.RateWaitSlot(rateFit, session, rateLimit, rateKnown, rateUnknown, rateWindow, rateBoxWidth - 32.dp, 6.dp,
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp))
         if (!replyInline) replyControl(false)
         if (!compact) { attachNotices(headerLimit * 0.5f); attachmentCard(headerLimit * 0.5f) }
         if (inlineCompletion && !detailsOpen) CompletionSuggestions(completionComposer)
@@ -761,6 +771,13 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     if (detailsOpen) AlertDialog(onDismissRequest = { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } },
         title = { Text(stringResource(R.string.conversation_details)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+            // PL refinement: when the composer shows the short wait line, the full line comes first here.
+            if (rateFit.short) state.sendLimit?.let { limit ->
+                val ping = limit.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
+                io.github.thiesi.chitchat.core.ui.RateWaitLine(session, limit,
+                    if (ping) R.string.rate_wait_pings else R.string.rate_wait_messages,
+                    if (ping) R.string.rate_wait_pings_unknown else R.string.rate_wait_messages_unknown, Modifier.fillMaxWidth())
+            }
             val current = connection?.takeIf { it.generation == session.generation }
             if (current != null) {
                 val realtime = model.realtime
