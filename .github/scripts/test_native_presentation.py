@@ -382,6 +382,42 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertFalse(any(call.args[1].parent == runner.FORM_DIALOG_DESTINATION for call in self.copy.call_args_list), name)
 
+    def nodes_file(self, name, text):
+        import shutil, tempfile
+        folder = Path(tempfile.mkdtemp(prefix="ccm-a11y-nodes-test-"))
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        path = folder / name; path.write_bytes(text.encode("utf-8"))
+        self.glob.side_effect = lambda pattern: (iter([path]) if pattern == "ccm-a11y-nodes/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+        return path
+
+    NODE = {"case": "message-input-string", "kind": "real", "state": "empty", "className": "android.widget.EditText",
+        "text": None, "hintText": "Message", "contentDescription": None, "labeledBy": None, "showingHintText": True,
+        "password": False, "preceding": "Fixture heading"}
+
+    def test_the_node_probe_is_copied_and_keeps_the_original_status(self):
+        import json
+        self.results(2)
+        path = self.nodes_file("text-field-nodes-api35.json", json.dumps({"api": 35, "entries": [self.NODE]}))
+        self.assertEqual(2, runner.main()); self.assert_once()
+        self.copy.assert_any_call(path, runner.A11Y_NODES_DESTINATION / "text-field-nodes-api35.json")
+
+    def test_foreign_malformed_or_oversized_node_probe_output_is_rejected_before_copy(self):
+        import json
+        good = json.dumps({"api": 36, "entries": [self.NODE]})
+        for name, text in (("other.json", good), ("text-field-nodes-api36.json", "not json"),
+                ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": []})),
+                ("text-field-nodes-api36.json", json.dumps({"api": "36", "entries": [self.NODE]})),
+                ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": [dict(self.NODE, extra=1)]})),
+                ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": [dict(self.NODE, text="secret\nline")]})),
+                ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": [dict(self.NODE, password="yes")]})),
+                ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": [self.NODE] * 65})),
+                ("text-field-nodes-api36.json", json.dumps({"api": 36, "entries": [dict(self.NODE, text="x" * 70000)]}))):
+            self.results(0); self.copy.reset_mock()
+            self.nodes_file(name, text)
+            self.assertEqual(0, runner.main())
+            self.assertFalse(any(call.args[1].parent == runner.A11Y_NODES_DESTINATION for call in self.copy.call_args_list), name)
+
     def test_excess_ambiguous_or_foreign_step_up_output_is_rejected_before_copy(self):
         self.results(0)
         for files in ([Path(f"stepup-light-default-export-{n}.png") for n in range(23)],
