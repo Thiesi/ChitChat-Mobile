@@ -334,8 +334,9 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     fun reviewAuthorProposal(request: DirectAuthorRequest): Boolean {
         if (!canReviewAuthor(request)) return false
         val body = checkNotNull(mutable.value.authorDialog).body
+        val recovery = checkNotNull(mutable.value.authorDialog).recovery
         mutable.value = mutable.value.copy(authorDialog = DirectAuthorDialog(DirectAuthorRequest(request.expected,
-            request.peerId, checkNotNull(currentAuthorRow(request)), AuthorChangeKind.EDIT), body), error = null)
+            request.peerId, checkNotNull(currentAuthorRow(request)), AuthorChangeKind.EDIT), body, recovery = recovery), error = null)
         return true
     }
 
@@ -351,7 +352,8 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
 
     fun updateAuthorBody(request: DirectAuthorRequest, body: String) {
         if (!mutable.value.busy && authorAvailable(request) && request.kind == AuthorChangeKind.EDIT)
-            mutable.value = mutable.value.copy(authorDialog = DirectAuthorDialog(request, body))
+            mutable.value = mutable.value.copy(authorDialog = DirectAuthorDialog(request, body,
+                recovery = mutable.value.authorDialog?.takeIf { it.request === request }?.recovery == true))
     }
     fun dismissAuthor(request: DirectAuthorRequest) {
         if (mutable.value.authorDialog?.request === request && selected(request.expected, request.peerId) && !mutable.value.busy)
@@ -364,7 +366,8 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         if (request.kind == AuthorChangeKind.EDIT) {
             val invalid = validateEditedBody(body) ?: "message_unchanged".takeIf { body.phpTrim() == request.original.body }
             if (invalid != null) {
-                mutable.value = mutable.value.copy(authorDialog = DirectAuthorDialog(request, body, invalid)); return
+                mutable.value = mutable.value.copy(authorDialog = DirectAuthorDialog(request, body, invalid,
+                    recovery = mutable.value.authorDialog?.takeIf { it.request === request }?.recovery == true)); return
             }
         }
         start { peer ->
@@ -399,7 +402,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
                 val retained = editor?.takeIf { mutable.value.authorDialog?.request === it.request }
                 mutable.value = mutable.value.copy(authorUnknown = null, authorLimit = false, authorNotice = "author_checked",
                     authorDialog = if (retained != null && retained.request.kind == AuthorChangeKind.EDIT)
-                        DirectAuthorDialog(retained.request, retained.body, checked = true)
+                        DirectAuthorDialog(retained.request, retained.body, checked = true, recovery = true)
                     else if (retained != null) null else mutable.value.authorDialog)
             }
         }
@@ -408,7 +411,10 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     private fun rememberUnknownAuthor(request: DirectAuthorRequest) {
         val marker = DirectAuthorUnknown(request.peerId, request.original.id, request.kind)
         unknownAuthors[request.peerId] = marker // Capacity was checked before this single serialized POST.
-        if (mutable.value.peerId == request.peerId) mutable.value = mutable.value.copy(authorUnknown = marker)
+        if (mutable.value.peerId == request.peerId) mutable.value = mutable.value.copy(authorUnknown = marker,
+            // The dialog's recovery path starts here (#70/#284): its confirm keeps one row arrangement until it closes.
+            authorDialog = mutable.value.authorDialog?.let { dialog -> if (dialog.request === request)
+                DirectAuthorDialog(dialog.request, dialog.body, dialog.validation, dialog.checked, recovery = true) else dialog })
     }
 
     private fun reactionPrivacyKnown(): Boolean {

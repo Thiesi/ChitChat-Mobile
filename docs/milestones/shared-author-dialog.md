@@ -9,3 +9,41 @@ The extraction permits the separate M5b3 DM consumer to reuse the adaptive edito
 This isolated prerequisite passed debug/release/test-APK build in13m4s (R8 executed),623 fresh JVM tests with0 failures/errors/skips (23 room-author cases), lint0, and6/6 native room-author journeys: baseline134.966s,150%-portrait149.211s,150%-landscape136.045s, exact settings/portrait restored.10 unchanged diagnostic-wrapper Python tests also passed. Full native/current-head CI and completed initial/fresh Claude reviews remain merge gates, with outcomes recorded on its delivery PR. Earlier23-room-author and82-focused tests verified earlier DM-worktree checkpoints only, not these gates. Keep all tests enabled in CI and retain every original failure. No further physical-phone/live-server/clipboard experiments are part of this slice.
 
 The original local sequence stopped on a PowerShell parser error before layout/device changes. Retain its source/diagnostics; correcting the helper's reserved-word name changed no app code/assertion. Continuation ran only previously unstarted checks, not the completed baseline journeys.
+
+## A read-only body holds no focus (#70, #284; PL and TL, 2026-11-23)
+
+After a Save whose outcome is unknown, the body is read-only (unknown, then checked). It used to keep its input focus
+there. Review swaps in a fresh request and makes the body editable, so the still-focused field restarted its input
+session: the keyboard came up unasked about 50–80 ms after Review, and when its inset landed about 400 ms later, Save
+moved 235 px up (235 dp at 160 dpi). A tap aimed at Save in that window landed on the keyboard. That's #70's DM journey failure and #284's
+room one, measured locally (5 runs) and matching both CI occurrences.
+
+- **The rule (PL):** a state change inside a form dialog never gives focus or brings up the keyboard by itself. The
+  initial open is unchanged.
+- **The read-only body** holds no input focus: `focusProperties { canFocus = !readOnly }`, plus a plain `clearFocus()` on
+  the read-only transition itself (no `moveFocus`, so no other node takes focus). The keyboard closes once on entering
+  the unknown state, as before.
+- **Review** makes the body editable without focus or keyboard, and Save stays put. Only a tap on the body focuses it,
+  through the normal one-tap path.
+- **One row arrangement on the recovery path (PL ruling B):** from the transition into unknown until the dialog closes
+  (unknown, checked, reviewed, unknown again), the confirm button keeps the width of its widest recovery label ("Check
+  author-change history", "Review proposed edit", "Save edit"). The sizing labels are invisible and silent; the visible
+  label is end-aligned. A first edit keeps today's arrangement at every scale. Measured on the CI AVD: at 150% and 200%
+  "Review proposed edit" stacked under Cancel while "Save edit" fit beside it, so the row reflowed on Review and a tap
+  aimed at Review's centre landed between the buttons. Now the arrangement changes at most once per recovery, at the
+  transition into unknown, together with the keyboard closing, and never at Check, Review or Save. Where the reserved
+  width doesn't fit beside Cancel, the recovery row stacks and stays stacked from unknown entry through Save (PL
+  amendment, 2026-11-23). On the 320 px CI window that's already at 1.0: the widest label, "Check author-change
+  history" (`author_check_history`), is 211 px, and 70 + 8 + 211 = 289 against 288 px, as main's unknown state already
+  did. Review no longer reflows it back to side by side. The dialog state carries a memory-only `recovery` flag (set on
+  entering unknown, kept through Check, edits and Review, and gone with the dialog). The delete dialog is unchanged.
+  The reservation never applies in the compact layout (PL J, 2026-11-23). Compact exists only while the keyboard is up
+  in a short, wide window, which on the recovery path means editing after Review, where the label is always "Save edit".
+  There the actions get half the width, and reserving "Check author-change history" at 200% pushed "Save edit" onto a
+  second line the shortened window couldn't show. In compact the confirm shows its own label, as on main.
+- **Accessibility:** the read-only body stays readable, and Review becomes Save in the same node, so accessibility focus
+  stays on it.
+- **The look:** the body's decoration depends on `enabled` only, so it looks editable after Review.
+- **No change to the writes:** Save, Check and Review, one request each, never resent.
+- **Tests:** `aReadOnlyBodyHoldsNoFocusSoReviewBringsNoKeyboardAndSaveStaysPut`, in DirectAuthorJourneyTest and
+  RoomAuthorJourneyTest. The #70 and #284 tests are unchanged, as the proof.
