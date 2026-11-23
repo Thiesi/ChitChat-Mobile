@@ -111,6 +111,11 @@ with its existing re-fencing.
   With ChitChat#159, **Report {name}…** sits below Refresh when the profile allows it
   (reporting.md, "Report a person"). No other actions. Avatar availability hints authorize no
   fetch (M5f1/M5f2). "Message" or "Ignore" entry points would need their own decision.
+- **Icons come with this restyle (PL, 2026-11-22).** Until the card becomes this sheet, it
+  stays the current `AlertDialog` and every card row is text only: Report {name}… in
+  `onSurface` and "You've reported {name}." in `textMuted` (R3). The rows' 24dp leading icons
+  (`report`, `check`) arrive with the sheet's row rule above, all at once, never one row ahead
+  of the others. Debt 17 in [overhaul-handoff.md](overhaul-handoff.md).
 - Loading and error states inside the sheet, with the existing copy.
 
 ## Decision dialogs
@@ -201,6 +206,18 @@ Implementation and evidence: `docs/milestones/form-dialog-scaffold.md`.
   ignores outside taps: the report form and StepUp (PL, 2026-11-22: a typed password or recovery
   code), in every phase. Back and the dialog's own buttons still close it. Choice sheets keep the
   platform's dismissal.
+- **A shown notice wins over the focused field (PL and TL, 2026-11-22).** Normally the scaffold
+  keeps the focused field in view when the space changes. A form that shows a notice after its
+  action (the report form, for every line after Send) holds that notice in view instead, through
+  a keyboard close or a layout switch, until the person's next interaction: (a) the keyboard
+  going from hidden to shown on the focused field, (b) a focus gain on the field, (c) typing,
+  or (d) a choice such as the report form's category. A keyboard already up when the notice
+  appears doesn't end it. The notice comes into view on each occurrence, from its top edge when
+  it's taller than the space. It's a scroll only, with no focus, caret or announcement change,
+  and it only matters when the notice and the field can't both fit. It's opt-in
+  (`holdFocusedInView`, off by default), so StepUp is unchanged. Details:
+  [form-dialog-scaffold.md](../milestones/form-dialog-scaffold.md); the report form's rules:
+  reporting.md "Lines inside the form".
 
 ## Form dialogs (restyle only)
 

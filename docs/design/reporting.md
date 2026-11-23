@@ -197,6 +197,10 @@ Mockup: `ReportPerson` on the canvas.
   false`.
 - When `reported_by_me` is true, the row is replaced by a non-interactive caption with the
   `check` icon: "**You've reported {name}.**" No second report is offered.
+- **Icons wait for the modals restyle (PL, 2026-11-22).** R3 ships the row and the caption as
+  text only: the row in `onSurface`, the caption in `textMuted`. The `report` and `check` icons
+  arrive with the profile card's restyle (modals-restyle.md), together with the card's other
+  row icons, not before (overhaul-handoff.md debt 17).
 - `can_report` false or missing: nothing is shown. Never your own card.
 - **Room context:** a card opened from a room (room author, presence list) loads the profile
   with that room's `room_id`, and the report sends **the same `room_id`**. A card opened from a
@@ -263,6 +267,30 @@ The person's card, name and messages are otherwise **unchanged** after a report.
 change is the "You've reported {name}." caption, which comes from the server's
 `reported_by_me`, not from local state.
 
+## Lines inside the form (PL and TL, 2026-11-22)
+
+These apply to message and person reports alike: every line the form shows after Send while
+it stays open. That covers the rate line, "Nothing was sent.", the picture-gone and other
+validation lines, "Not sure your report went through." and "Your report didn't arrive."
+- **No focus or keyboard return after a refusal.** Send takes focus and the keyboard away while
+  the report is sending, and a refusal that keeps the form open doesn't bring them back. The
+  person taps the field to carry on; the text and the category are kept.
+- **A line brings itself into view** each time it appears, a repeat of the same line included.
+  A line taller than the space shows from its top edge, so it's read from its start.
+- **It stays in view until the person's next interaction.** The keyboard closing or the
+  dialog's layout switch doesn't scroll it away. The hold ends at the first of:
+  - (a) the keyboard going from hidden to shown while the details field has focus (a tap,
+    TalkBack's double-tap, any re-show);
+  - (b) the details field gaining focus;
+  - (c) typing;
+  - (d) choosing a category.
+
+  A keyboard that's already up when the line appears doesn't end the hold.
+- **Scroll only.** Focus, the caret and TalkBack's focus don't move, and nothing extra is
+  spoken: each line's announcement stays as it was (a level-2 notice announces itself once).
+- The mechanism is the form-dialog scaffold's `holdFocusedInView` (modals-restyle.md,
+  [form-dialog-scaffold.md](../milestones/form-dialog-scaffold.md)).
+
 ## Guests (M7)
 
 Guests may report room messages. The same flow applies, with the room copy, once guest
@@ -310,3 +338,4 @@ for it.
 | P-167 | An unknown person-report result re-reads the profile (`reported_by_me`) before any new report and never resends automatically. Reporting is never gated by rules acceptance. | U |
 | P-225 | A sending report can't be closed, and leaving the conversation doesn't stop it. Its outcome shows once as a level-1 line in the conversation it came from (memory only, fenced, no follow-up sheet on return), or "Sending your report…" until it settles. A genuine background makes it Unknown, shown there as "Not sure your report went through." with Review. A waiting outcome never blocks a new report; a pending Unknown is dropped, unsent, when Report… opens elsewhere; only a report that's sending or checking blocks a new one, with "Your last report is still sending. Try again in a moment." | U, C |
 | P-226 | The follow-up sheet shows the specified title, lead, outlined Ignore or Block and text Done, with no `primary` button, and only when that action applies; otherwise the confirmation line shows alone. The details question is a visible label above the field, exposed once directly before it. The report form ignores outside taps in every phase. | C, S |
+| P-227 | A line the report form shows after Send brings itself into view on every occurrence (from its top edge when taller than the space) and stays in view, through a keyboard close or a layout switch, until the next interaction: the keyboard opening on the focused field, a focus gain, typing or a category choice. It's a scroll only. A refusal that keeps the form open never returns focus or the keyboard. The row and caption on the card are text only until the modals restyle. | C, S |
