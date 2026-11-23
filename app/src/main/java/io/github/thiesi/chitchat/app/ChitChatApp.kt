@@ -99,6 +99,7 @@ import io.github.thiesi.chitchat.feature.profile.ProfileDialog
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.core.server.displayHost
 import io.github.thiesi.chitchat.core.server.AddressError
 import io.github.thiesi.chitchat.core.server.AddressResult
 import io.github.thiesi.chitchat.core.server.ServerAddress
@@ -163,6 +164,8 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     receivedImages: io.github.thiesi.chitchat.core.media.AttachmentImagesViewModel? = null,
     rulesUpdate: io.github.thiesi.chitchat.feature.policies.RulesUpdateViewModel? = null,
     accountDeletion: io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel? = null,
+    serverLinks: io.github.thiesi.chitchat.core.server.PendingServerLink? = null,
+    linkUi: ServerLinkViewModel? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session = auth.state.collectAsStateWithLifecycle().value
@@ -305,6 +308,35 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
         LaunchedEffect(session.phase == SessionPhase.AUTHENTICATED, state.hasLoadedSettings && state.settings.server == null) {
             if (session.phase == SessionPhase.AUTHENTICATED || state.hasLoadedSettings && state.settings.server == null) {
                 savedInOnboarding = false; chosen = false
+            }
+        }
+        // Server prefill P1 (PL rulings A to G, TL): a chitchat://connect link only prefills; it's taken once, here.
+        val pendingLink = serverLinks?.state?.collectAsStateWithLifecycle()?.value
+        LaunchedEffect(pendingLink, session.phase, session.user?.id, state.hasLoadedSettings, state.settings.server, chosen, savedInOnboarding) {
+            val link = pendingLink ?: return@LaunchedEffect
+            if (serverLinks == null || linkUi == null || !state.hasLoadedSettings) return@LaunchedEffect
+            val saved = state.settings.server
+            when {
+                // F: signed in. Nothing switches and nothing is requested; a different host gets the dialog, never stacked.
+                session.phase == SessionPhase.AUTHENTICATED || session.user != null -> if (serverLinks.take(link) &&
+                    link.address != null && link.address != saved && linkUi.signedInDialog.value == null) linkUi.signedInDialog.value = link
+                // No server yet (A, B, G): step 2 applies it when it's on screen (after Welcome).
+                saved == null -> if (serverLinks.take(link)) linkUi.editorPrefill.value = link
+                // Step 2 in place after a failed bootstrap (its field holds the address: C).
+                savedInOnboarding && session.user == null && session.phase == SessionPhase.INVALIDATED && session.error != null ->
+                    if (serverLinks.take(link)) linkUi.editorPrefill.value = link
+                // A bootstrap is running: wait until it settles.
+                session.phase == SessionPhase.CONNECTING || session.phase == SessionPhase.NO_SERVER -> Unit
+                // D: Server found. The same host does nothing; otherwise "Use a different server", filled (saved server kept).
+                session.phase == SessionPhase.ANONYMOUS && !chosen -> if (serverLinks.take(link) && link.address != saved) {
+                    linkUi.editorPrefill.value = link
+                    nav.navigate(SERVER_NEW_ROUTE) { launchSingleTop = true }
+                }
+                // E: a sign-in or create form is open. No navigation; an offer at the top of the form (invalid: silent).
+                session.phase == SessionPhase.ANONYMOUS -> if (serverLinks.take(link) && link.address != null && link.address != saved)
+                    linkUi.formOffer.value = link
+                // Anything else (an update notice, a deletion outcome): taken, ignored.
+                else -> serverLinks.take(link)
             }
         }
         // Reselect at a tab root scrolls that root to the top (navigation-shell.md); one count per tab.
@@ -569,6 +601,13 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                     if (rulesRequired != null && rulesRequired != rulesUi.dismissed)
                         RulesUpdatedDialog(session, state.settings.server?.value, rulesUpdate, policies)
                 }
+                // Server prefill P1, F (PL, TL): a link for another server while signed in. A dialog over whatever is on screen:
+                // no navigation, no request, no departure (its own window suppresses read and typing proof), never stacked.
+                linkUi?.signedInDialog?.collectAsStateWithLifecycle()?.value?.address?.let { linkAddress ->
+                    SignedInLinkDialog(linkAddress.displayHost(), state.settings.server?.displayHost().orEmpty()) {
+                        linkUi.signedInDialog.value = null
+                    }
+                }
                 // "Didn't reach this phone" (O4a2b): on the Rooms root under the status slot, yielding to a level-2 slot
                 // notice like the rules strip. It lasts for this runtime and ends on Go there, Not now or a changed status.
                 if (recoveryKeys != null && entry?.destination?.route == ROOMS_ROUTE && session.phase == SessionPhase.AUTHENTICATED &&
@@ -615,7 +654,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                         else if (!welcomed) WelcomeScreen { welcomed = true }
                                         else {
                                             androidx.activity.compose.BackHandler { welcomed = false }
-                                            ServerEditor(state, model, onSaved = {}, onSubmitted = { savedInOnboarding = true; chosen = false })
+                                            ServerEditor(state, model, onSaved = {}, onSubmitted = { savedInOnboarding = true; chosen = false }, linkUi = linkUi)
                                         }
                                     } else if (session.phase == SessionPhase.AUTHENTICATED) {
                                         // Entering the shell; the signed-in hub is the You tab.
@@ -625,7 +664,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                         // An outdated server is a successful bootstrap and goes to Server found (O1).
                                         ServerEditor(state, model, onSaved = {}, onSubmitted = { savedInOnboarding = true; chosen = false },
                                             connecting = connecting, failure = session.error.takeIf { session.phase == SessionPhase.INVALIDATED },
-                                            onRetry = auth::reconnect)
+                                            onRetry = auth::reconnect, linkUi = linkUi)
                                     } else if (session.phase == SessionPhase.ANONYMOUS && !chosen) {
                                         ServerFound(session, state.settings.server?.value, onChoose = { flow -> auth.selectForm(flow); chosen = true },
                                             onOtherServer = { nav.navigate(SERVER_NEW_ROUTE) },
@@ -636,8 +675,18 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                                         // The consent line's documents open over the form, so it stays composed and keeps what
                                         // was typed (the password never enters saved state; PR #273 review).
                                         var formDocument by rememberSaveable { mutableStateOf<io.github.thiesi.chitchat.core.policies.PolicyDocumentName?>(null) }
+                                        val offer = linkUi?.formOffer?.collectAsStateWithLifecycle()?.value
                                         AuthScreen(session, auth, onBack = { chosen = false },
-                                            onPolicy = policies?.let { { name -> formDocument = name } })
+                                            onPolicy = policies?.let { { name -> formDocument = name } },
+                                            top = offer?.address?.let { address -> {
+                                                LinkOfferLine(address.displayHost(), onUse = {
+                                                    // Only this tap leaves the form (its typed text goes), to step 2 filled (PL, E).
+                                                    linkUi.formOffer.value = null
+                                                    linkUi.editorPrefill.value = offer
+                                                    chosen = false
+                                                    nav.navigate(SERVER_NEW_ROUTE) { launchSingleTop = true }
+                                                }, onDismiss = { linkUi.formOffer.value = null })
+                                            } })
                                         val open = formDocument
                                         if (open != null && policies != null)
                                             PolicyDocumentDialog(policies, open, session, state.settings.server?.value) { formDocument = null }
@@ -676,7 +725,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                         composable(SERVER_NEW_ROUTE) { // "Use a different server": step 2 with the field empty.
                             ScreenContent {
                                 if (session.canChangeServer) ServerEditor(state, model, onSaved = { nav.popBackStack() }, startEmpty = true,
-                                    onSubmitted = { savedInOnboarding = true; chosen = false })
+                                    onSubmitted = { savedInOnboarding = true; chosen = false }, linkUi = linkUi)
                                 else Text(stringResource(R.string.sign_out_to_change_server))
                             }
                         }
@@ -1063,9 +1112,25 @@ private fun ScreenContent(content: @Composable () -> Unit) {
 @Composable
 private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSaved: () -> Unit, startEmpty: Boolean = false,
     onSubmitted: () -> Unit = {}, connecting: Boolean = false, failure: io.github.thiesi.chitchat.core.network.ApiFailure? = null,
-    onRetry: () -> Unit = {}) {
+    onRetry: () -> Unit = {}, linkUi: ServerLinkViewModel? = null) {
     var address by rememberSaveable { mutableStateOf(if (startEmpty) "" else state.settings.server?.value.orEmpty()) }
     var submitted by rememberSaveable { mutableStateOf(false) }
+    // Server prefill P1 (PL rulings A, B, C, G): applied once per link arrival. Only ASCII hosts are ever shown or filled;
+    // an invalid value is never shown, logged or kept (only that the link didn't carry a usable address).
+    var linkFilled by rememberSaveable { mutableStateOf(false) }
+    var linkInvalid by rememberSaveable { mutableStateOf(false) }
+    var offerHost by rememberSaveable { mutableStateOf<String?>(null) }
+    val prefill = linkUi?.editorPrefill?.collectAsStateWithLifecycle()?.value
+    LaunchedEffect(prefill) {
+        val link = prefill ?: return@LaunchedEffect
+        if (linkUi.editorPrefill.value !== link) return@LaunchedEffect
+        linkUi.editorPrefill.value = null
+        val host = link.address?.displayHost()
+        if (address.isBlank()) {
+            if (host != null) { address = host; linkFilled = true; linkInvalid = false; offerHost = null; model.clearAddressError() }
+            else { linkInvalid = true; linkFilled = false }
+        } else if (host != null && (ServerAddress.parse(address) as? AddressResult.Valid)?.address != link.address) offerHost = host
+    }
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val busy = state.saving || connecting
@@ -1073,6 +1138,7 @@ private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSav
         ?: address.trim()
     val submitAddress: () -> Unit = {
         submitted = true
+        linkFilled = false; linkInvalid = false
         val parsed = ServerAddress.parse(address)
         // Continue after a failure on the same address is a fresh bootstrap of it, never a silent no-op.
         if (failure != null && parsed is AddressResult.Valid && parsed.address == state.settings.server) {
@@ -1095,7 +1161,7 @@ private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSav
         if (failure != null && !busy) io.github.thiesi.chitchat.core.ui.InlineError(stringResource(stepTwoNotice(failure), host))
         OutlinedTextField(
             value = address,
-            onValueChange = { address = it; submitted = false; model.clearAddressError() },
+            onValueChange = { address = it; submitted = false; model.clearAddressError(); linkFilled = false; linkInvalid = false },
             modifier = Modifier.fillMaxWidth().testTag("onboarding_server_input"),
             label = { Text(stringResource(R.string.server_address)) },
             supportingText = {
@@ -1113,12 +1179,33 @@ private fun ServerEditor(state: SettingsUiState, model: SettingsViewModel, onSav
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go, autoCorrectEnabled = false),
             keyboardActions = KeyboardActions(onGo = { if (!busy) submitAddress() }),
          shape = MaterialTheme.shapes.medium)
+        // The link's lines, plain text right after the field (PL): filled, invalid, or an offer beside typed text.
+        if (linkFilled) Text(stringResource(R.string.prefill_filled), Modifier.testTag("prefill_filled"),
+            color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.textMuted)
+        if (linkInvalid) Text(stringResource(R.string.prefill_invalid), Modifier.testTag("prefill_invalid"),
+            color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.textMuted)
+        offerHost?.let { host ->
+            LinkOfferLine(host, onUse = {
+                address = host; offerHost = null; linkFilled = true; linkInvalid = false; submitted = false; model.clearAddressError()
+            }, onDismiss = { offerHost = null })
+        }
         PrimaryButton(
             onClick = submitAddress,
             enabled = !busy && address.isNotBlank(),
             modifier = Modifier.fillMaxWidth().testTag("onboarding_continue"),
         ) { Text(if (busy) stringResource(R.string.onboarding_looking_for, host) else stringResource(R.string.save_server)) }
     }
+}
+
+/** Server prefill P1, F (PL copy): signed in, a link for another server. One button; no request, no navigation. */
+@Composable
+private fun SignedInLinkDialog(linkHost: String, savedHost: String, onClose: () -> Unit) {
+    androidx.compose.material3.AlertDialog(onDismissRequest = onClose,
+        modifier = Modifier.testTag("prefill_signed_in"),
+        title = { Text(stringResource(R.string.prefill_signed_in_title)) },
+        text = { io.github.thiesi.chitchat.core.ui.DialogScrollBody { Text(stringResource(R.string.prefill_signed_in_body, linkHost, savedHost)) } },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onClose, modifier = Modifier.testTag("prefill_signed_in_ok")) {
+            Text(stringResource(R.string.prefill_ok)) } })
 }
 
 @Composable

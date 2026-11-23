@@ -612,6 +612,15 @@
     <string name="onboarding_get_started">Get started</string>
     <string name="onboarding_preview">What works in this preview</string>
     <string name="onboarding_where_title">Where do you chat?</string>
+    <!-- Server prefill P1 (PL copy): a chitchat://connect link only prefills; never a host in the filled line. -->
+    <string name="prefill_filled">Filled in from a link. Check the address before you continue.</string>
+    <string name="prefill_offer">The link you opened points to %1$s.</string>
+    <string name="prefill_use">Use this address</string>
+    <string name="prefill_dismiss">Dismiss</string>
+    <string name="prefill_invalid">The link you opened didn\'t contain a server address you can use. Type it instead.</string>
+    <string name="prefill_signed_in_title">You\'re already signed in</string>
+    <string name="prefill_signed_in_body">This link is for %1$s, but you\'re signed in to %2$s. To use another server, sign out first.</string>
+    <string name="prefill_ok">OK</string>
     <string name="onboarding_looking_for">Looking for %1$s…</string>
     <string name="onboarding_not_answering">%1$s isn\'t answering. Check the address and your connection, then try again.</string>
     <string name="onboarding_tls">We couldn\'t verify %1$s\'s security certificate. Check the address. This can\'t be bypassed.</string>

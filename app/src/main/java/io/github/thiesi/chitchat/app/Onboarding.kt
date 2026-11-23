@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,6 +51,23 @@ import io.github.thiesi.chitchat.core.ui.PrimaryButton
  */
 
 /** Step 1. No server saved yet; Get started leads to step 2. Back exits the app (no handler here). */
+@Composable
+internal fun LinkOfferLine(host: String, onUse: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    // Server prefill P1, C and E (PL): a muted line, "Use this address" and a 48dp dismiss; nothing replaces typed text by itself.
+    androidx.compose.foundation.layout.Column(modifier.testTag("prefill_offer")) {
+        androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(stringResource(R.string.prefill_offer, host), androidx.compose.ui.Modifier.weight(1f),
+                color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.textMuted)
+            androidx.compose.material3.IconButton(onClick = onDismiss, modifier = androidx.compose.ui.Modifier.size(48.dp).testTag("prefill_offer_dismiss")) {
+                Icon(painterResource(R.drawable.ic_close), stringResource(R.string.prefill_dismiss), androidx.compose.ui.Modifier.size(24.dp))
+            }
+        }
+        androidx.compose.material3.TextButton(onClick = onUse, modifier = androidx.compose.ui.Modifier.heightIn(min = 48.dp).testTag("prefill_offer_use")) {
+            Text(stringResource(R.string.prefill_use))
+        }
+    }
+}
+
 @Composable
 internal fun WelcomeScreen(onStart: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
