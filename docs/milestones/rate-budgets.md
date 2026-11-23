@@ -121,6 +121,9 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
     - **Hidden (compact with the keyboard):** the same node becomes a 1dp full-width strip at its place, directly above
       the composer block, keeping its description (TL's branch 2, PL-agreed): a zero-height node sent nothing at all on
       run 45233308933. It's the one accepted extra swipe stop, in that rare state; the composer may give up that 1dp.
+      The timeline's block keeps at least 1dp (`heightIn(min = 1.dp)`): squeezed to 0 at 200% portrait with a reply
+      chip and the keyboard up, the strip had zero size and the notice was announced only when the keyboard hid (run
+      45244641951, a real gap, not timing).
     - **Counting (TL and PL rule, a model of TalkBack, not a proof):** an announcement is a carrier event with a non-empty
       spoken text that differs from the last counted one. Any move or resize of a live node also sends events (`SUBTREE`,
       identical text; run 45234305565): those aren't counted but stay listed in the test output. The owner's TalkBack
