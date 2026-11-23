@@ -244,6 +244,9 @@ class RatePresentationTest {
             compose.waitUntil(5_000) { (if (dm) thread.state.value.sendLimit else room.state.value.sendLimit) != null }
             compose.waitForIdle()
             lineOrDot(name, "with the keyboard up", detailsLabel)
+            // TL diagnostic (run 45244641951): the carrier's height when the notice appears; a zero-size node announces nothing.
+            val heightAtAppearance = lineHeight()
+            val drawnAtAppearance = lineDrawn()
             val appeared = heard.mark(compose, sentinel)
             if (!keyboard) {
                 keyboardDown()
@@ -275,7 +278,11 @@ class RatePresentationTest {
             // swaps since, each between two delivered sentinels.
             heard.verify()
             check(opened == 0) { "$name: $opened announcements before the refusal ${heard.spoken()}" }
-            check(appeared - opened == 1) { "$name: ${appeared - opened} announcements for the appearance ${heard.spoken()}" }
+            check(appeared - opened == 1) {
+                "$name: ${appeared - opened} announcements for the appearance (line height ${heightAtAppearance}px, drawn=$drawnAtAppearance) ${heard.spoken()}" }
+            // The carrier has size when the notice appears: the drawn line, or the hidden 1dp strip (TL, PL).
+            check(heightAtAppearance >= context.resources.displayMetrics.density - 0.5f) {
+                "$name: the carrier was ${heightAtAppearance}px tall at appearance (drawn=$drawnAtAppearance)" }
             check(swapped - appeared == 0) { "$name: ${swapped - appeared} announcements for the keyboard or form swaps ${heard.spoken()}" }
             check(heard.texts() == listOf(waitText)) { "$name: the counted texts ${heard.texts()} (expected the full line once) ${heard.spoken()}" }
             // PL (J on af1481d): never assertIsDisplayed alone, which passes on a sliver. The line (when drawn), the composer
@@ -429,6 +436,8 @@ class RatePresentationTest {
 
     private fun detailsState(label: String) =
         compose.onNodeWithContentDescription(label).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+
+    private fun lineHeight() = compose.onNodeWithTag("rate_wait_line").fetchSemanticsNode().size.height
 
     /** The persistent wait line (one node: zero height with no notice, a 1dp strip while hidden) shows its text. */
     private fun lineDrawn() =
