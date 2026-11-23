@@ -49,7 +49,37 @@ upload in an hour, for example) then blocked reading, sending and everything els
 goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, AccountScreen's session line
 (`AccountScreen.kt`, `now < session.retryAtMillis`), and every other screen's wait.
 
-## #323b (next)
+## #323b1: sends, ping and typing (TL split and PL ruling, 2026-11-23)
 
-Sends, ping, typing, author edit and delete, reactions and search get their budgets with the PL's copy and placement.
-After it, only proxy, non-JSON, bootstrap and revalidation 429s reach row 7.
+| Budget | Server policy | Consumed at (b2791a0), before any work | Client call site |
+| --- | --- | --- | --- |
+| `ROOM_SEND` | `room_send` | `rooms/send.php:31–32`, when `PingCommand::parse` (:29) finds no ping | room send |
+| `ROOM_PING` | `room_ping` | the same consume, for a ping | room `/ping` |
+| `DIRECT_MESSAGE_SEND` | `direct_message_send` | `direct-messages/send.php:23–24` | DM send |
+| `TYPING` | `typing` | `typing.php:30` | room and DM typing |
+
+- **Which policy a room send hits:** `isPrivatePingCommand` (phpTrim, then `/ping` or `/ping `) mirrors
+  `src/Realtime/PingCommand.php:14–15` exactly. A bare `/ping` is that parse's 400, before any consume, unchanged.
+- **Guests:** a guest also consumes `guest_room_send` (`rooms/send.php:37`) for the same action. Guests are M7 and the app
+  has none, so there's no budget for it.
+- **Display:** `SessionState.rateWaits` mirrors each known deadline (written under the repository lock, memory only, gone
+  with the state on any runtime replacement). `rateWaitMillis(budget, now)` also fences it to the generation and
+  account. Screens read the same monotonic clock as the gate through `LocalMonotonicClock`, never wall time.
+- **The composer line** (`RateWaitLine`, PL copy): "You've sent a lot of messages recently. Try again in {wait}. Your
+  message is kept." and "You've sent a lot of pings recently. Try again in {wait}." A level-1 muted line on the
+  composer's error line, never error colour, announced once politely.
+  - **{wait}:** computed from the stored deadline at render and frozen until the notice changes; minutes and hours never
+    tick; under a minute reads "less than a minute".
+  - **At the deadline:** one composition-bound one-shot clears the line. It never sends; there's no other timer.
+  - **An unknown wait** sets no gate and shows "…Try again later." until the next draft edit.
+- **Definite:** the draft, reply and attachment stay; nothing becomes unknown; nothing resends. Nothing changed on the
+  server, so history isn't marked stale and Send stays enabled. A tap during the wait is refused locally with no
+  request and keeps the line.
+- **Typing:** silent. During its wait the signal is refused locally and the coordinator shows nothing; only actual input
+  attempts, at the existing cadence.
+- **A proxy's 429** on a send keeps today's handling: the error line, the session-wide wait and row 7.
+
+## #323b2 and #323b3 (next)
+
+Author edit, delete and reactions (a contract change to M5b1, like O3b3b), then message and people search. After #323b3,
+only proxy, non-JSON, bootstrap and revalidation 429s reach row 7.

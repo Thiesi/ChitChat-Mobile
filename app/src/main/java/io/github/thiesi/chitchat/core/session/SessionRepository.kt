@@ -138,6 +138,12 @@ data class SessionState(
      * Read only by Send when back online, which needs a revalidation strictly newer than its reconnect.
      */
     val bootstrapSequence: Long = 0,
+    /**
+     * #323b: each [RateBudget]'s known server wait, for display only (the gate itself reads the runtime's own map under
+     * the lock). Memory only, written under the same lock, and gone with the state on any runtime replacement. Read it
+     * through [rateWaitMillis], which also fences it to this generation and account.
+     */
+    val rateWaits: Map<RateBudget, RateWait> = emptyMap(),
 ) {
     val canChangeServer get() = phase !in setOf(SessionPhase.AUTHENTICATED, SessionPhase.PENDING_MFA, SessionPhase.GUEST) && !storageWarning && !busy
 }
@@ -266,7 +272,8 @@ class SessionRepository internal constructor(
             } catch (_: IOException) {
                 runtime?.api?.close()
                 runtime = null
-                mutable.value = mutable.value.copy(phase = SessionPhase.INVALIDATED, error = ApiFailure(FailureKind.STORAGE))
+                mutable.value = mutable.value.copy(phase = SessionPhase.INVALIDATED, error = ApiFailure(FailureKind.STORAGE),
+                    rateWaits = emptyMap())
                 null
             }
         } ?: return
@@ -937,7 +944,10 @@ class SessionRepository internal constructor(
                 retryAfterSeconds = (mutable.value.retryAtMillis - clock.millis() + 999) / 1000)
             if (budget != null) active.budgets[budget]?.let { wait ->
                 val left = wait.untilElapsed - elapsed()
-                if (wait.generation != access.generation || wait.userId != access.userId || left <= 0) active.budgets.remove(budget)
+                if (wait.generation != access.generation || wait.userId != access.userId || left <= 0) {
+                    active.budgets.remove(budget)
+                    mutable.value = mutable.value.copy(rateWaits = mutable.value.rateWaits - budget)
+                }
                 else throw ApiFailure(FailureKind.HTTP, 429, "rate_limited", retryAfterSeconds = (left + 999) / 1000, localGate = true)
             }
         }
@@ -957,7 +967,10 @@ class SessionRepository internal constructor(
                     val budgeted = budget != null && failure.isServerRateBudget()
                     // The server's wait (already capped, Retry-After first) on the monotonic clock; unknown sets no gate.
                     if (budgeted && active != null) failure.retryAfterSeconds?.takeIf { it > 0 }?.let { seconds ->
-                        active.budgets[checkNotNull(budget)] = BudgetWait(access.generation, access.userId, elapsed() + seconds * 1000)
+                        val until = elapsed() + seconds * 1000
+                        active.budgets[checkNotNull(budget)] = BudgetWait(access.generation, access.userId, until)
+                        if (runtime === active) mutable.value = mutable.value.copy(
+                            rateWaits = mutable.value.rateWaits + (budget to RateWait(until, access.generation, access.userId)))
                     }
                     // Resource validation/permission errors belong to that screen, not global logout.
                     if (active != null && !budgeted && (failure.status == 401 || failure.status == 429 || failure.status == 503 ||

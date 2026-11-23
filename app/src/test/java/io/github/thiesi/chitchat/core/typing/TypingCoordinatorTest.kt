@@ -43,6 +43,23 @@ class TypingCoordinatorTest {
         f.model.sent(f.expected, room); f.model.input(f.expected, room, true); runCurrent()
         assertEquals(3, f.api.calls.size)
     }
+    /** #323b1: during the typing policy's wait (the server's 429 or the local gate) typing shows nothing and stays quiet. */
+    @Test fun aRateLimitedTypingSignalShowsNothingAndNeverReplays() = runTest {
+        val f = Fixture(this); runCurrent()
+        val before = f.model.state.value
+        f.api.failure = io.github.thiesi.chitchat.core.network.ApiFailure(io.github.thiesi.chitchat.core.network.FailureKind.HTTP,
+            429, "rate_limited", 30)
+        f.model.input(f.expected, room, true); runCurrent()
+        assertEquals("One attempt", 1, f.api.calls.size)
+        assertEquals("Nothing shows: no line, no state", before, f.model.state.value)
+        f.api.failure = io.github.thiesi.chitchat.core.network.ApiFailure(io.github.thiesi.chitchat.core.network.FailureKind.HTTP,
+            429, "rate_limited", 25, localGate = true)
+        advanceTimeBy(10_000); runCurrent()
+        assertEquals("Never replayed by a timer", 1, f.api.calls.size)
+        f.model.input(f.expected, room, true); runCurrent()
+        assertEquals("Only actual input attempts, at the existing cadence", 2, f.api.calls.size)
+        assertEquals(before, f.model.state.value)
+    }
     @Test fun ownPublishingRestrictionDoesNotHideOtherPeopleAndMessageRemovesTheirHint() = runTest {
         val f = Fixture(this); f.model.select(f.expected, room, true, false); runCurrent()
         f.model.input(f.expected, room, true); runCurrent(); assertTrue(f.api.calls.isEmpty())
@@ -152,8 +169,10 @@ class TypingCoordinatorTest {
         val calls = mutableListOf<TypingTarget>()
         var hold = false
         var cancelled = 0
+        var failure: io.github.thiesi.chitchat.core.network.ApiFailure? = null
         override suspend fun signal(expected: SessionState, target: TypingTarget): Boolean {
             calls += target
+            failure?.let { throw it }
             if (hold) try { awaitCancellation() } finally { cancelled++ }
             return false // Suppressed is a normal server result.
         }

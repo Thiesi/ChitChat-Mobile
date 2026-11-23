@@ -23,6 +23,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -284,6 +285,53 @@ class ConversationViewModelTest {
         assertEquals("/ping Bob fixture", model.state.value.draft)
         fake.sendFailure = null; acceptRules(); advanceUntilIdle()
         assertEquals(1, fake.sends)
+    }
+
+    // #323b1: the send's or ping's own `429 rate_limited` (server or local gate) is definite: the line, not the error; the
+    // draft and reply stay, nothing is unknown, nothing resends. A proxy 429 keeps today's handling.
+    private fun limited(seconds: Long?, local: Boolean = false) = ApiFailure(FailureKind.HTTP, 429, "rate_limited", seconds, localGate = local)
+
+    @Test fun aRateLimitedSendShowsItsLineKeepsTheDraftAndNeverResends() = runTest(dispatcher) {
+        open(); fake.sendFailure = limited(120)
+        model.updateDraft("Unsent fixture"); model.send(); advanceUntilIdle()
+        assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(io.github.thiesi.chitchat.core.session.RateBudget.ROOM_SEND, true),
+            model.state.value.sendLimit)
+        assertNull("The line, not the error", model.state.value.error)
+        assertFalse("Definite, never unknown", model.state.value.uncertainSend)
+        assertEquals("The draft stays", "Unsent fixture", model.state.value.draft)
+        assertNotNull("Reading continues", model.state.value.context)
+        // Nothing changed on the server: history isn't stale and Send stays enabled (PL, TL).
+        assertFalse("Not stale", model.state.value.stale)
+        assertTrue("Send stays enabled", model.canSend())
+        // A tap during the wait: the local gate refuses, nothing is sent, and the line stays.
+        fake.sendFailure = limited(119, local = true); model.send(); advanceUntilIdle()
+        assertNotNull(model.state.value.sendLimit); assertEquals("Unsent fixture", model.state.value.draft)
+        // A known wait isn't dropped by an edit; nothing resends by itself.
+        model.updateDraft("Edited fixture"); advanceTimeBy(1_000_000); advanceUntilIdle()
+        assertNotNull("A known wait stays until its deadline", model.state.value.sendLimit)
+        assertEquals("Later content survives", "Edited fixture", model.state.value.draft)
+        assertEquals("Each send was one explicit press", 2, fake.sends)
+        fake.sendFailure = null; model.send(); advanceUntilIdle()
+        assertNull("A confirmed send clears it", model.state.value.sendLimit)
+    }
+
+    @Test fun aRateLimitedPingUsesThePingBudgetAndAnUnknownWaitEndsAtTheNextEdit() = runTest(dispatcher) {
+        open(); fake.sendFailure = limited(null)
+        model.updateDraft("/ping Bob fixture"); model.send(); advanceUntilIdle()
+        assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING, false),
+            model.state.value.sendLimit)
+        assertFalse(model.state.value.uncertainSend); assertEquals("/ping Bob fixture", model.state.value.draft)
+        model.updateDraft("/ping Bob fixture!")
+        assertNull("An unknown wait ends at the next interaction", model.state.value.sendLimit)
+        assertEquals(1, fake.sends)
+    }
+
+    @Test fun aProxy429OnASendKeepsTodaysHandling() = runTest(dispatcher) {
+        open(); fake.sendFailure = ApiFailure(FailureKind.HTTP, 429, null, 40)
+        model.updateDraft("Unsent fixture"); model.send(); advanceUntilIdle()
+        assertNull("No rate line for a proxy's 429", model.state.value.sendLimit)
+        assertEquals(429, model.state.value.error?.status)
+        assertFalse(model.state.value.uncertainSend); assertEquals("Unsent fixture", model.state.value.draft)
     }
 
     private class Conversations : ConversationOperations {

@@ -685,6 +685,11 @@ private fun ThreadFeedback(model: DirectThreadViewModel, state: DirectThreadStat
     if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
     if (state.anchorLost) Text(stringResource(R.string.conversation_anchor_unavailable))
     if (state.incompleteRange) Text(stringResource(R.string.conversation_range_unavailable))
+    // #323b (PL): the send's own wait, a level-1 muted line on the composer's error line.
+    state.sendLimit?.let { limit ->
+        val session by model.session.collectAsState()
+        io.github.thiesi.chitchat.core.ui.RateWaitLine(session, limit, R.string.rate_wait_messages, R.string.rate_wait_messages_unknown)
+    }
     state.error?.let { InlineError(directError(it)) }
     state.validation?.let { InlineError(stringResource(if (it == "empty_message") R.string.dm_empty_body else R.string.dm_long_body)) }
     if (state.confirmedSendId != null && (state.error != null || state.stale)) Text(stringResource(R.string.dm_confirmed))

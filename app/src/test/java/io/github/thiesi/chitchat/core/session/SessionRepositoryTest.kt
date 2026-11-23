@@ -489,6 +489,26 @@ class SessionRepositoryTest {
         assertEquals(count + 1, server.requestCount)
     }
 
+    /** #323b: the known deadline is mirrored into the state for display, fenced, and gone with the wait or the session. */
+    @Test fun aKnownBudgetWaitIsMirroredForDisplayAndClearedWithIt() = runTest {
+        login(); val access = sessions.openAccess()
+        assertNull(sessions.state.value.rateWaitMillis(RateBudget.ROOM_SEND, elapsedNow))
+        server.enqueue(limited(30)); budgeted(access, RateBudget.ROOM_SEND); server.takeRequest()
+        assertEquals(30_000L, sessions.state.value.rateWaitMillis(RateBudget.ROOM_SEND, elapsedNow))
+        assertNull("Only that budget", sessions.state.value.rateWaitMillis(RateBudget.ROOM_PING, elapsedNow))
+        assertEquals(10_000L, sessions.state.value.rateWaitMillis(RateBudget.ROOM_SEND, elapsedNow + 20_000))
+        assertNull("Another account sees nothing", sessions.state.value.copy(user = sessions.state.value.user?.copy(id = 99))
+            .rateWaitMillis(RateBudget.ROOM_SEND, elapsedNow))
+        elapsedNow += 30_000
+        assertNull("Over at the deadline", sessions.state.value.rateWaitMillis(RateBudget.ROOM_SEND, elapsedNow))
+        server.enqueue(error("validation_error", 400)); budgeted(access, RateBudget.ROOM_SEND); server.takeRequest()
+        assertFalse("The next press drops the expired entry", RateBudget.ROOM_SEND in sessions.state.value.rateWaits)
+        server.enqueue(limited(30)); budgeted(access, RateBudget.TYPING); server.takeRequest()
+        assertTrue(RateBudget.TYPING in sessions.state.value.rateWaits)
+        server.enqueue(json("""{"status":"logged_out"}""")); sessions.signOut(); server.takeRequest()
+        assertTrue("Sign-out drops every wait", sessions.state.value.rateWaits.isEmpty())
+    }
+
     @Test fun aBudgetGateUsesRetryAfterFirstAndTheCap() = runTest {
         login(); val access = sessions.openAccess()
         server.enqueue(MockResponse.Builder().code(429).addHeader("Retry-After", "45").addHeader("Content-Type", "application/json")

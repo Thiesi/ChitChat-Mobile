@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.core.conversation
 
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
+import io.github.thiesi.chitchat.core.session.RateBudget
 import io.github.thiesi.chitchat.core.session.SessionRepository
 
 /** No independent cookie jar or authentication path. Bootstrap/policy remain session-owned. */
@@ -35,7 +36,9 @@ internal class SessionConversationRepository(private val sessions: SessionReposi
     }
     override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult {
         val access = sessions.openAccess()
-        return sessions.authorized(access) { sendRoomMessage(roomId, body, access.csrf, access.userId, replyId) }
+        // #323b: rooms/send.php consumes room_ping or room_send by the same parse isPrivatePingCommand mirrors.
+        val budget = if (isPrivatePingCommand(body)) RateBudget.ROOM_PING else RateBudget.ROOM_SEND
+        return sessions.authorized(access, budget) { sendRoomMessage(roomId, body, access.csrf, access.userId, replyId) }
     }
     override suspend fun read(roomId: Long, messageId: Long): Long {
         val access = sessions.openAccess()

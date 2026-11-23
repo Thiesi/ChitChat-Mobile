@@ -47,6 +47,10 @@ import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.core.realtime.awaitSendWhenBackOnline
 import io.github.thiesi.chitchat.core.session.SessionPhase
+import io.github.thiesi.chitchat.core.conversation.isPrivatePingCommand
+import io.github.thiesi.chitchat.core.session.RateBudget
+import io.github.thiesi.chitchat.core.session.RateLimitNotice
+import io.github.thiesi.chitchat.core.session.isRateBudgetRefusal
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.targets.MessageTarget
 import io.github.thiesi.chitchat.core.targets.TargetSnapshot
@@ -88,6 +92,12 @@ data class ConversationUiState(
     val authorUnknown: RoomAuthorUnknown? = null, val authorLimit: Boolean = false,
     val reactionDialog: RoomReactionDialog? = null, val reactionWriting: Boolean = false,
     val reactionUnknown: RoomReactionUnknown? = null, val reactionLimit: Boolean = false,
+    /**
+     * #323b: this room's send or ping hit its policy's own `429 rate_limited` (server or local gate). Definite: the draft,
+     * reply and attachment stay, nothing is unknown, nothing resends. A known wait shows until its deadline; an unknown
+     * one until the next draft edit. Kept while a send is attempted, so a tap during the wait keeps the line.
+     */
+    val sendLimit: RateLimitNotice? = null,
     val attachmentReview: RoomAttachmentReview? = null,
 ) { override fun toString() = "ConversationUiState" }
 
@@ -243,7 +253,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
             waiting != null || mutable.value.attachmentReview != null || mutable.value.authorDialog != null || mutable.value.authorWriting || mutable.value.reactionDialog != null ||
             mutable.value.reactionWriting) return false
         if (!canEditDraft() && value.isNotEmpty()) { mutable.value = mutable.value.copy(draftLimit = true); return false }
-        mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false)
+        mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false,
+            sendLimit = mutable.value.sendLimit?.takeIf { it.knownWait })
         rememberDraft(); return true
     }
     fun canUseMessage(expected: SessionState, roomId: Long?, message: RoomMessage): Boolean {
@@ -1215,13 +1226,14 @@ class ConversationViewModel internal constructor(private val operations: Convers
     private fun performSend(body: String, replyId: Long?) {
         val value = mutable.value
         val typingSession = session.value
-        request(sending = true) { current ->
+        request(sending = true, rateBudget = if (isPrivatePingCommand(body)) RateBudget.ROOM_PING else RateBudget.ROOM_SEND) { current ->
             postInFlight = true
             val result = operations.send(checkNotNull(value.roomId), body, replyId)
             current(); postInFlight = false
             typing?.sent(typingSession, TypingTarget.Room(checkNotNull(value.roomId)))
             realtime?.activity(checkNotNull(value.roomId)) // Only an acknowledged, current send/ping.
-            mutable.value = mutable.value.copy(draft = "", composerReply = null, notice = if (result is SendResult.Ping) "ping_sent" else "sent")
+            mutable.value = mutable.value.copy(draft = "", composerReply = null, sendLimit = null,
+                notice = if (result is SendResult.Ping) "ping_sent" else "sent")
             when (result) {
                 is SendResult.Message -> if (value.latestWindow) {
                     val existing = mutable.value
@@ -1496,7 +1508,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
         selectPresence()
     }
 
-    private fun request(sending: Boolean = false, preserveAttachmentReview: Boolean = false, action: suspend (() -> Unit) -> Unit) {
+    private fun request(sending: Boolean = false, preserveAttachmentReview: Boolean = false, rateBudget: RateBudget? = null,
+        action: suspend (() -> Unit) -> Unit) {
         val roomId = mutable.value.roomId ?: return
         val expected = session.value.identity() ?: return
         if (mutable.value.busy || uploadPosting != null || expected != identity) return
@@ -1516,13 +1529,19 @@ class ConversationViewModel internal constructor(private val operations: Convers
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: ApiFailure) {
                 if (isCurrent(expected, attempt, roomId)) {
-                    if (failure.status in setOf(403, 404) && failure.code != "csrf_failed" &&
+                    // #323b: the send's own policy refusal (rooms/send.php consumes before any work, so it's definite):
+                    // its line, not the error; the draft, reply and attachment stay, nothing becomes unknown. Nothing
+                    // changed on the server, so history isn't marked stale and Send stays enabled (PL); a tap during the
+                    // wait is refused locally with no request and keeps the line.
+                    if (rateBudget != null && failure.isRateBudgetRefusal())
+                        mutable.value = mutable.value.copy(sendLimit = RateLimitNotice(rateBudget, failure.retryAfterSeconds != null))
+                    else if (failure.status in setOf(403, 404) && failure.code != "csrf_failed" &&
                         (!postInFlight || failure.code in setOf("room_forbidden", "room_not_found")))
                         // A definitive rejection of this request. A send refused with room_not_found says so
                         // in its own words (ChitChat #326); the draft stays as it is.
                         clearUnauthorized(if (sending && failure.code == "room_not_found")
                             ApiFailure(failure.kind, failure.status, ROOM_UNAVAILABLE_ON_SEND) else failure, unknownWrite = false)
-                    else mutable.value = mutable.value.copy(error = failure, stale = true,
+                    else mutable.value = mutable.value.copy(error = failure, stale = true, sendLimit = null,
                         uncertainSend = mutable.value.uncertainSend || (postInFlight && failure.ambiguous()),
                         reconciledAfterUncertain = false)
                 }

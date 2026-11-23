@@ -26,6 +26,9 @@ import io.github.thiesi.chitchat.core.typing.TypingController
 import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.core.realtime.awaitSendWhenBackOnline
+import io.github.thiesi.chitchat.core.session.RateBudget
+import io.github.thiesi.chitchat.core.session.RateLimitNotice
+import io.github.thiesi.chitchat.core.session.isRateBudgetRefusal
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.targets.MessageTarget
 import io.github.thiesi.chitchat.core.targets.TargetSnapshot
@@ -62,7 +65,13 @@ data class DirectThreadState(val peerId: Long? = null, val context: DirectContex
     val reactionNotice: String? = null,
     val attachmentReview: DirectAttachmentReview? = null,
     /** Send when back online (S4b): this conversation's draft waits for the connection; it is not an attempt. */
-    val waitingToSend: Boolean = false) { override fun toString() = "DirectThreadState" }
+    val waitingToSend: Boolean = false,
+    /**
+     * #323b: this conversation's send hit direct_message_send's own `429 rate_limited` (server or local gate). Definite:
+     * the draft, reply and attachment stay, nothing is unknown, nothing resends. A known wait shows until its deadline;
+     * an unknown one until the next draft edit. Kept while a send is attempted, so a tap during the wait keeps the line.
+     */
+    val sendLimit: RateLimitNotice? = null) { override fun toString() = "DirectThreadState" }
 
 /** One serialized operation per thread: hints queue behind writes, never cancel/replay a POST. */
 class DirectThreadViewModel internal constructor(private val operations: DirectOperations,
@@ -555,9 +564,18 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
                 // after a mutation starts keeps M5b1's possibly-committed handling.
                 if (failure.isRulesRefusal()) { authorPosting = null; reactionPosting = null }
                 val pending = write
+                // #323b: the send's own policy refusal (direct-messages/send.php consumes before any work: definite).
+                // Its line, not the error; the draft, reply and attachment stay, nothing becomes unknown. Nothing changed
+                // on the server, so history isn't marked stale and Send stays enabled (PL).
+                if (pending == Write.SEND && failure.isRateBudgetRefusal()) {
+                    mutable.value = mutable.value.copy(
+                        sendLimit = RateLimitNotice(RateBudget.DIRECT_MESSAGE_SEND, failure.retryAfterSeconds != null))
+                    return@launch
+                }
                 val inaccessible = pending == null && (failure.status == 404 ||
                     failure.status == 403 && failure.code != "csrf_failed") || failure.kind == FailureKind.INCOMPATIBLE && pending == null
                 mutable.value = mutable.value.copy(error = failure.takeUnless { pending == Write.READ }, stale = true,
+                    sendLimit = mutable.value.sendLimit.takeUnless { pending == Write.SEND },
                     context = mutable.value.context.takeUnless { inaccessible },
                     messages = if (inaccessible) emptyList() else mutable.value.messages,
                     authorDialog = mutable.value.authorDialog.takeUnless { inaccessible },
@@ -720,7 +738,8 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     fun updateDraft(expected: SessionState, peer: Long?, value: String): Boolean {
         if (!selected(expected, peer) || mutable.value.sending || waiting != null || mutable.value.authorDialog != null || mutable.value.reactionDialog != null || mutable.value.attachmentReview != null) return false
         if (!canEditDraft() && value.isNotEmpty()) { mutable.value = mutable.value.copy(draftLimit = true); return false }
-        mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false)
+        mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false,
+            sendLimit = mutable.value.sendLimit?.takeIf { it.knownWait })
         rememberDraft(); return true
     }
     fun canUseMessage(expected: SessionState, peer: Long?, message: DirectMessage): Boolean {
@@ -799,7 +818,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             typing?.sent(typingSession, TypingTarget.Direct(peer))
             write = null
             mutable.value = mutable.value.copy(draft = "", composerReply = null, sending = false, uncertainSend = false,
-                checkedUnknown = false, confirmedSendId = confirmed)
+                checkedUnknown = false, confirmedSendId = confirmed, sendLimit = null)
             rememberDraft()
             reload(peer, latest = true)
         }

@@ -17,6 +17,25 @@ enum class RateBudget {
     USER_REPORT,
 
     /**
+     * `room_send`: `public/api/v1/rooms/send.php:31–32`, when `PingCommand::parse` (:29) finds no ping. A bare `/ping` is
+     * that parse's 400, before any consume, and stays as it is. A guest also consumes `guest_room_send` (:37) for the same
+     * action; guests are M7 and the app has none, so there's no budget for it.
+     */
+    ROOM_SEND,
+
+    /**
+     * `room_ping`: the same consume (`rooms/send.php:31–32`) for a ping. `isPrivatePingCommand` (phpTrim, then `/ping` or
+     * `/ping `) mirrors `src/Realtime/PingCommand.php:14–15` exactly, so the client knows which policy a send hits.
+     */
+    ROOM_PING,
+
+    /** `direct_message_send`: `public/api/v1/direct-messages/send.php:23–24`, before DirectMessageService. */
+    DIRECT_MESSAGE_SEND,
+
+    /** `typing`: `public/api/v1/typing.php:30`, rooms and DMs alike, before TypingService. */
+    TYPING,
+
+    /**
      * `push_subscription_management`: `public/api/v1/push/update-preferences.php:23–24` and
      * `public/api/v1/push/revoke-device.php:23–24`, each before the service. Not `push/subscribe.php`, which can refuse
      * under `push_subscription_refresh` (`subscribe.php:23–24`) or this policy (`PushSubscriptionService.php:48/79`), so it
@@ -54,6 +73,26 @@ enum class RateBudget {
      */
     RECOVERY_KEY_MANAGEMENT,
 }
+
+/**
+ * Which rate refusal a screen shows (#323b): the budget its own `429 rate_limited` hit (server or local gate), and
+ * whether the server gave a wait. A known wait shows until its deadline; an unknown one until the next interaction.
+ */
+data class RateLimitNotice(val budget: RateBudget, val knownWait: Boolean)
+
+/** A policy's own `429 rate_limited`, the server's or the local gate's: never a proxy's 429. */
+fun io.github.thiesi.chitchat.core.network.ApiFailure.isRateBudgetRefusal() = status == 429 && code == "rate_limited"
+
+/** #323b: a known wait for display, on the monotonic clock, stamped with its generation and account. */
+data class RateWait(val untilElapsed: Long, val generation: Long, val userId: Long)
+
+/**
+ * The remaining known wait for [budget] in milliseconds at [nowElapsed] (the same monotonic clock the repository uses),
+ * or null when there's none, it's over, or it belongs to another generation or account.
+ */
+fun SessionState.rateWaitMillis(budget: RateBudget, nowElapsed: Long): Long? =
+    rateWaits[budget]?.takeIf { it.generation == generation && it.userId == user?.id }
+        ?.let { (it.untilElapsed - nowElapsed).takeIf { left -> left > 0 } }
 
 /** A policy limiter's own refusal from the server: exactly `429 rate_limited`, never a local gate or a proxy's 429. */
 internal fun io.github.thiesi.chitchat.core.network.ApiFailure.isServerRateBudget() =

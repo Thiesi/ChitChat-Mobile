@@ -433,6 +433,13 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             if (draftCount > 0) TextButton(onClick = { close(); model.showDrafts(displayedSession) }) {
                 Text(stringResource(R.string.room_drafts_count, draftCount))
             }
+            // #323b (PL): the send's or ping's own wait, a level-1 muted line on the composer's error line.
+            state.sendLimit?.let { limit ->
+                val ping = limit.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
+                io.github.thiesi.chitchat.core.ui.RateWaitLine(displayedSession, limit,
+                    if (ping) R.string.rate_wait_pings else R.string.rate_wait_messages,
+                    if (ping) R.string.rate_wait_pings_unknown else R.string.rate_wait_messages_unknown)
+            }
             state.error?.let { InlineError(conversationError(it)) }
             state.syncError?.let {
                 InlineError(if (it.code == "history_range_unavailable") stringResource(R.string.conversation_range_unavailable)
