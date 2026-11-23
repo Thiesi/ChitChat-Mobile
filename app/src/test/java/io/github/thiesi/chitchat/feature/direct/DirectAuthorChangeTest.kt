@@ -130,6 +130,29 @@ class DirectAuthorChangeTest {
         assertNull(model.state.value.authorUnknown); assertEquals(1, changes.edits)
     }
 
+    /** #70/#284 (PL ruling B): the dialog's recovery flag starts on entering unknown, survives Check, edits and Review. */
+    @Test fun theRecoveryPathIsMarkedFromUnknownUntilTheDialogCloses() = runTest(dispatcher) {
+        open(); val owner = api.session.value; val old = choose()
+        assertFalse("A first edit isn't on the recovery path", checkNotNull(model.state.value.authorDialog).recovery)
+        model.updateAuthorBody(old, "Committed proposal")
+        assertFalse(checkNotNull(model.state.value.authorDialog).recovery)
+        changes.failure = ApiFailure(FailureKind.HTTP, 500); changes.commitBeforeFailure = true
+        model.submitAuthor(old); runCurrent(); val marker = checkNotNull(model.state.value.authorUnknown)
+        assertTrue("Unknown starts it", checkNotNull(model.state.value.authorDialog).recovery)
+        model.checkAuthorHistory(owner, marker); runCurrent()
+        assertTrue("Check keeps it", checkNotNull(model.state.value.authorDialog).recovery)
+        assertTrue(model.reviewAuthorProposal(old)); val fresh = checkNotNull(model.state.value.authorDialog).request
+        assertTrue("Review carries it to the fresh dialog", checkNotNull(model.state.value.authorDialog).recovery)
+        model.submitAuthor(fresh); runCurrent()
+        assertTrue("The unchanged validation keeps it", checkNotNull(model.state.value.authorDialog).recovery)
+        model.updateAuthorBody(fresh, "Another choice")
+        assertTrue("An edit keeps it", checkNotNull(model.state.value.authorDialog).recovery)
+        model.dismissAuthor(fresh)
+        assertNull("It goes with the dialog", model.state.value.authorDialog)
+        choose()
+        assertFalse("A fresh first edit starts without it", checkNotNull(model.state.value.authorDialog).recovery)
+    }
+
     @Test fun committedButUnconfirmedEditNeedsExplicitGetAndFreshChoiceNotReplay() = runTest(dispatcher) {
         open(); val owner = api.session.value; val old = choose(); model.updateAuthorBody(old, "Committed proposal")
         changes.failure = ApiFailure(FailureKind.HTTP, 500); changes.commitBeforeFailure = true

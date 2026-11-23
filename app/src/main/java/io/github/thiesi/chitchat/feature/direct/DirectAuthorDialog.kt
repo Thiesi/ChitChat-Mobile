@@ -16,6 +16,6 @@ internal fun DirectAuthorChangeDialog(dialog: DirectAuthorDialog, targetCurrent:
         else -> R.string.dm_long_body
     }) }
     MessageAuthorChangeDialog(AuthorDialogPresentation(dialog.request.kind, dialog.body,
-        dialog.request.original.body.orEmpty(), validation, dialog.checked, pending?.messageId),
+        dialog.request.original.body.orEmpty(), validation, dialog.checked, pending?.messageId, dialog.recovery || pending != null),
         targetCurrent, available, busy, onChange, onConfirm, onDismiss, canConfirm, currentPreview, error)
 }

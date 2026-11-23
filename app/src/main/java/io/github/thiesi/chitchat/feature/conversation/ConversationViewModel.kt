@@ -791,7 +791,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
         val dialog = checkNotNull(mutable.value.authorDialog)
         val current = checkNotNull(currentAuthorRow(request))
         mutable.value = mutable.value.copy(authorDialog = RoomAuthorDialog(
-            RoomAuthorRequest(request.expected, current, AuthorChangeKind.EDIT), dialog.body), error = null)
+            RoomAuthorRequest(request.expected, current, AuthorChangeKind.EDIT), dialog.body, recovery = dialog.recovery), error = null)
         return true
     }
 
@@ -810,7 +810,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
 
     fun updateAuthorBody(request: RoomAuthorRequest, body: String) {
         if (authorAvailable(request) && !mutable.value.busy && request.kind == AuthorChangeKind.EDIT)
-            mutable.value = mutable.value.copy(authorDialog = RoomAuthorDialog(request, body))
+            mutable.value = mutable.value.copy(authorDialog = RoomAuthorDialog(request, body,
+                recovery = mutable.value.authorDialog?.takeIf { it.request === request }?.recovery == true))
     }
 
     fun dismissAuthor(request: RoomAuthorRequest) {
@@ -825,7 +826,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
         if (request.kind == AuthorChangeKind.EDIT) {
             val invalid = validateEditedBody(body) ?: "message_unchanged".takeIf { body.phpTrim() == request.original.body }
             if (invalid != null) {
-                mutable.value = value.copy(authorDialog = RoomAuthorDialog(request, body, invalid)); return
+                mutable.value = value.copy(authorDialog = RoomAuthorDialog(request, body, invalid,
+                    recovery = value.authorDialog?.takeIf { it.request === request }?.recovery == true)); return
             }
         }
         mutationRequest(request.original.roomId) { current ->
@@ -867,7 +869,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
                 val retained = editor?.takeIf { mutable.value.authorDialog?.request === it.request }
                 mutable.value = mutable.value.copy(authorUnknown = null, authorLimit = false, notice = "author_checked",
                     authorDialog = if (retained != null && retained.request.kind == AuthorChangeKind.EDIT)
-                        RoomAuthorDialog(retained.request, retained.body, checked = true)
+                        RoomAuthorDialog(retained.request, retained.body, checked = true, recovery = true)
                     else if (retained != null) null else mutable.value.authorDialog)
             }
         }
@@ -876,7 +878,10 @@ class ConversationViewModel internal constructor(private val operations: Convers
     private fun rememberUnknownAuthor(request: RoomAuthorRequest) {
         val unknown = RoomAuthorUnknown(request.original.roomId, request.original.id, request.kind)
         unknownAuthors[unknown.roomId] = unknown // Capacity was reserved before the POST could start.
-        if (mutable.value.roomId == unknown.roomId) mutable.value = mutable.value.copy(authorUnknown = unknown)
+        if (mutable.value.roomId == unknown.roomId) mutable.value = mutable.value.copy(authorUnknown = unknown,
+            // The dialog's recovery path starts here (#70/#284): its confirm keeps one row arrangement until it closes.
+            authorDialog = mutable.value.authorDialog?.let { dialog -> if (dialog.request === request)
+                RoomAuthorDialog(dialog.request, dialog.body, dialog.validation, dialog.checked, recovery = true) else dialog })
     }
 
     private fun reactionRowCurrent(request: RoomReactionRequest): Boolean {
