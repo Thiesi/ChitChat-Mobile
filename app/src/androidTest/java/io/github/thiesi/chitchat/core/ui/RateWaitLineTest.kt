@@ -255,6 +255,12 @@ class RateWaitLineTest {
 
     private fun announcements() = LiveAnnouncements { node -> node.contentDescription?.toString() == "Send" }
 
+    /** Opens Compose's accessibility-event gate on this test's window (see ComposeAccessibilityForcing). */
+    private fun LiveAnnouncements.attachHost() {
+        val activity = (compose as androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>).activity as android.app.Activity
+        compose.runOnUiThread { attach(activity.window.decorView) }
+    }
+
     /**
      * TL/PL: exactly one announcement when a notice appears and per refused tap; none on clearing (unknown wait dropped).
      * Every count is between two delivered sentinels (the positive control).
@@ -262,6 +268,7 @@ class RateWaitLineTest {
     @Test fun sendAnnouncesOnceOnAppearanceAndPerRefusalAndClearsSilently() {
         announcements().use { heard ->
             send(paused = false)
+            heard.attachHost()
             val start = heard.mark(compose, sentinel)
             compose.runOnIdle { notice = RateLimitNotice(RateBudget.ROOM_SEND, false) }
             val appeared = heard.mark(compose, sentinel)
@@ -290,6 +297,7 @@ class RateWaitLineTest {
             notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
             deadline = base + compose.mainClock.currentTime + 2_000
             send(paused = false)
+            heard.attachHost()
             val before = heard.mark(compose, sentinel)
             compose.mainClock.advanceTimeBy(2_500)
             compose.waitForIdle()

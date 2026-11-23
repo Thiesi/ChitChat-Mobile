@@ -37,11 +37,11 @@ private const val FLUSH = "ccm-live-flush-"
  * run; [verify] rethrows it (cause kept, diagnostics in the message) before any count is asserted. No sleep, no retry.
  * Measurement only: it never acts on the UI.
  *
- * Compose UI 1.11.4 sends accessibility events only when the app's AccessibilityManager is enabled and lists at least
- * one enabled service (or with its internal test flag). On CI the plain UiAutomation connection wasn't enough (run
- * 45200317050: no event at all), so construction gives UiAutomation's service info a spoken feedback type, which lists
- * it as an enabled service, before the screen under test is composed. No touch exploration (taps keep their meaning).
- * [close] restores the original service info in a finally, so the rest of the suite runs as before.
+ * Compose UI 1.11.4 sends accessibility events only when the app's AccessibilityManager is enabled and lists an enabled
+ * service, or with its internal test flag. On CI the manager is enabled but lists none (runs 45200317050, 45210942147),
+ * so [attach] sets that flag on the screen's Compose views ([ComposeAccessibilityForcing], reset in [close]). Giving
+ * UiAutomation a spoken feedback type was tried first (4246bc3) and dropped: the list stayed empty, and it touched global
+ * state.
  */
 class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean) : AutoCloseable {
     private val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
@@ -53,17 +53,10 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
     private val nullSources = AtomicInteger()
     private val liveSources = AtomicInteger()
 
-    private val originalInfo: AccessibilityServiceInfo? = automation.serviceInfo
+    private val forced = mutableListOf<View>()
+    @Volatile private var primed = false
 
     init {
-        originalInfo?.let { original ->
-            automation.serviceInfo = AccessibilityServiceInfo().apply {
-                eventTypes = AccessibilityEvent.TYPES_ALL_MASK
-                feedbackType = AccessibilityServiceInfo.FEEDBACK_SPOKEN
-                flags = original.flags and AccessibilityServiceInfo.FLAG_REQUEST_TOUCH_EXPLORATION_MODE.inv()
-                notificationTimeout = original.notificationTimeout
-            }
-        }
         automation.setOnAccessibilityEventListener { event ->
             events.incrementAndGet()
             if (event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return@setOnAccessibilityEventListener
@@ -90,6 +83,8 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
      * what reached the listener at all); after one, later marks return at once and [verify] fails.
      */
     fun mark(compose: ComposeTestRule, sentinel: MutableIntState): Int {
+        // One unawaited change first: once the gate opens, the delegate's first diff may only take its baseline.
+        if (!primed) { primed = true; compose.runOnIdle { sentinel.intValue += 1 }; compose.waitForIdle() }
         if (failure == null) repeat(2) {
             if (failure != null) return@repeat
             val next = sentinel.intValue + 1
@@ -114,8 +109,18 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
             "liveSources=${liveSources.get()}, flushed=$flushed, counted=${seen.size}"
     }
 
+    /**
+     * Opens Compose's accessibility-event gate on every Compose view under [root] (main thread, after the content is
+     * attached, before any counted change). Throws loudly when it can't ([ComposeAccessibilityForcing]).
+     */
+    fun attach(root: View) { forced += ComposeAccessibilityForcing.forceAll(root, true) }
+
     override fun close() {
-        try { automation.setOnAccessibilityEventListener(null) } finally { originalInfo?.let { automation.serviceInfo = it } }
+        try { automation.setOnAccessibilityEventListener(null) } finally {
+            if (forced.isNotEmpty()) InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                forced.forEach { runCatching { ComposeAccessibilityForcing.set(it, false) } }
+            }
+        }
     }
 }
 

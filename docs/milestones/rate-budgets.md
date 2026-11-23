@@ -113,7 +113,12 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
       send) removes the state and the live region in the same change; typing, keyboard, rotation and form swaps don't
       touch Send.
     - **Tested** with real accessibility events (`LiveAnnouncements`: UiAutomation, content changes from a source that
-      still has its live region, flushed through a test-only sentinel, no sleeps). On the owner's TalkBack list: two
+      still has its live region). Every count is the difference between two delivered test sentinels (the positive
+      control), and a timed-out sentinel fails only after the case's capture. Compose 1.11.4 sends no events on CI
+      without its internal test flag (the manager is enabled but lists no service), so the tests set it by reflection
+      (`ComposeAccessibilityForcing`, test-only, fails loudly if the field moves, tied to 1.11.4; the public
+      `enableAccessibilityChecks` path doesn't set it). Listing UiAutomation as a spoken-feedback service was tried and
+      dropped (the list stayed empty). On the owner's TalkBack list: two
       refused taps give two announcements with nothing extra spoken; if TalkBack drops the parity, the fallback is another
       inaudible variant under the same limits, never a timed change. Also for that check: emptying the draft during a
       known wait disables Send, a state change that its live region may voice.
