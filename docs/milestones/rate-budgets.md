@@ -66,8 +66,15 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
   with the state on any runtime replacement). `rateWaitMillis(budget, now)` also fences it to the generation and
   account. Screens read the same monotonic clock as the gate through `LocalMonotonicClock`, never wall time.
 - **The composer line** (`RateWaitLine`, PL copy): "You've sent a lot of messages recently. Try again in {wait}. Your
-  message is kept." and "You've sent a lot of pings recently. Try again in {wait}." A level-1 muted line on the
-  composer's error line, never error colour, announced once politely.
+  message is kept." and "You've sent a lot of pings recently. Try again in {wait}." A level-1 muted line, never error
+  colour, announced once politely.
+  - **Placement (PL amendment after the J on 3f0b798):** directly above the composer block (above the reply chip when
+    there is one), outside the room's bounded header and the DM's top block, in full width. It shows its full text,
+    wrapping and never clipped, in every layout including compact with the keyboard up; the timeline gives up the
+    space. In the header it was invisible at 1.0 in the room, clipped in the DM, and not displayed at 200% or in
+    landscape with the keyboard up.
+  - **Unknown wait:** the send line keeps "Your message is kept." ("Try again later." replaces only "Try again in
+    {wait}."); the ping line has neither.
   - **{wait}:** computed from the stored deadline at render and frozen until the notice changes; minutes and hours never
     tick; under a minute reads "less than a minute".
   - **At the deadline:** one composition-bound one-shot clears the line. It never sends; there's no other timer.
