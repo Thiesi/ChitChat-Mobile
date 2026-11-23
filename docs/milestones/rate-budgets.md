@@ -118,8 +118,14 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
     - **Silent otherwise:** clearing (the deadline, an unknown notice dropped on the next edit, a successful send)
       empties the description; full, short and hidden change only the node's size and visible text; typing, the
       keyboard, rotation and Send's own changes don't touch it.
-    - **Hidden (compact with the keyboard):** the same node at zero height keeps the description (TL's branch 1, to be
-      confirmed by measurement: one announcement on appearance, and not visible to the user, so no swipe stop).
+    - **Hidden (compact with the keyboard):** the same node becomes a 1dp full-width strip at its place, directly above
+      the composer block, keeping its description (TL's branch 2, PL-agreed): a zero-height node sent nothing at all on
+      run 45233308933. It's the one accepted extra swipe stop, in that rare state; the composer may give up that 1dp.
+    - **Counting (TL and PL rule, a model of TalkBack, not a proof):** an announcement is a carrier event with a non-empty
+      spoken text that differs from the last counted one. Any move or resize of a live node also sends events (`SUBTREE`,
+      identical text; run 45234305565): those aren't counted but stay listed in the test output. The owner's TalkBack
+      check is the gate, and an open release item: no speech on a keyboard swap, rotation or full/short swap, one per
+      appearance and per refused tap. Speech on swaps would be a defect to fix before release.
     - **Send** keeps its label and reads the full line as its state description while a notice is current, with no live
       region: focusing Send reads "Send, You've sent…" (PL condition 1).
     - **Tested** with real accessibility events (`LiveAnnouncements`: UiAutomation, content changes from a source that
