@@ -97,31 +97,42 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
     - Guards: the notice is still current, the composer still has focus, no dialog is open; otherwise nothing hides.
     - Only a refusal ever hides: tapping the field brings the keyboard back and the line hides behind the dot, with no
       hide and no announcement. A restored count (configuration change, re-entry) is seen, never acted on.
-  - **Send carries every announcement (PL and TL, 2026-11-23).** The line and the Details copy are silent text; their
-    description is the full line, in both forms (static text, so visible and spoken text may differ, as under P-25).
-    - **Why Send:** Compose UI 1.11.4's accessibility delegate reads `LiveRegion` only to fill in node info and diffs
-      semantics snapshots every 100 ms (`SendRecurringAccessibilityEventsIntervalMillis`). A node that appears (the line,
-      when a notice arrives or when the keyboard hides) looks new with its final text, so it isn't reliably announced.
-      Only a content change on a node from the previous snapshot is. Send exists in every state.
-    - **Label and state:** the label stays "Send"; while a notice is current its state description is the full line, with
-      a polite live region (dropped while sending, so "Sending" isn't spoken). TalkBack says roughly "Send, You've sent a
-      lot of messages recently. Try again in about 5 minutes. Your message is kept."
-    - **Once on appearance, once per refused tap:** the state description appearing is one change. Each refused tap (the
-      local gate or a repeated server 429) flips one trailing space, present or absent, on that state description only,
-      never on a timer and never on the visible line or Details, so each refusal is a real snapshot difference.
-    - **Silent otherwise:** clearing (the deadline one-shot, an unknown notice dropped on the next edit, a successful
-      send) removes the state and the live region in the same change; typing, keyboard, rotation and form swaps don't
-      touch Send.
+  - **The wait line itself carries every announcement (PL and TL, 2026-11-23).**
+    - **Why not an appearing node:** Compose UI 1.11.4's accessibility delegate reads `LiveRegion` only to fill in node
+      info and diffs semantics snapshots every 100 ms (`SendRecurringAccessibilityEventsIntervalMillis`). A node that
+      appears (a line drawn when a notice arrives or the keyboard hides) looks new with its final text, so it isn't
+      reliably announced; only a content change on a node from the previous snapshot is.
+    - **Why not Send:** Send carried it first (298d9a5 to e096392). A button changes several properties when a refusal
+      lands (label "Sending" to "Send", enabled, progress), and on a live node each is an event: run 45222016407 counted
+      three announcements per appearance.
+    - **So the line is one persistent node,** always composed, zero height (no padding) when nothing is drawn, inside the
+      timeline's block (the timeline, then the typing line and the wait line with their own 6dp top spacing), so a
+      zero-height line adds no gap and the spacing is unchanged. Its only semantics: a permanent polite live region, a
+      description that's the full line while a notice is current and nothing otherwise, and its test tag. The visible
+      text (full or short) isn't semantics, so visible and spoken text may differ (static text, as under P-25).
+    - **Once on appearance, once per refused tap:** the description appearing is one change on an existing node. Each
+      refused tap (the local gate or a repeated server 429) flips one trailing space, present or absent, on that
+      description only (never the visible text, never Details), never on a timer, so each refusal is a real snapshot
+      difference. TalkBack says "You've sent a lot of messages recently. Try again in about 5 minutes. Your message is
+      kept." It's the one swipe stop on the wait, on the visible text.
+    - **Silent otherwise:** clearing (the deadline, an unknown notice dropped on the next edit, a successful send)
+      empties the description; full, short and hidden change only the node's size and visible text; typing, the
+      keyboard, rotation and Send's own changes don't touch it.
+    - **Hidden (compact with the keyboard):** the same node at zero height keeps the description (TL's branch 1, to be
+      confirmed by measurement: one announcement on appearance, and not visible to the user, so no swipe stop).
+    - **Send** keeps its label and reads the full line as its state description while a notice is current, with no live
+      region: focusing Send reads "Send, You've sent…" (PL condition 1).
     - **Tested** with real accessibility events (`LiveAnnouncements`: UiAutomation, content changes from a source that
       still has its live region). Every count is the difference between two delivered test sentinels (the positive
       control), and a timed-out sentinel fails only after the case's capture. Compose 1.11.4 sends no events on CI
       without its internal test flag (the manager is enabled but lists no service), so the tests set it by reflection
       (`ComposeAccessibilityForcing`, test-only, fails loudly if the field moves, tied to 1.11.4; the public
       `enableAccessibilityChecks` path doesn't set it). Listing UiAutomation as a spoken-feedback service was tried and
-      dropped (the list stayed empty). On the owner's TalkBack list: two
-      refused taps give two announcements with nothing extra spoken; if TalkBack drops the parity, the fallback is another
-      inaudible variant under the same limits, never a timed change. Also for that check: emptying the draft during a
-      known wait disables Send, a state change that its live region may voice.
+      dropped (the list stayed empty).
+    - **On the owner's TalkBack list:** two refused taps give two announcements with nothing extra spoken (if TalkBack
+      drops the parity, the fallback is another inaudible variant under the same limits, never a timed change); the number
+      of swipe stops and where the focus box lands, with the line visible and hidden; whether a notice appearing while
+      hidden is spoken.
   - **Unknown wait:** the send line keeps "Your message is kept." ("Try again later." replaces only "Try again in
     {wait}."); the ping line has neither.
   - **{wait}:** computed from the stored deadline at render and frozen until the notice changes; minutes and hours never

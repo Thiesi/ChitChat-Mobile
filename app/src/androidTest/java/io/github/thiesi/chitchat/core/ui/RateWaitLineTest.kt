@@ -135,62 +135,79 @@ class RateWaitLineTest {
         assertFalse(line().config.contains(SemanticsProperties.LiveRegion))
     }
 
-    // The composer slot: a fixed-height column with a weighted timeline, the slot, and a composer of a given height.
+    // The composer slot laid out as the screens do: the timeline's block (a weighted timeline, then the persistent wait
+    // line) above a composer of a given height, in a column spaced by 6dp; plus the test-only live sentinel.
     private var columnHeight by mutableStateOf(600.dp)
     private var composerHeight by mutableStateOf(48.dp)
     private var window by mutableStateOf<Any>("portrait")
     private var fit: RateLineFit? = null
+    private var notice by mutableStateOf<RateLimitNotice?>(null)
+    private var deadline by mutableStateOf<Long?>(null)
+    private var repeats by mutableIntStateOf(0)
+    private val sentinel = mutableIntStateOf(0)
 
-    private fun slot(notice: RateLimitNotice, deadline: Long?, measured: Boolean = true) = host {
+    private fun slot(measured: Boolean = true, paused: Boolean = true) = host(paused) {
         val held = remember { RateLineFit() }.also { fit = it }
-        Column(Modifier.width(320.dp).height(columnHeight), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.weight(1f).fillMaxWidth().then(if (measured) Modifier.rateFitTimeline(held, window) else Modifier))
-            RateWaitSlot(held, session(deadline), notice, R.string.rate_wait_messages, R.string.rate_wait_messages_unknown,
-                window, 320.dp, 6.dp, Modifier.fillMaxWidth())
-            Box(Modifier.fillMaxWidth().height(composerHeight))
+        Box {
+            Column(Modifier.width(320.dp).height(columnHeight), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.weight(1f).fillMaxWidth()) {
+                    Box(Modifier.weight(1f).fillMaxWidth().then(if (measured) Modifier.rateFitTimeline(held, window) else Modifier))
+                    RateWaitSlot(held, session(deadline), notice, R.string.rate_wait_messages, R.string.rate_wait_messages_unknown,
+                        window, 320.dp, 6.dp, Modifier.fillMaxWidth(), parity = repeats % 2 == 1)
+                }
+                Box(Modifier.fillMaxWidth().height(composerHeight))
+            }
+            LiveFlushSentinel(sentinel.intValue)
         }
     }
 
     private fun settle() { repeat(2) { compose.mainClock.advanceTimeByFrame(); compose.waitForIdle() } }
     private fun known5() = base + compose.mainClock.currentTime + 5 * 60_000
+    private fun drawn() = line().size.height > 0
+    private fun lineDescription() = line().config.getOrNull(SemanticsProperties.ContentDescription)?.singleOrNull()
 
     /** TL condition 1: a late or missing measurement gives the short form, never a missing line and never the full one. */
     @Test fun withoutAMeasurementTheSlotShowsTheShortFormNotNothing() {
-        slot(RateLimitNotice(RateBudget.ROOM_SEND, true), known5(), measured = false)
+        deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
+        slot(measured = false)
         settle()
-        assertEquals(1, lines().size)
+        assertEquals(true, drawn())
         assertEquals(true, shown?.first)
     }
 
     @Test fun aRoomyTimelineGetsTheFullLineAndATightOneTheShortForm() {
-        slot(RateLimitNotice(RateBudget.ROOM_SEND, true), known5())
+        deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
+        slot()
         settle()
         assertEquals(false to full5(), shown)
         assertEquals(RateLineForm.FULL, fit?.form)
         columnHeight = 120.dp; window = "tight"
         settle()
-        assertEquals(1, lines().size)
+        assertEquals(true, drawn())
         assertEquals(true, shown?.first)
         assertEquals(RateLineForm.SHORT, fit?.form)
     }
 
-    /** TL's amended condition 3: where not even the short form fits at the composer's natural height, no line; it returns. */
+    /** TL's amended condition 3: no room for the short form, nothing drawn (zero height, still the carrier); it returns. */
     @Test fun withNoRoomForTheShortFormTheLineHidesAndReturnsWhenTheWindowGrows() {
         columnHeight = 70.dp; window = "keyboard"
-        slot(RateLimitNotice(RateBudget.ROOM_SEND, true), known5())
+        deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
+        slot()
         settle()
-        assertEquals(0, lines().size)
+        assertFalse(drawn())
         assertEquals(RateLineForm.HIDDEN, fit?.form)
         assertEquals(true, fit?.detailsFirst)
+        assertEquals("Still the carrier while hidden", full5(), lineDescription())
         columnHeight = 600.dp; window = "no keyboard"
         settle()
-        assertEquals(1, lines().size)
+        assertEquals(true, drawn())
         assertEquals(RateLineForm.FULL, fit?.form)
     }
 
     /** TL condition: the composer growing with the draft (same window) never re-decides, so the form can't flip while typing. */
     @Test fun theDraftGrowingDoesNotFlipTheForm() {
-        slot(RateLimitNotice(RateBudget.ROOM_SEND, true), known5())
+        deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
+        slot()
         settle()
         assertEquals(false, shown?.first)
         composerHeight = 560.dp // The timeline now has no row left, but the window is the same.
@@ -198,62 +215,50 @@ class RateWaitLineTest {
         assertEquals(false, shown?.first)
     }
 
-    /** A full/short swap (a new window) keeps the same node and the same semantics. */
-    @Test fun aSwapKeepsTheLinesSemantics() {
-        slot(RateLimitNotice(RateBudget.ROOM_SEND, true), known5())
+    /** Full, short and hidden are one node with identical semantics: only its size and visible text change. */
+    @Test fun formSwapsKeepTheCarriersNodeAndSemantics() {
+        deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
+        slot()
         settle()
-        assertEquals(false, shown?.first)
-        val before = line()
-        columnHeight = 120.dp; window = "keyboard"
+        val full = line()
+        columnHeight = 120.dp; window = "tight"
         settle()
-        assertEquals(true, shown?.first)
-        val after = line()
-        assertEquals("The same node", before.id, after.id)
-        assertEquals(full5(), after.config[SemanticsProperties.ContentDescription].single())
-        assertEquals("Identical semantics in both forms", before.config.toList().map { it.key.name to it.value },
-            after.config.toList().map { it.key.name to it.value })
+        val short = line()
+        columnHeight = 70.dp; window = "keyboard"
+        settle()
+        val hidden = line()
+        assertEquals(RateLineForm.HIDDEN, fit?.form)
+        assertEquals("One node", setOf(full.id), setOf(full.id, short.id, hidden.id))
+        val semantics = { node: androidx.compose.ui.semantics.SemanticsNode -> node.config.toList().map { it.key.name to it.value } }
+        assertEquals(semantics(full), semantics(short))
+        assertEquals(semantics(full), semantics(hidden))
+        assertEquals(LiveRegionMode.Polite, full.config[SemanticsProperties.LiveRegion])
     }
 
-    // Send, the announcement carrier: its label, state description and live region.
-    private var notice by mutableStateOf<RateLimitNotice?>(null)
-    private var deadline by mutableStateOf<Long?>(null)
-    private var repeats by mutableIntStateOf(0)
-    private var sending by mutableStateOf(false)
-    private val sentinel = mutableIntStateOf(0)
+    /** No notice: the carrier is there (zero height, polite live region) but says nothing and offers nothing. */
+    @Test fun withNoNoticeTheCarrierIsEmpty() {
+        slot()
+        settle()
+        assertFalse(drawn())
+        assertNull(lineDescription())
+        assertEquals(LiveRegionMode.Polite, line().config[SemanticsProperties.LiveRegion])
+        assertFalse(line().config.contains(SemanticsProperties.Focused))
+    }
 
-    private fun send(paused: Boolean = true) = host(paused) {
-        Column {
+    /** PL condition 1: Send keeps its label and reads the full line as its state; no live region (the line carries it). */
+    @Test fun sendKeepsItsLabelAndReadsTheFullLineWithoutALiveRegion() {
+        deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
+        host {
             Box(Modifier.size(48.dp).semantics { contentDescription = "Send" }.then(Modifier.semantics { testTag = "send" })
-                .rateWaitState(rateWaitSpoken(session(deadline), notice, R.string.rate_wait_messages, R.string.rate_wait_messages_unknown),
-                    repeats % 2 == 1, sending))
-            LiveFlushSentinel(sentinel.intValue)
+                .rateWaitState(rateWaitSpoken(session(deadline), notice, R.string.rate_wait_messages, R.string.rate_wait_messages_unknown)))
         }
+        val node = compose.onNodeWithTag("send").fetchSemanticsNode().config
+        assertEquals(listOf("Send"), node[SemanticsProperties.ContentDescription])
+        assertEquals(full5(), node[SemanticsProperties.StateDescription])
+        assertFalse(node.contains(SemanticsProperties.LiveRegion))
     }
 
-    private fun sendNode() = compose.onNodeWithTag("send").fetchSemanticsNode().config
-
-    /** PL condition 1: the label stays "Send"; the full line only in its state description, only while a notice is current. */
-    @Test fun sendKeepsItsLabelAndCarriesTheFullLineOnlyWhileANoticeIsCurrent() {
-        send()
-        assertFalse(sendNode().contains(SemanticsProperties.StateDescription))
-        assertFalse(sendNode().contains(SemanticsProperties.LiveRegion))
-        deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true); settle()
-        assertEquals(listOf("Send"), sendNode()[SemanticsProperties.ContentDescription])
-        assertEquals(full5(), sendNode()[SemanticsProperties.StateDescription])
-        assertEquals(LiveRegionMode.Polite, sendNode()[SemanticsProperties.LiveRegion])
-        repeats = 1; settle()
-        assertEquals("One trailing space, present or absent", "${full5()} ", sendNode()[SemanticsProperties.StateDescription])
-        repeats = 2; settle()
-        assertEquals(full5(), sendNode()[SemanticsProperties.StateDescription])
-        sending = true; settle()
-        assertFalse("No live region while sending", sendNode().contains(SemanticsProperties.LiveRegion))
-        sending = false; compose.mainClock.advanceTimeBy(5 * 60_000L + 32); settle()
-        assertFalse("Cleared at the deadline", sendNode().contains(SemanticsProperties.StateDescription))
-        assertFalse(sendNode().contains(SemanticsProperties.LiveRegion))
-        assertEquals(listOf("Send"), sendNode()[SemanticsProperties.ContentDescription])
-    }
-
-    private fun announcements() = LiveAnnouncements { node -> node.contentDescription?.toString() == "Send" }
+    private fun announcements(text: () -> String) = LiveAnnouncements { node -> node.contentDescription?.toString()?.trimEnd() == text() }
 
     /** Opens Compose's accessibility-event gate on this test's window (see ComposeAccessibilityForcing). */
     private fun LiveAnnouncements.attachHost() {
@@ -262,49 +267,95 @@ class RateWaitLineTest {
     }
 
     /**
-     * TL/PL: exactly one announcement when a notice appears and per refused tap; none on clearing (unknown wait dropped).
-     * Every count is between two delivered sentinels (the positive control).
+     * TL/PL: exactly one announcement when a notice appears and per refused tap; none for full/short/hidden swaps or on
+     * clearing. Every count is between two delivered sentinels (the positive control).
      */
-    @Test fun sendAnnouncesOnceOnAppearanceAndPerRefusalAndClearsSilently() {
-        announcements().use { heard ->
-            send(paused = false)
+    @Test fun theLineAnnouncesOnceOnAppearanceAndPerRefusalAndIsSilentOtherwise() {
+        val unknown = context.getString(R.string.rate_wait_messages_unknown)
+        announcements { unknown }.use { heard ->
+            slot(paused = false)
             heard.attachHost()
             val start = heard.mark(compose, sentinel)
             compose.runOnIdle { notice = RateLimitNotice(RateBudget.ROOM_SEND, false) }
             val appeared = heard.mark(compose, sentinel)
-            // A refused tap during a server attempt: no live region while sending, then the flip lands with the refusal.
-            compose.runOnIdle { sending = true }
-            val sendingMark = heard.mark(compose, sentinel)
-            compose.runOnIdle { sending = false; repeats++ }
+            compose.runOnIdle { repeats++ }
             val firstTap = heard.mark(compose, sentinel)
             compose.runOnIdle { repeats++ }
             val secondTap = heard.mark(compose, sentinel)
+            compose.runOnIdle { columnHeight = 120.dp; window = "tight" }
+            val toShort = heard.mark(compose, sentinel)
+            compose.runOnIdle { columnHeight = 70.dp; window = "keyboard" }
+            val toHidden = heard.mark(compose, sentinel)
+            compose.runOnIdle { columnHeight = 600.dp; window = "no keyboard" }
+            val back = heard.mark(compose, sentinel)
             compose.runOnIdle { notice = null } // The unknown wait dropped on the next edit, or a successful send.
             val cleared = heard.mark(compose, sentinel)
             heard.verify()
-            assertEquals("Nothing before the notice: ${heard.spoken()}", 0, start)
-            assertEquals("Once on appearance: ${heard.spoken()}", 1, appeared - start)
-            assertEquals("Silent while sending: ${heard.spoken()}", 0, sendingMark - appeared)
-            assertEquals("Once per refused tap: ${heard.spoken()}", 1, firstTap - sendingMark)
-            assertEquals("Once per refused tap: ${heard.spoken()}", 1, secondTap - firstTap)
-            assertEquals("Clearing is silent: ${heard.spoken()}", 0, cleared - secondTap)
+            val all = heard.spoken()
+            assertEquals("Nothing before the notice: $all", 0, start)
+            assertEquals("Once on appearance: $all", 1, appeared - start)
+            assertEquals("Once per refused tap: $all", 1, firstTap - appeared)
+            assertEquals("Once per refused tap: $all", 1, secondTap - firstTap)
+            assertEquals("Full to short is silent: $all", 0, toShort - secondTap)
+            assertEquals("Short to hidden is silent: $all", 0, toHidden - toShort)
+            assertEquals("Hidden to full is silent: $all", 0, back - toHidden)
+            assertEquals("Clearing is silent: $all", 0, cleared - back)
         }
     }
 
-    /** PL condition 3: the known wait's deadline clears Send's state silently (between two delivered sentinels). */
-    @Test fun theDeadlineClearsSendSilently() {
-        announcements().use { heard ->
+    /**
+     * TL's branch measurement for the hidden state (compact with the keyboard): a notice appearing while nothing can be
+     * drawn still announces once on the zero-height carrier, and that node is no swipe stop (not visible to the user).
+     */
+    @Test fun aNoticeAppearingHiddenAnnouncesOnceAndIsNoSwipeStop() {
+        announcements { full5() }.use { heard ->
+            columnHeight = 70.dp; window = "keyboard"
+            slot(paused = false)
+            heard.attachHost()
+            val start = heard.mark(compose, sentinel)
+            compose.runOnIdle { deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true) }
+            val appeared = heard.mark(compose, sentinel)
+            heard.verify()
+            assertEquals(RateLineForm.HIDDEN, fit?.form)
+            val facts = nodeFacts(full5())
+            assertEquals("Once on appearance while hidden: ${heard.spoken()}", 1, appeared - start)
+            assertEquals("The hidden carrier's node facts: $facts", false, facts?.visibleToUser)
+        }
+    }
+
+    private data class NodeFacts(val visibleToUser: Boolean, val important: Boolean, val focusable: Boolean,
+        val screenReaderFocusable: Boolean, val bounds: String)
+
+    /** The accessibility node (as a screen reader sees it) whose description is [text]; null if there's none. */
+    private fun nodeFacts(text: String): NodeFacts? {
+        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow ?: return null
+        val queue = ArrayDeque(listOf(root))
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            if (node.contentDescription?.toString()?.trimEnd() == text) {
+                val bounds = android.graphics.Rect().also { node.getBoundsInScreen(it) }
+                return NodeFacts(node.isVisibleToUser, node.isImportantForAccessibility, node.isFocusable,
+                    android.os.Build.VERSION.SDK_INT >= 28 && node.isScreenReaderFocusable, bounds.toShortString())
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.addLast(it) }
+        }
+        return null
+    }
+
+    /** PL condition 3: the known wait's deadline clears the carrier silently (between two delivered sentinels). */
+    @Test fun theDeadlineClearsTheLineSilently() {
+        announcements { full5() }.use { heard ->
             notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
             deadline = base + compose.mainClock.currentTime + 2_000
-            send(paused = false)
+            slot(paused = false)
             heard.attachHost()
             val before = heard.mark(compose, sentinel)
             compose.mainClock.advanceTimeBy(2_500)
             compose.waitForIdle()
-            val stateAfter = compose.onNodeWithTag("send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
+            val descriptionAfter = lineDescription()
             val after = heard.mark(compose, sentinel)
             heard.verify()
-            assertNull("Cleared at the deadline", stateAfter)
+            assertNull("Cleared at the deadline", descriptionAfter)
             assertEquals("The deadline is silent: ${heard.spoken()}", 0, after - before)
         }
     }

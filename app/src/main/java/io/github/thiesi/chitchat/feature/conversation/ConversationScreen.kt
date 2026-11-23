@@ -522,6 +522,13 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         io.github.thiesi.chitchat.core.ui.TransferNotice(Modifier.padding(horizontal = 16.dp))
         // Reporting R2: this room's report lines (PL).
         io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Room(state.context?.room?.name), Modifier.padding(horizontal = 16.dp))
+        val rateLimit = state.sendLimit
+        val ratePing = rateLimit?.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
+        val rateKnown = if (ratePing) R.string.rate_wait_pings else R.string.rate_wait_messages
+        val rateUnknown = if (ratePing) R.string.rate_wait_pings_unknown else R.string.rate_wait_messages_unknown
+        // #323b (PL, TL): the timeline's block holds the typing line and the persistent wait line with their own top
+        // spacing, so the always-present (zero-height when empty) wait line adds no gap; spacing is unchanged otherwise.
+        Column(Modifier.weight(1f).fillMaxWidth()) {
         LazyColumn(Modifier.weight(1f).fillMaxWidth().rateFitTimeline(rateFit, rateWindow).testTag("conversation_timeline"), state = timeline,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "history_header") {
@@ -585,24 +592,21 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 Spacer(Modifier.height(1.dp))
             }
         }
+        TypingStatus(model.typing, session, TypingTarget.Room(roomId),
+            viewing = state.loaded && !state.stale && state.context != null && !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured,
+            publishing = ready && !state.busy && !composerDialog && !obscured && model.canSend(), modifier = Modifier.padding(top = 6.dp))
+        // #323b (PL amendment): the send's or ping's own wait, a level-1 muted line directly above the composer block
+        // (above the reply chip), outside the bounded header, full text in every layout; the timeline gives up the space.
+        // PL refinement: the composer comes first. The full line only where the timeline keeps one 48dp row beside it,
+        // else the short form here and the full line first in Details; decided per notice and window, never per draft.
+        io.github.thiesi.chitchat.core.ui.RateWaitSlot(rateFit, session, rateLimit, rateKnown, rateUnknown, rateWindow, rateBoxWidth - 32.dp, 6.dp,
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp), parity = state.sendLimitRepeats % 2 == 1)
+        }
         io.github.thiesi.chitchat.core.ui.ReceivedViewerHost(received, settled = state.loaded && !state.busy) { id ->
             state.messages.firstOrNull { it.attachment?.id == id && !it.deleted }?.let { message ->
                 Triple(message.username ?: stringResource(R.string.conversation_unknown_user), displayTime(message.createdAt, state.context), message.body)
             }
         }
-        TypingStatus(model.typing, session, TypingTarget.Room(roomId),
-            viewing = state.loaded && !state.stale && state.context != null && !pingsVisible && !detailsOpen && !personDialog && !state.draftsOpen && !composerDialog && !obscured,
-            publishing = ready && !state.busy && !composerDialog && !obscured && model.canSend())
-        // #323b (PL amendment): the send's or ping's own wait, a level-1 muted line directly above the composer block
-        // (above the reply chip), outside the bounded header, full text in every layout; the timeline gives up the space.
-        // PL refinement: the composer comes first. The full line only where the timeline keeps one 48dp row beside it,
-        // else the short form here and the full line first in Details; decided per notice and window, never per draft.
-        val rateLimit = state.sendLimit
-        val ratePing = rateLimit?.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
-        val rateKnown = if (ratePing) R.string.rate_wait_pings else R.string.rate_wait_messages
-        val rateUnknown = if (ratePing) R.string.rate_wait_pings_unknown else R.string.rate_wait_messages_unknown
-        io.github.thiesi.chitchat.core.ui.RateWaitSlot(rateFit, session, rateLimit, rateKnown, rateUnknown, rateWindow, rateBoxWidth - 32.dp, 6.dp,
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp))
         if (!replyInline) replyControl(false)
         if (!compact) { attachNotices(headerLimit * 0.5f); attachmentCard(headerLimit * 0.5f) }
         if (inlineCompletion && !detailsOpen) CompletionSuggestions(completionComposer)
@@ -659,9 +663,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     (attachment == null && model.canWaitToSend())),
                 // Waiting shows the clock glyph, not progress: nothing has been attempted yet.
                 sending = state.sending || state.waitingToSend, modifier = Modifier.testTag("conversation_send").then(
-                    // #323b (PL, TL): Send carries the wait's announcements; see rateWaitState.
-                    Modifier.rateWaitState(io.github.thiesi.chitchat.core.ui.rateWaitSpoken(session, state.sendLimit, rateKnown, rateUnknown),
-                        state.sendLimitRepeats % 2 == 1, state.sending)),
+                    // #323b (PL, TL): Send reads the wait on focus (no live region); see rateWaitState.
+                    Modifier.rateWaitState(io.github.thiesi.chitchat.core.ui.rateWaitSpoken(session, state.sendLimit, rateKnown, rateUnknown))),
                 progress = attachment == null && !state.waitingToSend)
             })
     }
