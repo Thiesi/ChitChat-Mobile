@@ -75,8 +75,9 @@ import org.junit.Test
  * the composer's natural height), the line unclipped and above the keyboard, and the composer's field width, arrangement
  * and field height equal with and without the line; the line or the dot after the keyboard hides (room and DM); the full
  * line first in Details only while short or hidden; a reply started during the wait re-decides the form; Send's
- * announcements counted from real accessibility events: one on appearance, one per refused tap, none on swaps; a refused
- * tap while hidden hides the keyboard, shows the line and clears the dot, keeping focus, draft and reply.
+ * announcements counted from real accessibility events: one on appearance, one per refused tap, none on swaps; a refusal
+ * whose form resolves to hidden hides the keyboard once (the line shows, the dot clears, focus and draft kept), and a
+ * later field tap bringing the keyboard back hides the line behind the dot with no hide and no announcement.
  */
 class RatePresentationTest {
     @get:Rule val compose = createEmptyComposeRule()
@@ -102,11 +103,11 @@ class RatePresentationTest {
         expect = if (factor > 1f) SHORT else FULL) }
     @Test fun dmSendDark() = scales { name, factor -> flow("rate-dm-send-dark-$name", dm = true, dark = true, factor,
         expect = if (factor > 1f) SHORT else FULL) }
-    // 3. Room composer at 200% landscape with the keyboard up: no line, the Details dot (hidden). Then a refused tap:
-    // the keyboard hides and the line shows (rate-room-send-light-font200-landscape-after-tap).
+    // 3. Room composer at 200% landscape with the keyboard up (PL ruling): the refusal's form resolves to hidden, so the
+    // refusal hides the keyboard once and the line shows (rate-room-send-light-font200-landscape-after-tap). A later field
+    // tap brings the keyboard back: hidden, the Details dot, no hide, no announcement (…-landscape-ime).
     @Test fun roomSendLandscapeKeyboard() =
-        flow("rate-room-send-light-font200-landscape-ime", dm = false, dark = false, 2f, landscape = true, keyboard = true,
-            expect = HIDDEN, hiddenTap = true)
+        flow(null, dm = false, dark = false, 2f, landscape = true, keyboard = true, expect = HIDDEN, landscapeHide = true)
     // 4. The ping line (default light).
     @Test fun roomPing() = flow("rate-room-ping-light-default", dm = false, dark = false, 1f, ping = true, expect = FULL)
     // 11. The unknown-wait send line (light default).
@@ -124,8 +125,8 @@ class RatePresentationTest {
     private fun flow(capture: String?, dm: Boolean, dark: Boolean, fontScale: Float, expect: RateLineForm, reply: Boolean = false,
         ping: Boolean = false, known: Boolean = true, landscape: Boolean = false, keyboard: Boolean = false,
         noStatusRow: Boolean = false, details: Boolean = false, replyLater: Boolean = false, visibleTap: Boolean = false,
-        hiddenTap: Boolean = false) {
-        val name = capture ?: "rate-room-reply-during-wait"
+        landscapeHide: Boolean = false) {
+        val name = capture ?: if (landscapeHide) "rate-room-send-light-font200-landscape" else "rate-room-reply-during-wait"
         form = null
         FontScaleTestActivity.requestedFontScale = fontScale
         val sessions = TestSessions()
@@ -223,6 +224,38 @@ class RatePresentationTest {
             compose.onNodeWithTag(send).performNativeTap()
             compose.waitUntil(5_000) { (if (dm) thread.state.value.sendLimit else room.state.value.sendLimit) != null }
             compose.waitForIdle()
+            if (landscapeHide) {
+                // PL ruling: the first refusal resolves to hidden (keyboard up, 200% landscape), so it hides the keyboard
+                // once (a plain hide; focus, draft kept), the line shows above the composer and the dot clears.
+                compose.waitUntil(5_000) { imeBottom == 0 }
+                compose.waitForIdle()
+                capture("rate-room-send-light-font200-landscape-after-tap")
+                heard.flush(compose, sentinel)
+                check(heard.count == 1) { "$name: ${heard.count} announcements for the first refusal ${heard.spoken()}" }
+                check(compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) { "$name: no line after the hide" }
+                unclipped(name, "rate_wait_line")
+                unclipped(name, input)
+                unclipped(name, send)
+                check(detailsState(detailsLabel) == null) { "$name: the Details dot stayed: ${detailsState(detailsLabel)}" }
+                check(room.state.value.draft == "Unsent fixture") { "$name: the draft changed" }
+                check(compose.onNodeWithTag(input).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) == true) {
+                    "$name: focus left the field" }
+                check(arrangement(input, send) == before) { "$name: the composer changed after the hide ${arrangement(input, send)} vs $before" }
+                // A field tap brings the keyboard back: hidden behind the dot, never hidden again by itself, silent.
+                compose.tapNativeInput(input, { imeBottom })
+                compose.waitForIdle()
+                capture("rate-room-send-light-font200-landscape-ime")
+                check(imeBottom > 0) { "$name: the keyboard was hidden again without a refusal" }
+                formIs(name, HIDDEN, detailsLabel)
+                unclipped(name, input)
+                unclipped(name, send)
+                check(arrangement(input, send) == beforeKeyboard) {
+                    "$name: the composer changed with the keyboard back ${arrangement(input, send)} vs $beforeKeyboard" }
+                heard.flush(compose, sentinel)
+                check(heard.count == 1) { "$name: the keyboard's return announced ${heard.spoken()}" }
+                keyboardDown()
+                return@use
+            }
             lineOrDot(name, "with the keyboard up", detailsLabel)
             // TL condition (a) and PL: one announcement when the notice appears, visible or hidden.
             heard.flush(compose, sentinel)
@@ -278,28 +311,7 @@ class RatePresentationTest {
                 check(form == shown && compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) {
                     "$name: the line changed on a refused tap: $shown -> $form" }
             }
-            if (hiddenTap) {
-                // PL ruling (b): a refused tap while hidden hides the keyboard (focus, draft and reply kept), the line shows
-                // by the rule and the dot clears; one announcement.
-                check(detailsState(detailsLabel) != null) { "$name: no Details dot while hidden" }
-                compose.onNodeWithTag(send).performNativeTap()
-                compose.waitUntil(5_000) { room.state.value.sendLimitRepeats == 1 && !room.state.value.busy }
-                compose.waitUntil(5_000) { imeBottom == 0 }
-                compose.waitForIdle()
-                capture("rate-room-send-light-font200-landscape-after-tap")
-                check(compose.onAllNodesWithTag("rate_wait_line").fetchSemanticsNodes().size == 1) { "$name: no line after the tap" }
-                unclipped(name, "rate_wait_line")
-                unclipped(name, input)
-                unclipped(name, send)
-                check(detailsState(detailsLabel) == null) { "$name: the Details dot stayed: ${detailsState(detailsLabel)}" }
-                check(room.state.value.draft == "Unsent fixture") { "$name: the draft changed" }
-                check(compose.onNodeWithTag(input).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) == true) {
-                    "$name: focus left the field" }
-                check(arrangement(input, send) == before) { "$name: the composer changed after the tap ${arrangement(input, send)} vs $before" }
-                heard.flush(compose, sentinel)
-                check(heard.count == 2) { "$name: ${heard.count} announcements after one refused tap ${heard.spoken()}" }
-            }
-            if (keyboard && !hiddenTap) keyboardDown()
+            if (keyboard) keyboardDown()
         }
         }
     }
