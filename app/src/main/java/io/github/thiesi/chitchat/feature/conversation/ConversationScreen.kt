@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.feature.conversation
 
 import io.github.thiesi.chitchat.core.ui.rateFitTimeline
+import io.github.thiesi.chitchat.core.ui.rateWaitState
 import io.github.thiesi.chitchat.core.theme.lanternDialogEdge
 import io.github.thiesi.chitchat.core.theme.lanternSurfaceBorder
 
@@ -366,6 +367,17 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     }
     // #323b refinement: the short wait line shows when the full one doesn't fit; Details then shows the full line first.
     val rateFit = remember { io.github.thiesi.chitchat.core.ui.RateLineFit() }
+    // PL ruling (b): a send refused for its rate wait while the line is hidden (compact with the keyboard up) also hides
+    // the soft keyboard, a plain hide answering the tap: focus, draft, caret and reply stay; the window re-decides and the
+    // line shows by the rule. Only a repeat refusal (the notice already showing), never the first or a restored count.
+    val rateKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    var rateRepeatsSeen by remember { androidx.compose.runtime.mutableIntStateOf(state.sendLimitRepeats) }
+    LaunchedEffect(state.sendLimitRepeats) {
+        if (state.sendLimitRepeats != rateRepeatsSeen) {
+            rateRepeatsSeen = state.sendLimitRepeats
+            if (rateFit.hidden) rateKeyboard?.hide()
+        }
+    }
     BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
     val compact = maxHeight < 240.dp
     // The timeline's measured height, for the wait line's fit decision (it excludes the composer and every other block).
@@ -501,7 +513,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         io.github.thiesi.chitchat.core.ui.TransferNotice(Modifier.padding(horizontal = 16.dp))
         // Reporting R2: this room's report lines (PL).
         io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Room(state.context?.room?.name), Modifier.padding(horizontal = 16.dp))
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().rateFitTimeline(rateFit, state.sendLimit, rateWindow).testTag("conversation_timeline"), state = timeline,
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().rateFitTimeline(rateFit, rateWindow).testTag("conversation_timeline"), state = timeline,
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "history_header") {
                 Column(Modifier.padding(horizontal = 16.dp)) {
@@ -603,7 +615,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 val attention = (compact && (attachmentFacts != null || attach.notice != null || attach.picked != null)) ||
                     completionComposer.choice!=null || state.busy || state.syncing || state.stale || state.newerAvailable || state.uncertainSend || state.authorUnknown != null || state.authorLimit ||
                     state.error != null || state.syncError != null || state.readError != null || state.validation != null ||
-                    state.notice != null || blocked || connection?.takeIf { it.generation == session.generation }?.let {
+                    state.notice != null || blocked || rateFit.hidden || connection?.takeIf { it.generation == session.generation }?.let {
                         it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null || it.roomId == roomId }
                     } == true
                 BadgedBox(badge = { if (attention) AttentionBadge(uncertain = markerUncertain, failed = markerFailed) }) {
@@ -637,7 +649,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                     (ready && !state.busy && model.canSend() && state.draft.phpTrim().isNotEmpty()) ||
                     (attachment == null && model.canWaitToSend())),
                 // Waiting shows the clock glyph, not progress: nothing has been attempted yet.
-                sending = state.sending || state.waitingToSend, modifier = Modifier.testTag("conversation_send"),
+                sending = state.sending || state.waitingToSend, modifier = Modifier.testTag("conversation_send").then(
+                    // #323b (PL, TL): Send carries the wait's announcements; see rateWaitState.
+                    Modifier.rateWaitState(io.github.thiesi.chitchat.core.ui.rateWaitSpoken(session, state.sendLimit, rateKnown, rateUnknown),
+                        state.sendLimitRepeats % 2 == 1, state.sending)),
                 progress = attachment == null && !state.waitingToSend)
             })
     }
@@ -771,8 +786,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     if (detailsOpen) AlertDialog(onDismissRequest = { if (completionDetailsToken===detailsSource) { detailsOpen=false;completionDetailsToken=null } },
         title = { Text(stringResource(R.string.conversation_details)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-            // PL refinement: when the composer shows the short wait line, the full line comes first here.
-            if (rateFit.short) state.sendLimit?.let { limit ->
+            // PL refinement: when the composer shows the short wait line or none, the full line comes first here (silent).
+            if (rateFit.detailsFirst) state.sendLimit?.let { limit ->
                 val ping = limit.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
                 io.github.thiesi.chitchat.core.ui.RateWaitLine(session, limit,
                     if (ping) R.string.rate_wait_pings else R.string.rate_wait_messages,

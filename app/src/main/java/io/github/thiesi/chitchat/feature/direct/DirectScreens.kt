@@ -1,6 +1,8 @@
 package io.github.thiesi.chitchat.feature.direct
 
 import io.github.thiesi.chitchat.core.ui.rateFitTimeline
+import io.github.thiesi.chitchat.core.ui.rateWaitState
+import androidx.compose.runtime.LaunchedEffect
 import io.github.thiesi.chitchat.core.theme.LanternOutlinedButton
 
 import io.github.thiesi.chitchat.core.ui.PrimaryButton
@@ -378,6 +380,17 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             }
             // #323b refinement: the short wait line shows when the full one doesn't fit; Details then shows the full line first.
             val rateFit = remember { io.github.thiesi.chitchat.core.ui.RateLineFit() }
+            // PL ruling (b): a send refused for its rate wait while the line is hidden (compact with the keyboard up) also hides
+            // the soft keyboard, a plain hide answering the tap: focus, draft, caret and reply stay; the window re-decides and the
+            // line shows by the rule. Only a repeat refusal (the notice already showing), never the first or a restored count.
+            val rateKeyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+            var rateRepeatsSeen by remember { androidx.compose.runtime.mutableIntStateOf(state.sendLimitRepeats) }
+            LaunchedEffect(state.sendLimitRepeats) {
+                if (state.sendLimitRepeats != rateRepeatsSeen) {
+                    rateRepeatsSeen = state.sendLimitRepeats
+                    if (rateFit.hidden) rateKeyboard?.hide()
+                }
+            }
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val compact = maxHeight < 240.dp
                 // #323b refinement: the timeline's measured height, for the wait line's fit decision.
@@ -425,7 +438,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     io.github.thiesi.chitchat.core.ui.TransferNotice(Modifier.padding(horizontal = 16.dp))
                     // Reporting R2: this conversation's report lines (PL).
                     io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Direct, Modifier.padding(horizontal = 16.dp))
-                    LazyColumn(Modifier.weight(1f).fillMaxWidth().rateFitTimeline(rateFit, state.sendLimit, rateWindow).testTag("dm_timeline"), timeline,
+                    LazyColumn(Modifier.weight(1f).fillMaxWidth().rateFitTimeline(rateFit, rateWindow).testTag("dm_timeline"), timeline,
                         contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item("older") { if (state.mayHaveOlder) TextButton(onClick = model::older, enabled = !state.busy && !state.stale) {
                             Text(stringResource(R.string.conversation_older))
@@ -506,11 +519,11 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                     state.uncertainSend || state.uncertainRead || state.readError != null || state.uncertainBlock ||
                                     state.authorUnknown != null || state.authorLimit || state.authorNotice != null ||
                                     state.reactionUnknown != null || state.reactionLimit || state.reactionNotice != null ||
-                                    attention[peer] != null || state.draftLimit || !model.canEditDraft() ||
+                                    attention[peer] != null || state.draftLimit || !model.canEditDraft() || rateFit.hidden ||
                                     context?.relationship?.messagingAvailable == false || context?.mutedEverywhere != null || !ready ||
                                     connection?.let { it.phase != RealtimePhase.LIVE || it.broadcasts.any { it.roomId == null } } == true) { dismiss ->
-                                // PL refinement: when the composer shows the short wait line, the full line comes first here.
-                                if (rateFit.short) state.sendLimit?.let { limit ->
+                                // PL refinement: when the composer shows the short wait line or none, the full line comes first here (silent).
+                                if (rateFit.detailsFirst) state.sendLimit?.let { limit ->
                                     io.github.thiesi.chitchat.core.ui.RateWaitLine(session, limit, R.string.rate_wait_messages,
                                         R.string.rate_wait_messages_unknown, Modifier.fillMaxWidth())
                                 }
@@ -571,7 +584,10 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                                 (ready && model.canSend() && state.draft.phpTrim().isNotEmpty()) ||
                                 (attachment == null && model.canWaitToSend())),
                             // Waiting shows the clock glyph, not progress: nothing has been attempted yet.
-                            sending = state.sending || state.waitingToSend, modifier = Modifier.testTag("dm_send"),
+                            sending = state.sending || state.waitingToSend, modifier = Modifier.testTag("dm_send").then(
+                                // #323b (PL, TL): Send carries the wait's announcements; see rateWaitState.
+                                Modifier.rateWaitState(io.github.thiesi.chitchat.core.ui.rateWaitSpoken(session, state.sendLimit, R.string.rate_wait_messages,
+                                    R.string.rate_wait_messages_unknown), state.sendLimitRepeats % 2 == 1, state.sending)),
                             progress = attachment == null && !state.waitingToSend)
                     })
                 }
