@@ -585,6 +585,32 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def rate_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-rate-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_rate_captures_are_copied_and_keep_the_original_status(self):
+        self.results(4)
+        files = [Path("rate-room-send-light-default.png"), Path("rate-dm-send-dark-font200.png"),
+            Path("rate-room-send-light-font200-landscape-ime.png"), Path("rate-room-ping-light-default.png"),
+            Path("rate-room-send-unknown-light-default.png"), Path("rate-room-conversation-light-default.png"),
+            Path("rate-room-send-light-font200-details.png"), Path("rate-room-send-light-font200-landscape-after-tap.png")]
+        self.rate_files(files)
+        self.assertEqual(4, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.RATE_DESTINATION / path.name)
+        self.assertEqual(9, self.copy.call_count) # Eight captures and the completion capture.
+
+    def test_excess_ambiguous_or_foreign_rate_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"rate-room-send-light-default-{n}.png") for n in range(15)],
+            [Path("a/rate-room-ping-light-default.png"), Path("b/rate-room-ping-light-default.png")],
+            # Not taken: a dark ping, a DM landscape shot, a 150% send.
+            [Path("rate-room-ping-dark-default.png")], [Path("rate-dm-send-light-font200-landscape-ime.png")],
+            [Path("rate-room-send-light-font150.png")], [Path("rate-dm-send-light-font200-details.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.rate_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def auth_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-auth-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
