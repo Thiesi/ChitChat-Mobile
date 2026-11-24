@@ -222,13 +222,20 @@ jobs:
           emulator-build: '16740729'
           disable-animations: true
           pre-emulator-launch-script: python3 -B .github/scripts/pin_journey_image.py
-          script: python3 -B .github/scripts/r8_smoke.py app/build/outputs/apk/release/app-release-unsigned.apk
+          # The journey's own health precheck first (the same pinned image and emulator build): an unhealthy emulator stops
+          # the job before the app is installed, recorded in device/environment.json.
+          script: |
+            adb shell settings put secure show_ime_with_hard_keyboard 1
+            python3 -B .github/scripts/native_environment.py
+            python3 -B .github/scripts/r8_smoke.py app/build/outputs/apk/release/app-release-unsigned.apk
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: r8-smoke-report
           retention-days: 7
-          path: app/build/reports/r8-smoke/
+          path: |
+            app/build/reports/r8-smoke/
+            app/build/reports/androidTests/device/environment.json
 
   api36-image-cache:
     # Main pushes only, never a PR or required check, and its result affects no gate: it warms the

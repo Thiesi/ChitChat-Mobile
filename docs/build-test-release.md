@@ -63,11 +63,13 @@ This is an actual JVM HTTP/server integration check using transient in-memory cr
 
 **R8 smoke check (2026-11-24):** the visible, non-gating `r8-smoke` job builds the minified release APK, zip-aligns and
 signs it with a throwaway key made in the job (never the Play upload key, which never enters CI), and installs it on the
-pinned API35 emulator with airplane mode on and Wi-Fi and mobile data off. `.github/scripts/r8_smoke.py` then launches it
+pinned API35 emulator (the journey's image and emulator build, after the journey's own health precheck,
+`native_environment.py`) with airplane mode on and Wi-Fi and mobile data off. `.github/scripts/r8_smoke.py` then launches it
 to Welcome, taps Get started into "Where do you chat?", types an http address and taps Continue, which must show the
 HTTPS line (`ServerAddress.parse` under R8; nothing can be requested). It fails on a missing screen, a dead process or an
 allowlisted fatal signature (a crash, an R8 or serialization error) in the app's own log or a crash naming the app. Only
-those truncated lines and booleans are kept, in the `r8-smoke-report` artifact; never raw logcat or field content. One
+those truncated lines and booleans are kept, in the `r8-smoke-report` artifact, under a one-line summary (pass or fail,
+the step reached and the reason); never raw logcat or field content. One
 attempt, no retries. Whether it becomes gating is decided once it has run clean.
 
 **Native job time limits (2026-11-20):** the API35 `journey` and the API36 `api36-observation` jobs have a 45-minute

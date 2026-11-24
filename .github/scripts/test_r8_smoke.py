@@ -41,6 +41,15 @@ class Helpers(unittest.TestCase):
         self.assertTrue(all(len(line) == smoke.LINE_CHARS for line in lines))
 
 
+class Summary(unittest.TestCase):
+    def test_the_first_missing_step_and_then_the_log(self):
+        full = dict(installed=True, welcome=True, stepTwo=True, httpsLine=True, alive=True, fatal=[])
+        self.assertTrue(smoke.summary(full).startswith("passed"))
+        self.assertEqual("FAILED at address: the HTTPS line didn't appear after Continue",
+                         smoke.summary(dict(full, httpsLine=False, alive=False)))
+        self.assertEqual("FAILED at log: 2 fatal line(s) in the app's log", smoke.summary(dict(full, fatal=["a", "b"])))
+
+
 class Main(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -71,6 +80,8 @@ class Main(unittest.TestCase):
         self.assertEqual(0, smoke.main(["r8_smoke.py", "app.apk"]))
         record = self.record()
         self.assertTrue(record["passed"])
+        self.assertEqual("summary", next(iter(record)), "The one-line summary comes first")
+        self.assertTrue(record["summary"].startswith("passed"))
         typed = [call.args for call in self.adb.call_args_list if call.args[:3] == ("shell", "input", "text")]
         self.assertEqual([("shell", "input", "text", smoke.ADDRESS)], typed)
         offline = [call.args for call in self.adb.call_args_list if call.args[:2] == ("shell", "svc")]
@@ -82,6 +93,7 @@ class Main(unittest.TestCase):
         self.assertEqual(1, smoke.main(["r8_smoke.py", "app.apk"]))
         record = self.record()
         self.assertFalse(record["welcome"]); self.assertFalse(record["passed"])
+        self.assertEqual("FAILED at welcome: Welcome didn't appear", record["summary"])
         self.assertEqual(1, self.wait_for.call_count)
 
     def test_a_crash_or_dead_process_fails(self):
@@ -90,11 +102,13 @@ class Main(unittest.TestCase):
         self.assertEqual(1, smoke.main(["r8_smoke.py", "app.apk"]))
         record = self.record()
         self.assertFalse(record["alive"]); self.assertEqual(1, len(record["fatal"]))
+        self.assertTrue(record["summary"].startswith("FAILED at process"))
 
     def test_a_signing_failure_is_recorded_not_hidden(self):
         self.sign.side_effect = RuntimeError("Signing step failed: apksigner")
         self.assertEqual(1, smoke.main(["r8_smoke.py", "app.apk"]))
         self.assertIn("apksigner", self.record()["error"])
+        self.assertTrue(self.record()["summary"].startswith("FAILED before launch: RuntimeError"))
 
 
 if __name__ == "__main__":

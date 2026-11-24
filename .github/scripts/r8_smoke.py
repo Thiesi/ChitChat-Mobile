@@ -79,6 +79,25 @@ def fatal_lines(crash: str, app: str) -> list[str]:
     return [line[:LINE_CHARS] for line in found][:MAX_LINES]
 
 
+STEPS = (("installed", "install", "the signed APK didn't install"),
+         ("welcome", "welcome", "Welcome didn't appear"),
+         ("stepTwo", "step 2", "\"Where do you chat?\" didn't appear after Get started"),
+         ("httpsLine", "address", "the HTTPS line didn't appear after Continue"),
+         ("alive", "process", "the app process wasn't running at the end"))
+
+
+def summary(record: dict) -> str:
+    """One line (TL): pass or fail, the step reached and the reason."""
+    if record.get("error"):
+        return f"FAILED before launch: {record['error']}" if not record.get("installed") else f"FAILED: {record['error']}"
+    for key, step, reason in STEPS:
+        if not record.get(key):
+            return f"FAILED at {step}: {reason}"
+    if record.get("fatal"):
+        return f"FAILED at log: {len(record['fatal'])} fatal line(s) in the app's log"
+    return "passed: Welcome, step 2 and the HTTPS line, offline, with no fatal log"
+
+
 def dump() -> str:
     adb("shell", "uiautomator", "dump", "/sdcard/ccm-r8-smoke.xml", timeout=30)
     return adb("shell", "cat", "/sdcard/ccm-r8-smoke.xml", timeout=30).stdout
@@ -146,11 +165,10 @@ def main(argv: list[str]) -> int:
             and not record["fatal"]
     except Exception as error:  # Recorded, never hidden: the check fails.
         record["error"] = type(error).__name__ + ": " + str(error)[:LINE_CHARS]
+    line = summary(record)
     REPORT.parent.mkdir(parents=True, exist_ok=True)
-    REPORT.write_text(json.dumps(record, indent=1), encoding="utf-8")
-    print(f"R8 smoke check: {'passed' if record['passed'] else 'FAILED'} "
-          f"(installed={record['installed']}, welcome={record['welcome']}, stepTwo={record['stepTwo']}, "
-          f"httpsLine={record['httpsLine']}, alive={record['alive']}, fatal={len(record['fatal'])})")
+    REPORT.write_text(json.dumps(dict(summary=line, **record), indent=1), encoding="utf-8")
+    print(f"R8 smoke check: {line}")
     for line in record["fatal"]:
         print("  " + line)
     return 0 if record["passed"] else 1
