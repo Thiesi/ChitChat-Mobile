@@ -37,6 +37,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.Constraints
@@ -70,9 +71,20 @@ internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetC
                     val lineScope = androidx.compose.runtime.rememberCoroutineScope()
                     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
                     val currentCompact by androidx.compose.runtime.rememberUpdatedState(compact)
+                    // A reveal asked for before the line is laid out (the dialog opening with a known wait: run 45439159759
+                    // left it below the fold) waits for the line's own positioning, then runs once.
+                    val revealPending = androidx.compose.runtime.remember { booleanArrayOf(false) }
                     val editLine: (@Composable () -> Unit)? = rateLine?.let { line -> {
-                        line(RateLineSlot(EditLinePadding, Modifier.bringIntoViewRequester(lineRequester)) { initial ->
+                        line(RateLineSlot(EditLinePadding, Modifier.bringIntoViewRequester(lineRequester).onGloballyPositioned {
+                            if (revealPending[0] && it.size.height > 1) {
+                                revealPending[0] = false
+                                lineScope.launch { lineRequester.bringIntoView() }
+                            }
+                        }) { initial ->
                             if (currentCompact && !initial) keyboard?.hide()
+                            // Only the opening waits for positioning; later reveals act on a laid-out line, and a lingering
+                            // flag would scroll on some unrelated relayout (typing) later.
+                            if (initial) revealPending[0] = true
                             lineScope.launch { lineRequester.bringIntoView() }
                         })
                     } }

@@ -209,6 +209,20 @@ class RateMutationPresentationTest {
         io.github.thiesi.chitchat.testing.assertLineBeforeEveryAction(full, "compact after the refusal")
     }
 
+    /**
+     * PL re-J on 56cc3ab: 200% portrait without the keyboard, a refused Save while open (the field already scrolled into
+     * view, the line appearing below it): the line is brought into view; final state after idle.
+     */
+    @Test fun portraitRefusalWithoutTheKeyboard() = launchAt200(landscape = false) {
+        compose.onNodeWithTag("author_edit_body").performScrollTo()
+        compose.runOnIdle { live.value = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true) } // A refused Save.
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("author_rate_line", useUnmergedTree = true).fetchSemanticsNodes()
+            .singleOrNull()?.config?.getOrNull(SemanticsProperties.ContentDescription)?.singleOrNull() == full }
+        compose.waitForIdle()
+        assertLineInView("portrait refusal without the keyboard")
+        io.github.thiesi.chitchat.testing.assertLineBeforeEveryAction(full, "portrait refusal without the keyboard")
+    }
+
     /** The PL's landscape pair without the keyboard: a wait known at opening, and the same scene with none. */
     @Test fun landscapeWithoutTheKeyboard() {
         launchAt200(landscape = true) { capture("rate-mutation-edit-light-font200-landscape-nowait") }
