@@ -612,6 +612,30 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def rate_mutation_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-rate-mutation-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_rate_mutation_captures_are_copied_and_keep_the_original_status(self):
+        self.results(4)
+        files = [Path("rate-mutation-edit-light-default.png"), Path("rate-mutation-edit-opened-dark-font200.png"),
+            Path("rate-mutation-delete-light-default.png"), Path("rate-mutation-reactions-dark-default.png"),
+            Path("rate-mutation-traversal.txt"), Path("rate-mutation-edit-light-font200-landscape-ime.png")]
+        self.rate_mutation_files(files)
+        self.assertEqual(4, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.RATE_MUTATION_DESTINATION / path.name)
+        self.assertEqual(7, self.copy.call_count) # Five captures, the traversal record and the completion capture.
+
+    def test_excess_ambiguous_or_foreign_rate_mutation_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"rate-mutation-edit-light-default-{n}.png") for n in range(19)],
+            [Path("a/rate-mutation-delete-light-default.png"), Path("b/rate-mutation-delete-light-default.png")],
+            # Not taken: a dark delete, a 200% delete.
+            [Path("rate-mutation-delete-dark-default.png")], [Path("rate-mutation-delete-light-font200.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.rate_mutation_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def rate_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-rate-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))

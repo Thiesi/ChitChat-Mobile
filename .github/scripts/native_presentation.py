@@ -78,6 +78,11 @@ PREFILL_DESTINATION = ROOT / "app/build/reports/androidTests/prefill-presentatio
 PREFILL_NAME = re.compile(r"prefill-(?:step2-(?:light|dark)-(?:default|font200)|offer-light-(?:default|font200)|"
     r"server-found-light-default|form-light-(?:default|font200)|signed-in-(?:light|dark)-(?:default|font200)|"
     r"invalid-light-default|referrer-step2-light-default|referrer-invalid-light-default)[.]png")
+RATE_MUTATION_DESTINATION = ROOT / "app/build/reports/androidTests/rate-mutation-presentation"
+# #323b2 (PL list 5-8): the shared mutation wait in the edit dialog, the delete dialog, an edit dialog opened during a
+# wait a reaction started, and the reaction picker.
+RATE_MUTATION_NAME = re.compile(r"rate-mutation-(?:edit-light-font200-landscape(?:-ime|-nowait)?|edit-light-font200-ime|edit-(?:light|dark)-(?:default|font200)|edit-opened-(?:light|dark)-(?:default|font200)|"
+    r"delete-light-default|reactions-(?:light|dark)-(?:default|font200))[.]png|rate-mutation-traversal[.]txt")
 RATE_DESTINATION = ROOT / "app/build/reports/androidTests/rate-presentation"
 RATE_NAME = re.compile(r"rate-(?:room-send-(?:light|dark)-(?:default|font200)|dm-send-(?:light|dark)-(?:default|font200)|"
     r"room-send-light-font200-landscape-ime|room-ping-light-default|room-send-unknown-light-default|"
@@ -500,6 +505,21 @@ def collect_prefill():
     print(f"Prefill presentation captures collected: {len(files)} of 16.")
 
 
+def collect_rate_mutation():
+    # #323b2 (PL): edit, light and dark x default and 200% (4); edit opened during a wait (4); delete (1); reactions (4).
+    # Plus the opened-with-known-wait traversal record (TL), one line of text.
+    # Plus the compact capture (200% landscape, the keyboard up).
+    # Plus the 200% landscape pair without the keyboard (with and without a wait, PL) and 200% portrait with it.
+    files = list(islice(SOURCE.rglob("ccm-rate-mutation-presentation/*"), 19))
+    if (not files or len(files) > 18 or len({p.name for p in files}) != len(files)
+        or any(RATE_MUTATION_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous rate mutation presentation output")
+    RATE_MUTATION_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, RATE_MUTATION_DESTINATION / path.name)
+    print(f"Rate mutation presentation captures collected: {len(files)} of 18.")
+
+
 def collect_rate():
     # #323b1 (PL list, 2026-11-23): room send with a draft and reply chip and DM send, light and dark at default and 200%
     # (8); room send at 200% landscape with the keyboard up (1); the ping line (1); the unknown-wait send line (1); a
@@ -691,6 +711,10 @@ def main() -> int:
         collect_rate()
     except Exception:
         print("Rate presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_rate_mutation()
+    except Exception:
+        print("Rate mutation presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_prefill()
     except Exception:

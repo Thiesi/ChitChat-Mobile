@@ -9,7 +9,8 @@ import io.github.thiesi.chitchat.core.ui.MessageAuthorChangeDialog
 @Composable
 internal fun DirectAuthorChangeDialog(dialog: DirectAuthorDialog, targetCurrent: Boolean, available: Boolean,
     busy: Boolean, onChange: (String) -> Unit, onConfirm: () -> Unit, onDismiss: () -> Unit,
-    pending: DirectAuthorUnknown?, canConfirm: Boolean, currentPreview: String?, error: String?) {
+    pending: DirectAuthorUnknown?, canConfirm: Boolean, currentPreview: String?, error: String?,
+    rateLine: (@Composable (io.github.thiesi.chitchat.core.ui.RateLineSlot) -> Unit)? = null) {
     val validation = dialog.validation?.let { stringResource(when (it) {
         "message_unchanged" -> R.string.author_unchanged
         "empty_message" -> R.string.dm_empty_body
@@ -17,5 +18,5 @@ internal fun DirectAuthorChangeDialog(dialog: DirectAuthorDialog, targetCurrent:
     }) }
     MessageAuthorChangeDialog(AuthorDialogPresentation(dialog.request.kind, dialog.body,
         dialog.request.original.body.orEmpty(), validation, dialog.checked, pending?.messageId, dialog.recovery || pending != null),
-        targetCurrent, available, busy, onChange, onConfirm, onDismiss, canConfirm, currentPreview, error)
+        targetCurrent, available, busy, onChange, onConfirm, onDismiss, canConfirm, currentPreview, error, rateLine)
 }

@@ -75,7 +75,18 @@ data class DirectThreadState(val peerId: Long? = null, val context: DirectContex
     /** #323b: refusals while a notice already showed; each flips Send's spoken parity (one announcement per refused tap). */
     val sendLimitRepeats: Int = 0,
     /** #323b: every refusal for the rate wait, first or repeat; each is one keyboard-hide check on the screen. */
-    val sendLimitRefusals: Int = 0) { override fun toString() = "DirectThreadState" }
+    val sendLimitRefusals: Int = 0,
+    /**
+     * #323b2: an edit, delete or reaction hit direct_message_mutation's own `429 rate_limited` (server or local gate).
+     * Definite (each endpoint consumes before any work): the dialog keeps its text, the reaction choice isn't sent or kept,
+     * nothing becomes unknown. A known wait shows until its deadline; an unknown one until the next interaction.
+     */
+    val mutationLimit: RateLimitNotice? = null,
+    /**
+     * #323b2: every refusal flips the line's spoken parity (one announcement per refused tap), including the first: the line
+     * may already show a wait known at opening (`mutationNotice`) while [mutationLimit] is still null (review of f6beb5b).
+     */
+    val mutationLimitRepeats: Int = 0) { override fun toString() = "DirectThreadState" }
 
 /** One serialized operation per thread: hints queue behind writes, never cancel/replay a POST. */
 class DirectThreadViewModel internal constructor(private val operations: DirectOperations,
@@ -172,7 +183,10 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             uncertainRead = current.uncertainRead || write == Write.READ,
             uncertainBlock = current.uncertainBlock || write == Write.BLOCK,
             checkedUnknown = false, busy = uploadPosting != null, sending = uploadPosting?.selection?.peer == current.peerId && uploadPosting != null, stale = true, atLatest = false,
-            authorDialog = null, authorWriting = false, reactionDialog = null, reactionWriting = false, attachmentReview = null)
+            authorDialog = null, authorWriting = false, reactionDialog = null, reactionWriting = false, attachmentReview = null,
+            // #323b2: closing the dialogs ends their wait line (review of c24d673); leaving ends the composer's unknown wait
+            // (TL), a known one stays until its deadline.
+            mutationLimit = null, sendLimit = current.sendLimit?.takeIf { it.knownWait })
         rememberDraft(); retire(); visibleNewest = null; viewport = null
     }
 
@@ -186,7 +200,8 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         dropWaiting()
         if ((uploadPosting == null && write == null) || !currentIdentity()) { background(); return }
         active = false; visibleNewest = null; viewport = null
-        mutable.value = mutable.value.copy(atLatest = false, authorDialog = null, reactionDialog = null)
+        mutable.value = mutable.value.copy(atLatest = false, authorDialog = null, reactionDialog = null, mutationLimit = null,
+            sendLimit = mutable.value.sendLimit?.takeIf { it.knownWait })
     }
     fun connectionLost() { mutable.value = mutable.value.copy(stale = true) }
     fun invalidate() { if (currentIdentity()) { requested++; drain() } }
@@ -245,7 +260,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             uncertainSend = old.uncertainSend || pending == Write.SEND,
             uncertainRead = old.uncertainRead || pending == Write.READ,
             uncertainBlock = old.uncertainBlock || pending == Write.BLOCK, authorDialog = null, authorWriting = false,
-            reactionDialog = null, reactionWriting = false)
+            reactionDialog = null, reactionWriting = false, mutationLimit = null, sendLimit = old.sendLimit?.takeIf { it.knownWait })
         rememberDraft()
     }
 
@@ -370,7 +385,8 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
     }
     fun dismissAuthor(request: DirectAuthorRequest) {
         if (mutable.value.authorDialog?.request === request && selected(request.expected, request.peerId) && !mutable.value.busy)
-            mutable.value = mutable.value.copy(authorDialog = null, atLatest = false)
+            // #323b2: closing ends an unknown wait's line (the next interaction); a known one returns on reopening.
+            mutable.value = mutable.value.copy(authorDialog = null, atLatest = false, mutationLimit = null)
     }
 
     fun submitAuthor(request: DirectAuthorRequest) {
@@ -396,8 +412,9 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
                 request.kind == AuthorChangeKind.DELETE && !result.deleted) throw ApiFailure(FailureKind.INCOMPATIBLE)
             // The acknowledged write is confirmed even if the following canonical GET fails.
             authorPosting = null; write = null
+            // #323b2: a confirmed edit or delete ends any wait line.
             mutable.value = mutable.value.copy(messages = applyDirectAuthorResult(mutable.value.messages, result),
-                authorDialog = null, authorWriting = false, stale = true,
+                authorDialog = null, authorWriting = false, stale = true, mutationLimit = null,
                 authorNotice = if (request.kind == AuthorChangeKind.EDIT) "author_edited" else "author_deleted")
             reload(peer) // No uncertain-SEND consent; preserve the existing window/anchor/draft.
         }
@@ -484,14 +501,16 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             // Confirmation precedes every fallible GET; another client's desired state is not synthesized.
             reactionPosting = null; write = null
             mutable.value = mutable.value.copy(messages = applyDirectReactionResult(mutable.value.messages, request.original, summary),
-                reactionDialog = null, reactionWriting = false, stale = true, reactionNotice = "reaction_changed")
+                reactionDialog = null, reactionWriting = false, stale = true, reactionNotice = "reaction_changed",
+                mutationLimit = null) // #323b2: a confirmed reaction ends any wait line.
             reload(peer, reconcileBlock = false)
         }
     }
 
     internal fun dismissReactions(request: DirectReactionRequest) {
         if (mutable.value.reactionDialog?.request === request && selected(request.expected, request.peerId) && !mutable.value.busy)
-            mutable.value = mutable.value.copy(reactionDialog = null, atLatest = false)
+            // #323b2: closing ends an unknown wait's line (the next interaction); a known one returns on reopening.
+            mutable.value = mutable.value.copy(reactionDialog = null, atLatest = false, mutationLimit = null)
     }
 
     private fun rememberUnknownReaction(pending: DirectReactionWrite) {
@@ -566,8 +585,19 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
                 // The rules refusal is checked under the content transaction's lock and refused before any commit
                 // (policies.md, play-readiness.md §1): definite, so no author or reaction uncertainty. Every other failure
                 // after a mutation starts keeps M5b1's possibly-committed handling.
-                if (failure.isRulesRefusal()) { authorPosting = null; reactionPosting = null }
                 val pending = write
+                // #323b2 (TL): direct_message_mutation's own 429 is definite too. Each of the four endpoints consumes
+                // before any work (direct-messages/edit.php, delete.php, react.php and unreact.php, :23–24 before the
+                // service at :29). A proxy's or any other 429 keeps M5b1's possibly-committed handling.
+                val mutationLimited = (pending == Write.AUTHOR || pending == Write.REACTION) && failure.isRateBudgetRefusal()
+                if (failure.isRulesRefusal() || mutationLimited) { authorPosting = null; reactionPosting = null }
+                if (mutationLimited) {
+                    // Its line, not the error; nothing changed on the server, so history isn't marked stale.
+                    mutable.value = mutable.value.copy(
+                        mutationLimit = RateLimitNotice(RateBudget.DIRECT_MESSAGE_MUTATION, failure.retryAfterSeconds != null),
+                        mutationLimitRepeats = mutable.value.mutationLimitRepeats + 1)
+                    return@launch
+                }
                 // #323b: the send's own policy refusal (direct-messages/send.php consumes before any work: definite).
                 // Its line, not the error; the draft, reply and attachment stay, nothing becomes unknown. Nothing changed
                 // on the server, so history isn't marked stale and Send stays enabled (PL).

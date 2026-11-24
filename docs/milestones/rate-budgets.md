@@ -158,7 +158,9 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
   - **{wait}:** computed from the stored deadline at render and frozen until the notice changes; minutes and hours never
     tick; under a minute reads "less than a minute".
   - **At the deadline:** one composition-bound one-shot clears the line. It never sends; there's no other timer.
-  - **An unknown wait** sets no gate and shows "…Try again later." until the next draft edit.
+  - **An unknown wait** sets no gate and shows "…Try again later." until the next draft edit or leaving the conversation
+    (a genuine background, a departure, the resource-denial reset; TL, #360). A known wait stays across leaving and
+    returning until its deadline; a configuration change keeps both.
 - **Definite:** the draft, reply and attachment stay; nothing becomes unknown; nothing resends. Nothing changed on the
   server, so history isn't marked stale and Send stays enabled. A tap during the wait is refused locally with no
   request and keeps the line.
@@ -166,7 +168,43 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
   attempts, at the existing cadence.
 - **A proxy's 429** on a send keeps today's handling: the error line, the session-wide wait and row 7.
 
-## #323b2 and #323b3 (next)
+## #323b2: author edit/delete and reactions (TL plan, PL ruling, 2026-11-24)
 
-Author edit, delete and reactions (a contract change to M5b1, like O3b3b), then message and people search. After #323b3,
-only proxy, non-JSON, bootstrap and revalidation 429s reach row 7.
+A contract change to M5b1, like O3b3b: on all eight paths only the policy's own `429 rate_limited` (the server's or the
+local gate's) is definite.
+- **The budgets (server facts at b2791a0):**
+  - `room_message_mutation` covers `rooms/edit-message.php`, `delete-own-message.php`, `react.php` and `unreact.php`;
+  - `direct_message_mutation` covers `direct-messages/edit.php`, `delete.php`, `react.php` and `unreact.php`;
+  - each endpoint consumes at :23–24, after CSRF and the actor and before its service (:29). So nothing was written, and
+    an edit, a delete and a reaction gate each other within their budget (`theMutationBudgetsGateEachOtherLocallyAnd
+    OnlyWithinTheirOwnPolicy`).
+- **Definite:** no author or reaction uncertainty, history isn't marked stale, the edit dialog keeps its text, the
+  reaction choice isn't sent or kept, and nothing resends. A later Save or choice is a fresh one. A proxy's or any other
+  429 keeps M5b1's possibly-committed handling (a guard test per screen and kind).
+- **The line (PL copy):** "You've changed a lot of messages and reactions recently. Try again in {wait}." ("…Try again
+  later." with an unknown wait).
+  - **Where (TL and PL, after the re-J on a942d9a):**
+    - edit: in the body directly after the field. On appearance (a 429 while open, a known wait at opening, a refused
+      tap) it's brought into view (BringIntoViewRequester: no focus or caret change, the full text), with at least 48dp
+      of the field visible. In compact a refusal also hides the keyboard (a plain hide, focus kept, as the composer's
+      rule b), so the line shows beside the field; opening with a known wait leaves the keyboard alone. The fixed area
+      and the action row are exactly main's.
+    - The two earlier placements failed J: below the fold at 200% (2f560da), and in the fixed area, where even the short
+      form hid the field at 200% portrait and pushed Save under the keyboard in compact (a942d9a).
+    - With no notice the line has zero footprint everywhere (its padding applies only while drawn, outside spaced
+      columns), so the edit and delete dialogs and the picker are identical to main;
+    - delete: the first item of the dialog's text (its gap below is drawn padding);
+    - the reaction picker: above the emoji rows;
+    - never on the Check history path.
+  - A wait already known (another edit, delete or reaction started it) shows as soon as the dialog opens; opening sends
+    nothing (`mutationNotice`).
+  - The same persistent carrier as the composer's (`RateWaitDialogLine`): a polite live region with the full line as its
+    description, one trailing space flipped per refused tap, and a zero-footprint strip when there's nothing to say.
+  - It ends at the deadline (one one-shot), on closing the dialog (an unknown wait's next interaction) or on a confirmed
+    change.
+- **Captures:** `rate-mutation-*` (PL list 5–8), collected into `rate-mutation-presentation`.
+
+## #323b3 (next)
+
+Message and people search, and the final unmapped list. After it, only proxy, non-JSON, bootstrap and revalidation 429s
+reach row 7.

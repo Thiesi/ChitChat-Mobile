@@ -25,6 +25,13 @@ Room history retains optional can_edit/can_delete enrichment in transient client
 
 The dependent native slice must provide accessible author actions, original entry/account/resource/row guards, memory-only edit text, explicit delete-for-everyone/revision disclosures and operation serialization. Suppress underlying read/typing proof while modal, preserve normal drafts/replies/anchors/unknown-send consent, and require explicit GET reconciliation plus a fresh choice after ambiguous author writes. Native guests/moderation remain separate. Protocol availability alone does not complete editing parity.
 
+### Rate refusals (#323b2, 2026-11-24)
+
+The one other definite failure after a mutation starts, beside O3b3b's rules refusal: the policy's own `429
+rate_limited` (`room_message_mutation` or `direct_message_mutation`, the server's or the local gate's). Each endpoint
+consumes it before any work (:23–24, before the service at :29, at b2791a0). No author or reaction uncertainty, nothing
+resends; a proxy's or any other 429 stays possibly committed. See `rate-budgets.md`.
+
 ## Verification boundaries
 
 Credential-free TLS MockWebServer tests use production session/network code: exact routes/bodies/cookies/CSRF; literal/Unicode/trim validation; original-author checks; ID/permission/tombstone/reaction handling; malformed/error replies without replay; missing DM privacy; stale account callbacks, logout, cancellation and redirects. Record actual build/test/native results after execution. Normal CI/native gates omit diagnostic input tracing and phone autofill overrides. No integration-file access, live-server calls, phone interaction or backend-checkout modifications belong to this slice.

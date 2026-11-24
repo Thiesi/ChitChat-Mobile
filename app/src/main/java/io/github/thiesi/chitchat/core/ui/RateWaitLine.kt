@@ -108,6 +108,50 @@ fun RateWaitLine(session: SessionState, notice: RateLimitNotice, @StringRes know
 }
 
 /**
+ * #323b2 (PL ruling): the shared message-mutation wait in the edit/delete dialog (on its refusal line) and the reaction
+ * picker (above the emoji rows). The same persistent carrier as the composer's: always composed while the dialog shows, a
+ * polite live region whose description is the full line while a notice is current (one trailing space flipped per refused
+ * tap: [parity]) and nothing otherwise, a zero-footprint 1dp strip when there's nothing to say. So the line appearing and
+ * each refused tap are one change on an existing node (one announcement each), and an empty carrier is no swipe stop.
+ */
+@Composable
+fun mutationNotice(session: SessionState, notice: RateLimitNotice?, budget: io.github.thiesi.chitchat.core.session.RateBudget): RateLimitNotice? {
+    // A wait already known (another edit, delete or reaction started it) shows as soon as the dialog opens (PL); opening
+    // sends nothing. The refusal's own notice wins, so an unknown wait still reads "Try again later.".
+    val clock = LocalMonotonicClock.current
+    return notice ?: RateLimitNotice(budget, true).takeIf {
+        session.rateWaits[budget]?.let { wait -> wait.generation == session.generation && wait.userId == session.user?.id &&
+            wait.untilElapsed > clock() } == true
+    }
+}
+
+@Composable
+fun RateWaitDialogLine(session: SessionState, notice: RateLimitNotice?, @StringRes known: Int, @StringRes unknown: Int,
+    tag: String, modifier: Modifier = Modifier, parity: Boolean = false,
+    drawnPadding: androidx.compose.foundation.layout.PaddingValues? = null, onShown: ((initial: Boolean) -> Unit)? = null) {
+    val now = current(session, notice)
+    val full = now?.let { fullText(it, known, unknown) }
+    val spoken = full?.let { if (parity) "$it " else it }
+    // [onShown] (TL, PL): each time the line appears (initial: it's there as the dialog opens) and on each refused tap
+    // (the parity flips), so the dialog can bring it into view. Nothing else: no focus or caret change.
+    if (onShown != null) {
+        val opening = remember { booleanArrayOf(true) }
+        val shown = full != null
+        LaunchedEffect(shown, parity) {
+            if (shown) onShown(opening[0])
+            opening[0] = false
+        }
+    }
+    // [drawnPadding] applies only while the line is drawn: an empty carrier adds nothing to its container.
+    val drawn = if (drawnPadding != null) Modifier.padding(drawnPadding) else Modifier
+    Text(full.orEmpty(), modifier.then(if (full != null) drawn else ZeroFootprintStrip).clearAndSetSemantics {
+        if (spoken != null) contentDescription = spoken
+        liveRegion = LiveRegionMode.Polite
+        testTag = tag
+    }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+}
+
+/**
  * #323b (PL, TL): Send's readable wait. While a notice is current, Send keeps its label ("Send") and its state description
  * is the full line, so focusing Send reads "Send, You've sent…". No live region: a button changes several properties
  * at once (label, enabled, progress), and on a live node each change is an announcement (run 45222016407: three per

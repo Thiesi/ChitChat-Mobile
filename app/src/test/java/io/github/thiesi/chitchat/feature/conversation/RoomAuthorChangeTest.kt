@@ -155,6 +155,100 @@ class RoomAuthorChangeTest {
         assertEquals("Nothing resends after I agree", 1, fake.writes)
     }
 
+    /**
+     * #323b2: room_message_mutation's own 429 is definite (edit-message.php consumes before any work). The dialog keeps
+     * its text, nothing is unknown or stale, the wait line shows, nothing resends; a later Save still works.
+     */
+    /**
+     * Review of f6beb5b (TL): a dialog opened during a known wait another write started shows the line (`mutationNotice`)
+     * while [ConversationUiState.mutationLimit] is still null. The first refused tap there must flip the parity, or its
+     * description wouldn't change and TalkBack would stay silent.
+     */
+    @Test fun theFirstRefusalDuringAKnownWaitFlipsTheParity() = runTest(dispatcher) {
+        open()
+        fake.session.value = fake.session.value.copy(rateWaits = mapOf(io.github.thiesi.chitchat.core.session.RateBudget.ROOM_MESSAGE_MUTATION to
+            io.github.thiesi.chitchat.core.session.RateWait(Long.MAX_VALUE / 2, 1, 7)))
+        val request = begin(); model.updateAuthorBody(request, "Limited edit")
+        assertNull("Opening sets no notice of its own", model.state.value.mutationLimit)
+        assertEquals(0, model.state.value.mutationLimitRepeats)
+        fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120); model.submitAuthor(request); runCurrent()
+        assertNotNull(model.state.value.mutationLimit)
+        assertEquals("The first refused tap flips the parity", 1, model.state.value.mutationLimitRepeats)
+    }
+
+    /** Review of c24d673: an unknown wait (no deadline) ends when the dialog closes by leaving too, not only by Dismiss. */
+    @Test fun leavingAfterAnUnknownWaitRefusalEndsTheLine() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", null)
+        val request = begin(); model.updateAuthorBody(request, "Limited edit"); model.submitAuthor(request); runCurrent()
+        assertNotNull(model.state.value.mutationLimit)
+        model.background(); runCurrent()
+        assertNull("Leaving closed the dialog", model.state.value.authorDialog)
+        assertNull("and ended the unknown wait's line", model.state.value.mutationLimit)
+    }
+
+    /** TL: leaving ends the composer's unknown wait ("Try again later."); a known wait (with a deadline) stays. */
+    @Test fun leavingEndsTheComposersUnknownWaitAndKeepsAKnownOne() = runTest(dispatcher) {
+        for ((retry, kept) in listOf<Pair<Long?, Boolean>>(null to false, 120L to true)) {
+            open(); fake.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", retry)
+            model.updateDraft("Limited message"); model.send(); runCurrent()
+            assertNotNull("retry=$retry: the composer's line", model.state.value.sendLimit)
+            model.background(); runCurrent()
+            assertEquals("retry=$retry: kept only with a deadline", kept, model.state.value.sendLimit != null)
+            fake.sendFailure = null; model.foreground(); runCurrent()
+            model.updateDraft(""); runCurrent()
+        }
+    }
+
+    @Test fun aRateLimitedEditKeepsItsTextIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
+        val request = begin(); model.updateAuthorBody(request, "Limited edit"); model.submitAuthor(request); runCurrent()
+        assertNull("Definite: no author uncertainty", model.state.value.authorUnknown)
+        assertFalse("Nothing changed on the server", model.state.value.stale)
+        assertNull("Its line, not the error", model.state.value.error)
+        assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(
+            io.github.thiesi.chitchat.core.session.RateBudget.ROOM_MESSAGE_MUTATION, true), model.state.value.mutationLimit)
+        // Review of f6beb5b: the first refusal flips the parity too (the line may already show a wait known at opening).
+        assertEquals("Every refusal flips the parity", 1, model.state.value.mutationLimitRepeats)
+        assertEquals("The edit dialog keeps its text", "Limited edit", model.state.value.authorDialog?.body)
+        runCurrent(); assertEquals("Nothing resends", 1, fake.writes)
+        fake.writeFailure = null; model.submitAuthor(request); runCurrent()
+        assertEquals("A later Save is a fresh choice", 2, fake.writes)
+        assertNull("A confirmed edit ends the line", model.state.value.mutationLimit)
+    }
+
+    /** #323b2: a delete refused by the same budget is definite too (delete-own-message.php consumes before any work). */
+    @Test fun aRateLimitedDeleteIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
+        val request = begin(AuthorChangeKind.DELETE); model.submitAuthor(request); runCurrent()
+        assertNull(model.state.value.authorUnknown); assertFalse(model.state.value.stale)
+        assertNotNull("The dialog stays", model.state.value.authorDialog)
+        assertNotNull(model.state.value.mutationLimit); runCurrent(); assertEquals(1, fake.writes)
+    }
+
+    /**
+     * Review of 2f560da (#323b2): a rate_limited 429 on Check history (a GET) isn't the mutation's refusal. The uncertainty
+     * stays unresolved, the error shows and no wait line appears.
+     */
+    @Test fun aRateLimitedAuthorCheckHistoryKeepsTheUncertaintyAndShowsTheError() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.NETWORK)
+        val request = begin(); model.updateAuthorBody(request, "Maybe committed"); model.submitAuthor(request); runCurrent()
+        val pending = checkNotNull(model.state.value.authorUnknown)
+        fake.writeFailure = null; fake.historyFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 60)
+        model.checkAuthorHistory(fake.session.value, pending); runCurrent()
+        assertSame("Still unresolved", pending, model.state.value.authorUnknown)
+        assertNotNull("The error shows", model.state.value.error)
+        assertNull("No mutation wait line", model.state.value.mutationLimit)
+        assertEquals(1, fake.writes)
+    }
+
+    /** Guard (TL, #323b2): a proxy's 429 (no rate_limited code) after the write starts keeps M5b1's uncertainty. */
+    @Test fun aProxy429EditStillLeavesAuthorUncertainty() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, null)
+        val request = begin(); model.updateAuthorBody(request, "Maybe committed"); model.submitAuthor(request); runCurrent()
+        assertNotNull("M5b1: may have committed", model.state.value.authorUnknown)
+        assertNull(model.state.value.mutationLimit); assertEquals(1, fake.writes)
+    }
+
     /** Guard (TL, O3b3b): only the exact rules refusal is definite. Another 403 after the write starts stays uncertain. */
     @Test fun aDifferentForbiddenEditStillLeavesAuthorUncertainty() = runTest(dispatcher) {
         open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 403, "forbidden")

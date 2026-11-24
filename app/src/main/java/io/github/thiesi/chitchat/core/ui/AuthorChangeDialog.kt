@@ -19,7 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.platform.LocalFocusManager
@@ -35,7 +37,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.mutations.AuthorChangeKind
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.Constraints
 
 /** Presentation only. Owner-specific canonical requests, authorization and jobs stay in the VM.
@@ -47,7 +51,8 @@ internal class AuthorDialogPresentation(val kind: AuthorChangeKind, val body: St
 @Composable
 internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetCurrent: Boolean, available: Boolean,
     busy: Boolean, onChange: (String) -> Unit, onConfirm: () -> Unit, onDismiss: () -> Unit,
-    canConfirm: Boolean = available, currentPreview: String? = null, error: String? = null) {
+    canConfirm: Boolean = available, currentPreview: String? = null, error: String? = null,
+    rateLine: (@Composable (RateLineSlot) -> Unit)? = null) {
     val editing = dialog.kind == AuthorChangeKind.EDIT
     if (editing) {
         // A floating alert can pan its footer beneath the IME when large text makes the form tall.
@@ -58,12 +63,37 @@ internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetC
             Surface(Modifier.fillMaxSize().testTag("author_change_dialog"), color = MaterialTheme.colorScheme.surface) {
                 BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
                     val compact = maxHeight < 200.dp && maxWidth >= 400.dp
+                    // #323b2 (TL, PL after the re-J on a942d9a): the wait line sits in the body directly after the field,
+                    // brought into view whenever it appears or a tap is refused (no focus or caret change). In compact a
+                    // refusal also hides the keyboard (a plain hide, focus kept, as the composer's rule b), so the line shows
+                    // beside the field. Opening with a known wait brings it into view but leaves the keyboard alone.
+                    val lineRequester = androidx.compose.runtime.remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+                    val lineScope = androidx.compose.runtime.rememberCoroutineScope()
+                    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+                    val currentCompact by androidx.compose.runtime.rememberUpdatedState(compact)
+                    // A reveal asked for before the line is laid out (the dialog opening with a known wait: run 45439159759
+                    // left it below the fold) waits for the line's own positioning, then runs once.
+                    val revealPending = androidx.compose.runtime.remember { booleanArrayOf(false) }
+                    val editLine: (@Composable () -> Unit)? = rateLine?.let { line -> {
+                        line(RateLineSlot(EditLinePadding, Modifier.bringIntoViewRequester(lineRequester).onGloballyPositioned {
+                            if (revealPending[0] && it.size.height > 1) {
+                                revealPending[0] = false
+                                lineScope.launch { lineRequester.bringIntoView() }
+                            }
+                        }) { initial ->
+                            if (currentCompact && !initial) keyboard?.hide()
+                            // Only the opening waits for positioning; later reveals act on a laid-out line, and a lingering
+                            // flag would scroll on some unrelated relayout (typing) later.
+                            if (initial) revealPending[0] = true
+                            lineScope.launch { lineRequester.bringIntoView() }
+                        })
+                    } }
                     AuthorEditorLayout(compact) {
                     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(stringResource(R.string.message_edit_action), style = MaterialTheme.typography.headlineSmall,
                             modifier = Modifier.semantics { heading() })
-                        AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error, compact)
+                        AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error, compact, editLine)
                     }
                     FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End),
@@ -78,13 +108,28 @@ internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetC
     } else {
         AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, modifier = Modifier.testTag("author_change_dialog").lanternDialogEdge(),
             title = { Text(stringResource(R.string.author_delete_title)) },
-            text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error)
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+                // #323b2 (PL J, TL): the delete dialog's wait line is the first item of its text, read after the title. Its
+                // gap below is drawn padding, and the text keeps main's spaced column, so with no notice nothing moves.
+                rateLine?.invoke(RateLineSlot(DeleteLinePadding))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error)
+                }
             } },
             confirmButton = { AuthorConfirm(dialog, canConfirm && !busy, onConfirm) },
             dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.cancel)) } })
     }
 }
+
+/**
+ * #323b2: how a dialog draws its wait line. [padding] is applied only while the line is drawn, so an empty carrier adds
+ * nothing and the dialog matches main (PL re-J); [modifier] and [onShown] let the dialog bring the line into view.
+ */
+internal class RateLineSlot(val padding: androidx.compose.foundation.layout.PaddingValues, val modifier: Modifier = Modifier,
+    val onShown: ((initial: Boolean) -> Unit)? = null)
+
+private val EditLinePadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp)
+private val DeleteLinePadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)
 
 /** Measure each slot once without moving/recreating the focused field when the IME changes height. */
 @Composable
@@ -105,7 +150,8 @@ private fun AuthorEditorLayout(compact: Boolean, content: @Composable () -> Unit
 
 @Composable
 private fun AuthorChangeText(dialog: AuthorDialogPresentation, targetCurrent: Boolean, available: Boolean,
-    busy: Boolean, onChange: (String) -> Unit, currentPreview: String?, error: String?, compact: Boolean = false) {
+    busy: Boolean, onChange: (String) -> Unit, currentPreview: String?, error: String?, compact: Boolean = false,
+    rateLine: (@Composable () -> Unit)? = null) {
     val editing = dialog.kind == AuthorChangeKind.EDIT
     val pending = dialog.pendingMessageId
     Text(stringResource(R.string.author_retention))
@@ -125,11 +171,16 @@ private fun AuthorChangeText(dialog: AuthorDialogPresentation, targetCurrent: Bo
         // read-only transition itself. It's a plain clear (no moveFocus), so no other node takes input focus. It stays
         // because a canFocus change isn't guaranteed to release focus that's already held.
         LaunchedEffect(readOnly) { if (readOnly) focus.clearFocus() }
-        MessageInput(dialog.body, onChange, !busy,
-            stringResource(if (pending != null || dialog.checked) R.string.author_proposed_text else R.string.author_edit_body), compact,
-            Modifier.fillMaxWidth().focusProperties { canFocus = !readOnly }.testTag("author_edit_body"), readOnly = readOnly)
+        // #323b2: the field and the wait line directly after it share an unspaced column; the line's gap is drawn padding,
+        // so with no notice the body is exactly main's.
+        Column {
+            MessageInput(dialog.body, onChange, !busy,
+                stringResource(if (pending != null || dialog.checked) R.string.author_proposed_text else R.string.author_edit_body), compact,
+                Modifier.fillMaxWidth().focusProperties { canFocus = !readOnly }.testTag("author_edit_body"), readOnly = readOnly)
+            rateLine?.invoke()
+        }
         Text(stringResource(R.string.author_character_count, dialog.body.codePointCount(0, dialog.body.length)))
-    } else if (!targetCurrent) Text(stringResource(R.string.message_actions_unavailable))
+    } else if (!targetCurrent) Column { Text(stringResource(R.string.message_actions_unavailable)); rateLine?.invoke() }
     else if (pending == null) Text(messageExcerpt(dialog.originalBody))
     error?.let { Text(it) }
     dialog.validationText?.let { Text(it) }

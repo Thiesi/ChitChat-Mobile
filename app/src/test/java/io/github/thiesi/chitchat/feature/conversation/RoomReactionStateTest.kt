@@ -140,6 +140,51 @@ class RoomReactionStateTest {
         assertEquals("Nothing resends after I agree", 1, fake.writes)
     }
 
+    /** #323b2: a room reaction add (react.php) refused by room_message_mutation is definite; the chip is unchanged. */
+    @Test fun roomReactRateLimitedIsDefinite() = runTest(dispatcher) { rateLimitedReaction("room react", desired = true) }
+
+    /** #323b2: a room reaction removal (unreact.php) refused by room_message_mutation is definite; the chip is unchanged. */
+    @Test fun roomUnreactRateLimitedIsDefinite() = runTest(dispatcher) {
+        // The viewer's own 👍 to remove (as in mutedDeletedRowAllowsOwnRemovalButNeverAnAdd).
+        fake.rows[42] = listOf(message(reactions = listOf(reaction(7, flag = false))))
+        rateLimitedReaction("room unreact", desired = false, ReactionEmoji.THUMBS_UP)
+    }
+
+    private fun kotlinx.coroutines.test.TestScope.rateLimitedReaction(path: String, desired: Boolean,
+        emoji: ReactionEmoji = ReactionEmoji.HEART) {
+        open(); val before = model.state.value.messages.map { it.id to it.reactions }
+        fake.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
+        val request = begin()
+        assertTrue("$path: the choice is allowed", model.canSetReaction(request, emoji, desired))
+        model.setReaction(request, emoji, desired); runCurrent()
+        assertNull("$path: definite, no reaction uncertainty", model.state.value.reactionUnknown)
+        assertFalse("$path: not stale", model.state.value.stale)
+        assertNotNull("$path: the wait line", model.state.value.mutationLimit)
+        assertEquals("$path: the chip is unchanged", before, model.state.value.messages.map { it.id to it.reactions })
+        assertEquals("$path: one request, nothing resent", 1, fake.writes)
+        model.dismissReactions(request)
+        assertNull("$path: closing ends the line", model.state.value.mutationLimit)
+    }
+
+    /** Review of 2f560da (#323b2): a rate_limited 429 on the reaction Check history keeps the uncertainty and shows the error. */
+    @Test fun aRateLimitedReactionCheckHistoryKeepsTheUncertaintyAndShowsTheError() = runTest(dispatcher) {
+        open(); fake.failure = ApiFailure(FailureKind.NETWORK); model.setReaction(begin(), ReactionEmoji.HEART, true); runCurrent()
+        val unknown = checkNotNull(model.state.value.reactionUnknown)
+        fake.failure = null; fake.getFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 60)
+        model.checkReactionHistory(fake.session.value, unknown); runCurrent()
+        assertSame("Still unresolved", unknown, model.state.value.reactionUnknown)
+        assertNotNull("The error shows", model.state.value.error)
+        assertNull("No mutation wait line", model.state.value.mutationLimit)
+        assertEquals(1, fake.writes)
+    }
+
+    /** Guard (TL, #323b2): a proxy's 429 on a reaction keeps M5b1's uncertainty. */
+    @Test fun aProxy429ReactionStillLeavesReactionUncertainty() = runTest(dispatcher) {
+        open(); fake.failure = ApiFailure(FailureKind.HTTP, 429, null)
+        model.setReaction(begin(), ReactionEmoji.HEART, true); runCurrent()
+        assertNotNull(model.state.value.reactionUnknown); assertNull(model.state.value.mutationLimit)
+    }
+
     @Test fun failedExplicitGetRetainsSameUnknownAndDoesNotReplay() = runTest(dispatcher) {
         open(); fake.failure = ApiFailure(FailureKind.NETWORK); model.setReaction(begin(), ReactionEmoji.HEART, true); runCurrent()
         val unknown = checkNotNull(model.state.value.reactionUnknown); fake.getFailure = ApiFailure(FailureKind.NETWORK)
