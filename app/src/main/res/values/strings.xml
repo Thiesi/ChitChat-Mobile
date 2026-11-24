@@ -214,9 +214,15 @@
     <string name="rate_wait_messages_unknown">You\'ve sent a lot of messages recently. Try again later. Your message is kept.</string>
     <string name="rate_wait_pings">You\'ve sent a lot of pings recently. Try again in %1$s.</string>
     <string name="rate_wait_pings_unknown">You\'ve sent a lot of pings recently. Try again later.</string>
-    <!-- #323b refinement (PL): the short form where the full line doesn't fit; the full line is first in Details. -->
+    <!-- #323b3 (PL): the @room/@here wait; a message without the mention can go now, so the line says so. -->
+    <string name="rate_wait_broadcast">You\'ve used @room or @here a lot recently. You can send without it now, or try again in %1$s. Your message is kept.</string>
+    <string name="rate_wait_broadcast_unknown">You\'ve used @room or @here a lot recently. You can send without it now, or try again later. Your message is kept.</string>
+    <string name="rate_wait_broadcast_short">Send without @room or @here, or try again in %1$s.</string>
+    <string name="rate_wait_broadcast_short_unknown">Send without @room or @here, or try again later.</string>
+    <!-- #323b2 (PL): edit, delete and reaction waits in their dialogs (full line only). -->
     <string name="rate_wait_mutations">You\'ve changed a lot of messages and reactions recently. Try again in %1$s.</string>
     <string name="rate_wait_mutations_unknown">You\'ve changed a lot of messages and reactions recently. Try again later.</string>
+    <!-- #323b refinement (PL): the short form where the full line doesn't fit; the full line is first in Details. -->
     <string name="rate_wait_short">Try again in %1$s.</string>
     <string name="rate_wait_short_unknown">Try again later.</string>
     <string name="status_syncing">Updating…</string>

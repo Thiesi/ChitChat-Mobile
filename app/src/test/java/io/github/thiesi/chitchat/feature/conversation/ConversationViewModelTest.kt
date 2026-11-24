@@ -321,6 +321,28 @@ class ConversationViewModelTest {
         assertNull("A confirmed send clears it", model.state.value.sendLimit)
     }
 
+    /** #323b3 (PL): the @room/@here wait, its silent end once the draft has no counted mention, and send precedence. */
+    @Test fun aBroadcastWaitShowsItsOwnLineAndEndsWhenTheMentionGoes() = runTest(dispatcher) {
+        open(); fake.sendFailure = limited(120)
+        model.updateDraft("Hello @room fixture"); model.send(); advanceUntilIdle()
+        assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(io.github.thiesi.chitchat.core.session.RateBudget.ROOM_BROADCAST_MENTION, true), model.state.value.sendLimit)
+        assertFalse("Definite", model.state.value.uncertainSend); assertEquals("Hello @room fixture", model.state.value.draft)
+        model.updateDraft("Hello @rooms fixture") // @rooms isn't counted by the server.
+        assertNull("Removing the mention ends the line, silently", model.state.value.sendLimit)
+        assertEquals("No parity flip: silent", 0, model.state.value.sendLimitRepeats)
+        model.updateDraft("Hello @room fixture")
+        assertNull("Typing it back doesn't bring the line back", model.state.value.sendLimit)
+        // The next refused tap does (the local gate).
+        fake.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 110, localGate = true, gatedBudget = io.github.thiesi.chitchat.core.session.RateBudget.ROOM_BROADCAST_MENTION)
+        model.send(); advanceUntilIdle()
+        assertEquals(io.github.thiesi.chitchat.core.session.RateBudget.ROOM_BROADCAST_MENTION, model.state.value.sendLimit?.budget)
+        // A known room_send wait refuses it under room_send: only the send line shows (PL precedence).
+        fake.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 30, localGate = true, gatedBudget = io.github.thiesi.chitchat.core.session.RateBudget.ROOM_SEND)
+        model.send(); advanceUntilIdle()
+        assertEquals(io.github.thiesi.chitchat.core.session.RateBudget.ROOM_SEND, model.state.value.sendLimit?.budget)
+        assertEquals("Each send was one explicit press", 3, fake.sends)
+    }
+
     @Test fun aRateLimitedPingUsesThePingBudgetAndAnUnknownWaitEndsAtTheNextEdit() = runTest(dispatcher) {
         open(); fake.sendFailure = limited(null)
         model.updateDraft("/ping Bob fixture"); model.send(); advanceUntilIdle()

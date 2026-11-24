@@ -55,6 +55,7 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
 | --- | --- | --- | --- |
 | `ROOM_SEND` | `room_send` | `rooms/send.php:31–32`, when `PingCommand::parse` (:29) finds no ping | room send |
 | `ROOM_PING` | `room_ping` | the same consume, for a ping | room `/ping` |
+| `ROOM_BROADCAST_MENTION` | `room_broadcast_mention` | `rooms/send.php:39–41`, after `room_send`, for a non-ping body with `@room`/`@here` | room send with a broadcast mention (#323b3) |
 | `DIRECT_MESSAGE_SEND` | `direct_message_send` | `direct-messages/send.php:23–24` | DM send |
 | `TYPING` | `typing` | `typing.php:30` | room and DM typing |
 
@@ -204,7 +205,31 @@ local gate's) is definite.
     change.
 - **Captures:** `rate-mutation-*` (PL list 5–8), collected into `rate-mutation-presentation`.
 
-## #323b3 (next)
+## #323b3a: the @room/@here budget (a #323b1 fix; TL plan, PL ruling, 2026-11-24)
+
+- **The defect:** `rooms/send.php` consumes `room_send` and then, for a non-ping body where
+  `MentionParser::containsBroadcastToken` (`src/Mentions/MentionParser.php:62–70`) finds `@room` or `@here`,
+  `room_broadcast_mention` (:39–41), both before any work. #323b1 put every send 429 under `ROOM_SEND`, so a broadcast
+  refusal gated every room send for its wait: more than the server.
+- **The fix:**
+  - `containsBroadcastToken` mirrors the PHP exactly: case-insensitive, not after `[A-Za-z0-9_.-]`, trailing `.`, `-`
+    and `_` dropped, raw text with no exemption for code or quotes;
+  - `roomSendBudget`: a ping goes to `ROOM_PING`; a broadcast body to the narrower `ROOM_BROADCAST_MENTION` (the 429
+    doesn't say which policy refused; narrower never over-gates); anything else to `ROOM_SEND`;
+  - a broadcast send is also gated by a known `ROOM_SEND` wait, checked first (`authorized(…, alsoGatedBy)`); the local
+    refusal names that budget (`ApiFailure.gatedBudget`), so the send line takes precedence (PL);
+  - a plain message during the broadcast wait goes to the server as usual; the draft is kept and the refusal definite.
+- **The line (PL copy):** "You've used @room or @here a lot recently. You can send without it now, or try again in
+  {wait}. Your message is kept." (unknown: "…or try again later. Your message is kept."); short form "Send without @room
+  or @here, or try again in {wait}." / "…or try again later.". The send line's placement, carrier, parity, forms and
+  announcement counts.
+  - It shows only after a refused send for that budget, and ends silently once the draft no longer has a counted
+    mention; typing one back doesn't bring it back, the next refused tap does (one announcement).
+  - A known wait also ends at its deadline; an unknown one on the next edit or on leaving, as for send.
+- **Captures:** `rate-broadcast-*` (light and dark × default and 200%, the unknown variant at light default), collected
+  into `rate-presentation`.
+
+## #323b3b (next)
 
 Message and people search, and the final unmapped list. After it, only proxy, non-JSON, bootstrap and revalidation 429s
 reach row 7.

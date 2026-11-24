@@ -525,8 +525,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         io.github.thiesi.chitchat.feature.reports.ReportNotices(reportOrigin, io.github.thiesi.chitchat.feature.reports.ReportPlace.Room(state.context?.room?.name), Modifier.padding(horizontal = 16.dp))
         val rateLimit = state.sendLimit
         val ratePing = rateLimit?.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
-        val rateKnown = if (ratePing) R.string.rate_wait_pings else R.string.rate_wait_messages
-        val rateUnknown = if (ratePing) R.string.rate_wait_pings_unknown else R.string.rate_wait_messages_unknown
+        // #323b3 (PL): the @room/@here line names the way out (send without it now); its own short form.
+        val rateBroadcast = rateLimit?.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_BROADCAST_MENTION
+        val rateKnown = if (ratePing) R.string.rate_wait_pings else if (rateBroadcast) R.string.rate_wait_broadcast else R.string.rate_wait_messages
+        val rateUnknown = if (ratePing) R.string.rate_wait_pings_unknown
+            else if (rateBroadcast) R.string.rate_wait_broadcast_unknown else R.string.rate_wait_messages_unknown
         // #323b (PL, TL): the timeline's block holds the typing line and the persistent wait line with their own top
         // spacing, so the always-present (zero-height when empty) wait line adds no gap; spacing is unchanged otherwise.
         // At least 1dp (TL, run 45244641951): squeezed to 0, the hidden 1dp strip had zero size and announced nothing.
@@ -602,7 +605,9 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         // PL refinement: the composer comes first. The full line only where the timeline keeps one 48dp row beside it,
         // else the short form here and the full line first in Details; decided per notice and window, never per draft.
         io.github.thiesi.chitchat.core.ui.RateWaitSlot(rateFit, session, rateLimit, rateKnown, rateUnknown, rateWindow, rateBoxWidth - 32.dp, 6.dp,
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp), parity = state.sendLimitRepeats % 2 == 1)
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp), parity = state.sendLimitRepeats % 2 == 1,
+            shortKnown = if (rateBroadcast) R.string.rate_wait_broadcast_short else R.string.rate_wait_short,
+            shortUnknown = if (rateBroadcast) R.string.rate_wait_broadcast_short_unknown else R.string.rate_wait_short_unknown)
         }
         io.github.thiesi.chitchat.core.ui.ReceivedViewerHost(received, settled = state.loaded && !state.busy) { id ->
             state.messages.firstOrNull { it.attachment?.id == id && !it.deleted }?.let { message ->
@@ -812,9 +817,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             // PL refinement: when the composer shows the short wait line or none, the full line comes first here (silent).
             if (rateFit.detailsFirst) state.sendLimit?.let { limit ->
                 val ping = limit.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
+                val broadcast = limit.budget == io.github.thiesi.chitchat.core.session.RateBudget.ROOM_BROADCAST_MENTION
                 io.github.thiesi.chitchat.core.ui.RateWaitLine(session, limit,
-                    if (ping) R.string.rate_wait_pings else R.string.rate_wait_messages,
-                    if (ping) R.string.rate_wait_pings_unknown else R.string.rate_wait_messages_unknown, Modifier.fillMaxWidth())
+                    if (ping) R.string.rate_wait_pings else if (broadcast) R.string.rate_wait_broadcast else R.string.rate_wait_messages,
+                    if (ping) R.string.rate_wait_pings_unknown else if (broadcast) R.string.rate_wait_broadcast_unknown
+                    else R.string.rate_wait_messages_unknown, Modifier.fillMaxWidth())
             }
             val current = connection?.takeIf { it.generation == session.generation }
             if (current != null) {

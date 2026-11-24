@@ -80,6 +80,32 @@ interface ConversationOperations {
 internal fun String.phpTrim() = trim { it in " \t\n\r\u0000\u000B" }
 internal fun isPrivatePingCommand(input: String) = input.phpTrim().let { it == "/ping" || it.startsWith("/ping ") }
 
+/**
+ * #323b3: `MentionParser::containsBroadcastToken` (`src/Mentions/MentionParser.php:13–70` at b2791a0), exactly: every
+ * `@`-word not preceded by `[A-Za-z0-9_.-]`, lowercased, then its candidates (longest first, one trailing `.`, `-` or `_`
+ * removed per step, each `[A-Za-z0-9][A-Za-z0-9_.-]{2,31}`); broadcast if any candidate is `room` or `here`. Raw text: no
+ * exemption for code or quotes, as on the server.
+ */
+internal fun containsBroadcastToken(body: String): Boolean = BROADCAST_WORD.findAll(body).any { match ->
+    var token = match.groupValues[1].lowercase(java.util.Locale.ROOT)
+    var found = false
+    while (token.length >= 3) {
+        if (BROADCAST_CANDIDATE.matches(token) && (token == "room" || token == "here")) { found = true; break }
+        if (token.last() !in "._-") break
+        token = token.dropLast(1)
+    }
+    found
+}
+private val BROADCAST_WORD = Regex("(?<![A-Za-z0-9_.-])@([A-Za-z0-9][A-Za-z0-9_.-]{2,})")
+private val BROADCAST_CANDIDATE = Regex("[A-Za-z0-9][A-Za-z0-9_.-]{2,31}")
+
+/** #323b3: the policy a room send's `429 rate_limited` belongs to (`rooms/send.php:29–41`), narrowest when unsure. */
+internal fun roomSendBudget(body: String) = when {
+    isPrivatePingCommand(body) -> io.github.thiesi.chitchat.core.session.RateBudget.ROOM_PING
+    containsBroadcastToken(body) -> io.github.thiesi.chitchat.core.session.RateBudget.ROOM_BROADCAST_MENTION
+    else -> io.github.thiesi.chitchat.core.session.RateBudget.ROOM_SEND
+}
+
 /** PDO history timestamps use a space and may end in +00; pings use DATE_ATOM. */
 fun serverInstant(value: String): Instant? = runCatching {
     OffsetDateTime.parse(value.replace(' ', 'T').replace(Regex("([+-]\\d{2})$"), "$1:00")).toInstant()

@@ -192,6 +192,8 @@ class ApiFailure(
      * distinguishable in code and tests.
      */
     val localGate: Boolean = false,
+    /** #323b3: with [localGate], the budget whose known wait refused (a send can be gated by more than one). */
+    val gatedBudget: io.github.thiesi.chitchat.core.session.RateBudget? = null,
 ) : java.io.IOException(kind.name)
 
 internal fun requireValidCsrf(value: String) {

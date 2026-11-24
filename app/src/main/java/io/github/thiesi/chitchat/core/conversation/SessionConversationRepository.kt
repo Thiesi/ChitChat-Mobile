@@ -36,9 +36,11 @@ internal class SessionConversationRepository(private val sessions: SessionReposi
     }
     override suspend fun send(roomId: Long, body: String, replyId: Long?): SendResult {
         val access = sessions.openAccess()
-        // #323b: rooms/send.php consumes room_ping or room_send by the same parse isPrivatePingCommand mirrors.
-        val budget = if (isPrivatePingCommand(body)) RateBudget.ROOM_PING else RateBudget.ROOM_SEND
-        return sessions.authorized(access, budget) { sendRoomMessage(roomId, body, access.csrf, access.userId, replyId) }
+        // #323b: rooms/send.php consumes room_ping or room_send by the same parse isPrivatePingCommand mirrors; #323b3: a
+        // broadcast body also consumes room_broadcast_mention, so it's gated by a known room_send wait first.
+        val budget = roomSendBudget(body)
+        return sessions.authorized(access, budget, RateBudget.ROOM_SEND.takeIf { budget == RateBudget.ROOM_BROADCAST_MENTION }) {
+            sendRoomMessage(roomId, body, access.csrf, access.userId, replyId) }
     }
     override suspend fun read(roomId: Long, messageId: Long): Long {
         val access = sessions.openAccess()

@@ -232,7 +232,8 @@ private val ZeroFootprintStrip = Modifier.layout { measurable, constraints ->
 @Composable
 fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotice?, @StringRes known: Int,
     @StringRes unknown: Int, window: Any, availableWidth: Dp, spacing: Dp, modifier: Modifier = Modifier,
-    parity: Boolean = false) {
+    parity: Boolean = false, @StringRes shortKnown: Int = R.string.rate_wait_short,
+    @StringRes shortUnknown: Int = R.string.rate_wait_short_unknown) {
     var last by remember(notice) { mutableStateOf<RateLineForm?>(null) }
     var decided by remember(notice, window) { mutableStateOf<RateLineForm?>(null) }
     val now = current(session, notice)
@@ -240,7 +241,7 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     val density = LocalDensity.current
     val style = MaterialTheme.typography.bodyMedium
     val full = now?.let { fullText(it, known, unknown) }
-    val short = now?.let { it.words?.let { w -> stringResource(R.string.rate_wait_short, w) } ?: stringResource(R.string.rate_wait_short_unknown) }
+    val short = now?.let { it.words?.let { w -> stringResource(shortKnown, w) } ?: stringResource(shortUnknown) }
     val timeline = fit.timeline
     val fresh = if (full == null || short == null) null else decided ?: if (timeline?.first == window) {
         val drawn = fit.lineSlot

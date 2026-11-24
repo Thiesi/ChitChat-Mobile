@@ -128,12 +128,24 @@ class RatePresentationTest {
     // re-decided (here, to short). Asserts only, no capture.
     @Test fun roomReplyStartedDuringTheWait() =
         flow(null, dm = false, dark = false, 2f, replyLater = true, expect = SHORT)
+    // #323b3 (PL): the @room/@here line (a draft with @room, its own budget): light and dark × default and 200%, and the
+    // unknown variant (light default). Same placement, carrier, forms and announcement counts as the send line.
+    @Test fun roomBroadcastLightDefault() =
+        flow("rate-broadcast-light-default", dm = false, dark = false, 1f, reply = true, expect = FULL, broadcast = true)
+    @Test fun roomBroadcastLightFont200() =
+        flow("rate-broadcast-light-font200", dm = false, dark = false, 2f, reply = true, expect = SHORT, broadcast = true)
+    @Test fun roomBroadcastDarkDefault() =
+        flow("rate-broadcast-dark-default", dm = false, dark = true, 1f, reply = true, expect = FULL, broadcast = true)
+    @Test fun roomBroadcastDarkFont200() =
+        flow("rate-broadcast-dark-font200", dm = false, dark = true, 2f, reply = true, expect = SHORT, broadcast = true)
+    @Test fun roomBroadcastUnknownWait() =
+        flow("rate-broadcast-unknown-light-default", dm = false, dark = false, 1f, known = false, expect = FULL, broadcast = true)
 
 
     private fun flow(capture: String?, dm: Boolean, dark: Boolean, fontScale: Float, expect: RateLineForm, reply: Boolean = false,
         ping: Boolean = false, known: Boolean = true, landscape: Boolean = false, keyboard: Boolean = false,
         noStatusRow: Boolean = false, details: Boolean = false, replyLater: Boolean = false, visibleTap: Boolean = false,
-        landscapeCase: Char? = null) {
+        landscapeCase: Char? = null, broadcast: Boolean = false) {
         val name = capture ?: "rate-room-reply-during-wait"
         form = null
         FontScaleTestActivity.requestedFontScale = fontScale
@@ -147,7 +159,7 @@ class RatePresentationTest {
             override suspend fun savePureBlack(enabled: Boolean) = Unit
             override suspend fun saveTheme(theme: ThemePreference) { settings.value = settings.value.copy(theme = theme) }
         }
-        val waitText = fullLine(dm, ping, known)
+        val waitText = fullLine(dm, ping, known, broadcast)
         val detailsLabel = text(if (dm) R.string.dm_details else R.string.conversation_details)
         // TL/PL: the wait line carries every announcement; counted from real accessibility events, connected before launch.
         LiveAnnouncements { node -> node.contentDescription?.toString()?.trimEnd() == waitText }.use { heard ->
@@ -217,7 +229,8 @@ class RatePresentationTest {
             // line: the chip settled, the keyboard confirmed down, idle (TL).
             val input = if (dm) "dm_composer" else "conversation_composer"
             val send = if (dm) "dm_send" else "conversation_send"
-            val draft = if (ping) "/ping Peer fixture" else if (dm) "Unsent direct fixture" else "Unsent fixture"
+            val draft = if (ping) "/ping Peer fixture" else if (dm) "Unsent direct fixture"
+                else if (broadcast) "Unsent fixture for @room" else "Unsent fixture"
             compose.runOnIdle { if (dm) thread.updateDraft(draft) else room.updateDraft(draft) }
             keyboardDown()
             val before = arrangement(input, send)
@@ -230,7 +243,8 @@ class RatePresentationTest {
             compose.tapNativeInput(input, { imeBottom })
             compose.waitForIdle()
             val beforeKeyboard = arrangement(input, send) // The landscape-ime capture's state, still without the line.
-            val budget = if (dm) RateBudget.DIRECT_MESSAGE_SEND else if (ping) RateBudget.ROOM_PING else RateBudget.ROOM_SEND
+            val budget = if (dm) RateBudget.DIRECT_MESSAGE_SEND else if (ping) RateBudget.ROOM_PING
+                else if (broadcast) RateBudget.ROOM_BROADCAST_MENTION else RateBudget.ROOM_SEND
             compose.runOnIdle {
                 val refusal = ApiFailure(FailureKind.HTTP, 429, "rate_limited", if (known) 300 else null)
                 if (dm) api.directs.sendFailure = refusal else api.rooms.sendFailure = refusal
@@ -277,7 +291,7 @@ class RatePresentationTest {
                 compose.onNodeWithContentDescription(detailsLabel).performNativeTap()
                 compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty() }
                 compose.waitForIdle()
-                inDetails = compose.onAllNodes(hasContentDescription(fullLine(dm, ping, known)) and hasAnyAncestor(isDialog()))
+                inDetails = compose.onAllNodes(hasContentDescription(fullLine(dm, ping, known, broadcast)) and hasAnyAncestor(isDialog()))
                     .fetchSemanticsNodes().size
                 if (expect != FULL) capture("rate-room-send-light-font200-details", dialog = true)
                 androidx.test.espresso.Espresso.pressBack()
@@ -432,9 +446,11 @@ class RatePresentationTest {
         compose.waitForIdle()
     }
 
-    private fun fullLine(dm: Boolean, ping: Boolean, known: Boolean): String {
+    private fun fullLine(dm: Boolean, ping: Boolean, known: Boolean, broadcast: Boolean = false): String {
         val wait = context.resources.getQuantityString(R.plurals.wait_about_minutes, 5, 5)
         return when {
+            broadcast && !known -> text(R.string.rate_wait_broadcast_unknown)
+            broadcast -> context.getString(R.string.rate_wait_broadcast, wait)
             !known -> text(R.string.rate_wait_messages_unknown)
             ping && !dm -> context.getString(R.string.rate_wait_pings, wait)
             else -> context.getString(R.string.rate_wait_messages, wait)
