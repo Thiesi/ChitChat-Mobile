@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.app
 
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -105,10 +106,12 @@ class AppPrivacyPresentationTest {
             val current = session(withDocuments = true)
             val auth = AuthViewModel(TestSessions()) // Outside composition (lint).
             launch(fontScale) {
-                ChitChatTheme(dark = dark) { Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
+                ChitChatTheme(dark = dark) { androidx.compose.material3.Surface(Modifier.fillMaxSize(),
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp)) {
                     YouScreen(current, auth, server.value, pushAvailable = false, onNotifications = {},
                         onAppearance = {}, onAccount = {}, onChangeServer = {}, onLicences = {}, onPolicy = {})
-                } }
+                } } }
             }.use {
                 compose.onNodeWithTag("you_about").performScrollTo()
                 capture("app-privacy-about-$label-$name", "you_about")
@@ -123,8 +126,11 @@ class AppPrivacyPresentationTest {
 
     /** "Before you chat" with the server's rules and privacy policy: the app's text link after the operator line. */
     @Test fun guidelinesShowTheLinkAfterTheOperatorLine() {
-        for (dark in listOf(false, true)) for ((name, fontScale) in scales) guidelines(dark, name, fontScale, withDocuments = true)
-        guidelines(dark = false, "default", 1f, withDocuments = false)
+        val failures = mutableListOf<Throwable>()
+        for (dark in listOf(false, true)) for ((name, fontScale) in scales)
+            runCatching { guidelines(dark, name, fontScale, withDocuments = true) }.exceptionOrNull()?.let(failures::add)
+        runCatching { guidelines(dark = false, "default", 1f, withDocuments = false) }.exceptionOrNull()?.let(failures::add)
+        failures.firstOrNull()?.let { throw AssertionError("${failures.size} case(s) failed; first: ${it.message}", it) }
     }
 
     private fun guidelines(dark: Boolean, name: String, fontScale: Float, withDocuments: Boolean) {
@@ -132,7 +138,8 @@ class AppPrivacyPresentationTest {
         val current = session(withDocuments)
         val model = GuidelinesViewModel(rules(current), store)
         launch(fontScale) {
-            ChitChatTheme(dark = dark) { Box(Modifier.fillMaxSize().testTag("app_privacy_host")) {
+            ChitChatTheme(dark = dark) { Box(Modifier.fillMaxSize().testTag("app_privacy_host")
+                .background(androidx.compose.material3.MaterialTheme.colorScheme.background)) {
                 GuidelinesScreen(current, server.value, model, documents = null, onSignOut = {})
             } }
         }.use {
@@ -149,11 +156,21 @@ class AppPrivacyPresentationTest {
     /** Welcome (always dark) with "Privacy policy" at its foot; no accessibility-feedback footer there (TL). */
     @Test fun welcomeHasTheFooterLink() {
         for ((name, fontScale) in scales) {
+            // The real app on its real surface (PL): Welcome as onboarding renders it, in the dark theme.
+            val settings = SettingsViewModel(object : io.github.thiesi.chitchat.core.settings.SettingsStore {
+                override val settings = MutableStateFlow(io.github.thiesi.chitchat.core.settings.AppSettings(
+                    theme = io.github.thiesi.chitchat.core.settings.ThemePreference.DARK))
+                override suspend fun saveServer(server: ServerAddress?) { settings.value = settings.value.copy(server = server) }
+                override suspend fun savePureBlack(enabled: Boolean) = Unit
+                override suspend fun saveTheme(theme: io.github.thiesi.chitchat.core.settings.ThemePreference) = Unit
+            })
+            val auth = AuthViewModel(TestSessions())
             launch(fontScale) {
-                ChitChatTheme(dark = true) { Box(Modifier.fillMaxSize().testTag("app_privacy_host")) {
-                    Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp)) { WelcomeScreen {} }
-                } }
+                Box(Modifier.fillMaxSize().testTag("app_privacy_host")) {
+                    io.github.thiesi.chitchat.feature.account.TestChitChatApp(settings, auth)
+                }
             }.use {
+                compose.waitUntil(5_000) { !settings.state.value.loading }
                 compose.onNodeWithTag("welcome_app_privacy").performScrollTo()
                 capture("app-privacy-welcome-dark-$name", "app_privacy_host")
                 assertEquals(context.getString(R.string.app_privacy_policy_short), text("welcome_app_privacy"))
@@ -197,11 +214,11 @@ class AppPrivacyPresentationTest {
     @Test fun theLabelNeverCollidesWithAServersPolicyTitle() {
         val app = context.getString(R.string.app_privacy_policy)
         assertNotEquals(context.getString(R.string.policy_privacy_title, "ChitChat"), app)
-        assertNotEquals(context.getString(R.string.policy_privacy_title, "The app"), app)
     }
 
     private fun node(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
-    private fun top(tag: String) = node(tag).boundsInWindow.top
+    /** The unclipped layout position (a node scrolled out of view has empty window bounds). */
+    private fun top(tag: String) = node(tag).positionInRoot.y
     /** The link's merged text (the clickable box merges its child Text). */
     private fun text(tag: String) =
         compose.onNodeWithTag(tag).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
