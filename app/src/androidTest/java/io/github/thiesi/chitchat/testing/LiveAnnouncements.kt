@@ -58,6 +58,9 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
     // The counted total at each sentinel's delivery (in the listener), so a bracket ends exactly at its second sentinel.
     private val countAt = java.util.concurrent.ConcurrentHashMap<Int, Int>()
     @Volatile private var flushed = -1
+    // TL diagnostic (run 45299066691): each sentinel's event time (uptime), beside the counted events' t=, so a failure
+    // says whether an event was late (after its bracket's sentinels) or caused by a later change.
+    private val sentinelAt = java.util.concurrent.ConcurrentHashMap<Int, Long>()
     // Diagnostic scalars only (no text): what reached the listener, for a flush that times out.
     private val events = AtomicInteger()
     private val contentChanges = AtomicInteger()
@@ -78,6 +81,7 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
             val description = source.contentDescription?.toString().orEmpty()
             if (description.startsWith(FLUSH)) description.removePrefix(FLUSH).toIntOrNull()?.let {
                 countAt[it] = counted.size
+                sentinelAt.putIfAbsent(it, event.eventTime)
                 flushed = maxOf(flushed, it)
             }
             // Measurement (TL): each counted event's change types and the carrier's scalar state at that moment, so a
@@ -108,7 +112,8 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
     /** The counted spoken texts, in order. */
     fun texts(): List<String> = counted.toList()
     /** Diagnostics: the counted events, then every raw carrier event (text, change types, scalars). */
-    fun spoken(): String = "counted=${seen.toList()} raw=${raw.toList()}"
+    fun spoken(): String = "counted=${seen.toList()} raw=${raw.toList()} " +
+        "sentinels=${sentinelAt.toSortedMap().map { (n, t) -> "$n@t=$t(count=${countAt[n]})" }}"
 
     @Volatile private var failure: AssertionError? = null
 
@@ -134,6 +139,31 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
         // TL: the bracket ends at this mark's second sentinel; the first was set after the counted action, so every diff
         // holding the action had been processed before the second was even set.
         return countAt[sentinel.intValue] ?: counted.size
+    }
+
+    /** A real accessibility node (as a screen reader sees it) with a live region and no text or description: scalars only. */
+    data class EmptyLiveNode(val visibleToUser: Boolean, val focusable: Boolean, val screenReaderFocusable: Boolean,
+        val clickable: Boolean, val width: Int, val height: Int, val bounds: String)
+
+    /**
+     * TL (#348): every node in the active window, through UiAutomation, with a live region and neither text nor a
+     * description (the empty carrier is one), so a test proves the node exists for a screen reader, not only in Compose.
+     */
+    fun emptyLiveNodes(): List<EmptyLiveNode> {
+        val root = automation.rootInActiveWindow ?: return emptyList()
+        val found = mutableListOf<EmptyLiveNode>()
+        val queue = ArrayDeque(listOf(root))
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            if (node.liveRegion != View.ACCESSIBILITY_LIVE_REGION_NONE && node.text.isNullOrEmpty() && node.contentDescription.isNullOrEmpty()) {
+                val bounds = android.graphics.Rect().also { node.getBoundsInScreen(it) }
+                found += EmptyLiveNode(node.isVisibleToUser, node.isFocusable,
+                    Build.VERSION.SDK_INT >= 28 && node.isScreenReaderFocusable, node.isClickable, bounds.width(), bounds.height(),
+                    bounds.toShortString())
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.addLast(it) }
+        }
+        return found
     }
 
     /** Fails with the first recorded mark timeout, if any: call before asserting any count. */
