@@ -68,6 +68,22 @@ showed "538/538 completed (0 failed)", during teardown. A limit that cancels a f
 limits changed: the suite, filtering (none), retries (none), the wrappers, predicates, deadlines and the classification
 are unchanged. The wrappers' own short `adb` timeouts are per command, not suite limits.
 
+**Raised to 60 minutes (#352, 2026-11-24):** with the suite at 691 cases, the five PR runs before the change took 36.3–44.3
+minutes for the journey's emulator step and 35.1–44.4 for API36's. Run 45328723298's API36 job was cancelled at 45
+minutes, 14 seconds after the log showed "691/691 completed (2 failed)" and before the results XML existed, so its
+observation was "incomplete, 0 tests" and its failures could only be recorded from the log. Raising the limit was chosen
+over letting the classifier read results after a cancel: Gradle writes the results only when the suite task ends, so
+there is nothing to read when the job is cancelled at that point, and a step-level limit below the job's would cut the
+suite itself. Only the two limits changed, as in 2026-11-20.
+
+| Run | `journey` job (API35) | `api36-observation` job |
+| --- | --- | --- |
+| 45299066691 | 44.6 min | 36.0 min |
+| 45307781872 | 39.2 min | 37.4 min |
+| 45315793228 | 37.0 min | 37.7 min |
+| 45322426256 | 44.9 min | 38.1 min |
+| 45328723298 | 42.2 min | 45.1 min (cancelled at the limit) |
+
 CI's `python3 -B .github/scripts/native_journeys.py` runs the original connected-test command once, preserving its exit status. On failure only, it attempts a15s `ImeTracker`/`TestRunner` capture and writes at most2000 allowlisted scalar/lifecycle records into the existing native-report artifact. It never writes raw logcat or falls back to arbitrary exception/body/window dumps; capture failure does not turn the gate green. Run its credential/device-free checks with `python3 -B -m unittest discover -s .github/scripts -p 'test_*.py'` (`python` on this Windows host). See [scope, recorded failures and verification](milestones/native-ime-diagnostics.md). This is fixture CI diagnostics, not permission to collect private live-conversation logs.
 
 Start an owned local emulator from the stable repository root, not a transient worktree: Windows can keep its launch working directory open after Git unregisters a completed worktree. Preserve reports/APK hashes before normal worktree removal; stop only the verified owned emulator when needed for that owned-directory cleanup. Never reset a shared adb server or alter ACL/OneDrive attributes to force removal.

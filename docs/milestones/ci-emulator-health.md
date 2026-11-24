@@ -54,7 +54,7 @@ a concurrent reader made API36's setup fail on PR #282's first head, so the orde
 - **Focus samples:** a component or dialog class every 5 seconds.
 - **What's never kept:** message text, credentials or test content.
 - **Survives cancellation:** every line is flushed at once, so the file exists even when the job is cancelled or hits
-  its time limit (45 minutes since 2026-11-20; see build-test-release.md). The existing `if: always()` report upload
+  its time limit (60 minutes since 2026-11-24, #352; see build-test-release.md). The existing `if: always()` report upload
   collects it.
 - **Bounded:** 2,000 lines, five tests or 15 minutes, whichever comes first.
 
