@@ -693,9 +693,9 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         else -> model.authorAvailable(request)
                     }, currentPreview = model.authorCurrentPreview(request), error = state.error?.let { directError(it) },
                     // #323b2: never on the Check history path (PL).
-                    rateLine = { if (pending == null) io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(displayedSession,
+                    rateLine = { short -> if (pending == null) io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(displayedSession,
                 mutationNotice(displayedSession, state.mutationLimit, io.github.thiesi.chitchat.core.session.RateBudget.DIRECT_MESSAGE_MUTATION),
-                R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "author_rate_line", parity = state.mutationLimitRepeats % 2 == 1) })
+                R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "author_rate_line", parity = state.mutationLimitRepeats % 2 == 1, short = short) })
             }
             state.reactionDialog?.takeIf { paneInteractive() }?.let { dialog ->
                 val request = dialog.request

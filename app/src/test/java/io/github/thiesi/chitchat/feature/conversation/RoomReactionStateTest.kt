@@ -166,6 +166,18 @@ class RoomReactionStateTest {
         assertNull("$path: closing ends the line", model.state.value.mutationLimit)
     }
 
+    /** Review of 2f560da (#323b2): a rate_limited 429 on the reaction Check history keeps the uncertainty and shows the error. */
+    @Test fun aRateLimitedReactionCheckHistoryKeepsTheUncertaintyAndShowsTheError() = runTest(dispatcher) {
+        open(); fake.failure = ApiFailure(FailureKind.NETWORK); model.setReaction(begin(), ReactionEmoji.HEART, true); runCurrent()
+        val unknown = checkNotNull(model.state.value.reactionUnknown)
+        fake.failure = null; fake.getFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 60)
+        model.checkReactionHistory(fake.session.value, unknown); runCurrent()
+        assertSame("Still unresolved", unknown, model.state.value.reactionUnknown)
+        assertNotNull("The error shows", model.state.value.error)
+        assertNull("No mutation wait line", model.state.value.mutationLimit)
+        assertEquals(1, fake.writes)
+    }
+
     /** Guard (TL, #323b2): a proxy's 429 on a reaction keeps M5b1's uncertainty. */
     @Test fun aProxy429ReactionStillLeavesReactionUncertainty() = runTest(dispatcher) {
         open(); fake.failure = ApiFailure(FailureKind.HTTP, 429, null)

@@ -10,7 +10,7 @@ import io.github.thiesi.chitchat.core.ui.MessageAuthorChangeDialog
 internal fun DirectAuthorChangeDialog(dialog: DirectAuthorDialog, targetCurrent: Boolean, available: Boolean,
     busy: Boolean, onChange: (String) -> Unit, onConfirm: () -> Unit, onDismiss: () -> Unit,
     pending: DirectAuthorUnknown?, canConfirm: Boolean, currentPreview: String?, error: String?,
-    rateLine: (@Composable () -> Unit)? = null) {
+    rateLine: (@Composable (short: Boolean) -> Unit)? = null) {
     val validation = dialog.validation?.let { stringResource(when (it) {
         "message_unchanged" -> R.string.author_unchanged
         "empty_message" -> R.string.dm_empty_body

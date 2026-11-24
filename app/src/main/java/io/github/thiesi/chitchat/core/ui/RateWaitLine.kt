@@ -127,11 +127,14 @@ fun mutationNotice(session: SessionState, notice: RateLimitNotice?, budget: io.g
 
 @Composable
 fun RateWaitDialogLine(session: SessionState, notice: RateLimitNotice?, @StringRes known: Int, @StringRes unknown: Int,
-    tag: String, modifier: Modifier = Modifier, parity: Boolean = false) {
+    tag: String, modifier: Modifier = Modifier, parity: Boolean = false, short: Boolean = false) {
     val now = current(session, notice)
     val full = now?.let { fullText(it, known, unknown) }
     val spoken = full?.let { if (parity) "$it " else it }
-    Text(full.orEmpty(), modifier.then(if (full != null) Modifier else ZeroFootprintStrip).clearAndSetSemantics {
+    // Compact (TL, PL pre-approved): "Try again in {wait}." in the fixed area, the full line still spoken.
+    val visible = if (now == null || !short) full else now.words?.let { stringResource(R.string.rate_wait_short, it) }
+        ?: stringResource(R.string.rate_wait_short_unknown)
+    Text(visible.orEmpty(), modifier.then(if (full != null) Modifier else ZeroFootprintStrip).clearAndSetSemantics {
         if (spoken != null) contentDescription = spoken
         liveRegion = LiveRegionMode.Polite
         testTag = tag

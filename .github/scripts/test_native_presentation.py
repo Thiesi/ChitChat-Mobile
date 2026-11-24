@@ -620,15 +620,15 @@ class PresentationGateTests(unittest.TestCase):
         self.results(4)
         files = [Path("rate-mutation-edit-light-default.png"), Path("rate-mutation-edit-opened-dark-font200.png"),
             Path("rate-mutation-delete-light-default.png"), Path("rate-mutation-reactions-dark-default.png"),
-            Path("rate-mutation-traversal.txt")]
+            Path("rate-mutation-traversal.txt"), Path("rate-mutation-edit-light-font200-landscape-ime.png")]
         self.rate_mutation_files(files)
         self.assertEqual(4, runner.main()); self.assert_once()
         for path in files: self.copy.assert_any_call(path, runner.RATE_MUTATION_DESTINATION / path.name)
-        self.assertEqual(6, self.copy.call_count) # Four captures, the traversal record and the completion capture.
+        self.assertEqual(7, self.copy.call_count) # Five captures, the traversal record and the completion capture.
 
     def test_excess_ambiguous_or_foreign_rate_mutation_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"rate-mutation-edit-light-default-{n}.png") for n in range(15)],
+        for files in ([Path(f"rate-mutation-edit-light-default-{n}.png") for n in range(16)],
             [Path("a/rate-mutation-delete-light-default.png"), Path("b/rate-mutation-delete-light-default.png")],
             # Not taken: a dark delete, a 200% delete.
             [Path("rate-mutation-delete-dark-default.png")], [Path("rate-mutation-delete-light-font200.png")], [Path("other.png")]):

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.R
@@ -22,6 +23,9 @@ import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
 import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
+import io.github.thiesi.chitchat.testing.nativeAuthorSaveGeometry
+import io.github.thiesi.chitchat.testing.nativeAuthorImeBottom
+import io.github.thiesi.chitchat.testing.tapNativeInput
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -65,15 +69,15 @@ class RateMutationPresentationTest {
     private val scales = listOf("default" to 1f, "font200" to 2f)
 
     @androidx.compose.runtime.Composable
-    private fun Line(notice: RateLimitNotice?, tag: String) = RateWaitDialogLine(session,
+    private fun Line(notice: RateLimitNotice?, tag: String, short: Boolean = false) = RateWaitDialogLine(session,
         mutationNotice(session, notice, RateBudget.ROOM_MESSAGE_MUTATION), R.string.rate_wait_mutations,
-        R.string.rate_wait_mutations_unknown, tag)
+        R.string.rate_wait_mutations_unknown, tag, short = short)
 
     private fun edit(kind: AuthorChangeKind, notice: RateLimitNotice?) =
         @androidx.compose.runtime.Composable {
             MessageAuthorChangeDialog(AuthorDialogPresentation(kind, "Proposed private edit", "Original private body", null,
                 checked = false, pendingMessageId = null), targetCurrent = true, available = true, busy = false,
-                onChange = {}, onConfirm = {}, onDismiss = {}, rateLine = { Line(notice, "author_rate_line") })
+                onChange = {}, onConfirm = {}, onDismiss = {}, rateLine = { short -> Line(notice, "author_rate_line", short) })
         }
 
     /** 5: the edit dialog after a refused Save; 7: an edit dialog opened during a wait a reaction started (no notice yet). */
@@ -89,6 +93,47 @@ class RateMutationPresentationTest {
                 }
                 show(scale, dark, edit(AuthorChangeKind.EDIT, notice))
             }
+        }
+    }
+
+    /**
+     * PL J and TL: compact (200% landscape, the keyboard up after one native tap on the body). The line sits at the top of
+     * the actions column in its short form, the full line spoken; Save stays fully visible above the keyboard, on one line
+     * beside Cancel, and the body field keeps at least 48dp (M5b2's own-window geometry, #337's width rule).
+     */
+    @Test fun compactEditWithTheKeyboardUp() {
+        FontScaleTestActivity.requestedFontScale = 2f
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+            compose.waitUntil(5_000) {
+                var orientation = 0
+                scenario.onActivity { orientation = it.resources.configuration.orientation }
+                orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            }
+            lateinit var activity: androidx.activity.ComponentActivity
+            scenario.onActivity { host -> activity = host
+                host.setContent { CompositionLocalProvider(LocalMonotonicClock provides { now }) {
+                    ChitChatTheme(dark = false) { edit(AuthorChangeKind.EDIT, RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true))() }
+                } }
+            }
+            compose.waitForIdle()
+            compose.tapNativeInput("author_edit_body", { compose.nativeAuthorImeBottom() })
+            compose.waitForIdle()
+            capture("rate-mutation-edit-light-font200-landscape-ime")
+            val shortLine = context.getString(R.string.rate_wait_short, context.resources.getQuantityString(R.plurals.wait_about_minutes, 5, 5))
+            val shown = compose.onNodeWithTag("author_rate_line", useUnmergedTree = true).fetchSemanticsNode()
+            assertEquals("The full line is still spoken", full, shown.config.getOrNull(SemanticsProperties.ContentDescription)?.single())
+            io.github.thiesi.chitchat.testing.assertLineBeforeEveryAction(full, "compact edit with the keyboard up")
+            val density = context.resources.displayMetrics.density
+            val field = compose.onNodeWithTag("author_edit_body").fetchSemanticsNode()
+            check(field.size.height >= 48 * density - 1) { "The body field is below 48dp: ${field.size}" }
+            val save = compose.onNodeWithTag("author_change_confirm").fetchSemanticsNode()
+            check(save.boundsInWindow.height >= save.size.height - 1f) { "Save is clipped (${save.boundsInWindow}, ${save.size})" }
+            val geometry = compose.nativeAuthorSaveGeometry(activity, compose.nativeAuthorImeBottom())
+            check(geometry.keyboardTop != null && geometry.pointY < checkNotNull(geometry.keyboardTop)) {
+                "Save not above the keyboard (${geometry.details})" }
+            check(shortLine.isNotEmpty())
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
         }
     }
 
@@ -117,6 +162,7 @@ class RateMutationPresentationTest {
 
     /** The persistent carrier (PL): the full line as its description, polite live region, and the visible text. */
     private fun assertLine(tag: String) {
+        // No scrolling (PL J, TL): the line sits in the dialog's fixed area, visible and in the tree as the dialog shows.
         val node = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
         assertEquals(full, node.config.getOrNull(SemanticsProperties.ContentDescription)?.single())
         assertEquals(LiveRegionMode.Polite, node.config.getOrNull(SemanticsProperties.LiveRegion))

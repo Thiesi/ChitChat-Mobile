@@ -1054,8 +1054,12 @@ class ConversationViewModel internal constructor(private val operations: Convers
                     // endpoints consumes before any work (edit-message.php, delete-own-message.php, react.php and
                     // unreact.php, :23–24 before the service at :29), so nothing was written. A proxy's or any other 429
                     // keeps M5b1's possibly-committed handling.
-                    if (failure.isRulesRefusal() || failure.isRateBudgetRefusal()) { authorPosting = null; reactionPosting = null }
-                    if (failure.isRateBudgetRefusal())
+                    // Only while the author or reaction POST itself is in flight (its posting marker is set): Check
+                    // history and the reload after an acknowledged write keep the ordinary error path (review of 37d5a33
+                    // and 2f560da), and a Check 429 never clears an unresolved uncertainty (M5b1).
+                    val mutationLimited = failure.isRateBudgetRefusal() && (authorPosting != null || reactionPosting != null)
+                    if (failure.isRulesRefusal() || mutationLimited) { authorPosting = null; reactionPosting = null }
+                    if (mutationLimited)
                         // Its line, not the error; nothing changed on the server, so history isn't marked stale.
                         mutable.value = mutable.value.copy(
                             mutationLimit = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, failure.retryAfterSeconds != null),

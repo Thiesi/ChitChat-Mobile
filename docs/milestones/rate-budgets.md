@@ -181,8 +181,13 @@ local gate's) is definite.
   429 keeps M5b1's possibly-committed handling (a guard test per screen and kind).
 - **The line (PL copy):** "You've changed a lot of messages and reactions recently. Try again in {wait}." ("…Try again
   later." with an unknown wait).
-  - On AuthorChangeDialog's refusal line, and in the reaction picker above the emoji rows; never on the Check history
-    path.
+  - **Where (PL J on 2f560da, TL):**
+    - edit: in the dialog's fixed area, on its own row directly above Cancel and Save, never in the scrolling body, so
+      it's visible and in the tree at 1.0 and 200%; in compact (200% landscape with the keyboard up) at the top of the
+      actions column in the short form ("Try again in {wait}."), the full line still spoken;
+    - delete: the first item of the dialog's text;
+    - the reaction picker: above the emoji rows;
+    - never on the Check history path.
   - A wait already known (another edit, delete or reaction started it) shows as soon as the dialog opens; opening sends
     nothing (`mutationNotice`).
   - The same persistent carrier as the composer's (`RateWaitDialogLine`): a polite live region with the full line as its

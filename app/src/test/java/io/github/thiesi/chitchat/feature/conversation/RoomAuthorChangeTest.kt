@@ -183,6 +183,22 @@ class RoomAuthorChangeTest {
         assertNotNull(model.state.value.mutationLimit); runCurrent(); assertEquals(1, fake.writes)
     }
 
+    /**
+     * Review of 2f560da (#323b2): a rate_limited 429 on Check history (a GET) isn't the mutation's refusal. The uncertainty
+     * stays unresolved, the error shows and no wait line appears.
+     */
+    @Test fun aRateLimitedAuthorCheckHistoryKeepsTheUncertaintyAndShowsTheError() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.NETWORK)
+        val request = begin(); model.updateAuthorBody(request, "Maybe committed"); model.submitAuthor(request); runCurrent()
+        val pending = checkNotNull(model.state.value.authorUnknown)
+        fake.writeFailure = null; fake.historyFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 60)
+        model.checkAuthorHistory(fake.session.value, pending); runCurrent()
+        assertSame("Still unresolved", pending, model.state.value.authorUnknown)
+        assertNotNull("The error shows", model.state.value.error)
+        assertNull("No mutation wait line", model.state.value.mutationLimit)
+        assertEquals(1, fake.writes)
+    }
+
     /** Guard (TL, #323b2): a proxy's 429 (no rate_limited code) after the write starts keeps M5b1's uncertainty. */
     @Test fun aProxy429EditStillLeavesAuthorUncertainty() = runTest(dispatcher) {
         open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, null)

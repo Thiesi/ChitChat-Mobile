@@ -87,6 +87,14 @@ class RateMutationAnnouncementTest {
     }
 
     private fun line() = compose.onNodeWithTag("reaction_rate_line", useUnmergedTree = true).fetchSemanticsNode()
+    private fun description() = line().config.getOrNull(SemanticsProperties.ContentDescription)?.singleOrNull()
+
+    /**
+     * TL (the #348 rule): close a bracket only after a positive condition on the carrier. After Compose idle, the line's
+     * semantics show [expected] (null: no description), so the change is applied before mark() and a following action
+     * can't coalesce with it.
+     */
+    private fun awaitDescription(expected: String?) = compose.waitUntil(5_000) { description() == expected }
 
     @Test fun anUnknownWaitWhileOpenAnnouncesOnceAndPerRefusalAndClosingIsSilent() {
         val unknown = context.getString(R.string.rate_wait_mutations_unknown)
@@ -100,10 +108,13 @@ class RateMutationAnnouncementTest {
             assertEquals(LiveRegionMode.Polite, empty.config.getOrNull(SemanticsProperties.LiveRegion))
             val start = heard.mark(compose, sentinel)
             compose.runOnIdle { notice = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, false) } // A 429 while open.
+            awaitDescription(unknown)
             val appeared = heard.mark(compose, sentinel)
             compose.runOnIdle { repeats++ } // A refused tap during the wait.
+            awaitDescription("$unknown ")
             val tapped = heard.mark(compose, sentinel)
             compose.runOnIdle { notice = null } // Closing ends an unknown wait's line.
+            awaitDescription(null)
             val cleared = heard.mark(compose, sentinel)
             heard.verify()
             val all = heard.spoken()
@@ -133,6 +144,7 @@ class RateMutationAnnouncementTest {
             val record = io.github.thiesi.chitchat.testing.assertLineBeforeEveryAction(full, "reaction picker opened with a known wait")
             writeTraversal(record)
             compose.runOnIdle { repeats++ } // A refused reaction tap during that wait.
+            awaitDescription("$full ")
             val tapped = heard.mark(compose, sentinel)
             heard.verify()
             assertEquals("No live announcement on opening: ${heard.spoken()}", 0, settled - start)
@@ -150,14 +162,19 @@ class RateMutationAnnouncementTest {
 
     @Test fun aKnownWaitsDeadlineClearsTheLineSilently() {
         announcements { context.getString(R.string.rate_wait_mutations, context.getString(R.string.rate_wait_under_minute)) }.use { heard ->
-            deadline = base + compose.mainClock.currentTime + 2_000
-            picker()
+            picker() // Opened with no wait: the 429 with a known wait arrives while open.
             heard.attachDialog()
             val start = heard.mark(compose, sentinel)
-            compose.runOnIdle { notice = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true) }
+            val known = context.getString(R.string.rate_wait_mutations, context.getString(R.string.rate_wait_under_minute))
+            compose.runOnIdle {
+                deadline = base + compose.mainClock.currentTime + 2_000
+                notice = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true)
+            }
+            awaitDescription(known)
             val appeared = heard.mark(compose, sentinel)
             compose.mainClock.advanceTimeBy(2_100)
             compose.waitForIdle()
+            awaitDescription(null)
             val cleared = heard.mark(compose, sentinel)
             heard.verify()
             assertNull("Emptied at the deadline", line().config.getOrNull(SemanticsProperties.ContentDescription))
