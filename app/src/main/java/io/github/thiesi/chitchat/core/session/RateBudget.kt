@@ -56,6 +56,19 @@ enum class RateBudget {
     DIRECT_MESSAGE_ATTACHMENT_UPLOAD,
 
     /**
+     * `room_message_mutation` (#323b2): `public/api/v1/rooms/edit-message.php`, `delete-own-message.php`, `react.php` and
+     * `unreact.php`, each consuming at :23–24 after CSRF and the actor, before its service (:29). One shared budget, so an
+     * edit, a delete and a reaction gate each other.
+     */
+    ROOM_MESSAGE_MUTATION,
+
+    /**
+     * `direct_message_mutation` (#323b2): `public/api/v1/direct-messages/edit.php`, `delete.php`, `react.php` and
+     * `unreact.php`, each consuming at :23–24 after CSRF and the actor, before its service (:29). One shared budget.
+     */
+    DIRECT_MESSAGE_MUTATION,
+
+    /**
      * `privileged_step_up`: `public/api/v1/step-up.php:24` via `src/Auth/PrivilegedStepUpService.php:37`, after only an MFA
      * read and before the credential check.
      */

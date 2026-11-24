@@ -166,7 +166,32 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
   attempts, at the existing cadence.
 - **A proxy's 429** on a send keeps today's handling: the error line, the session-wide wait and row 7.
 
-## #323b2 and #323b3 (next)
+## #323b2: author edit/delete and reactions (TL plan, PL ruling, 2026-11-24)
 
-Author edit, delete and reactions (a contract change to M5b1, like O3b3b), then message and people search. After #323b3,
-only proxy, non-JSON, bootstrap and revalidation 429s reach row 7.
+A contract change to M5b1, like O3b3b: on all eight paths only the policy's own `429 rate_limited` (the server's or the
+local gate's) is definite.
+- **The budgets (server facts at b2791a0):**
+  - `room_message_mutation` covers `rooms/edit-message.php`, `delete-own-message.php`, `react.php` and `unreact.php`;
+  - `direct_message_mutation` covers `direct-messages/edit.php`, `delete.php`, `react.php` and `unreact.php`;
+  - each endpoint consumes at :23–24, after CSRF and the actor and before its service (:29). So nothing was written, and
+    an edit, a delete and a reaction gate each other within their budget (`theMutationBudgetsGateEachOtherLocallyAnd
+    OnlyWithinTheirOwnPolicy`).
+- **Definite:** no author or reaction uncertainty, history isn't marked stale, the edit dialog keeps its text, the
+  reaction choice isn't sent or kept, and nothing resends. A later Save or choice is a fresh one. A proxy's or any other
+  429 keeps M5b1's possibly-committed handling (a guard test per screen and kind).
+- **The line (PL copy):** "You've changed a lot of messages and reactions recently. Try again in {wait}." ("…Try again
+  later." with an unknown wait).
+  - On AuthorChangeDialog's refusal line, and in the reaction picker above the emoji rows; never on the Check history
+    path.
+  - A wait already known (another edit, delete or reaction started it) shows as soon as the dialog opens; opening sends
+    nothing (`mutationNotice`).
+  - The same persistent carrier as the composer's (`RateWaitDialogLine`): a polite live region with the full line as its
+    description, one trailing space flipped per refused tap, and a zero-footprint strip when there's nothing to say.
+  - It ends at the deadline (one one-shot), on closing the dialog (an unknown wait's next interaction) or on a confirmed
+    change.
+- **Captures:** `rate-mutation-*` (PL list 5–8), collected into `rate-mutation-presentation`.
+
+## #323b3 (next)
+
+Message and people search, and the final unmapped list. After it, only proxy, non-JSON, bootstrap and revalidation 429s
+reach row 7.

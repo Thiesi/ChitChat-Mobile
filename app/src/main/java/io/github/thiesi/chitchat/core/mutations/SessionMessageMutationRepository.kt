@@ -3,6 +3,7 @@ package io.github.thiesi.chitchat.core.mutations
 import io.github.thiesi.chitchat.core.conversation.RoomMessage
 import io.github.thiesi.chitchat.core.direct.DirectMessage
 import io.github.thiesi.chitchat.core.direct.validatedDirectPrivacy
+import io.github.thiesi.chitchat.core.session.RateBudget
 import io.github.thiesi.chitchat.core.session.SessionRepository
 import io.github.thiesi.chitchat.core.session.SessionState
 
@@ -10,20 +11,20 @@ import io.github.thiesi.chitchat.core.session.SessionState
 internal class SessionMessageMutationRepository(private val sessions: SessionRepository) : MessageMutationOperations {
     override suspend fun editRoom(expected: SessionState, original: RoomMessage, body: String): RoomMessage {
         val access = sessions.openAccess(expected)
-        return sessions.authorized(access) { editRoomMessage(original, body, access.csrf, access.userId) }
+        return sessions.authorized(access, RateBudget.ROOM_MESSAGE_MUTATION) { editRoomMessage(original, body, access.csrf, access.userId) }
     }
     override suspend fun deleteRoom(expected: SessionState, original: RoomMessage): RoomMessage {
         val access = sessions.openAccess(expected)
-        return sessions.authorized(access) { deleteOwnRoomMessage(original, access.csrf, access.userId) }
+        return sessions.authorized(access, RateBudget.ROOM_MESSAGE_MUTATION) { deleteOwnRoomMessage(original, access.csrf, access.userId) }
     }
     override suspend fun editDirect(expected: SessionState, original: DirectMessage, body: String): DirectMessage {
         val access = sessions.openAccess(expected)
         validatedDirectPrivacy(sessions.state.value.privacy)
-        return sessions.authorized(access) { editDirectMessage(original, body, access.csrf, access.userId) }
+        return sessions.authorized(access, RateBudget.DIRECT_MESSAGE_MUTATION) { editDirectMessage(original, body, access.csrf, access.userId) }
     }
     override suspend fun deleteDirect(expected: SessionState, original: DirectMessage): DirectMessage {
         val access = sessions.openAccess(expected)
         validatedDirectPrivacy(sessions.state.value.privacy)
-        return sessions.authorized(access) { deleteOwnDirectMessage(original, access.csrf, access.userId) }
+        return sessions.authorized(access, RateBudget.DIRECT_MESSAGE_MUTATION) { deleteOwnDirectMessage(original, access.csrf, access.userId) }
     }
 }

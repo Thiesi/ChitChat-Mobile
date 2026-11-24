@@ -103,6 +103,14 @@ data class ConversationUiState(
     /** #323b: every refusal for the rate wait, first or repeat; each is one keyboard-hide check on the screen. */
     val sendLimitRefusals: Int = 0,
     val attachmentReview: RoomAttachmentReview? = null,
+    /**
+     * #323b2: an edit, delete or reaction hit room_message_mutation's own `429 rate_limited` (server or local gate).
+     * Definite (each endpoint consumes before any work): the dialog keeps its text, the reaction choice isn't sent or kept,
+     * nothing becomes unknown. A known wait shows until its deadline; an unknown one until the next interaction.
+     */
+    val mutationLimit: RateLimitNotice? = null,
+    /** #323b2: refusals while the line already showed; each flips its spoken parity (one announcement per refused tap). */
+    val mutationLimitRepeats: Int = 0,
 ) { override fun toString() = "ConversationUiState" }
 
 class ConversationViewModel internal constructor(private val operations: ConversationOperations,
@@ -831,7 +839,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
 
     fun dismissAuthor(request: RoomAuthorRequest) {
         if (mutable.value.authorDialog?.request === request && belongsTo(request.expected) && !mutable.value.busy)
-            mutable.value = mutable.value.copy(authorDialog = null, atLatest = false)
+            // #323b2: closing ends an unknown wait's line (the next interaction); a known one returns on reopening.
+            mutable.value = mutable.value.copy(authorDialog = null, atLatest = false, mutationLimit = null)
     }
 
     fun submitAuthor(request: RoomAuthorRequest) {
@@ -961,7 +970,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
 
     internal fun dismissReactions(request: RoomReactionRequest) {
         if (mutable.value.reactionDialog?.request === request && belongsTo(request.expected) && !mutable.value.busy)
-            mutable.value = mutable.value.copy(reactionDialog = null, atLatest = false)
+            // #323b2: closing ends an unknown wait's line (the next interaction); a known one returns on reopening.
+            mutable.value = mutable.value.copy(reactionDialog = null, atLatest = false, mutationLimit = null)
     }
 
     private fun rememberUnknownReaction(write: RoomReactionWrite) {
@@ -1028,6 +1038,8 @@ class ConversationViewModel internal constructor(private val operations: Convers
                     ensureCurrent(expected, attempt, roomId)
                     if (!ready(currentSession)) throw ApiFailure(FailureKind.HTTP, code = "csrf_failed")
                     action { ensureCurrent(expected, attempt, roomId) }
+                    // #323b2: a confirmed edit, delete or reaction ends any wait line.
+                    if (isCurrent(expected, attempt, roomId)) mutable.value = mutable.value.copy(mutationLimit = null)
                 }
             } catch (_: TimeoutCancellationException) {
                 if (isCurrent(expected, attempt, roomId)) mutable.value = mutable.value.copy(error = ApiFailure(FailureKind.TIMEOUT), stale = true)
@@ -1038,8 +1050,17 @@ class ConversationViewModel internal constructor(private val operations: Convers
                     // the server checks rules acceptance under the content transaction's lock and refuses before any
                     // commit (policies.md, play-readiness.md §1). That one is definite, so no author or reaction
                     // uncertainty; the edit dialog keeps its text and the chip is unchanged.
-                    if (failure.isRulesRefusal()) { authorPosting = null; reactionPosting = null }
-                    if (failure.status in setOf(403, 404) && failure.code in setOf("room_forbidden", "room_not_found"))
+                    // #323b2 (TL): room_message_mutation's own 429 is the same kind of definite refusal. Each of the four
+                    // endpoints consumes before any work (edit-message.php, delete-own-message.php, react.php and
+                    // unreact.php, :23–24 before the service at :29), so nothing was written. A proxy's or any other 429
+                    // keeps M5b1's possibly-committed handling.
+                    if (failure.isRulesRefusal() || failure.isRateBudgetRefusal()) { authorPosting = null; reactionPosting = null }
+                    if (failure.isRateBudgetRefusal())
+                        // Its line, not the error; nothing changed on the server, so history isn't marked stale.
+                        mutable.value = mutable.value.copy(
+                            mutationLimit = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, failure.retryAfterSeconds != null),
+                            mutationLimitRepeats = mutable.value.mutationLimitRepeats + if (mutable.value.mutationLimit != null) 1 else 0)
+                    else if (failure.status in setOf(403, 404) && failure.code in setOf("room_forbidden", "room_not_found"))
                         clearUnauthorized(failure)
                     else mutable.value = mutable.value.copy(error = failure, stale = true)
                 }

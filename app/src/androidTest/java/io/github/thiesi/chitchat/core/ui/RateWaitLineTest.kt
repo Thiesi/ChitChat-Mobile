@@ -85,6 +85,25 @@ class RateWaitLineTest {
     private fun minutes(n: Int) = context.resources.getQuantityString(R.plurals.wait_about_minutes, n, n)
     private fun full5() = context.getString(R.string.rate_wait_messages, minutes(5))
 
+    /**
+     * #323b2: the dialog line is a persistent carrier. It says the full line until the deadline, when ONE one-shot empties it
+     * (nothing is sent: it has no action), and the node stays as an empty polite live region, a 1dp strip.
+     */
+    @Test fun theDialogLineEmptiesAtTheDeadlineAndTheCarrierStays() {
+        val start = compose.mainClock.currentTime
+        val deadline = base + start + 5 * 60_000
+        val waitSession = SessionState(generation = 3, phase = SessionPhase.AUTHENTICATED,
+            user = SessionUser(7, "Viewer", listOf("member"), 1, false),
+            rateWaits = mapOf(RateBudget.ROOM_MESSAGE_MUTATION to RateWait(deadline, 3, 7)))
+        host { RateWaitDialogLine(waitSession, mutationNotice(waitSession, null, RateBudget.ROOM_MESSAGE_MUTATION),
+            R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "rate_wait_line") }
+        val full = context.getString(R.string.rate_wait_mutations, minutes(5))
+        assertEquals("A known wait shows at opening", full, lineDescription())
+        compose.mainClock.advanceTimeBy(5 * 60_000L + 32)
+        assertNull("Emptied at the deadline", lineDescription())
+        assertEquals("The carrier stays", LiveRegionMode.Polite, line().config[SemanticsProperties.LiveRegion])
+    }
+
     @Test fun aKnownWaitShowsUntilItsDeadlineAndOneOneShotClearsIt() {
         val start = compose.mainClock.currentTime
         show(session(base + start + 5 * 60_000), RateLimitNotice(RateBudget.ROOM_SEND, true))

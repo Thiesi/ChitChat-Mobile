@@ -45,7 +45,7 @@ internal fun MessageReactionPicker(requestKey: Any, messageId: Long, groups: Lis
     unknownMessageId: Long?, dialogTag: String, choicesTag: String,
     canCheck: Boolean, canReview: Boolean, error: String?,
     canChoose: (ReactionEmoji, Boolean) -> Boolean, onChoose: (ReactionEmoji, Boolean) -> Unit,
-    onCheck: () -> Unit, onReview: () -> Unit, onDismiss: () -> Unit) {
+    onCheck: () -> Unit, onReview: () -> Unit, onDismiss: () -> Unit, rateLine: (@Composable () -> Unit)? = null) {
     var people by remember(requestKey) { mutableStateOf(false) }
     AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, modifier = Modifier.testTag(dialogTag).lanternDialogEdge(),
         title = { Text(stringResource(R.string.room_reactions_message, messageId.toString())) },
@@ -61,6 +61,8 @@ internal fun MessageReactionPicker(requestKey: Any, messageId: Long, groups: Lis
                     }
                     if (deleted) Text(stringResource(R.string.reaction_deleted_removal))
                     if (busy) Text(stringResource(R.string.reaction_changing))
+                    // #323b2: the shared mutation wait above the emoji rows (PL); a choice isn't sent or kept.
+                    rateLine?.invoke()
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     if (unknownMessageId != null) TextButton(onClick = onCheck, enabled = canCheck && !busy,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("reaction_check_history")) {

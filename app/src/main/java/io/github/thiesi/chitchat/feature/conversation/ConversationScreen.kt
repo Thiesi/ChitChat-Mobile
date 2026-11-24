@@ -1,5 +1,6 @@
 package io.github.thiesi.chitchat.feature.conversation
 
+import io.github.thiesi.chitchat.core.ui.mutationNotice
 import io.github.thiesi.chitchat.core.ui.rateFitTimeline
 import io.github.thiesi.chitchat.core.ui.rateWaitState
 import androidx.compose.ui.focus.onFocusChanged
@@ -746,7 +747,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             onChoose = { emoji, selected -> if (paneInteractive()) model.setReaction(request, emoji, selected) },
             onCheck = { if (paneInteractive() && pending != null) model.checkReactionHistory(request.expected, pending) },
             onReview = { if (paneInteractive()) model.reviewReactions(request) },
-            onDismiss = { if (isCurrentEntry()) model.dismissReactions(request) })
+            onDismiss = { if (isCurrentEntry()) model.dismissReactions(request) },
+            rateLine = { if (pending == null) io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(displayedSession,
+                mutationNotice(displayedSession, state.mutationLimit, io.github.thiesi.chitchat.core.session.RateBudget.ROOM_MESSAGE_MUTATION),
+                R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "reaction_rate_line", parity = state.mutationLimitRepeats % 2 == 1) })
     }
     state.authorDialog?.takeIf { paneInteractive() }?.let { dialog ->
         val request = dialog.request
@@ -762,7 +766,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 pending != null -> ready && !state.busy && !state.reading
                 dialog.checked -> model.canReviewAuthor(request)
                 else -> model.authorAvailable(request)
-            }, currentPreview = model.authorCurrentPreview(request), error = state.error?.let { conversationError(it) })
+            }, currentPreview = model.authorCurrentPreview(request), error = state.error?.let { conversationError(it) },
+            // #323b2: never on the Check history path (PL).
+            rateLine = { if (pending == null) io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(displayedSession,
+                mutationNotice(displayedSession, state.mutationLimit, io.github.thiesi.chitchat.core.session.RateBudget.ROOM_MESSAGE_MUTATION),
+                R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "author_rate_line", parity = state.mutationLimitRepeats % 2 == 1) })
     }
     replyOptions?.let { choice ->
         val current = state.composerReply === choice

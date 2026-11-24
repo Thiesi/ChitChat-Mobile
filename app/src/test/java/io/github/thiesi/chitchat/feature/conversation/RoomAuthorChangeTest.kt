@@ -155,6 +155,42 @@ class RoomAuthorChangeTest {
         assertEquals("Nothing resends after I agree", 1, fake.writes)
     }
 
+    /**
+     * #323b2: room_message_mutation's own 429 is definite (edit-message.php consumes before any work). The dialog keeps
+     * its text, nothing is unknown or stale, the wait line shows, nothing resends; a later Save still works.
+     */
+    @Test fun aRateLimitedEditKeepsItsTextIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
+        val request = begin(); model.updateAuthorBody(request, "Limited edit"); model.submitAuthor(request); runCurrent()
+        assertNull("Definite: no author uncertainty", model.state.value.authorUnknown)
+        assertFalse("Nothing changed on the server", model.state.value.stale)
+        assertNull("Its line, not the error", model.state.value.error)
+        assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(
+            io.github.thiesi.chitchat.core.session.RateBudget.ROOM_MESSAGE_MUTATION, true), model.state.value.mutationLimit)
+        assertEquals("The edit dialog keeps its text", "Limited edit", model.state.value.authorDialog?.body)
+        runCurrent(); assertEquals("Nothing resends", 1, fake.writes)
+        fake.writeFailure = null; model.submitAuthor(request); runCurrent()
+        assertEquals("A later Save is a fresh choice", 2, fake.writes)
+        assertNull("A confirmed edit ends the line", model.state.value.mutationLimit)
+    }
+
+    /** #323b2: a delete refused by the same budget is definite too (delete-own-message.php consumes before any work). */
+    @Test fun aRateLimitedDeleteIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
+        val request = begin(AuthorChangeKind.DELETE); model.submitAuthor(request); runCurrent()
+        assertNull(model.state.value.authorUnknown); assertFalse(model.state.value.stale)
+        assertNotNull("The dialog stays", model.state.value.authorDialog)
+        assertNotNull(model.state.value.mutationLimit); runCurrent(); assertEquals(1, fake.writes)
+    }
+
+    /** Guard (TL, #323b2): a proxy's 429 (no rate_limited code) after the write starts keeps M5b1's uncertainty. */
+    @Test fun aProxy429EditStillLeavesAuthorUncertainty() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, null)
+        val request = begin(); model.updateAuthorBody(request, "Maybe committed"); model.submitAuthor(request); runCurrent()
+        assertNotNull("M5b1: may have committed", model.state.value.authorUnknown)
+        assertNull(model.state.value.mutationLimit); assertEquals(1, fake.writes)
+    }
+
     /** Guard (TL, O3b3b): only the exact rules refusal is definite. Another 403 after the write starts stays uncertain. */
     @Test fun aDifferentForbiddenEditStillLeavesAuthorUncertainty() = runTest(dispatcher) {
         open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 403, "forbidden")

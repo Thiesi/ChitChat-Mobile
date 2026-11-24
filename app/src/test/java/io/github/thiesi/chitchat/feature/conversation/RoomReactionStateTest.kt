@@ -140,6 +140,29 @@ class RoomReactionStateTest {
         assertEquals("Nothing resends after I agree", 1, fake.writes)
     }
 
+    /** #323b2: a reaction add or removal refused by room_message_mutation is definite: the chip is unchanged, nothing resends. */
+    @Test fun aRateLimitedReactionLeavesTheChipUnchangedIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        for (desired in listOf(true, false)) {
+            open(); val before = model.state.value.messages.map { it.id to it.reactions }
+            fake.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
+            val request = begin(); model.setReaction(request, ReactionEmoji.HEART, desired); runCurrent()
+            assertNull("Definite ($desired)", model.state.value.reactionUnknown)
+            assertFalse(model.state.value.stale)
+            assertNotNull("The wait line ($desired)", model.state.value.mutationLimit)
+            assertEquals("The chip is unchanged", before, model.state.value.messages.map { it.id to it.reactions })
+            model.dismissReactions(request)
+            assertNull("Closing ends an unknown or shown line", model.state.value.mutationLimit)
+            fake.failure = null
+        }
+    }
+
+    /** Guard (TL, #323b2): a proxy's 429 on a reaction keeps M5b1's uncertainty. */
+    @Test fun aProxy429ReactionStillLeavesReactionUncertainty() = runTest(dispatcher) {
+        open(); fake.failure = ApiFailure(FailureKind.HTTP, 429, null)
+        model.setReaction(begin(), ReactionEmoji.HEART, true); runCurrent()
+        assertNotNull(model.state.value.reactionUnknown); assertNull(model.state.value.mutationLimit)
+    }
+
     @Test fun failedExplicitGetRetainsSameUnknownAndDoesNotReplay() = runTest(dispatcher) {
         open(); fake.failure = ApiFailure(FailureKind.NETWORK); model.setReaction(begin(), ReactionEmoji.HEART, true); runCurrent()
         val unknown = checkNotNull(model.state.value.reactionUnknown); fake.getFailure = ApiFailure(FailureKind.NETWORK)

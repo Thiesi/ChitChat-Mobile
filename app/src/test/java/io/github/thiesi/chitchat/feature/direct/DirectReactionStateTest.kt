@@ -121,6 +121,27 @@ class DirectReactionStateTest {
         assertEquals("Nothing resends after I agree",1,api.reacts)
     }
 
+    /** #323b2: a direct reaction add or removal refused by direct_message_mutation is definite; nothing resends. */
+    @Test fun aRateLimitedDirectReactionLeavesTheChipUnchangedIsNotUnknownAndNeverResends()=runTest(dispatcher) {
+        for (desired in listOf(true, false)) {
+            open(); val before=model.state.value.messages.map { it.id to it.reactions }
+            api.reactionFailure=ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
+            val request=begin(); model.setReaction(request,ReactionEmoji.HEART,desired); runCurrent()
+            assertNull("Definite ($desired)",model.state.value.reactionUnknown)
+            assertNotNull("The wait line ($desired)",model.state.value.mutationLimit)
+            assertEquals("The chip is unchanged",before,model.state.value.messages.map { it.id to it.reactions })
+            model.dismissReactions(request); assertNull(model.state.value.mutationLimit)
+            api.reactionFailure=null
+        }
+    }
+
+    /** Guard (TL, #323b2): a proxy's 429 on a direct reaction keeps M5b1's uncertainty. */
+    @Test fun aProxy429DirectReactionStillLeavesReactionUncertainty()=runTest(dispatcher) {
+        open(); api.reactionFailure=ApiFailure(FailureKind.HTTP, 429, null)
+        model.setReaction(begin(),ReactionEmoji.HEART,true); runCurrent()
+        assertNotNull(model.state.value.reactionUnknown); assertNull(model.state.value.mutationLimit)
+    }
+
     /** Navigation keeps an authorized reaction in flight (DM navigation path fix); it confirms with no unknown state. */
     @Test fun navigationKeepsAReactionInFlight()=runTest(dispatcher) {
         open(); api.gate=CompletableDeferred(); model.setReaction(begin(),ReactionEmoji.HEART,true); runCurrent()

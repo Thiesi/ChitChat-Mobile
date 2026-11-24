@@ -47,7 +47,8 @@ internal class AuthorDialogPresentation(val kind: AuthorChangeKind, val body: St
 @Composable
 internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetCurrent: Boolean, available: Boolean,
     busy: Boolean, onChange: (String) -> Unit, onConfirm: () -> Unit, onDismiss: () -> Unit,
-    canConfirm: Boolean = available, currentPreview: String? = null, error: String? = null) {
+    canConfirm: Boolean = available, currentPreview: String? = null, error: String? = null,
+    rateLine: (@Composable () -> Unit)? = null) {
     val editing = dialog.kind == AuthorChangeKind.EDIT
     if (editing) {
         // A floating alert can pan its footer beneath the IME when large text makes the form tall.
@@ -63,7 +64,7 @@ internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetC
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(stringResource(R.string.message_edit_action), style = MaterialTheme.typography.headlineSmall,
                             modifier = Modifier.semantics { heading() })
-                        AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error, compact)
+                        AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error, compact, rateLine)
                     }
                     FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End),
@@ -79,7 +80,7 @@ internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetC
         AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, modifier = Modifier.testTag("author_change_dialog").lanternDialogEdge(),
             title = { Text(stringResource(R.string.author_delete_title)) },
             text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error)
+                AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error, rateLine = rateLine)
             } },
             confirmButton = { AuthorConfirm(dialog, canConfirm && !busy, onConfirm) },
             dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.cancel)) } })
@@ -105,7 +106,8 @@ private fun AuthorEditorLayout(compact: Boolean, content: @Composable () -> Unit
 
 @Composable
 private fun AuthorChangeText(dialog: AuthorDialogPresentation, targetCurrent: Boolean, available: Boolean,
-    busy: Boolean, onChange: (String) -> Unit, currentPreview: String?, error: String?, compact: Boolean = false) {
+    busy: Boolean, onChange: (String) -> Unit, currentPreview: String?, error: String?, compact: Boolean = false,
+    rateLine: (@Composable () -> Unit)? = null) {
     val editing = dialog.kind == AuthorChangeKind.EDIT
     val pending = dialog.pendingMessageId
     Text(stringResource(R.string.author_retention))
@@ -131,6 +133,8 @@ private fun AuthorChangeText(dialog: AuthorDialogPresentation, targetCurrent: Bo
         Text(stringResource(R.string.author_character_count, dialog.body.codePointCount(0, dialog.body.length)))
     } else if (!targetCurrent) Text(stringResource(R.string.message_actions_unavailable))
     else if (pending == null) Text(messageExcerpt(dialog.originalBody))
+    // #323b2: the shared mutation wait on the refusal line (PL); the body is kept and Save or Delete sends nothing.
+    rateLine?.invoke()
     error?.let { Text(it) }
     dialog.validationText?.let { Text(it) }
     if (busy) Text(stringResource(R.string.author_working))

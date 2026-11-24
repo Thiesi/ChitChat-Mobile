@@ -181,6 +181,36 @@ class DirectAuthorChangeTest {
         assertEquals("Nothing resends after I agree", 1, changes.edits)
     }
 
+    /** #323b2: direct_message_mutation's own 429 is definite (direct-messages/edit.php consumes before any work). */
+    @Test fun aRateLimitedDirectEditKeepsItsTextIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); val request = choose(); model.updateAuthorBody(request, "Limited edit")
+        changes.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120); model.submitAuthor(request); runCurrent()
+        assertNull("Definite: no author uncertainty", model.state.value.authorUnknown)
+        assertFalse(model.state.value.stale); assertNull(model.state.value.error)
+        assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(
+            io.github.thiesi.chitchat.core.session.RateBudget.DIRECT_MESSAGE_MUTATION, true), model.state.value.mutationLimit)
+        assertEquals("Limited edit", model.state.value.authorDialog?.body)
+        runCurrent(); assertEquals("Nothing resends", 1, changes.edits)
+        changes.failure = null; model.submitAuthor(request); runCurrent()
+        assertEquals("A later Save is a fresh choice", 2, changes.edits)
+        assertNull(model.state.value.mutationLimit)
+    }
+
+    /** #323b2: a direct delete refused by the same budget is definite too (direct-messages/delete.php). */
+    @Test fun aRateLimitedDirectDeleteIsNotUnknownAndNeverResends() = runTest(dispatcher) {
+        open(); val request = choose(AuthorChangeKind.DELETE)
+        changes.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120); model.submitAuthor(request); runCurrent()
+        assertNull(model.state.value.authorUnknown); assertNotNull(model.state.value.mutationLimit)
+        runCurrent(); assertEquals(1, changes.deletes)
+    }
+
+    /** Guard (TL, #323b2): a proxy's 429 on a direct edit keeps M5b1's uncertainty. */
+    @Test fun aProxy429DirectEditStillLeavesAuthorUncertainty() = runTest(dispatcher) {
+        open(); val request = choose(); model.updateAuthorBody(request, "Maybe committed")
+        changes.failure = ApiFailure(FailureKind.HTTP, 429, null); model.submitAuthor(request); runCurrent()
+        assertNotNull(model.state.value.authorUnknown); assertNull(model.state.value.mutationLimit)
+    }
+
     @Test fun forbiddenPostIsAlsoUncertainAndAFailedRecoveryGetCannotClearIt() = runTest(dispatcher) {
         open(); val request = choose(); model.updateAuthorBody(request, "Proposal")
         changes.failure = ApiFailure(FailureKind.HTTP, 403, "forbidden"); model.submitAuthor(request); runCurrent()

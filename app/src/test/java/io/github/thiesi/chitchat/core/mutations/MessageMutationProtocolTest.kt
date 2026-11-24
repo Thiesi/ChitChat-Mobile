@@ -93,6 +93,31 @@ class MessageMutationProtocolTest {
         assertWrite("rooms/edit-message.php", """{"message_id":80,"body":${JsonPrimitive(body)}}""")
         assertEquals(4, server.requestCount)
     }
+    /**
+     * #323b2: room edit, delete and reactions share room_message_mutation, and DMs share direct_message_mutation. The
+     * server's own 429 on one gates the others of its budget locally, with no request; the other budget still reaches
+     * the server.
+     */
+    @Test fun theMutationBudgetsGateEachOtherLocallyAndOnlyWithinTheirOwnPolicy() = runTest {
+        val expected = login(); val reactions = io.github.thiesi.chitchat.core.reactions.SessionMessageReactionRepository(sessions)
+        server.enqueue(json("""{"error":{"code":"rate_limited","message":"x","retry_after_seconds":60}}""", 429))
+        val first = failure { repository.editRoom(expected, room(), "Limited") }; take()
+        assertEquals(429, first.status); assertFalse("The server's own refusal", first.localGate)
+        val count = server.requestCount
+        val delete = failure { repository.deleteRoom(expected, room()) }
+        val react = failure { reactions.setRoom(expected, room(), io.github.thiesi.chitchat.core.reactions.ReactionEmoji.HEART, true) }
+        val unreact = failure { reactions.setRoom(expected, room(), io.github.thiesi.chitchat.core.reactions.ReactionEmoji.HEART, false) }
+        for (gated in listOf(delete, react, unreact)) {
+            assertTrue("Refused locally", gated.localGate); assertEquals("rate_limited", gated.code); assertEquals(429, gated.status)
+        }
+        assertEquals("No request while the wait is known", count, server.requestCount)
+        assertNull("No session-wide error", sessions.state.value.error)
+        // direct_message_mutation is another policy: a DM edit still reaches the server.
+        server.enqueue(json(metadata(false)))
+        repository.editDirect(expected, direct(), "Corrected private body"); take()
+        assertEquals(count + 1, server.requestCount)
+    }
+
     @Test fun roomAuthorDeleteUsesDistinctEndpointAndClearsContentWithoutErasingReactions() = runTest {
         val expected = login(); server.enqueue(json(metadata(true, deleted = true)))
         val result = repository.deleteRoom(expected, room())
