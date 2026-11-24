@@ -56,7 +56,10 @@ jobs:
           retention-days: 7
       # The unsigned release bundle for Play (TL, 2026-11-23): the owner signs it locally with the upload key, which never
       # enters the repository, CI or any agent context. mapping.txt deobfuscates Play's crash reports for this build.
+      # Main pushes only (TL): PR runs build it (a broken release bundle still fails the PR) but upload nothing, to spare
+      # artifact egress and storage.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: chitchat-unsigned-release-aab
           if-no-files-found: error
