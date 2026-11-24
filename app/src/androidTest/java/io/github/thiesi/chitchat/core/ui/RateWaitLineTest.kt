@@ -160,7 +160,8 @@ class RateWaitLineTest {
 
     private fun settle() { repeat(2) { compose.mainClock.advanceTimeByFrame(); compose.waitForIdle() } }
     private fun known5() = base + compose.mainClock.currentTime + 5 * 60_000
-    private fun drawn() = line().size.height > 2 * context.resources.displayMetrics.density // The hidden strip is 1dp.
+    private fun drawn() = line().size.height > 2 * context.resources.displayMetrics.density // The strip is 1dp.
+    private fun oneDp() = kotlin.math.round(context.resources.displayMetrics.density).toInt().coerceAtLeast(1)
     private fun lineDescription() = line().config.getOrNull(SemanticsProperties.ContentDescription)?.singleOrNull()
 
     /** TL condition 1: a late or missing measurement gives the short form, never a missing line and never the full one. */
@@ -232,14 +233,37 @@ class RateWaitLineTest {
         assertEquals(LiveRegionMode.Polite, full.config[SemanticsProperties.LiveRegion])
     }
 
-    /** No notice: the carrier is there (zero height, polite live region) but says nothing and offers nothing. */
+    /**
+     * No notice: the carrier is there as a 1dp strip (TL, after run 45299066691: a zero-height node is outside the
+     * semantics snapshot) with its polite live region, but says nothing and offers nothing, so it's no swipe stop.
+     */
     @Test fun withNoNoticeTheCarrierIsEmpty() {
         slot()
         settle()
         assertFalse(drawn())
+        assertEquals("1dp before any notice", oneDp(), line().size.height)
         assertNull(lineDescription())
         assertEquals(LiveRegionMode.Polite, line().config[SemanticsProperties.LiveRegion])
-        assertFalse(line().config.contains(SemanticsProperties.Focused))
+        val config = line().config
+        assertFalse("No text", config.contains(SemanticsProperties.Text) || config.contains(SemanticsProperties.EditableText))
+        assertFalse("Not focusable", config.contains(SemanticsProperties.Focused) ||
+            config.contains(androidx.compose.ui.semantics.SemanticsActions.RequestFocus))
+        assertFalse("No action", config.contains(androidx.compose.ui.semantics.SemanticsActions.OnClick) ||
+            config.contains(androidx.compose.ui.semantics.SemanticsActions.OnLongClick))
+        assertFalse("Not merged into a stop", config.isMergingSemanticsOfDescendants)
+        assertEquals("Only the live region and the tag", setOf("LiveRegion", "TestTag"), config.map { it.key.name }.toSet())
+    }
+
+    /** TL: the node exists, 1dp, BEFORE the notice; the notice then changes that same node (never a new one). */
+    @Test fun theNoticeAppearsOnTheSameNodeThatWasAlreadyThere() {
+        slot()
+        settle()
+        val before = line()
+        assertEquals(oneDp(), before.size.height)
+        deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
+        settle()
+        assertEquals("The same node", before.id, line().id)
+        assertEquals(full5(), lineDescription())
     }
 
     /** PL condition 1: Send keeps its label and reads the full line as its state; no live region (the line carries it). */

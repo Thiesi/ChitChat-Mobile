@@ -237,6 +237,8 @@ class RatePresentationTest {
                 if (known) sessions.state.value = sessions.state.value.copy(rateWaits = mapOf(budget to RateWait(
                     android.os.SystemClock.elapsedRealtime() + 300_000, sessions.state.value.generation, checkNotNull(sessions.state.value.user).id)))
             }
+            // TL (after run 45299066691): the carrier node already exists, at least 1dp, before the notice appears.
+            val heightBeforeNotice = lineHeight()
             // Announcements are counted between delivered sentinels (PL, TL: the positive control). A mark that times out is
             // recorded and only fails after the capture (verify), so it can't cost the J its images.
             val opened = heard.mark(compose, sentinel)
@@ -277,6 +279,7 @@ class RatePresentationTest {
             // TL condition (a) and PL: none before the notice, exactly one for its appearance, none for the keyboard or form
             // swaps since, each between two delivered sentinels.
             heard.verify()
+            check(heightBeforeNotice >= oneDp()) { "$name: the carrier was ${heightBeforeNotice}px before the notice (expected 1dp or more)" }
             check(opened == 0) { "$name: $opened announcements before the refusal ${heard.spoken()}" }
             check(appeared - opened == 1) {
                 "$name: ${appeared - opened} announcements for the appearance (line height ${heightAtAppearance}px, drawn=$drawnAtAppearance) ${heard.spoken()}" }
@@ -330,6 +333,8 @@ class RatePresentationTest {
         }
         compose.waitForIdle()
         check(compose.onAllNodes(isFocused()).fetchSemanticsNodes().isEmpty()) { "$name: something is focused before the first tap" }
+        // TL: the carrier exists, at least 1dp, before the notice (checked after the captures, below).
+        val heightBeforeNotice = lineHeight()
         // Counted between delivered sentinels; a timed-out mark fails only after the capture (verify).
         val opened = heard.mark(compose, sentinel)
         if (case == 'A') {
@@ -404,6 +409,7 @@ class RatePresentationTest {
             focusedOnly(name, input, "after the refused tap's hide")
         }
         keyboardDown()
+        check(heightBeforeNotice >= oneDp()) { "$name: the carrier was ${heightBeforeNotice}px before the notice (expected 1dp or more)" }
     }
 
     private fun focusedOnly(name: String, input: String, moment: String) {
@@ -438,8 +444,9 @@ class RatePresentationTest {
         compose.onNodeWithContentDescription(label).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
 
     private fun lineHeight() = compose.onNodeWithTag("rate_wait_line").fetchSemanticsNode().size.height
+    private fun oneDp() = kotlin.math.round(context.resources.displayMetrics.density).toInt().coerceAtLeast(1)
 
-    /** The persistent wait line (one node: zero height with no notice, a 1dp strip while hidden) shows its text. */
+    /** The persistent wait line (one node: a 1dp strip with no notice and while hidden) shows its text. */
     private fun lineDrawn() =
         compose.onNodeWithTag("rate_wait_line").fetchSemanticsNode().size.height > 2 * context.resources.displayMetrics.density
 

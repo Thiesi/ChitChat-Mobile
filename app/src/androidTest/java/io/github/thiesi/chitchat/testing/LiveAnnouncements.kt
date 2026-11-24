@@ -58,6 +58,9 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
     // The counted total at each sentinel's delivery (in the listener), so a bracket ends exactly at its second sentinel.
     private val countAt = java.util.concurrent.ConcurrentHashMap<Int, Int>()
     @Volatile private var flushed = -1
+    // TL diagnostic (run 45299066691): each sentinel's event time (uptime), beside the counted events' t=, so a failure
+    // says whether an event was late (after its bracket's sentinels) or caused by a later change.
+    private val sentinelAt = java.util.concurrent.ConcurrentHashMap<Int, Long>()
     // Diagnostic scalars only (no text): what reached the listener, for a flush that times out.
     private val events = AtomicInteger()
     private val contentChanges = AtomicInteger()
@@ -78,6 +81,7 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
             val description = source.contentDescription?.toString().orEmpty()
             if (description.startsWith(FLUSH)) description.removePrefix(FLUSH).toIntOrNull()?.let {
                 countAt[it] = counted.size
+                sentinelAt.putIfAbsent(it, event.eventTime)
                 flushed = maxOf(flushed, it)
             }
             // Measurement (TL): each counted event's change types and the carrier's scalar state at that moment, so a
@@ -108,7 +112,8 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
     /** The counted spoken texts, in order. */
     fun texts(): List<String> = counted.toList()
     /** Diagnostics: the counted events, then every raw carrier event (text, change types, scalars). */
-    fun spoken(): String = "counted=${seen.toList()} raw=${raw.toList()}"
+    fun spoken(): String = "counted=${seen.toList()} raw=${raw.toList()} " +
+        "sentinels=${sentinelAt.toSortedMap().map { (n, t) -> "$n@t=$t(count=${countAt[n]})" }}"
 
     @Volatile private var failure: AssertionError? = null
 

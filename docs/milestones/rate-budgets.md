@@ -105,9 +105,13 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
     - **Why not Send:** Send carried it first (298d9a5 to e096392). A button changes several properties when a refusal
       lands (label "Sending" to "Send", enabled, progress), and on a live node each is an event: run 45222016407 counted
       three announcements per appearance.
-    - **So the line is one persistent node,** always composed, zero height (no padding) when nothing is drawn, inside the
-      timeline's block (the timeline, then the typing line and the wait line with their own 6dp top spacing), so a
-      zero-height line adds no gap and the spacing is unchanged. Its only semantics: a permanent polite live region, a
+    - **So the line is one persistent node,** always composed, never smaller than 1dp: a 1dp strip (no padding) when
+      nothing is drawn, inside the timeline's block (the timeline, then the typing line and the wait line with their own
+      6dp top spacing), so the strip adds no gap and the timeline gives up that 1dp. It was zero height with no notice
+      until run 45299066691: a zero-size node is outside the semantics snapshot, so a notice giving it size and text in
+      one change arrived as a new node and didn't reliably announce (on both platforms, the only counted event came from
+      the later keyboard-hide move). With no notice the strip has no text, description or action, so it's no swipe stop.
+      Its only semantics: a permanent polite live region, a
       description that's the full line while a notice is current and nothing otherwise, and its test tag. The visible
       text (full or short) isn't semantics, so visible and spoken text may differ (static text, as under P-25).
     - **Once on appearance, once per refused tap:** the description appearing is one change on an existing node. Each

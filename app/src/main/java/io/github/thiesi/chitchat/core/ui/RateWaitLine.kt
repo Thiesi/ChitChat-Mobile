@@ -159,12 +159,14 @@ fun Modifier.rateFitTimeline(fit: RateLineFit, window: Any): Modifier =
  * wait: measurements are tagged with the window. While one is pending the previous form holds; with none yet, SHORT.
  *
  * **The announcement carrier (PL and TL, after run 45222016407):** this line is ONE persistent node, always composed,
- * zero height (no padding) with no notice, 1dp while hidden. Its only semantics: a permanent polite live region, a description that
+ * never smaller than 1dp: a 1dp strip with no notice and while hidden (TL, after run 45299066691: a zero-height node is
+ * outside the semantics snapshot, so a notice giving it size and text in one change arrived as a new node and didn't
+ * reliably announce). With no notice the strip says nothing and offers nothing, so it's no swipe stop. Its only semantics: a permanent polite live region, a description that
  * is the full line while a notice is current (with or without one trailing space, flipped per refused tap: [parity])
  * and nothing otherwise, and its test tag. So the notice appearing and each refused tap are one change on an existing
  * node (one announcement), clearing empties it (silent), and full/short/hidden swaps change only its size and visible
- * text, never its semantics. It's the one swipe stop on the wait, where the text is. The caller places it where a
- * zero-height node adds no gap (inside the timeline's block, not as a spaced child).
+ * text, never its semantics. It's the one swipe stop on the wait, where the text is. The caller places it where the
+ * strip adds no gap (inside the timeline's block, not as a spaced child): the timeline gives up that 1dp.
  */
 @Composable
 fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotice?, @StringRes known: Int,
@@ -201,10 +203,9 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     val shown = when (form) { RateLineForm.FULL -> full; RateLineForm.SHORT -> short; else -> null }
     if (shown != null) LocalRateLineProbe.current?.let { probe -> SideEffect { probe(form == RateLineForm.SHORT, shown) } }
     val spoken = full?.let { if (parity) "$it " else it }
-    val strip = shown == null && form == RateLineForm.HIDDEN
-    Text(shown.orEmpty(), modifier.then(when { shown != null -> Modifier.padding(top = spacing); strip -> Modifier.height(1.dp)
-        else -> Modifier.height(0.dp) })
-        .onGloballyPositioned { fit.lineSlot = if (shown != null || strip) it.size.height else 0 }
+    // Drawn: the text with its top spacing. Otherwise (no notice, or hidden) the 1dp strip: the node always has size.
+    Text(shown.orEmpty(), modifier.then(if (shown != null) Modifier.padding(top = spacing) else Modifier.height(1.dp))
+        .onGloballyPositioned { fit.lineSlot = it.size.height }
         .clearAndSetSemantics {
             if (spoken != null) contentDescription = spoken
             liveRegion = LiveRegionMode.Polite
