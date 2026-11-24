@@ -41,6 +41,11 @@ private const val FLUSH = "ccm-live-flush-"
  * mark N+1" is evidence, and an "exactly 1" closed by a mark would catch a late extra announcement. The sentinel's text
  * is never the full line. A mark that times out is recorded, not thrown, so later steps and the case's capture still
  * run; [verify] rethrows it (cause kept, diagnostics in the message) before any count is asserted. No sleep, no retry.
+ *
+ * **Positive counts (TL refinement, #360):** a live event can arrive tens of milliseconds after the semantics show the
+ * change (runs 45426410650, 45439159759: 18 to 34 ms after a semantics-conditioned close). So a bracket that expects
+ * exactly 1 first waits, bounded at 5 s, for that announcement itself to be counted ([awaitCounted]), then closes with
+ * [mark]. A zero-bracket stays sentinel-delimited only, so a late or extra event still lands in it and fails it.
  * Measurement only: it never acts on the UI.
  *
  * Compose UI 1.11.4 sends accessibility events only when the app's AccessibilityManager is enabled and lists an enabled
@@ -123,6 +128,17 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
      * is missing (whether this process sees accessibility enabled with enabled services, which Compose 1.11.4 needs, and
      * what reached the listener at all); after one, later marks return at once and [verify] fails.
      */
+    /**
+     * The TL's positive condition for an "exactly 1" bracket: waits (bounded, 5 s) until [total] announcements have been
+     * counted. False on timeout (recorded by the caller's count assert, never thrown here).
+     */
+    fun awaitCounted(compose: ComposeTestRule, total: Int): Boolean = try {
+        compose.waitUntil(5_000) { counted.size >= total }
+        true
+    } catch (timeout: ComposeTimeoutException) {
+        false
+    }
+
     fun mark(compose: ComposeTestRule, sentinel: MutableIntState): Int {
         // One unawaited change first: once the gate opens, the delegate's first diff may only take its baseline.
         if (!primed) { primed = true; compose.runOnIdle { sentinel.intValue += 1 }; compose.waitForIdle() }
