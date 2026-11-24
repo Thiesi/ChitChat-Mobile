@@ -166,6 +166,7 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
     accountDeletion: io.github.thiesi.chitchat.feature.account.AccountDeletionViewModel? = null,
     serverLinks: io.github.thiesi.chitchat.core.server.PendingServerLink? = null,
     linkUi: ServerLinkViewModel? = null,
+    referrer: io.github.thiesi.chitchat.core.server.ReferrerPrefill? = null,
     onThemeChanged: (Boolean) -> Unit = {}) {
     val state by model.state.collectAsStateWithLifecycle()
     val session = auth.state.collectAsStateWithLifecycle().value
@@ -311,6 +312,14 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
             }
         }
         // Server prefill P1 (PL rulings A to G, TL): a chitchat://connect link only prefills; it's taken once, here.
+        // Server prefill P2 (TL): the Play referrer, considered once settings have loaded. It reads only while no server
+        // is saved and nobody is signed in (re-checked when the answer arrives), off the UI; a usable address arrives as
+        // a pending link below. A saved server or a sign-in settles it for good.
+        val referrerEligible by androidx.compose.runtime.rememberUpdatedState(state.settings.server == null &&
+            session.user == null && session.phase != SessionPhase.AUTHENTICATED)
+        LaunchedEffect(referrer, state.hasLoadedSettings, referrerEligible) {
+            if (referrer != null && state.hasLoadedSettings) referrer.consider { referrerEligible }
+        }
         val pendingLink = serverLinks?.state?.collectAsStateWithLifecycle()?.value
         LaunchedEffect(pendingLink, session.phase, session.user?.id, state.hasLoadedSettings, state.settings.server, chosen, savedInOnboarding) {
             val link = pendingLink ?: return@LaunchedEffect

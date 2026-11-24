@@ -594,19 +594,20 @@ class PresentationGateTests(unittest.TestCase):
         files = [Path("prefill-step2-light-default.png"), Path("prefill-step2-dark-font200.png"),
             Path("prefill-offer-light-font200.png"), Path("prefill-server-found-light-default.png"),
             Path("prefill-form-light-default.png"), Path("prefill-signed-in-dark-font200.png"),
-            Path("prefill-invalid-light-default.png")]
+            Path("prefill-invalid-light-default.png"), Path("prefill-referrer-step2-light-default.png"),
+            Path("prefill-referrer-invalid-light-default.png")]
         self.prefill_files(files)
         self.assertEqual(4, runner.main()); self.assert_once()
         for path in files: self.copy.assert_any_call(path, runner.PREFILL_DESTINATION / path.name)
-        self.assertEqual(8, self.copy.call_count) # Seven captures and the completion capture.
+        self.assertEqual(10, self.copy.call_count) # Nine captures and the completion capture.
 
     def test_excess_ambiguous_or_foreign_prefill_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"prefill-step2-light-default-{n}.png") for n in range(15)],
+        for files in ([Path(f"prefill-step2-light-default-{n}.png") for n in range(17)],
             [Path("a/prefill-invalid-light-default.png"), Path("b/prefill-invalid-light-default.png")],
             # Not taken: a dark offer, a 200% Server found, a dark invalid line.
             [Path("prefill-offer-dark-default.png")], [Path("prefill-server-found-light-font200.png")],
-            [Path("prefill-invalid-dark-default.png")], [Path("other.png")]):
+            [Path("prefill-invalid-dark-default.png")], [Path("prefill-referrer-step2-dark-default.png")], [Path("other.png")]):
             self.copy.reset_mock(); self.mkdir.reset_mock(); self.prefill_files(files)
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()

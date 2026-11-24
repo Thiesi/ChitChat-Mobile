@@ -126,6 +126,8 @@ class MainActivity : ComponentActivity() {
                 accountDeletion = accountDeletion,
                 // Server prefill P1: the process's pending link (from LinkEntryActivity) and its UI state.
                 serverLinks = (application as ChitChatApplication).serverLinks,
+                // Server prefill P2: the Play referrer, read once on first launch, into the same pending link.
+                referrer = (application as ChitChatApplication).referrerPrefill,
                 linkUi = viewModel<io.github.thiesi.chitchat.app.ServerLinkViewModel>(),
                 onThemeChanged = { dark ->
                 enableEdgeToEdge(

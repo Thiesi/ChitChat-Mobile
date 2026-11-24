@@ -82,7 +82,8 @@ internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel, a
     recoveryKeys: RecoveryKeyViewModel? = null,
     accountDeletion: AccountDeletionViewModel? = null,
     serverLinks: io.github.thiesi.chitchat.core.server.PendingServerLink? = null,
-    linkUi: io.github.thiesi.chitchat.app.ServerLinkViewModel? = null) {
+    linkUi: io.github.thiesi.chitchat.app.ServerLinkViewModel? = null,
+    referrer: io.github.thiesi.chitchat.core.server.ReferrerPrefill? = null) {
     val accountModel = account ?: remember(auth) { AccountViewModel(TestAccounts(auth.state)) }
     val rooms = roomModel ?: remember(auth) { RoomsViewModel(EmptyRoomOperations(auth.state)) }
     val conversations = conversationModel ?: remember(auth) { ConversationViewModel(EmptyConversationOperations(auth.state)) }
@@ -95,11 +96,11 @@ internal fun TestChitChatApp(settings: SettingsViewModel, auth: AuthViewModel, a
         ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox,
             directThread = directThread, messageTargets = messageTargets, notifications = notifications, search = search, profiles = profiles, completion = completion,
             pushTaps = pushTaps, policies = policies, guidelines = guidelines, rulesUpdate = rulesUpdate, recoveryKeys = recoveryKeys, accountDeletion = accountDeletion,
-            serverLinks = serverLinks, linkUi = linkUi)
+            serverLinks = serverLinks, linkUi = linkUi, referrer = referrer)
     } else {
         ChitChatApp(settings, auth, accountModel, rooms, conversations, realtime = realtime, directInbox = directInbox,
             directThread = directThread, messageTargets = messageTargets, notifications = notifications, search = search, profiles = profiles, completion = completion,
             pushTaps = pushTaps, policies = policies, guidelines = guidelines, rulesUpdate = rulesUpdate, recoveryKeys = recoveryKeys, accountDeletion = accountDeletion,
-            serverLinks = serverLinks, linkUi = linkUi)
+            serverLinks = serverLinks, linkUi = linkUi, referrer = referrer)
     }
 }

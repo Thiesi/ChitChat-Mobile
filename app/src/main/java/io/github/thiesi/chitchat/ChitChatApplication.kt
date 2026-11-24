@@ -45,6 +45,11 @@ import kotlinx.coroutines.launch
 class ChitChatApplication : Application() {
     /** Server prefill P1: the link LinkEntryActivity received, waiting for onboarding (memory only, taken once). */
     val serverLinks = io.github.thiesi.chitchat.core.server.PendingServerLink()
+    /** Server prefill P2: the one bounded Play referrer read of this process, offered into [serverLinks]. */
+    val referrerPrefill by lazy {
+        io.github.thiesi.chitchat.core.server.ReferrerPrefill(io.github.thiesi.chitchat.core.server.PlayInstallReferrer(this),
+            settingsRepository, serverLinks, processScope)
+    }
     // Numeric accounting survives retired sessions/workers; private payloads remain in draft owners.
     internal val attachmentMemory by lazy {
         io.github.thiesi.chitchat.core.media.AttachmentMemoryBudget(

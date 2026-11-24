@@ -26,7 +26,8 @@ interface SettingsStore {
 }
 
 /** Non-secret device preferences only. Sessions and message content never belong in this store. */
-class SettingsRepository(context: Context) : SettingsStore, GuidelinesAcceptanceStore {
+class SettingsRepository(context: Context) : SettingsStore, GuidelinesAcceptanceStore,
+    io.github.thiesi.chitchat.core.server.ReferrerFlag {
     private val store = context.applicationContext.settingsStore
     override val settings: Flow<AppSettings> = store.data.map { preferences ->
         decodeSettings(preferences[SERVER], preferences[THEME], preferences.asMap()[PURE_BLACK])
@@ -43,6 +44,14 @@ class SettingsRepository(context: Context) : SettingsStore, GuidelinesAcceptance
      * backup-excluded settings store, with no account or server data; sign-out and forgetting a server keep it.
      */
     val shareNoteSeen: Flow<Boolean> = store.data.map { it[SHARE_NOTE_SEEN] == true }
+
+    /**
+     * Server prefill P2 (TL): the Play referrer was settled on this install (read, unavailable for good, or onboarding
+     * done). One boolean in this backup-excluded store, no account or server data; never cleared, not by sign-out and
+     * not by forgetting a server, so a referrer can't re-apply later.
+     */
+    override val done: Flow<Boolean> = store.data.map { it[REFERRER_DONE] == true }
+    override suspend fun markDone() { store.edit { it[REFERRER_DONE] = true } }
     suspend fun markShareNoteSeen() { store.edit { it[SHARE_NOTE_SEEN] = true } }
 
     override val accepted: Flow<Set<GuidelinesAcceptance>> = store.data.map { preferences ->
@@ -59,6 +68,7 @@ class SettingsRepository(context: Context) : SettingsStore, GuidelinesAcceptance
         val GUIDELINES = stringSetPreferencesKey("guidelines_accepted")
         val PURE_BLACK = booleanPreferencesKey("pure_black")
         val SHARE_NOTE_SEEN = booleanPreferencesKey("share_note_seen")
+        val REFERRER_DONE = booleanPreferencesKey("referrer_done")
         val SERVER = stringPreferencesKey("server")
         val THEME = stringPreferencesKey("theme")
     }

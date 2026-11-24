@@ -65,7 +65,8 @@ class ServerPrefillTest {
     private fun link(value: String) = ServerLink.from("chitchat://connect?server=$value")!!
     private fun address(text: String) = (ServerAddress.parse(text) as AddressResult.Valid).address
 
-    private fun run(saved: String?, dark: Boolean = false, fontScale: Float = 1f, signedIn: Boolean = false, body: (Env) -> Unit) {
+    private fun run(saved: String?, dark: Boolean = false, fontScale: Float = 1f, signedIn: Boolean = false,
+        referrer: ((PendingServerLink) -> io.github.thiesi.chitchat.core.server.ReferrerPrefill)? = null, body: (Env) -> Unit) {
         FontScaleTestActivity.requestedFontScale = fontScale
         val sessions = TestSessions()
         val store = MutableStateFlow(AppSettings(server = saved?.let(::address), theme = if (dark) ThemePreference.DARK else ThemePreference.LIGHT))
@@ -76,6 +77,7 @@ class ServerPrefillTest {
             override suspend fun saveTheme(theme: ThemePreference) { store.value = store.value.copy(theme = theme) }
         }
         val links = PendingServerLink()
+        val referrerPrefill = referrer?.invoke(links)
         ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
             lateinit var ui: ServerLinkViewModel
             scenario.onActivity { activity ->
@@ -86,7 +88,7 @@ class ServerPrefillTest {
                 activity.setContent {
                     val bottom = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
                     androidx.compose.runtime.SideEffect { imeBottom = bottom }
-                    Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, serverLinks = links, linkUi = ui) }
+                    Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, serverLinks = links, linkUi = ui, referrer = referrerPrefill) }
                 }
             }
             if (saved != null) compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.ANONYMOUS }
@@ -259,6 +261,90 @@ class ServerPrefillTest {
         compose.onNodeWithTag("prefill_signed_in_ok").performNativeTap()
         compose.waitUntil(5_000) { !shown("prefill_signed_in") }
         assertEquals("Signed in still", SessionPhase.AUTHENTICATED, env.sessions.state.value.phase)
+    }
+
+    // P2: the Play install referrer, through the same pending link and router (TL conditions, PL rulings).
+    private class Flag : io.github.thiesi.chitchat.core.server.ReferrerFlag {
+        override val done = MutableStateFlow(false)
+        override suspend fun markDone() { done.value = true }
+    }
+
+    /** A reader that answers only when the test completes [answer]: late, as a real Play bind can be. */
+    private class LateReader : io.github.thiesi.chitchat.core.server.InstallReferrerReads {
+        val answer = kotlinx.coroutines.CompletableDeferred<io.github.thiesi.chitchat.core.server.ReferrerAnswer>()
+        @Volatile var reads = 0
+        override suspend fun read(): io.github.thiesi.chitchat.core.server.ReferrerAnswer { reads++; return answer.await() }
+    }
+
+    private fun prefill(reader: LateReader, flag: Flag) = { links: PendingServerLink ->
+        io.github.thiesi.chitchat.core.server.ReferrerPrefill(reader, flag, links,
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate))
+    }
+
+    /**
+     * A, from the referrer (PL): Welcome renders before the read answers (TL: never blocks or delays the UI), then step 2
+     * is filled with A's line. Its capture must be byte-identical to prefill-step2-light-default (the same router).
+     */
+    @Test fun aValidReferrerFillsStepTwoLikeALink() {
+        val reader = LateReader(); val flag = Flag()
+        run(null, referrer = prefill(reader, flag)) { env ->
+            val generation = env.sessions.state.value.generation
+            compose.waitUntil(5_000) { reader.reads == 1 }
+            val welcomeBeforeTheAnswer = shown("onboarding_welcome_start") && !reader.answer.isCompleted
+            reader.answer.complete(io.github.thiesi.chitchat.core.server.ReferrerAnswer.Referrer(
+                "utm_source=web&utm_medium=badge&chitchat_server=chat.example.org"))
+            compose.waitUntil(5_000) { env.ui.editorPrefill.value != null }
+            compose.onNodeWithTag("onboarding_welcome_start").performNativeTap()
+            compose.waitUntil(5_000) { shown("onboarding_server_input") }
+            capture("prefill-referrer-step2-light-default")
+            assertTrue("Welcome rendered before the read answered", welcomeBeforeTheAnswer)
+            assertEquals("chat.example.org", field())
+            assertTrue(shown("prefill_filled"))
+            assertTrue("Settled", flag.done.value)
+            assertEquals("One read", 1, reader.reads)
+            assertEquals("No request", generation, env.sessions.state.value.generation)
+            assertEquals("Nothing saved", null, env.store.value.server)
+        }
+    }
+
+    /** G for P2 (PL): an invalid referrer is always silent; step 2 is plain, with no line and an empty field. */
+    @Test fun anInvalidReferrerIsSilent() {
+        val reader = LateReader(); val flag = Flag()
+        run(null, referrer = prefill(reader, flag)) { env ->
+            compose.waitUntil(5_000) { reader.reads == 1 }
+            reader.answer.complete(io.github.thiesi.chitchat.core.server.ReferrerAnswer.Referrer("chitchat_server=not%20a%20host"))
+            compose.waitUntil(5_000) { flag.done.value }
+            compose.onNodeWithTag("onboarding_welcome_start").performNativeTap()
+            compose.waitUntil(5_000) { shown("onboarding_server_input") }
+            capture("prefill-referrer-invalid-light-default")
+            assertEquals("", field())
+            assertFalse("No line, not even G's", shown("prefill_invalid") || shown("prefill_filled") || shown("prefill_offer"))
+            assertTrue("The value is never shown", compose.onAllNodes(androidx.compose.ui.test.hasText("not a host", substring = true))
+                .fetchSemanticsNodes().isEmpty())
+            assertEquals(null, env.store.value.server)
+        }
+    }
+
+    /** First launch only (TL): with a server saved, nothing is read, and that settles it for good. */
+    @Test fun aSavedServerMeansNoReadAndSettlesIt() {
+        val reader = LateReader(); val flag = Flag()
+        run("saved.example.org", referrer = prefill(reader, flag)) { env ->
+            compose.waitUntil(5_000) { flag.done.value }
+            compose.waitForIdle()
+            assertEquals("Never read", 0, reader.reads)
+            assertEquals(null, env.links.state.value)
+        }
+    }
+
+    /**
+     * CI's google_apis images have no Play Store: the real client answers definitively (FEATURE_NOT_SUPPORTED), silently,
+     * within its bound (TL). On a device with Play it may answer OK instead; it never asks for a retry there.
+     */
+    @Test fun theRealClientIsDefinitiveWithoutPlay() {
+        val play = runCatching { context.packageManager.getPackageInfo("com.android.vending", 0) }.isSuccess
+        val answer = runBlocking { io.github.thiesi.chitchat.core.server.PlayInstallReferrer(context).read() }
+        if (!play) assertEquals(io.github.thiesi.chitchat.core.server.ReferrerAnswer.Definitive, answer)
+        else assertTrue("Play present: $answer", answer !is io.github.thiesi.chitchat.core.server.ReferrerAnswer.Retry)
     }
 
     // G: an invalid value from a link with step 2's field empty: the line, the field empty, the value never shown.
