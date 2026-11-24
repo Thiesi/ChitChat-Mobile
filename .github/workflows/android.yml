@@ -27,7 +27,7 @@ jobs:
       - name: Test native gate diagnostics without credentials or a device
         run: python3 -B -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Build, unit tests and lint
-        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:checkLicenceCoverage --max-workers=2
+        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:bundleRelease :app:checkLicenceCoverage --max-workers=2
       - name: Compile the opt-in standalone diagnostic (no device invocation)
         run: ./gradlew -PfocusDiagnostic=true :focus-diagnostic:assembleDebug --max-workers=2
       - name: Build and unit-test the opt-in IME reproducer (no instrumentation)
@@ -54,6 +54,19 @@ jobs:
           name: chitchat-unsigned-release-apk
           path: app/build/outputs/apk/release/app-release-unsigned.apk
           retention-days: 7
+      # The unsigned release bundle for Play (TL, 2026-11-23): the owner signs it locally with the upload key, which never
+      # enters the repository, CI or any agent context. mapping.txt deobfuscates Play's crash reports for this build.
+      # Main pushes only (TL): PR runs build it (a broken release bundle still fails the PR) but upload nothing, to spare
+      # artifact egress and storage.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: chitchat-unsigned-release-aab
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            app/build/outputs/bundle/release/app-release.aab
+            app/build/outputs/mapping/release/mapping.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: standalone-focus-diagnostic-apk
