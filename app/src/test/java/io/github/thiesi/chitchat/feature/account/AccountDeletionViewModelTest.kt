@@ -185,6 +185,9 @@ class AccountDeletionViewModelTest {
             val about = approximateDeadline(Instant.parse("2026-11-18T10:00:00Z"), ZoneId.of("UTC"))
             assertTrue("Fourteen days on, date only: $about", about.replace(' ', ' ').contains("2 Dec 2026") && !about.contains(":"))
             assertFalse(about.contains(' '))
+            // #349: the composable reads its clock and zone through LocalWallClock; a fixed one gives the same date.
+            val fixed = WallClock({ Instant.parse("2026-11-18T10:00:00Z") }, { ZoneId.of("UTC") })
+            assertEquals(about, approximateDeadline(fixed.now(), fixed.zone()))
         } finally { Locale.setDefault(previous) }
     }
 

@@ -150,7 +150,13 @@ class AccountDeletionPresentationTest {
             scenario.onActivity { activity ->
                 assertEquals("A real Configuration font scale", fontScale, activity.resources.configuration.fontScale)
                 activity.setContent { Box(Modifier.fillMaxSize().testTag("deletion_host")) {
-                    TestChitChatApp(settings, auth, accountDeletion = model)
+                    // #349 (TL): a fixed wall clock and zone, so the signed-out "about" date (and its capture) is the
+                    // same on every run date and image zone: 2026-11-18 in UTC, 14 days on.
+                    androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.feature.account.LocalWallClock provides
+                        io.github.thiesi.chitchat.feature.account.WallClock({ java.time.Instant.parse("2026-11-18T10:00:00Z") },
+                            { java.time.ZoneId.of("UTC") })) {
+                        TestChitChatApp(settings, auth, accountDeletion = model)
+                    }
                 } }
             }
             compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.ANONYMOUS }

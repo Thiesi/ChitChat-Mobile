@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -95,6 +96,14 @@ internal fun closureDeadline(finalizesAt: String, zone: ZoneId = ZoneId.systemDe
     val time = at.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
     if (date in whole && time in whole) whole.replace(date, date.noBreak()).replace(time, time.noBreak()) else whole
 }.getOrNull()
+
+/**
+ * The wall clock and zone the signed-out "about" date reads (#349, TL): the device's in production, a fixed one in the
+ * presentation captures, so they don't change with the run's date or the image's zone. Behaviour-neutral, like
+ * LocalMonotonicClock; only that call site uses it.
+ */
+internal class WallClock(val now: () -> Instant = { Instant.now() }, val zone: () -> ZoneId = { ZoneId.systemDefault() })
+internal val LocalWallClock = staticCompositionLocalOf { WallClock() }
 
 /** The hedged "about" date: the device clock plus 14 days, date only (§2; only on the signed-out line). */
 internal fun approximateDeadline(now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String =
@@ -267,7 +276,8 @@ fun ClosureOutcomeScreen(closure: ClosureState, installation: String, checking: 
                 Text(withLabel(stringResource(R.string.delete_account_restore_line, restore), restore), Modifier.testTag("closure_restore_line"))
             }
             is ClosureState.LikelyClosed -> Text(withLabel(stringResource(R.string.delete_account_signed_out_body,
-                approximateDeadline(), restore), restore), Modifier.testTag("closure_signed_out_body"))
+                LocalWallClock.current.let { approximateDeadline(it.now(), it.zone()) }, restore), restore),
+                Modifier.testTag("closure_signed_out_body"))
             else -> UnknownNotice()
         }
     }
