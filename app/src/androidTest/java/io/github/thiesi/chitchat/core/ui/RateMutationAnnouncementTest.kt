@@ -49,10 +49,6 @@ class RateMutationAnnouncementTest {
     private var repeats by mutableIntStateOf(0)
     private val sentinel = mutableIntStateOf(0)
     @Volatile private var dialogView: View? = null
-    /** DIAGNOSTIC (a): the notice is derived from a session without the wait, so the deadline can be settled first. */
-    private var splitSessions = false
-    /** DIAGNOSTIC (b): an unrelated pending long delay composed beside the line. */
-    private var pendingDelay = false
     @Volatile private var sentinelView: View? = null
 
     private fun session(deadline: Long?) = SessionState(generation = 3, phase = SessionPhase.AUTHENTICATED,
@@ -64,7 +60,6 @@ class RateMutationAnnouncementTest {
             CompositionLocalProvider(LocalMonotonicClock provides { base + compose.mainClock.currentTime }) {
                 ChitChatTheme(dark = false) {
                     val current = session(deadline)
-                    val forNotice = if (splitSessions) session(null) else current
                     MessageReactionPicker(Any(), 101, emptyList(), deleted = false, viewer = 7, busy = false, checked = false,
                         changed = false, unknownMessageId = null, dialogTag = "reactions_dialog", choicesTag = "reaction_choices",
                         canCheck = false, canReview = false, error = null, canChoose = { _, _ -> true }, onChoose = { _, _ -> },
@@ -72,8 +67,7 @@ class RateMutationAnnouncementTest {
                             val view = LocalView.current
                             SideEffect { dialogView = view }
                             Column {
-                                if (pendingDelay) androidx.compose.runtime.LaunchedEffect(Unit) { kotlinx.coroutines.delay(600_000) }
-                                RateWaitDialogLine(current, mutationNotice(forNotice, notice, RateBudget.ROOM_MESSAGE_MUTATION),
+                                RateWaitDialogLine(current, mutationNotice(current, notice, RateBudget.ROOM_MESSAGE_MUTATION),
                                     R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "reaction_rate_line",
                                     parity = repeats % 2 == 1, drawnPadding = slot.padding)
                                 // TL: the sentinel and the carrier share one AndroidComposeView (asserted in attachDialog).
@@ -180,9 +174,13 @@ class RateMutationAnnouncementTest {
     }
 
     /**
-     * TL: the appearance bracket uses a five-minute wait, so the line's deadline one-shot (a delay on the test's auto-advancing
-     * clock) can't clear it before the delegate's diff sends the appearance (a 2 s wait did, run 45426410650: no event at
-     * all). The clearing bracket then advances the clock explicitly past the deadline. No real-time sleeps.
+     * A known wait appearing while the picker is open IS announced (TL, after run 45449488300: this test and three
+     * diagnostic variants all counted it with [LiveAnnouncements.awaitCounted]). Earlier runs saw no event (raw=[]) because
+     * the test cleared the line right after the bracket (a 2 s deadline, then an explicit advance past it): the delegate's
+     * pending event then read its source already emptied, which no longer matched the carrier, so it was never counted. So
+     * the appearance bracket uses a five-minute wait and waits for the event itself before closing; only then does the
+     * clearing bracket advance the clock explicitly past the deadline. No real-time sleeps. For users the shortest server
+     * wait (1 s) is far above that lag.
      */
     @Test fun aKnownWaitsDeadlineClearsTheLineSilently() {
         val known = context.getString(R.string.rate_wait_mutations, context.resources.getQuantityString(R.plurals.wait_about_minutes, 5, 5))
@@ -212,73 +210,5 @@ class RateMutationAnnouncementTest {
             assertEquals("Once on appearance while open ($ids): ${heard.spoken()}", 1, appeared - start)
             assertEquals("The deadline's clearing is silent: ${heard.spoken()}", 0, cleared - appeared)
         }
-    }
-
-    // ---------------------------------------------------------------------------------------------------------------
-    // DIAGNOSTICS (TL, after run 45439159759): a known wait appearing while the picker is open produced no live
-    // announcement at all (same carrier node, the full line in its description at the bracket's close, every sentinel
-    // delivered), while an unknown wait announces. Each variant isolates one difference; each records the same scalars.
-    // After they're read, they become the real fix plus a regular test, or they're removed.
-    // ---------------------------------------------------------------------------------------------------------------
-
-    private fun diagnosticAppearance(label: String, expected: String, setUp: () -> Unit, change: () -> Unit,
-        drive: () -> Unit = {}) {
-        announcements { expected }.use { heard ->
-            picker()
-            heard.attachDialog()
-            setUp()
-            val start = heard.mark(compose, sentinel)
-            val idBefore = line().id
-            change()
-            drive()
-            awaitDescription(expected)
-            val idAfter = line().id
-            val delivered = heard.awaitCounted(compose, start + 1) // Bounded 5 s; false: no announcement arrived.
-            val appeared = heard.mark(compose, sentinel)
-            val afterMark = description()
-            heard.verify()
-            val record = "DIAGNOSTIC $label: carrier node $idBefore -> $idAfter, description at the bracket's close: $afterMark, " +
-                "event delivered within 5 s: $delivered, " +
-                "counted ${appeared - start}: ${heard.spoken()}"
-            android.util.Log.i("CCMRateMutation", record)
-            assertEquals(record, 1, appeared - start)
-        }
-    }
-
-    private val knownFive get() = context.getString(R.string.rate_wait_mutations,
-        context.resources.getQuantityString(R.plurals.wait_about_minutes, 5, 5))
-
-    /** DIAGNOSTIC (a): the deadline settles in an earlier step (nothing shows yet), then the notice alone arrives. */
-    @Test fun diagnosticA_knownWaitWithTheDeadlineSettledFirst() {
-        splitSessions = true
-        diagnosticAppearance("(a) deadline settled first", knownFive,
-            setUp = { compose.runOnIdle { deadline = base + compose.mainClock.currentTime + 5 * 60_000 }; awaitDescription(null) },
-            change = { compose.runOnIdle { notice = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true) } })
-    }
-
-    /** DIAGNOSTIC (b): the unknown wait (which announces) with an unrelated pending long delay composed beside it. */
-    @Test fun diagnosticB_unknownWaitBesideAPendingDelay() {
-        pendingDelay = true
-        diagnosticAppearance("(b) unknown beside a pending delay", context.getString(R.string.rate_wait_mutations_unknown),
-            setUp = {}, change = { compose.runOnIdle { notice = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, false) } })
-    }
-
-    /**
-     * DIAGNOSTIC (c): the known wait with the test clock's auto-advance off while it appears; frames are advanced
-     * explicitly (virtual time only, no real-time sleep), then auto-advance resumes for the bracket's close.
-     */
-    @Test fun diagnosticC_knownWaitWithoutAutoAdvance() {
-        diagnosticAppearance("(c) known without auto-advance", knownFive, setUp = {},
-            change = {
-                compose.mainClock.autoAdvance = false
-                compose.runOnUiThread {
-                    deadline = base + compose.mainClock.currentTime + 5 * 60_000
-                    notice = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true)
-                }
-            },
-            drive = {
-                repeat(10) { compose.mainClock.advanceTimeByFrame() }
-                compose.mainClock.autoAdvance = true
-            })
     }
 }
