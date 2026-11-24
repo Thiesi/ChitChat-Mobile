@@ -12,5 +12,8 @@
         <!-- Sets its content in onCreate like MainActivity, so recreation uses the production restore path. Debug only. -->
         <activity android:name="io.github.thiesi.chitchat.testing.OnCreateContentTestActivity"
             android:theme="@style/Theme.ChitChat" android:windowSoftInputMode="adjustResize" android:exported="false" />
+        <!-- Server prefill P1's trampoline tests: a caller in its own task (another affinity), like a messenger. Debug only. -->
+        <activity android:name="io.github.thiesi.chitchat.testing.ForeignTaskCallerActivity"
+            android:taskAffinity="io.github.thiesi.chitchat.test.caller" android:exported="false" />
     </application>
 </manifest>

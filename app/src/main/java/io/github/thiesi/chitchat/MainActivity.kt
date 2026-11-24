@@ -124,6 +124,9 @@ class MainActivity : ComponentActivity() {
                 notifications = notifications, search = search, profiles = profiles, completion = completion, pushSettings = pushSettings, pushPhone = pushPhone,
                 pushTaps = pushTaps.taps, policies = policies, guidelines = guidelines, recoveryKeys = recoveryKeys, receivedImages = receivedImages, rulesUpdate = rulesUpdate,
                 accountDeletion = accountDeletion,
+                // Server prefill P1: the process's pending link (from LinkEntryActivity) and its UI state.
+                serverLinks = (application as ChitChatApplication).serverLinks,
+                linkUi = viewModel<io.github.thiesi.chitchat.app.ServerLinkViewModel>(),
                 onThemeChanged = { dark ->
                 enableEdgeToEdge(
                     statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },

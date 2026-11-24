@@ -24,6 +24,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Server prefill P1 (CC #417): chitchat://connect?server=... only prefills "Where do you chat?". The only exported
+             VIEW handler, a no-UI trampoline into MainActivity (TL: MainActivity's launch mode stays unchanged). -->
+        <activity
+            android:name=".app.LinkEntryActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="chitchat" android:host="connect" />
+            </intent-filter>
+        </activity>
         <!-- Received files F5: Share and Open copies only (cache/shared), never exported, read-only grants on intents. -->
         <provider
             android:name="androidx.core.content.FileProvider"

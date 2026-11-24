@@ -43,6 +43,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 class ChitChatApplication : Application() {
+    /** Server prefill P1: the link LinkEntryActivity received, waiting for onboarding (memory only, taken once). */
+    val serverLinks = io.github.thiesi.chitchat.core.server.PendingServerLink()
     // Numeric accounting survives retired sessions/workers; private payloads remain in draft owners.
     internal val attachmentMemory by lazy {
         io.github.thiesi.chitchat.core.media.AttachmentMemoryBudget(

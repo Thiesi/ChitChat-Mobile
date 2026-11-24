@@ -585,6 +585,32 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def prefill_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-prefill-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_prefill_captures_are_copied_and_keep_the_original_status(self):
+        self.results(4)
+        files = [Path("prefill-step2-light-default.png"), Path("prefill-step2-dark-font200.png"),
+            Path("prefill-offer-light-font200.png"), Path("prefill-server-found-light-default.png"),
+            Path("prefill-form-light-default.png"), Path("prefill-signed-in-dark-font200.png"),
+            Path("prefill-invalid-light-default.png")]
+        self.prefill_files(files)
+        self.assertEqual(4, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.PREFILL_DESTINATION / path.name)
+        self.assertEqual(8, self.copy.call_count) # Seven captures and the completion capture.
+
+    def test_excess_ambiguous_or_foreign_prefill_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"prefill-step2-light-default-{n}.png") for n in range(15)],
+            [Path("a/prefill-invalid-light-default.png"), Path("b/prefill-invalid-light-default.png")],
+            # Not taken: a dark offer, a 200% Server found, a dark invalid line.
+            [Path("prefill-offer-dark-default.png")], [Path("prefill-server-found-light-font200.png")],
+            [Path("prefill-invalid-dark-default.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.prefill_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def rate_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-rate-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))

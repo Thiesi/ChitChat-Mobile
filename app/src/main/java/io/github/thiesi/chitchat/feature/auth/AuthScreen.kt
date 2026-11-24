@@ -54,7 +54,8 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? = null,
-    onPolicy: ((io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit)? = null) {
+    onPolicy: ((io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit)? = null,
+    top: (@Composable () -> Unit)? = null) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.pauseRegistration() }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -66,6 +67,8 @@ fun AuthScreen(state: SessionState, model: AuthViewModel, onBack: (() -> Unit)? 
     }
     val waiting = now < state.retryAtMillis
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Server prefill P1, E (PL): a link's offer sits at the top of the form's scroller.
+        top?.invoke()
         // The reset form shows its own refusals beside its action or field (PL, O4b2).
         // Only on the form itself: the pending MFA step has no lines of its own, so its errors stay here (review, #294).
         state.error?.takeUnless { state.authFlow == AuthFlow.RESET && state.reset.pending == null && state.resetOwnsError() }?.let { failure ->
