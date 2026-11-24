@@ -61,6 +61,17 @@ This is an actual JVM HTTP/server integration check using transient in-memory cr
 - **API35:** the journey's post-merge main run saves after its tests, also when they fail.
 - **API36:** `api36-observation` runs only on PRs, so a separate main-push-only job, `api36-image-cache`, does it. On a miss it installs the image with sdkmanager as the runner does, runs the same pinned-revision check and saves. It runs no emulator and no tests, is never a PR or required check, and its result (`continue-on-error`) affects no gate. It covers image-install failures only. The runner (a421e43, unchanged in v2.38.0) always installs the latest emulator with sdkmanager and downloads the pinned emulator build with curl, so emulator download failures stay possible. The suite, API levels, image revisions, retries (none) and timeouts are unchanged.
 
+**R8 smoke check (2026-11-24):** the visible, non-gating `r8-smoke` job builds the minified release APK, zip-aligns and
+signs it with a throwaway key made in the job (never the Play upload key, which never enters CI), and installs it on the
+pinned API35 emulator (the journey's image and emulator build, after the journey's own health precheck,
+`native_environment.py`) with airplane mode on and Wi-Fi and mobile data off. `.github/scripts/r8_smoke.py` then launches it
+to Welcome, taps Get started into "Where do you chat?", types an http address and taps Continue, which must show the
+HTTPS line (`ServerAddress.parse` under R8; nothing can be requested). It fails on a missing screen, a dead process or an
+allowlisted fatal signature (a crash, an R8 or serialization error) in the app's own log or a crash naming the app. Only
+those truncated lines and booleans are kept, in the `r8-smoke-report` artifact, under a one-line summary (pass or fail,
+the step reached and the reason); never raw logcat or field content. One
+attempt, no retries. Whether it becomes gating is decided once it has run clean.
+
 **Native job time limits (2026-11-20):** the API35 `journey` and the API36 `api36-observation` jobs have a 45-minute
 limit (it was 30). Over the 40 PR runs before the change, completed runs took 19.6–29.3 minutes (journey, median 23.8)
 and 21.0–29.6 (API36, median 25.1). Two were cancelled at 30 minutes, one of them (#315, run 44679216707) after the log
