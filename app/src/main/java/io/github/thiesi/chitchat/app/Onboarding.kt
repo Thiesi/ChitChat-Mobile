@@ -77,6 +77,9 @@ internal fun WelcomeScreen(onStart: () -> Unit) {
             Text(stringResource(R.string.onboarding_get_started))
         }
         PreviewDisclosure()
+        // The app's own privacy policy at Welcome's foot (PL, play-readiness surface table): "Privacy policy", since
+        // Welcome has no server context. No accessibility-feedback footer here (P-221 stays on the forms).
+        AppPrivacyTextLink(stringResource(R.string.app_privacy_policy_short), "welcome_app_privacy")
     }
 }
 

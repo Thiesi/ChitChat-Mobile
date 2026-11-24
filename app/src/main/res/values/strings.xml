@@ -602,6 +602,9 @@
     <string name="push_use_google">Use Google</string>
     <string name="push_google_link">How to choose a delivery app</string>
     <string name="oss_licences_open">Open-source licences</string>
+    <!-- The app's own privacy policy (P-174, PL): never "ChitChat's", an installation can be named ChitChat. -->
+    <string name="app_privacy_policy">The app\'s privacy policy</string>
+    <string name="app_privacy_policy_short">Privacy policy</string>
     <string name="oss_licences_title">Open-source licences</string>
     <string name="nav_direct">Direct</string>
     <string name="nav_activity">Activity</string>

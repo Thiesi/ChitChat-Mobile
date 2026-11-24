@@ -64,11 +64,18 @@ TalkBack's link navigation. The check sits in [accessibility-verification.md](..
 L4 walkthrough script 1 (First run): Create form, consent line, open the rules link, the pane announces "Rules", Back,
 focus is back on the consent line. Record the result in the PR that performs the L4 walkthrough.
 
-## Left out (dependency)
+## The app's own privacy policy (2026-11-24)
 
-The app's own privacy policy link isn't shown: the app has no published privacy policy URL yet (P-174 publishes it
-only after its own approval). **Release prerequisite:** Play needs that link before distribution. The row returns,
-labelled "The app's privacy policy", once a real URL exists.
+The link that was left out here now exists (TL, PL): "The app's privacy policy", to the fixed
+https://ChitChat.NetWorkXXIII.de/app/privacy (a constant, never a server value), opened only through
+`ExternalLinkChoice` naming that host.
+- **About and privacy:** a row with the open-external icon, after "Open-source licences" and before the server's
+  documents.
+- **"Before you chat":** a separate text link after the operator line, shown with or without the server's documents.
+- **Welcome:** "Privacy policy" at its foot (no accessibility-feedback footer there).
+- The label is never "ChitChat's": an installation can be named ChitChat.
+- **Not merged until the page is live:** the link ships only once ops confirms the page (P-174 publishes it after its
+  own approval). Play needs it before distribution.
 
 ## Verification
 

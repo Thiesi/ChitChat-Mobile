@@ -178,6 +178,8 @@ internal fun YouScreen(session: SessionState, auth: AuthViewModel, server: Strin
             Text(stringResource(R.string.you_about), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.you_app_version, BuildConfig.VERSION_NAME))
             Row(R.string.oss_licences_open, "licences_open", onLicences)
+            // The app's own privacy policy (PL): always, after the app's items and before the server's documents.
+            AppPrivacyRow()
             // The server's documents, each only when published (play-readiness.md §1); the legal notice is a link only.
             // Nothing new starts while the update state shows (server-update.md), as on Server found.
             if (onPolicy != null && !session.updateRequired) PolicyRows(session, server, onPolicy, "you")

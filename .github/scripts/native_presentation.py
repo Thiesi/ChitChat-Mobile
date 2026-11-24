@@ -72,6 +72,11 @@ PERSON_REPORT_NAME = re.compile(r"report-person-(?:light-(?:default|font200)-(?:
     r"card-entry-end|card-reported-end)|"
     r"dark-default-(?:card-entry|card-reported|form-room|form-room-end|unknown|didnotarrive|didnotarrive-notice|sheet-room|sheet-dm))[.]png")
 # #323b1 (PL list items 1-4, 11, 12): the composer's own rate-wait line.
+APP_PRIVACY_DESTINATION = ROOT / "app/build/reports/androidTests/app-privacy-presentation"
+# The app's own privacy policy link (PL list, 2026-11-24): About, "Before you chat" (with and without server documents),
+# the Welcome footer and the choice dialog.
+APP_PRIVACY_NAME = re.compile(r"app-privacy-(?:about-(?:light|dark)-(?:default|font200)|guidelines-(?:light|dark)-(?:default|font200)|"
+    r"guidelines-plain-light-default|welcome-dark-(?:default|font200)|choice-light-(?:default|font200))[.]png")
 PREFILL_DESTINATION = ROOT / "app/build/reports/androidTests/prefill-presentation"
 # Server prefill P1 (PL list, 2026-11-23): step 2 filled from a link, the offer beside typed text, Server found to step 2,
 # the offer on an open form, the signed-in dialog, and the invalid-link line.
@@ -485,6 +490,19 @@ def collect_author():
     print(f"Author presentation captures collected: {len(files)} of 19.")
 
 
+def collect_app_privacy():
+    # PL list: About with a server privacy policy, light and dark x default and 200% (4); "Before you chat" with server
+    # documents, the same (4), and without (1); the Welcome footer, dark, default and 200% (2); the choice (2).
+    files = list(islice(SOURCE.rglob("ccm-app-privacy-presentation/*"), 14))
+    if (not files or len(files) > 13 or len({p.name for p in files}) != len(files)
+        or any(APP_PRIVACY_NAME.fullmatch(p.name) is None for p in files)):
+        raise ValueError("Missing or ambiguous app privacy presentation output")
+    APP_PRIVACY_DESTINATION.mkdir(parents=True, exist_ok=True)
+    for path in files:
+        shutil.copyfile(path, APP_PRIVACY_DESTINATION / path.name)
+    print(f"App privacy presentation captures collected: {len(files)} of 13.")
+
+
 def collect_prefill():
     # Server prefill P1 (PL list): step 2 filled, light and dark x default and 200% (4); the offer beside typed text at
     # default and 200% (2); Server found to step 2 (1); the offer on the sign-in form at default and 200% (2); the
@@ -695,6 +713,10 @@ def main() -> int:
         collect_prefill()
     except Exception:
         print("Prefill presentation captures unavailable; original native status retained.", file=sys.stderr)
+    try:
+        collect_app_privacy()
+    except Exception:
+        print("App privacy presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_onboarding()
     except Exception:
