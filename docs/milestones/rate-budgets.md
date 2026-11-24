@@ -158,7 +158,9 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
   - **{wait}:** computed from the stored deadline at render and frozen until the notice changes; minutes and hours never
     tick; under a minute reads "less than a minute".
   - **At the deadline:** one composition-bound one-shot clears the line. It never sends; there's no other timer.
-  - **An unknown wait** sets no gate and shows "…Try again later." until the next draft edit.
+  - **An unknown wait** sets no gate and shows "…Try again later." until the next draft edit or leaving the conversation
+    (a genuine background, a departure, the resource-denial reset; TL, #360). A known wait stays across leaving and
+    returning until its deadline; a configuration change keeps both.
 - **Definite:** the draft, reply and attachment stay; nothing becomes unknown; nothing resends. Nothing changed on the
   server, so history isn't marked stale and Send stays enabled. A tap during the wait is refused locally with no
   request and keeps the line.

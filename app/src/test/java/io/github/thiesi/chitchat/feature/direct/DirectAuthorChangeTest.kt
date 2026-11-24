@@ -195,6 +195,32 @@ class DirectAuthorChangeTest {
         assertEquals("The first refused tap flips the parity", 1, model.state.value.mutationLimitRepeats)
     }
 
+    /** Review of c24d673: an unknown wait ends when the dialog closes by leaving the pane or a background, not only Dismiss. */
+    @Test fun leavingAfterAnUnknownDirectWaitRefusalEndsTheLine() = runTest(dispatcher) {
+        for (leave in listOf<() -> Unit>({ model.leavePane() }, { model.background() })) {
+            open(); val request = choose(); model.updateAuthorBody(request, "Limited edit")
+            changes.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", null); model.submitAuthor(request); runCurrent()
+            assertNotNull(model.state.value.mutationLimit)
+            leave(); runCurrent()
+            assertNull("Leaving closed the dialog", model.state.value.authorDialog)
+            assertNull("and ended the unknown wait's line", model.state.value.mutationLimit)
+            changes.failure = null; model.foreground(); runCurrent()
+        }
+    }
+
+    /** TL: leaving ends the composer's unknown wait; a known wait (with a deadline) stays. */
+    @Test fun leavingEndsTheDirectComposersUnknownWaitAndKeepsAKnownOne() = runTest(dispatcher) {
+        for ((retry, kept) in listOf<Pair<Long?, Boolean>>(null to false, 120L to true)) {
+            open(); api.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", retry)
+            model.updateDraft("Limited message"); model.send(); runCurrent()
+            assertNotNull("retry=$retry: the composer's line", model.state.value.sendLimit)
+            model.leavePane(); runCurrent()
+            assertEquals("retry=$retry: kept only with a deadline", kept, model.state.value.sendLimit != null)
+            api.sendFailure = null; model.foreground(); runCurrent()
+            model.updateDraft(""); runCurrent()
+        }
+    }
+
     @Test fun aRateLimitedDirectEditKeepsItsTextIsNotUnknownAndNeverResends() = runTest(dispatcher) {
         open(); val request = choose(); model.updateAuthorBody(request, "Limited edit")
         changes.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120); model.submitAuthor(request); runCurrent()

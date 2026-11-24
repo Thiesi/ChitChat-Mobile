@@ -183,7 +183,10 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             uncertainRead = current.uncertainRead || write == Write.READ,
             uncertainBlock = current.uncertainBlock || write == Write.BLOCK,
             checkedUnknown = false, busy = uploadPosting != null, sending = uploadPosting?.selection?.peer == current.peerId && uploadPosting != null, stale = true, atLatest = false,
-            authorDialog = null, authorWriting = false, reactionDialog = null, reactionWriting = false, attachmentReview = null)
+            authorDialog = null, authorWriting = false, reactionDialog = null, reactionWriting = false, attachmentReview = null,
+            // #323b2: closing the dialogs ends their wait line (review of c24d673); leaving ends the composer's unknown wait
+            // (TL), a known one stays until its deadline.
+            mutationLimit = null, sendLimit = current.sendLimit?.takeIf { it.knownWait })
         rememberDraft(); retire(); visibleNewest = null; viewport = null
     }
 
@@ -197,7 +200,8 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
         dropWaiting()
         if ((uploadPosting == null && write == null) || !currentIdentity()) { background(); return }
         active = false; visibleNewest = null; viewport = null
-        mutable.value = mutable.value.copy(atLatest = false, authorDialog = null, reactionDialog = null)
+        mutable.value = mutable.value.copy(atLatest = false, authorDialog = null, reactionDialog = null, mutationLimit = null,
+            sendLimit = mutable.value.sendLimit?.takeIf { it.knownWait })
     }
     fun connectionLost() { mutable.value = mutable.value.copy(stale = true) }
     fun invalidate() { if (currentIdentity()) { requested++; drain() } }
@@ -256,7 +260,7 @@ class DirectThreadViewModel internal constructor(private val operations: DirectO
             uncertainSend = old.uncertainSend || pending == Write.SEND,
             uncertainRead = old.uncertainRead || pending == Write.READ,
             uncertainBlock = old.uncertainBlock || pending == Write.BLOCK, authorDialog = null, authorWriting = false,
-            reactionDialog = null, reactionWriting = false)
+            reactionDialog = null, reactionWriting = false, mutationLimit = null, sendLimit = old.sendLimit?.takeIf { it.knownWait })
         rememberDraft()
     }
 

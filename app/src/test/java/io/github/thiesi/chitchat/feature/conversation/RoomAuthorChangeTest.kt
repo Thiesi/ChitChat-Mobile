@@ -176,6 +176,29 @@ class RoomAuthorChangeTest {
         assertEquals("The first refused tap flips the parity", 1, model.state.value.mutationLimitRepeats)
     }
 
+    /** Review of c24d673: an unknown wait (no deadline) ends when the dialog closes by leaving too, not only by Dismiss. */
+    @Test fun leavingAfterAnUnknownWaitRefusalEndsTheLine() = runTest(dispatcher) {
+        open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", null)
+        val request = begin(); model.updateAuthorBody(request, "Limited edit"); model.submitAuthor(request); runCurrent()
+        assertNotNull(model.state.value.mutationLimit)
+        model.background(); runCurrent()
+        assertNull("Leaving closed the dialog", model.state.value.authorDialog)
+        assertNull("and ended the unknown wait's line", model.state.value.mutationLimit)
+    }
+
+    /** TL: leaving ends the composer's unknown wait ("Try again later."); a known wait (with a deadline) stays. */
+    @Test fun leavingEndsTheComposersUnknownWaitAndKeepsAKnownOne() = runTest(dispatcher) {
+        for ((retry, kept) in listOf<Pair<Long?, Boolean>>(null to false, 120L to true)) {
+            open(); fake.sendFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", retry)
+            model.updateDraft("Limited message"); model.send(); runCurrent()
+            assertNotNull("retry=$retry: the composer's line", model.state.value.sendLimit)
+            model.background(); runCurrent()
+            assertEquals("retry=$retry: kept only with a deadline", kept, model.state.value.sendLimit != null)
+            fake.sendFailure = null; model.foreground(); runCurrent()
+            model.updateDraft(""); runCurrent()
+        }
+    }
+
     @Test fun aRateLimitedEditKeepsItsTextIsNotUnknownAndNeverResends() = runTest(dispatcher) {
         open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
         val request = begin(); model.updateAuthorBody(request, "Limited edit"); model.submitAuthor(request); runCurrent()

@@ -1618,8 +1618,12 @@ class ConversationViewModel internal constructor(private val operations: Convers
         sequence++; readSequence++; job?.cancel(); readJob?.cancel(); readJob = null; syncJob?.cancel(); syncJob = null
         postInFlight = false; viewport = null; visibleNewest = null; attemptedRead = 0
         requestedSync = 0; attemptedSync = 0; appliedSync = 0; deliberateSelection = false
+        // #323b2 (review of c24d673): closing the dialogs here ends the mutation wait line too; an unknown wait has no
+        // deadline, so it would otherwise reappear on the next dialog with no fresh refusal. The composer's unknown wait
+        // ends here too (TL: leaving ends "the next interaction"); a known wait stays, accurate until its deadline.
         mutable.value = mutable.value.copy(syncing = false, reading = false, authorDialog = null, authorWriting = false,
-            reactionDialog = null, reactionWriting = false, attachmentReview = null)
+            reactionDialog = null, reactionWriting = false, attachmentReview = null, mutationLimit = null,
+            sendLimit = mutable.value.sendLimit?.takeIf { it.knownWait })
     }
     private fun isReadCurrent(expected: Identity, attempt: Long, roomId: Long) = readSequence == attempt &&
         session.value.identity() == expected && mutable.value.roomId == roomId
