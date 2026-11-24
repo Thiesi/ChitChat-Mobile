@@ -30,6 +30,24 @@ This page records licence facts that need more than the dependency's metadata.
 - **Later:** when a release tagged after 2026-11-04 carries Apache-2.0, move to it as a normal dependency
   update and update this entry.
 
+## Google Play Install Referrer Library 2.2
+
+- **Dependency:** `com.android.installreferrer:installreferrer:2.2`, used by server prefill P2 to read the
+  Play referrer once on first launch (`docs/milestones/server-prefill.md`).
+- **Licence:** its published POM declares the "Android Software Development Kit License"
+  (https://developer.android.com/studio/terms.html). The AAR contains no licence or notice file. The terms
+  page states no licence for its own text, so the app shows the agreement's name with a short notice file
+  linking to it rather than a copy.
+- **The gap (2026-11-24):** the agreement (version of July 27, 2021) has no explicit grant to redistribute
+  library classes inside an app. §3.1 grants use "solely to develop applications for compatible
+  implementations of Android"; §3.4 says "you may not copy (except for backup purposes), modify, adapt,
+  redistribute, decompile, reverse engineer, disassemble, or create derivative works of the SDK or any part
+  of the SDK", except as required by third-party licences; §3.5 hands components under an open-source
+  licence to that licence, and this artifact declares none.
+- **Owner decision 2026-11-24:** included, following Google's documented use; not legal advice; revisit if
+  Google publishes a redistribution grant or the owner decides otherwise. It is the first component not
+  under an OSI-approved licence.
+
 ## JSR-305 annotations 3.0.2
 
 - **Dependency:** `com.google.code.findbugs:jsr305:3.0.2`, transitive.

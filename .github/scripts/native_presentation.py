@@ -77,7 +77,7 @@ PREFILL_DESTINATION = ROOT / "app/build/reports/androidTests/prefill-presentatio
 # the offer on an open form, the signed-in dialog, and the invalid-link line.
 PREFILL_NAME = re.compile(r"prefill-(?:step2-(?:light|dark)-(?:default|font200)|offer-light-(?:default|font200)|"
     r"server-found-light-default|form-light-(?:default|font200)|signed-in-(?:light|dark)-(?:default|font200)|"
-    r"invalid-light-default)[.]png")
+    r"invalid-light-default|referrer-step2-light-default|referrer-invalid-light-default)[.]png")
 RATE_DESTINATION = ROOT / "app/build/reports/androidTests/rate-presentation"
 RATE_NAME = re.compile(r"rate-(?:room-send-(?:light|dark)-(?:default|font200)|dm-send-(?:light|dark)-(?:default|font200)|"
     r"room-send-light-font200-landscape-ime|room-ping-light-default|room-send-unknown-light-default|"
@@ -488,15 +488,16 @@ def collect_author():
 def collect_prefill():
     # Server prefill P1 (PL list): step 2 filled, light and dark x default and 200% (4); the offer beside typed text at
     # default and 200% (2); Server found to step 2 (1); the offer on the sign-in form at default and 200% (2); the
-    # signed-in dialog, light and dark x default and 200% (4); the invalid-link line (1).
-    files = list(islice(SOURCE.rglob("ccm-prefill-presentation/*"), 15))
-    if (not files or len(files) > 14 or len({p.name for p in files}) != len(files)
+    # signed-in dialog, light and dark x default and 200% (4); the invalid-link line (1). P2 (PL): the referrer's step 2
+    # and its invalid case (2), proofs byte-identical to the link's step 2 and a plain step 2.
+    files = list(islice(SOURCE.rglob("ccm-prefill-presentation/*"), 17))
+    if (not files or len(files) > 16 or len({p.name for p in files}) != len(files)
         or any(PREFILL_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous prefill presentation output")
     PREFILL_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, PREFILL_DESTINATION / path.name)
-    print(f"Prefill presentation captures collected: {len(files)} of 14.")
+    print(f"Prefill presentation captures collected: {len(files)} of 16.")
 
 
 def collect_rate():

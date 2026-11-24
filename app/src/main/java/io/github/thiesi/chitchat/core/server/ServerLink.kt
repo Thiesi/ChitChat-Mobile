@@ -45,6 +45,9 @@ class ServerLink private constructor(val address: ServerAddress?) {
         }
 
         /** The link [uri] carries, with [ServerAddress.parse]'s verdict, or null when it isn't a server link at all. */
+        /** Server prefill P2: an address already parsed from the Play referrer (only ever a valid one is offered). */
+        fun of(address: ServerAddress): ServerLink = ServerLink(address)
+
         fun from(uri: String?): ServerLink? = value(uri)?.let { ServerLink((ServerAddress.parse(it) as? AddressResult.Valid)?.address) }
     }
 }

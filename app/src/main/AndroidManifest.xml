@@ -5,6 +5,11 @@
     <!-- Requested only inside Turn on (Android 13 and later), never at install or start. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Server prefill P2 (TL, 2026-11-24): package visibility for the Play Install Referrer service bind on API 30+.
+         Visibility of this one package only; no QUERY_ALL_PACKAGES. -->
+    <queries>
+        <package android:name="com.android.vending" />
+    </queries>
     <application
         android:name=".ChitChatApplication"
         android:allowBackup="false"
