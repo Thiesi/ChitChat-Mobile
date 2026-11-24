@@ -15,12 +15,14 @@ android {
         applicationId = "de.networkxxiii.chitchat"
         minSdk = 26
         targetSdk = 36
+        // The first internal-testing build (TL, 2026-11-23): versionCode 1, versionName 0.1.0. The public version name is
+        // settled with the owner before production. Debug builds say "-dev".
         versionCode = 1
-        versionName = "0.1.0-dev"
+        versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
-        debug { applicationIdSuffix = ".debug"; isPseudoLocalesEnabled = true }
+        debug { applicationIdSuffix = ".debug"; versionNameSuffix = "-dev"; isPseudoLocalesEnabled = true }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
