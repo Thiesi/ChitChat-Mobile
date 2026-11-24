@@ -11,6 +11,7 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.R
@@ -69,15 +70,15 @@ class RateMutationPresentationTest {
     private val scales = listOf("default" to 1f, "font200" to 2f)
 
     @androidx.compose.runtime.Composable
-    private fun Line(notice: RateLimitNotice?, tag: String, short: Boolean = false) = RateWaitDialogLine(session,
-        mutationNotice(session, notice, RateBudget.ROOM_MESSAGE_MUTATION), R.string.rate_wait_mutations,
-        R.string.rate_wait_mutations_unknown, tag, short = short)
+    private fun Line(notice: RateLimitNotice?, tag: String, slot: RateLineSlot? = null, waits: SessionState = session) =
+        RateWaitDialogLine(waits, mutationNotice(waits, notice, RateBudget.ROOM_MESSAGE_MUTATION), R.string.rate_wait_mutations,
+            R.string.rate_wait_mutations_unknown, tag, short = slot?.short ?: false, drawnPadding = slot?.padding)
 
     private fun edit(kind: AuthorChangeKind, notice: RateLimitNotice?) =
         @androidx.compose.runtime.Composable {
             MessageAuthorChangeDialog(AuthorDialogPresentation(kind, "Proposed private edit", "Original private body", null,
                 checked = false, pendingMessageId = null), targetCurrent = true, available = true, busy = false,
-                onChange = {}, onConfirm = {}, onDismiss = {}, rateLine = { short -> Line(notice, "author_rate_line", short) })
+                onChange = {}, onConfirm = {}, onDismiss = {}, rateLine = { slot -> Line(notice, "author_rate_line", slot) })
         }
 
     /** 5: the edit dialog after a refused Save; 7: an edit dialog opened during a wait a reaction started (no notice yet). */
@@ -90,6 +91,7 @@ class RateMutationPresentationTest {
                     assertLine("author_rate_line")
                     // PL: the line (below the body field, on the refusal line) is read before Cancel and Save.
                     io.github.thiesi.chitchat.testing.assertLineBeforeEveryAction(full, "edit dialog ($scene, $label, $name)")
+                    assertActionsEndAligned("$scene, $label, $name")
                 }
                 show(scale, dark, edit(AuthorChangeKind.EDIT, notice))
             }
@@ -117,6 +119,9 @@ class RateMutationPresentationTest {
                 } }
             }
             compose.waitForIdle()
+            // At 200% landscape the fixed actions block (the line and the buttons) leaves the body a short scroller, so
+            // the field can start below its fold: scroll to it before the one native tap.
+            compose.onNodeWithTag("author_edit_body").performScrollTo()
             compose.tapNativeInput("author_edit_body", { compose.nativeAuthorImeBottom() })
             compose.waitForIdle()
             capture("rate-mutation-edit-light-font200-landscape-ime")
@@ -135,6 +140,59 @@ class RateMutationPresentationTest {
             check(shortLine.isNotEmpty())
             androidx.test.espresso.Espresso.closeSoftKeyboard()
         }
+    }
+
+    /** PL re-J point 2: Cancel and Save stay end-aligned as on main (the row's end inset is 16dp). */
+    private fun assertActionsEndAligned(case: String) {
+        val density = context.resources.displayMetrics.density
+        val dialog = compose.onNodeWithTag("author_change_dialog").fetchSemanticsNode().boundsInWindow
+        val save = compose.onNodeWithTag("author_change_confirm").fetchSemanticsNode().boundsInWindow
+        val inset = dialog.right - save.right
+        check(inset >= 16 * density - 2 && inset <= 20 * density) { "Save isn't end-aligned ($case): inset ${inset / density}dp" }
+    }
+
+    /**
+     * PL rule (the composer's): in the same window and font scale, the edit field's visible height with the line is at
+     * least its visible height without it; where the full line would shrink it, the layout takes the short form. 200%
+     * portrait and 200% landscape without the keyboard; the landscape pair (with and without a wait) is captured for the PL.
+     */
+    @Test fun theLineNeverShrinksTheFieldsVisiblePart() {
+        val noWaits = SessionState(generation = 1, phase = SessionPhase.AUTHENTICATED,
+            user = SessionUser(7, "Viewer", listOf("member"), 1, false))
+        for (landscape in listOf(false, true)) {
+            val without = visibleField(landscape, null, noWaits, if (landscape) "rate-mutation-edit-light-font200-landscape-nowait" else null)
+            val with = visibleField(landscape, RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true), session,
+                if (landscape) "rate-mutation-edit-light-font200-landscape" else null)
+            check(with >= without - 1f) { "The line shrank the field's visible part (landscape=$landscape): $with < $without" }
+        }
+    }
+
+    /** The edit field's visible (window-clipped) height in px at 200%, no keyboard. */
+    private fun visibleField(landscape: Boolean, notice: RateLimitNotice?, waits: SessionState, capture: String?): Float {
+        FontScaleTestActivity.requestedFontScale = 2f
+        var visible = 0f
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            if (landscape) {
+                scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                compose.waitUntil(5_000) {
+                    var orientation = 0
+                    scenario.onActivity { orientation = it.resources.configuration.orientation }
+                    orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                }
+            }
+            scenario.onActivity { host -> host.setContent { CompositionLocalProvider(LocalMonotonicClock provides { now }) {
+                ChitChatTheme(dark = false) {
+                    MessageAuthorChangeDialog(AuthorDialogPresentation(AuthorChangeKind.EDIT, "Proposed private edit",
+                        "Original private body", null, checked = false, pendingMessageId = null), targetCurrent = true,
+                        available = true, busy = false, onChange = {}, onConfirm = {}, onDismiss = {},
+                        rateLine = { slot -> Line(notice, "author_rate_line", slot, waits) })
+                }
+            } } }
+            compose.waitForIdle()
+            capture?.let(::capture)
+            visible = compose.onNodeWithTag("author_edit_body").fetchSemanticsNode().boundsInWindow.height
+        }
+        return visible
     }
 
     /** 6: the delete dialog with the line (default light). */

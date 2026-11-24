@@ -185,7 +185,13 @@ local gate's) is definite.
     - edit: in the dialog's fixed area, on its own row directly above Cancel and Save, never in the scrolling body, so
       it's visible and in the tree at 1.0 and 200%; in compact (200% landscape with the keyboard up) at the top of the
       actions column in the short form ("Try again in {wait}."), the full line still spoken;
-    - delete: the first item of the dialog's text;
+    - the composer rule (PL re-J on f6a6d47): where the full line would shrink the field's visible part (part of the
+      body below its fold), that layout takes the short form, the full line spoken; decided once as the line appears and
+      held for the window (width, height above the keyboard, font scale), so typing can't flip it; a tall draft at that
+      moment can only make it more conservative (short), as in the composer (TL);
+    - with no notice the slot has zero footprint (its padding applies only while drawn) and the action row is main's
+      end-aligned FlowRow, so the dialog is byte-identical to main;
+    - delete: the first item of the dialog's text (its gap below is drawn padding);
     - the reaction picker: above the emoji rows;
     - never on the Check history path.
   - A wait already known (another edit, delete or reaction started it) shows as soon as the dialog opens; opening sends

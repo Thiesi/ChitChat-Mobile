@@ -20,6 +20,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.platform.LocalFocusManager
@@ -48,7 +50,7 @@ internal class AuthorDialogPresentation(val kind: AuthorChangeKind, val body: St
 internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetCurrent: Boolean, available: Boolean,
     busy: Boolean, onChange: (String) -> Unit, onConfirm: () -> Unit, onDismiss: () -> Unit,
     canConfirm: Boolean = available, currentPreview: String? = null, error: String? = null,
-    rateLine: (@Composable (short: Boolean) -> Unit)? = null) {
+    rateLine: (@Composable (RateLineSlot) -> Unit)? = null) {
     val editing = dialog.kind == AuthorChangeKind.EDIT
     if (editing) {
         // A floating alert can pan its footer beneath the IME when large text makes the form tall.
@@ -59,25 +61,29 @@ internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetC
             Surface(Modifier.fillMaxSize().testTag("author_change_dialog"), color = MaterialTheme.colorScheme.surface) {
                 BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
                     val compact = maxHeight < 200.dp && maxWidth >= 400.dp
-                    AuthorEditorLayout(compact) {
+                    // #323b2 (PL, TL: the composer rule): the full line unless, in this layout, it would shrink the body's
+                    // visible part; then the short form, the full line still spoken. Compact always uses the short form.
+                    // As in the composer, it's decided once when the line appears and held for this window (width, the
+                    // height above the keyboard, font scale): typing can't flip it. null: not decided (no line drawn).
+                    val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+                    var shortLine by androidx.compose.runtime.remember(maxWidth, maxHeight, fontScale) {
+                        androidx.compose.runtime.mutableStateOf<Boolean?>(null) }
+                    AuthorEditorLayout(compact, shortLine != null, onLineDecided = { shortLine = it }) {
                     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(stringResource(R.string.message_edit_action), style = MaterialTheme.typography.headlineSmall,
                             modifier = Modifier.semantics { heading() })
                         AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error, compact)
                     }
-                    // #323b2 (PL J, TL): the wait line in the fixed area, on its own row directly above Cancel and Save,
-                    // never in the scrolling body: always visible and in the tree, at 1.0 and 200%. Compact (actions beside
-                    // the body) shows the short form at the top of the actions column, the full line still spoken.
-                    Column {
-                        rateLine?.let { line -> Box(Modifier.padding(horizontal = 16.dp).padding(top = 8.dp)) { line(compact) } }
-                        FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.cancel)) }
-                            AuthorConfirm(dialog, canConfirm && !busy, onConfirm, compact)
-                        }
-                        }
+                    // The wait line's own slot: in the fixed area directly above Cancel and Save (compact: the top of the actions
+                    // column). With no notice it has zero footprint, so the dialog is byte-identical to main (PL re-J).
+                    Box { rateLine?.invoke(RateLineSlot(compact || shortLine == true, EditLinePadding)) }
+                    FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, androidx.compose.ui.Alignment.End),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.cancel)) }
+                        AuthorConfirm(dialog, canConfirm && !busy, onConfirm, compact)
+                    }
                     }
                 }
             }
@@ -85,29 +91,59 @@ internal fun MessageAuthorChangeDialog(dialog: AuthorDialogPresentation, targetC
     } else {
         AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, modifier = Modifier.testTag("author_change_dialog").lanternDialogEdge(),
             title = { Text(stringResource(R.string.author_delete_title)) },
-            text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // #323b2 (PL J, TL): the delete dialog's wait line is the first item of its text, read after the title.
-                rateLine?.invoke(false)
-                AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error)
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+                // #323b2 (PL J, TL): the delete dialog's wait line is the first item of its text, read after the title. Its
+                // gap below is drawn padding, and the text keeps main's spaced column, so with no notice nothing moves.
+                rateLine?.invoke(RateLineSlot(short = false, padding = DeleteLinePadding))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AuthorChangeText(dialog, targetCurrent, available, busy, onChange, currentPreview, error)
+                }
             } },
             confirmButton = { AuthorConfirm(dialog, canConfirm && !busy, onConfirm) },
             dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.cancel)) } })
     }
 }
 
+/**
+ * #323b2: how a dialog draws its wait line. [short] picks the short visible form (the full line is still spoken); [padding]
+ * is applied only while the line is drawn, so an empty carrier adds nothing and the dialog matches main (PL re-J).
+ */
+internal class RateLineSlot(val short: Boolean, val padding: androidx.compose.foundation.layout.PaddingValues)
+
+private val EditLinePadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp)
+private val DeleteLinePadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)
+
 /** Measure each slot once without moving/recreating the focused field when the IME changes height. */
 @Composable
-private fun AuthorEditorLayout(compact: Boolean, content: @Composable () -> Unit) {
+private fun AuthorEditorLayout(compact: Boolean, lineDecided: Boolean, onLineDecided: (Boolean?) -> Unit,
+    content: @Composable () -> Unit) {
     Layout(content, Modifier.fillMaxSize()) { children, constraints ->
         val width = constraints.maxWidth
         val height = constraints.maxHeight
-        val actions = children[1].measure(Constraints(maxWidth = if (compact) width / 2 else width, maxHeight = height))
-        val bodyWidth = if (compact) width - actions.width else width
-        val bodyHeight = if (compact) height else (height - actions.height).coerceAtLeast(0)
+        // Children: the scrolling body, the wait line's slot (#323b2; zero footprint when empty) and main's action row.
+        val actions = children[2].measure(Constraints(maxWidth = if (compact) width / 2 else width, maxHeight = height))
+        val lineWidth = if (compact) maxOf(actions.width, width / 2) else width
+        val line = children[1].measure(Constraints(maxWidth = lineWidth, maxHeight = height))
+        val sideWidth = if (compact) maxOf(actions.width, line.width) else 0
+        val bodyWidth = if (compact) width - sideWidth else width
+        val bodyHeight = if (compact) height else (height - actions.height - line.height).coerceAtLeast(0)
+        // The composer rule (PL, TL): if, with the full line, part of the body is below its fold, the line would shrink
+        // the field's visible part, so this window takes the short form. Measured once, as the line first appears (still
+        // full); an emptied line resets the decision for the next notice.
+        if (!compact) {
+            if (line.height == 0) { if (lineDecided) onLineDecided(null) }
+            else if (!lineDecided) onLineDecided(children[0].maxIntrinsicHeight(bodyWidth) > bodyHeight)
+        }
         val body = children[0].measure(Constraints.fixed(bodyWidth, bodyHeight))
         layout(width, height) {
             body.placeRelative(0, 0)
-            actions.placeRelative(width - actions.width, if (compact) 0 else height - actions.height)
+            if (compact) {
+                line.placeRelative(width - sideWidth, 0)
+                actions.placeRelative(width - actions.width, line.height)
+            } else {
+                line.placeRelative(0, bodyHeight)
+                actions.placeRelative(width - actions.width, height - actions.height)
+            }
         }
     }
 }

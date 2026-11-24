@@ -127,14 +127,17 @@ fun mutationNotice(session: SessionState, notice: RateLimitNotice?, budget: io.g
 
 @Composable
 fun RateWaitDialogLine(session: SessionState, notice: RateLimitNotice?, @StringRes known: Int, @StringRes unknown: Int,
-    tag: String, modifier: Modifier = Modifier, parity: Boolean = false, short: Boolean = false) {
+    tag: String, modifier: Modifier = Modifier, parity: Boolean = false, short: Boolean = false,
+    drawnPadding: androidx.compose.foundation.layout.PaddingValues? = null) {
     val now = current(session, notice)
     val full = now?.let { fullText(it, known, unknown) }
     val spoken = full?.let { if (parity) "$it " else it }
     // Compact (TL, PL pre-approved): "Try again in {wait}." in the fixed area, the full line still spoken.
     val visible = if (now == null || !short) full else now.words?.let { stringResource(R.string.rate_wait_short, it) }
         ?: stringResource(R.string.rate_wait_short_unknown)
-    Text(visible.orEmpty(), modifier.then(if (full != null) Modifier else ZeroFootprintStrip).clearAndSetSemantics {
+    // [drawnPadding] applies only while the line is drawn: an empty carrier adds nothing to its container.
+    val drawn = if (drawnPadding != null) Modifier.padding(drawnPadding) else Modifier
+    Text(visible.orEmpty(), modifier.then(if (full != null) drawn else ZeroFootprintStrip).clearAndSetSemantics {
         if (spoken != null) contentDescription = spoken
         liveRegion = LiveRegionMode.Polite
         testTag = tag

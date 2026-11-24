@@ -628,7 +628,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_excess_ambiguous_or_foreign_rate_mutation_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"rate-mutation-edit-light-default-{n}.png") for n in range(16)],
+        for files in ([Path(f"rate-mutation-edit-light-default-{n}.png") for n in range(18)],
             [Path("a/rate-mutation-delete-light-default.png"), Path("b/rate-mutation-delete-light-default.png")],
             # Not taken: a dark delete, a 200% delete.
             [Path("rate-mutation-delete-dark-default.png")], [Path("rate-mutation-delete-light-font200.png")], [Path("other.png")]):

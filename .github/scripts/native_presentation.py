@@ -81,7 +81,7 @@ PREFILL_NAME = re.compile(r"prefill-(?:step2-(?:light|dark)-(?:default|font200)|
 RATE_MUTATION_DESTINATION = ROOT / "app/build/reports/androidTests/rate-mutation-presentation"
 # #323b2 (PL list 5-8): the shared mutation wait in the edit dialog, the delete dialog, an edit dialog opened during a
 # wait a reaction started, and the reaction picker.
-RATE_MUTATION_NAME = re.compile(r"rate-mutation-(?:edit-light-font200-landscape-ime|edit-(?:light|dark)-(?:default|font200)|edit-opened-(?:light|dark)-(?:default|font200)|"
+RATE_MUTATION_NAME = re.compile(r"rate-mutation-(?:edit-light-font200-landscape(?:-ime|-nowait)?|edit-(?:light|dark)-(?:default|font200)|edit-opened-(?:light|dark)-(?:default|font200)|"
     r"delete-light-default|reactions-(?:light|dark)-(?:default|font200))[.]png|rate-mutation-traversal[.]txt")
 RATE_DESTINATION = ROOT / "app/build/reports/androidTests/rate-presentation"
 RATE_NAME = re.compile(r"rate-(?:room-send-(?:light|dark)-(?:default|font200)|dm-send-(?:light|dark)-(?:default|font200)|"
@@ -509,14 +509,15 @@ def collect_rate_mutation():
     # #323b2 (PL): edit, light and dark x default and 200% (4); edit opened during a wait (4); delete (1); reactions (4).
     # Plus the opened-with-known-wait traversal record (TL), one line of text.
     # Plus the compact capture (200% landscape, the keyboard up).
-    files = list(islice(SOURCE.rglob("ccm-rate-mutation-presentation/*"), 16))
-    if (not files or len(files) > 15 or len({p.name for p in files}) != len(files)
+    # Plus the 200% landscape pair without the keyboard (with and without a wait, PL).
+    files = list(islice(SOURCE.rglob("ccm-rate-mutation-presentation/*"), 18))
+    if (not files or len(files) > 17 or len({p.name for p in files}) != len(files)
         or any(RATE_MUTATION_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous rate mutation presentation output")
     RATE_MUTATION_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, RATE_MUTATION_DESTINATION / path.name)
-    print(f"Rate mutation presentation captures collected: {len(files)} of 15.")
+    print(f"Rate mutation presentation captures collected: {len(files)} of 17.")
 
 
 def collect_rate():

@@ -768,9 +768,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
                 else -> model.authorAvailable(request)
             }, currentPreview = model.authorCurrentPreview(request), error = state.error?.let { conversationError(it) },
             // #323b2: never on the Check history path (PL).
-            rateLine = { short -> if (pending == null) io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(displayedSession,
+            rateLine = { slot -> if (pending == null) io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(displayedSession,
                 mutationNotice(displayedSession, state.mutationLimit, io.github.thiesi.chitchat.core.session.RateBudget.ROOM_MESSAGE_MUTATION),
-                R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "author_rate_line", parity = state.mutationLimitRepeats % 2 == 1, short = short) })
+                R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "author_rate_line", parity = state.mutationLimitRepeats % 2 == 1, short = slot.short,
+                drawnPadding = slot.padding) })
     }
     replyOptions?.let { choice ->
         val current = state.composerReply === choice

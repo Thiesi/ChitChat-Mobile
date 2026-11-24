@@ -49,6 +49,7 @@ class RateMutationAnnouncementTest {
     private var repeats by mutableIntStateOf(0)
     private val sentinel = mutableIntStateOf(0)
     @Volatile private var dialogView: View? = null
+    @Volatile private var sentinelView: View? = null
 
     private fun session(deadline: Long?) = SessionState(generation = 3, phase = SessionPhase.AUTHENTICATED,
         user = SessionUser(7, "Viewer", listOf("member"), 1, false),
@@ -69,6 +70,9 @@ class RateMutationAnnouncementTest {
                                 RateWaitDialogLine(current, mutationNotice(current, notice, RateBudget.ROOM_MESSAGE_MUTATION),
                                     R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "reaction_rate_line",
                                     parity = repeats % 2 == 1)
+                                // TL: the sentinel and the carrier share one AndroidComposeView (asserted in attachDialog).
+                                val sentinelHost = LocalView.current
+                                SideEffect { sentinelView = sentinelHost }
                                 LiveFlushSentinel(sentinel.intValue)
                             }
                         })
@@ -83,6 +87,7 @@ class RateMutationAnnouncementTest {
     /** The dialog's own window: its AndroidComposeView, found from inside the dialog's content (not the activity's decor). */
     private fun LiveAnnouncements.attachDialog() {
         val view = checkNotNull(dialogView) { "The dialog's view wasn't captured" }
+        check(view.rootView === sentinelView?.rootView) { "The sentinel and the carrier aren't in the same window" }
         compose.runOnUiThread { attach(view.rootView) }
     }
 
@@ -107,8 +112,10 @@ class RateMutationAnnouncementTest {
             assertTrue(empty.config.getOrNull(SemanticsProperties.Text).isNullOrEmpty())
             assertEquals(LiveRegionMode.Polite, empty.config.getOrNull(SemanticsProperties.LiveRegion))
             val start = heard.mark(compose, sentinel)
+            val idBefore = line().id
             compose.runOnIdle { notice = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, false) } // A 429 while open.
             awaitDescription(unknown)
+            val idAfter = line().id
             val appeared = heard.mark(compose, sentinel)
             compose.runOnIdle { repeats++ } // A refused tap during the wait.
             awaitDescription("$unknown ")
@@ -119,6 +126,7 @@ class RateMutationAnnouncementTest {
             heard.verify()
             val all = heard.spoken()
             assertEquals("None before: $all", 0, start)
+            assertEquals("The same carrier node ($idBefore -> $idAfter)", idBefore, idAfter)
             assertEquals("Once when the 429 arrives while open: $all", 1, appeared - start)
             assertEquals("Once per refused tap: $all", 1, tapped - appeared)
             assertEquals("Clearing is silent: $all", 0, cleared - tapped)
@@ -165,12 +173,14 @@ class RateMutationAnnouncementTest {
             picker() // Opened with no wait: the 429 with a known wait arrives while open.
             heard.attachDialog()
             val start = heard.mark(compose, sentinel)
+            val idBefore = line().id
             val known = context.getString(R.string.rate_wait_mutations, context.getString(R.string.rate_wait_under_minute))
             compose.runOnIdle {
                 deadline = base + compose.mainClock.currentTime + 2_000
                 notice = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true)
             }
             awaitDescription(known)
+            val idAfter = line().id
             val appeared = heard.mark(compose, sentinel)
             compose.mainClock.advanceTimeBy(2_100)
             compose.waitForIdle()
@@ -178,6 +188,7 @@ class RateMutationAnnouncementTest {
             val cleared = heard.mark(compose, sentinel)
             heard.verify()
             assertNull("Emptied at the deadline", line().config.getOrNull(SemanticsProperties.ContentDescription))
+            assertEquals("The same carrier node ($idBefore -> $idAfter)", idBefore, idAfter)
             assertEquals("Once on appearance while open: ${heard.spoken()}", 1, appeared - start)
             assertEquals("The deadline's clearing is silent: ${heard.spoken()}", 0, cleared - appeared)
         }
