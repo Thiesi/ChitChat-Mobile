@@ -11,6 +11,8 @@ details (ChitChat#155) was approved on 2026-11-09, the maintainer's local date (
 comments 6728485518 and 6728505611, posted 2026-11-08 23:11 and 23:13 UTC).
 The profile-picture addition to "What you create" was approved on 2026-11-09 (issue #1,
 comment 6734871007).
+The Install Referrer addition to "What the app stores on your phone" was approved on 2026-11-24,
+relayed by the technical lead and applied verbatim.
 It is built from the approved data safety facts (`play-readiness.md` §4) and the existing
 in-app disclosures. It will be published at **https://ChitChat.NetWorkXXIII.de/app/privacy** (maintainer
 decision, 2026-11-08). Publisher (NetWork XXIII) and contact
@@ -86,6 +88,9 @@ software, and it doesn't sell or share your data.
   keystore. The key can't be exported.
 - **App settings:** the server address, appearance (light, dark, pure black) and similar
   preferences.
+- If you installed the app from a ChitChat server's link on Google Play, the app reads that
+  server's address from Google Play once, on your phone, to fill it in for you. It isn't sent
+  anywhere.
 - **Unsent drafts and temporary display data** (for example images you opened) are kept **in
   memory only** while the app runs. They aren't saved to storage.
 - When you **share** a file to another app, a temporary copy is made for that app. It is kept
@@ -152,4 +157,5 @@ Questions about your account or messages: the operator of your ChitChat server.
 - [ ] Drafts and images aren't written to disk, and share copies expire after 24 hours, are deleted at the next start or share after that, and are deleted on sign-out.
 - [x] Embedded FCM distributor ships (maintainer, 2026-11-08); the FCM sentence is final. Verify it's used only when no UnifiedPush distributor is installed.
 - [x] Publisher (NetWork XXIII) and contact (chitchat@NetWorkXXIII.de) filled in; confirm the mail alias works before publishing. URL: https://ChitChat.NetWorkXXIII.de/app/privacy.
+- [ ] Re-verify the Install Referrer read (once, on device, host only, nothing sent) against the shipped build.
 - [ ] Wording consistent with the data safety form answers.
