@@ -601,7 +601,8 @@ Where privacy information appears, so the app and the data safety form say the s
 
 These facts were approved by the maintainer (2026-11-07; the Firebase Cloud Messaging
 bullet and the revised third-parties bullet on 2026-11-13, relayed by the technical lead and
-applied verbatim). They describe the current design;
+applied verbatim; the install-referrer sub-bullet on 2026-11-24, relayed by the technical lead
+and applied verbatim). They describe the current design;
 re-verify them at release. How they map to the form's answers is the maintainer's decision.
 
 - **Leaves the device, to the server the person chose:**
@@ -613,6 +614,7 @@ re-verify them at release. How they map to the form's answers is the maintainer'
   payloads (RFC 8291). The distributor can't read them.
 - **If no UnifiedPush delivery app is installed:** to Google's Firebase Cloud Messaging as transport. Encrypted Web Push payloads (RFC 8291) plus delivery metadata (device push token, time, size); Google can't read the content.
 - **To the app maker or other third parties:** nothing beyond the Firebase Cloud Messaging transport above. There are no analytics, crash-reporting or advertising SDKs, which must be re-verified at release.
+  - The app reads Google Play's install referrer once, on the device, only to prefill the server address; nothing is sent.
 - **Encryption in transit:** HTTPS only. **End-to-end encryption:** none. Server operators can
   technically access content, and some servers enable DM inspection (existing disclosures).
 - **Deletion:** in-app closure (section 2), with the 14-day restoration and the retained shared
