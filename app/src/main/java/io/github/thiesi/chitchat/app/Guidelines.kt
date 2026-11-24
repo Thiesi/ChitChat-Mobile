@@ -100,6 +100,9 @@ internal fun GuidelinesScreen(session: SessionState, server: String?, model: Gui
                 }
                 Text(stringResource(if (rules != null) R.string.guidelines_operator_rules else R.string.guidelines_operator, installation),
                     Modifier.testTag("guidelines_operator"))
+                // The app's own privacy policy (PL): a separate text link after the operator line, with or without the
+                // server's documents (those belong to the server).
+                AppPrivacyTextLink(stringResource(R.string.app_privacy_policy), "guidelines_app_privacy")
                 val serverDue = rules != null && session.rules?.acceptanceRequired == true
                 if (mine?.outdated == true) InlineError(stringResource(R.string.guidelines_rules_outdated, installation))
                 mine?.failure?.let { InlineError(guidelinesFailure(it)) }

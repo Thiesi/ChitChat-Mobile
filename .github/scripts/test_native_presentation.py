@@ -585,6 +585,31 @@ class PresentationGateTests(unittest.TestCase):
             self.assertEqual(0, runner.main())
             self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
 
+    def app_privacy_files(self, files):
+        self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-app-privacy-presentation/*"
+            else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
+
+    def test_app_privacy_captures_are_copied_and_keep_the_original_status(self):
+        self.results(4)
+        files = [Path("app-privacy-about-light-default.png"), Path("app-privacy-about-dark-font200.png"),
+            Path("app-privacy-guidelines-light-font200.png"), Path("app-privacy-guidelines-plain-light-default.png"),
+            Path("app-privacy-welcome-dark-default.png"), Path("app-privacy-choice-light-font200.png")]
+        self.app_privacy_files(files)
+        self.assertEqual(4, runner.main()); self.assert_once()
+        for path in files: self.copy.assert_any_call(path, runner.APP_PRIVACY_DESTINATION / path.name)
+        self.assertEqual(7, self.copy.call_count) # Six captures and the completion capture.
+
+    def test_excess_ambiguous_or_foreign_app_privacy_output_is_rejected_before_copy(self):
+        self.results(0)
+        for files in ([Path(f"app-privacy-about-light-default-{n}.png") for n in range(14)],
+            [Path("a/app-privacy-choice-light-default.png"), Path("b/app-privacy-choice-light-default.png")],
+            # Not taken: a light Welcome, a dark choice, a dark plain guidelines.
+            [Path("app-privacy-welcome-light-default.png")], [Path("app-privacy-choice-dark-default.png")],
+            [Path("app-privacy-guidelines-plain-dark-default.png")], [Path("other.png")]):
+            self.copy.reset_mock(); self.mkdir.reset_mock(); self.app_privacy_files(files)
+            self.assertEqual(0, runner.main())
+            self.assertEqual(1, self.copy.call_count); self.mkdir.assert_called_once()
+
     def prefill_files(self, files):
         self.glob.side_effect = lambda pattern: (iter(files) if pattern == "ccm-prefill-presentation/*"
             else [Path("capture.png")] if pattern == "ccm-completion-presentation/*.png" else iter([]))
