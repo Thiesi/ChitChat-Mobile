@@ -11,7 +11,9 @@ import io.github.thiesi.chitchat.ChitChatApplication
 import io.github.thiesi.chitchat.MainActivity
 import io.github.thiesi.chitchat.core.server.displayHost
 import io.github.thiesi.chitchat.testing.ForeignTaskCallerActivity
+import kotlinx.coroutines.flow.first
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -58,6 +60,26 @@ class LinkEntryTest {
 
     private fun oneMain(): MainActivity = await("one resumed MainActivity") { mains().singleOrNull() }
 
+    /**
+     * The exact consumer (TL): with no saved server the app is on Welcome, so the link waits for step 2 in
+     * [ServerLinkViewModel.editorPrefill]. Awaited for this host (bounded, idle-synced): starting an activity is
+     * asynchronous, and "nothing pending" is also true before the trampoline has even offered the link (run 45322426256
+     * read it that early: the whole case took 550 ms).
+     */
+    private fun awaitHeldForStepTwo(main: MainActivity, host: String) =
+        await("the link held for step 2 (Welcome)") { if (prefillOf(main) == host) true else null }
+
+    /**
+     * Pinned starting state (TL): no saved server in the app's real settings store, so a launch shows Welcome, signed
+     * out. Nothing in this suite writes that store (these cases never tap Continue) and CI's emulator is fresh; a device
+     * that has one fails here loudly rather than being changed or skipped (its debug data is never touched).
+     */
+    @Before fun noSavedServer() {
+        val saved = kotlinx.coroutines.runBlocking { app.settingsRepository.settings.first().server }
+        check(saved == null) { "LinkEntryTest needs the debug app with no saved server (Welcome); this device has one" }
+        app.serverLinks.state.value?.let { app.serverLinks.take(it) }
+    }
+
     @After fun finishEverything() {
         instrumentation.runOnMainSync {
             val monitor = ActivityLifecycleMonitorRegistry.getInstance()
@@ -71,23 +93,21 @@ class LinkEntryTest {
     @Test fun aColdLinkStartsOneMainActivityAndHandsTheLinkOverOnce() {
         context.startActivity(link("cold.example.org").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val main = oneMain()
-        await("the link to be taken") { if (app.serverLinks.state.value == null) true else null }
+        awaitHeldForStepTwo(main, "cold.example.org")
+        assertNull("Taken once", app.serverLinks.state.value)
         assertTrue("No trampoline left", inStage(Stage.RESUMED).none { it is LinkEntryActivity })
         assertEquals(1, mains().size)
-        // No saved server in this app's real store (only this class launches MainActivity, and nothing here saves one): the
-        // app is on Welcome, so the link waits for step 2 in exactly one place.
-        assertEquals("cold.example.org", prefillOf(main))
     }
 
     @Test fun aLinkWhileRunningReachesTheSameMainActivity() {
         context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val first = oneMain()
         context.startActivity(link("running.example.org").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        await("the link to be taken") { if (app.serverLinks.state.value == null) true else null }
+        awaitHeldForStepTwo(first, "running.example.org")
+        assertNull("Taken once", app.serverLinks.state.value)
         val now = oneMain()
         assertSame("onNewIntent on the running instance, no second MainActivity", first, now)
         assertEquals(1, mains().size)
-        assertEquals("running.example.org", prefillOf(now))
     }
 
     @Test fun aLinkFromAnotherAppsTaskWithoutNewTaskStillOpensTheAppsOwnTask() {
@@ -97,13 +117,14 @@ class LinkEntryTest {
         val main = oneMain()
         assertNotEquals("MainActivity never lands in the caller's task", caller.taskId, main.taskId)
         assertEquals(1, mains().size)
-        await("the link to be taken") { if (app.serverLinks.state.value == null) true else null }
+        awaitHeldForStepTwo(main, "foreign.example.org")
+        assertNull("Taken once", app.serverLinks.state.value)
     }
 
     @Test fun aRestoredActivityNeverReplaysAnOldLink() {
         context.startActivity(link("once.example.org").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val main = oneMain()
-        await("the link to be taken") { if (app.serverLinks.state.value == null) true else null }
+        awaitHeldForStepTwo(main, "once.example.org")
         instrumentation.runOnMainSync { main.recreate() }
         val restored = await("the recreated MainActivity") { mains().singleOrNull()?.takeIf { it !== main } }
         instrumentation.waitForIdleSync()
