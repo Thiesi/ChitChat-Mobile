@@ -16,6 +16,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -161,13 +162,29 @@ fun Modifier.rateFitTimeline(fit: RateLineFit, window: Any): Modifier =
  * **The announcement carrier (PL and TL, after run 45222016407):** this line is ONE persistent node, always composed,
  * never smaller than 1dp: a 1dp strip with no notice and while hidden (TL, after run 45299066691: a zero-height node is
  * outside the semantics snapshot, so a notice giving it size and text in one change arrived as a new node and didn't
- * reliably announce). With no notice the strip says nothing and offers nothing, so it's no swipe stop. Its only semantics: a permanent polite live region, a description that
+ * reliably announce). With no notice the strip says nothing and offers nothing, so it's no swipe stop.
+ *
+ * **The strip has zero layout footprint (TL and PL, #348, option A2):** it reports 0 height to its parent and places its
+ * 1dp node at its slot's bottom edge, overhanging into the 6dp gap and the composer's top padding below, where no
+ * semantics node sits. So the semantics node always has a real 1dp size, even when a packed window allots the timeline's
+ * block 0 (200% portrait, a reply chip and the keyboard up), while nothing moves: neither the timeline nor the composer
+ * gives anything up, and the composer is measured exactly as before. The strip draws nothing (no background, divider or
+ * ripple) and takes no input (no pointer input, no click semantics). The drawn line keeps its real height. Its only semantics: a permanent polite live region, a description that
  * is the full line while a notice is current (with or without one trailing space, flipped per refused tap: [parity])
  * and nothing otherwise, and its test tag. So the notice appearing and each refused tap are one change on an existing
  * node (one announcement), clearing empties it (silent), and full/short/hidden swaps change only its size and visible
  * text, never its semantics. It's the one swipe stop on the wait, where the text is. The caller places it where the
  * strip adds no gap (inside the timeline's block, not as a spaced child): the timeline gives up that 1dp.
  */
+/**
+ * The deliberate overhang (A2): measured at 1dp whatever the incoming height (even 0), reported to the parent as 0 tall,
+ * placed at the slot's top-left so it extends 1dp below the slot's bottom edge.
+ */
+private val ZeroFootprintStrip = Modifier.layout { measurable, constraints ->
+    val strip = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+    layout(strip.width, 0) { strip.place(0, 0) }
+}.height(1.dp)
+
 @Composable
 fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotice?, @StringRes known: Int,
     @StringRes unknown: Int, window: Any, availableWidth: Dp, spacing: Dp, modifier: Modifier = Modifier,
@@ -203,9 +220,10 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     val shown = when (form) { RateLineForm.FULL -> full; RateLineForm.SHORT -> short; else -> null }
     if (shown != null) LocalRateLineProbe.current?.let { probe -> SideEffect { probe(form == RateLineForm.SHORT, shown) } }
     val spoken = full?.let { if (parity) "$it " else it }
-    // Drawn: the text with its top spacing. Otherwise (no notice, or hidden) the 1dp strip: the node always has size.
-    Text(shown.orEmpty(), modifier.then(if (shown != null) Modifier.padding(top = spacing) else Modifier.height(1.dp))
-        .onGloballyPositioned { fit.lineSlot = it.size.height }
+    // Drawn: the text with its top spacing. Otherwise (no notice, or hidden) the 1dp strip with zero footprint (A2): the
+    // node always has a real size, and the layout is exactly as with no node at all.
+    Text(shown.orEmpty(), modifier.then(if (shown != null) Modifier.padding(top = spacing) else ZeroFootprintStrip)
+        .onGloballyPositioned { fit.lineSlot = if (shown != null) it.size.height else 0 }
         .clearAndSetSemantics {
             if (spoken != null) contentDescription = spoken
             liveRegion = LiveRegionMode.Polite

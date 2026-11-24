@@ -105,13 +105,17 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
     - **Why not Send:** Send carried it first (298d9a5 to e096392). A button changes several properties when a refusal
       lands (label "Sending" to "Send", enabled, progress), and on a live node each is an event: run 45222016407 counted
       three announcements per appearance.
-    - **So the line is one persistent node,** always composed, never smaller than 1dp: a 1dp strip (no padding) when
-      nothing is drawn, inside the timeline's block (the timeline, then the typing line and the wait line with their own
-      6dp top spacing), so the strip adds no gap and the timeline gives up that 1dp. It was zero height with no notice
-      until run 45299066691: a zero-size node is outside the semantics snapshot, so a notice giving it size and text in
-      one change arrived as a new node and didn't reliably announce (on both platforms, the only counted event came from
-      the later keyboard-hide move). With no notice the strip has no text, description or action, so it's no swipe stop.
-      Its only semantics: a permanent polite live region, a
+    - **So the line is one persistent node,** always composed, never smaller than 1dp, inside the timeline's block (the
+      timeline, then the typing line and the wait line with their own 6dp top spacing). When nothing is drawn (no notice,
+      or hidden) it's a 1dp strip with **zero layout footprint** (#348, option A2, TL and PL): it reports 0 height to its
+      parent and places its 1dp node at its slot's bottom edge, overhanging into the 6dp gap and the composer's top
+      padding, where no semantics node sits. Nothing moves (the timeline and the composer are measured as with no node),
+      the strip draws nothing and takes no input, and with no notice it has no text, description or action, so it's no
+      swipe stop. Why: it was zero height with no notice until run 45299066691. A zero-size node is outside the semantics
+      snapshot, so a notice giving it size and text in one change arrived as a new node and didn't reliably announce (on
+      both platforms, the only counted event came from the later keyboard-hide move). A plain 1dp strip inside the block
+      wasn't enough (run 45307781872): a packed window (200% portrait, a reply chip and the keyboard up) allots the
+      weighted block 0, and its strip with it. Its only semantics: a permanent polite live region, a
       description that's the full line while a notice is current and nothing otherwise, and its test tag. The visible
       text (full or short) isn't semantics, so visible and spoken text may differ (static text, as under P-25).
     - **Once on appearance, once per refused tap:** the description appearing is one change on an existing node. Each
@@ -124,10 +128,13 @@ goes away is the session-wide reaction to these refusals: row 7, the P-25 gate, 
       keyboard, rotation and Send's own changes don't touch it.
     - **Hidden (compact with the keyboard):** the same node becomes a 1dp full-width strip at its place, directly above
       the composer block, keeping its description (TL's branch 2, PL-agreed): a zero-height node sent nothing at all on
-      run 45233308933. It's the one accepted extra swipe stop, in that rare state; the composer may give up that 1dp.
-      The timeline's block keeps at least 1dp (`heightIn(min = 1.dp)`): squeezed to 0 at 200% portrait with a reply
-      chip and the keyboard up, the strip had zero size and the notice was announced only when the keyboard hid (run
-      45244641951, a real gap, not timing).
+      run 45233308933. It's the one accepted extra swipe stop, in that rare state, its focus box a 1dp strip at the
+      composer's top edge (zero footprint since #348: nothing gives up space).
+      The timeline's block has `heightIn(min = 1.dp)` (after run 45244641951), but **that never guaranteed 1dp**
+      (correction, run 45307781872): a weight child gets exactly its share, and a min can't exceed the incoming max of 0
+      in a packed window. #342's appearance-height check passed only because the refusal had hidden the keyboard first.
+      The zero-footprint strip above is what keeps the node 1dp there; since #348 the hidden strip uses it too, so it no
+      longer takes 1dp from the composer or the timeline.
     - **Counting (TL and PL rule, a model of TalkBack, not a proof):** an announcement is a carrier event with a non-empty
       spoken text that differs from the last counted one. Any move or resize of a live node also sends events (`SUBTREE`,
       identical text; run 45234305565): those aren't counted but stay listed in the test output. The owner's TalkBack

@@ -141,6 +141,31 @@ class LiveAnnouncements(private val carrier: (AccessibilityNodeInfo) -> Boolean)
         return countAt[sentinel.intValue] ?: counted.size
     }
 
+    /** A real accessibility node (as a screen reader sees it) with a live region and no text or description: scalars only. */
+    data class EmptyLiveNode(val visibleToUser: Boolean, val focusable: Boolean, val screenReaderFocusable: Boolean,
+        val clickable: Boolean, val width: Int, val height: Int, val bounds: String)
+
+    /**
+     * TL (#348): every node in the active window, through UiAutomation, with a live region and neither text nor a
+     * description (the empty carrier is one), so a test proves the node exists for a screen reader, not only in Compose.
+     */
+    fun emptyLiveNodes(): List<EmptyLiveNode> {
+        val root = automation.rootInActiveWindow ?: return emptyList()
+        val found = mutableListOf<EmptyLiveNode>()
+        val queue = ArrayDeque(listOf(root))
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            if (node.liveRegion != View.ACCESSIBILITY_LIVE_REGION_NONE && node.text.isNullOrEmpty() && node.contentDescription.isNullOrEmpty()) {
+                val bounds = android.graphics.Rect().also { node.getBoundsInScreen(it) }
+                found += EmptyLiveNode(node.isVisibleToUser, node.isFocusable,
+                    Build.VERSION.SDK_INT >= 28 && node.isScreenReaderFocusable, node.isClickable, bounds.width(), bounds.height(),
+                    bounds.toShortString())
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.addLast(it) }
+        }
+        return found
+    }
+
     /** Fails with the first recorded mark timeout, if any: call before asserting any count. */
     fun verify() { failure?.let { throw it } }
 

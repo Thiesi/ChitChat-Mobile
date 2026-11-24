@@ -239,6 +239,13 @@ class RatePresentationTest {
             }
             // TL (after run 45299066691): the carrier node already exists, at least 1dp, before the notice appears.
             val heightBeforeNotice = lineHeight()
+            // TL condition (#348): whatever a packed window gives up for the carrier comes from padding or insets, never the
+            // field, Send or the reply chip: each unclipped and above the keyboard before the notice. Checked after captures.
+            val packedBefore = listOf(input, send, "composer_reply")
+                .filter { compose.onAllNodesWithTag(it).fetchSemanticsNodes().isNotEmpty() }
+                .map { tag -> runCatching { unclipped("$name before the notice", tag) } } +
+                runCatching { overhangClear(name, listOf(input, send, "composer_reply")) } +
+                runCatching { realCarrier(name, heard) }
             // Announcements are counted between delivered sentinels (PL, TL: the positive control). A mark that times out is
             // recorded and only fails after the capture (verify), so it can't cost the J its images.
             val opened = heard.mark(compose, sentinel)
@@ -280,6 +287,7 @@ class RatePresentationTest {
             // swaps since, each between two delivered sentinels.
             heard.verify()
             check(heightBeforeNotice >= oneDp()) { "$name: the carrier was ${heightBeforeNotice}px before the notice (expected 1dp or more)" }
+            packedBefore.forEach { it.getOrThrow() }
             check(opened == 0) { "$name: $opened announcements before the refusal ${heard.spoken()}" }
             check(appeared - opened == 1) {
                 "$name: ${appeared - opened} announcements for the appearance (line height ${heightAtAppearance}px, drawn=$drawnAtAppearance) ${heard.spoken()}" }
@@ -444,6 +452,37 @@ class RatePresentationTest {
         compose.onNodeWithContentDescription(label).fetchSemanticsNode().config.getOrNull(SemanticsProperties.StateDescription)
 
     private fun lineHeight() = compose.onNodeWithTag("rate_wait_line").fetchSemanticsNode().size.height
+
+    /**
+     * TL (#348, A2): the empty carrier exists for a screen reader, not only in Compose: exactly one real accessibility
+     * node with a live region, no text or description, the carrier's width and 1dp tall, visible to the user, not
+     * focusable or clickable (so no swipe stop).
+     */
+    private fun realCarrier(name: String, heard: LiveAnnouncements) {
+        val width = compose.onNodeWithTag("rate_wait_line").fetchSemanticsNode().size.width
+        val all = heard.emptyLiveNodes()
+        val carrier = all.filter { kotlin.math.abs(it.width - width) <= 1 && kotlin.math.abs(it.height - oneDp()) <= 1 }
+        check(carrier.size == 1) { "$name: expected one real empty carrier node ${width}x${oneDp()}px, found $all" }
+        val node = carrier.single()
+        check(node.visibleToUser && !node.focusable && !node.screenReaderFocusable && !node.clickable && node.height >= 1) {
+            "$name: the real carrier node $node" }
+    }
+
+    /**
+     * TL (#348, A2): the strip's deliberate 1dp overhang below its slot never covers the field, Send or the reply chip;
+     * it lies in the gap or the composer's top padding, inside the window.
+     */
+    private fun overhangClear(name: String, tags: List<String>) {
+        val strip = compose.onNodeWithTag("rate_wait_line").fetchSemanticsNode()
+        val top = strip.positionInWindow.y
+        val bottom = top + strip.size.height
+        val window = appRoot().fetchSemanticsNode().size
+        check(top >= 0f && bottom <= window.height + 0.5f) { "$name: the strip [$top, $bottom] is outside the window $window" }
+        for (tag in tags.filter { compose.onAllNodesWithTag(it).fetchSemanticsNodes().isNotEmpty() }) {
+            val other = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInWindow
+            check(bottom <= other.top + 0.5f || top >= other.bottom - 0.5f) { "$name: the strip [$top, $bottom] overlaps $tag $other" }
+        }
+    }
     private fun oneDp() = kotlin.math.round(context.resources.displayMetrics.density).toInt().coerceAtLeast(1)
 
     /** The persistent wait line (one node: a 1dp strip with no notice and while hidden) shows its text. */

@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -37,6 +38,7 @@ import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -149,11 +151,11 @@ class RateWaitLineTest {
         Box {
             Column(Modifier.width(320.dp).height(columnHeight), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
-                    Box(Modifier.weight(1f).fillMaxWidth().then(if (measured) Modifier.rateFitTimeline(held, window) else Modifier))
+                    Box(Modifier.weight(1f).fillMaxWidth().testTag("slot_timeline").then(if (measured) Modifier.rateFitTimeline(held, window) else Modifier))
                     RateWaitSlot(held, session(deadline), notice, R.string.rate_wait_messages, R.string.rate_wait_messages_unknown,
                         window, 320.dp, 6.dp, Modifier.fillMaxWidth(), parity = repeats % 2 == 1)
                 }
-                Box(Modifier.fillMaxWidth().height(composerHeight))
+                Box(Modifier.fillMaxWidth().height(composerHeight).testTag("slot_composer"))
             }
         }
     }
@@ -252,6 +254,38 @@ class RateWaitLineTest {
             config.contains(androidx.compose.ui.semantics.SemanticsActions.OnLongClick))
         assertFalse("Not merged into a stop", config.isMergingSemanticsOfDescendants)
         assertEquals("Only the live region and the tag", setOf("LiveRegion", "TestTag"), config.map { it.key.name }.toSet())
+    }
+
+    /**
+     * TL and PL (#348, A2): the strip has zero layout footprint. The timeline keeps every pixel (the layout is as with no
+     * node), and the 1dp node overhangs its slot's bottom edge into the 6dp gap above the composer, inside the window. In
+     * a packed column, where the timeline's block is allotted 0, the node is still 1dp: the case the plain strip lost.
+     */
+    @Test fun theStripTakesNoSpaceAndKeepsItsSizeWhenTheBlockIsAllottedNothing() {
+        slot()
+        settle()
+        val px = context.resources.displayMetrics.density
+        fun bounds(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInWindow
+        val timeline = bounds("slot_timeline")
+        val composer = bounds("slot_composer")
+        assertEquals("No footprint: the timeline reaches the gap", composer.top - 6 * px, timeline.bottom, 1f)
+        val strip = line()
+        assertEquals(oneDp(), strip.size.height)
+        assertEquals("At the slot's bottom edge", timeline.bottom, strip.positionInWindow.y, 1f)
+        assertTrue("Inside the gap", strip.positionInWindow.y + strip.size.height <= composer.top + 0.5f)
+        // Packed: the block gets 0 (54dp = 0 + the 6dp gap + a 48dp composer).
+        columnHeight = 54.dp
+        settle()
+        assertEquals("The block is allotted nothing", 0f, bounds("slot_timeline").height, 1f)
+        assertEquals("Still 1dp", oneDp(), line().size.height)
+        assertEquals("Its window bounds are 1dp too, not clipped away", oneDp().toFloat(), line().boundsInWindow.height, 1f)
+        assertTrue("Above the composer", line().boundsInWindow.bottom <= bounds("slot_composer").top + 0.5f)
+        // Hidden with a notice: the same zero-footprint strip, carrying the full line.
+        deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true); window = "packed"
+        settle()
+        assertEquals(RateLineForm.HIDDEN, fit?.form)
+        assertEquals(oneDp(), line().size.height)
+        assertEquals(full5(), lineDescription())
     }
 
     /** TL: the node exists, 1dp, BEFORE the notice; the notice then changes that same node (never a new one). */
