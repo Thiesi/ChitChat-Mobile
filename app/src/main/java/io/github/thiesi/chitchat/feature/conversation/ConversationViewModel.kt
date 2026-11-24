@@ -109,7 +109,10 @@ data class ConversationUiState(
      * nothing becomes unknown. A known wait shows until its deadline; an unknown one until the next interaction.
      */
     val mutationLimit: RateLimitNotice? = null,
-    /** #323b2: refusals while the line already showed; each flips its spoken parity (one announcement per refused tap). */
+    /**
+     * #323b2: every refusal flips the line's spoken parity (one announcement per refused tap), including the first: the line
+     * may already show a wait known at opening (`mutationNotice`) while [mutationLimit] is still null (review of f6beb5b).
+     */
     val mutationLimitRepeats: Int = 0,
 ) { override fun toString() = "ConversationUiState" }
 
@@ -1063,7 +1066,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
                         // Its line, not the error; nothing changed on the server, so history isn't marked stale.
                         mutable.value = mutable.value.copy(
                             mutationLimit = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, failure.retryAfterSeconds != null),
-                            mutationLimitRepeats = mutable.value.mutationLimitRepeats + if (mutable.value.mutationLimit != null) 1 else 0)
+                            mutationLimitRepeats = mutable.value.mutationLimitRepeats + 1)
                     else if (failure.status in setOf(403, 404) && failure.code in setOf("room_forbidden", "room_not_found"))
                         clearUnauthorized(failure)
                     else mutable.value = mutable.value.copy(error = failure, stale = true)

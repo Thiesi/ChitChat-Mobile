@@ -182,6 +182,19 @@ class DirectAuthorChangeTest {
     }
 
     /** #323b2: direct_message_mutation's own 429 is definite (direct-messages/edit.php consumes before any work). */
+    /** Review of f6beb5b (TL): the first refused tap during a known wait shown at opening flips the parity. */
+    @Test fun theFirstDirectRefusalDuringAKnownWaitFlipsTheParity() = runTest(dispatcher) {
+        open()
+        api.session.value = api.session.value.copy(rateWaits = mapOf(io.github.thiesi.chitchat.core.session.RateBudget.DIRECT_MESSAGE_MUTATION to
+            io.github.thiesi.chitchat.core.session.RateWait(Long.MAX_VALUE / 2, 1, 7)))
+        val request = choose(); model.updateAuthorBody(request, "Limited edit")
+        assertNull("Opening sets no notice of its own", model.state.value.mutationLimit)
+        assertEquals(0, model.state.value.mutationLimitRepeats)
+        changes.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120); model.submitAuthor(request); runCurrent()
+        assertNotNull(model.state.value.mutationLimit)
+        assertEquals("The first refused tap flips the parity", 1, model.state.value.mutationLimitRepeats)
+    }
+
     @Test fun aRateLimitedDirectEditKeepsItsTextIsNotUnknownAndNeverResends() = runTest(dispatcher) {
         open(); val request = choose(); model.updateAuthorBody(request, "Limited edit")
         changes.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120); model.submitAuthor(request); runCurrent()
@@ -189,6 +202,7 @@ class DirectAuthorChangeTest {
         assertFalse(model.state.value.stale); assertNull(model.state.value.error)
         assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(
             io.github.thiesi.chitchat.core.session.RateBudget.DIRECT_MESSAGE_MUTATION, true), model.state.value.mutationLimit)
+        assertEquals("Every refusal flips the parity (review of f6beb5b)", 1, model.state.value.mutationLimitRepeats)
         assertEquals("Limited edit", model.state.value.authorDialog?.body)
         runCurrent(); assertEquals("Nothing resends", 1, changes.edits)
         changes.failure = null; model.submitAuthor(request); runCurrent()

@@ -159,6 +159,23 @@ class RoomAuthorChangeTest {
      * #323b2: room_message_mutation's own 429 is definite (edit-message.php consumes before any work). The dialog keeps
      * its text, nothing is unknown or stale, the wait line shows, nothing resends; a later Save still works.
      */
+    /**
+     * Review of f6beb5b (TL): a dialog opened during a known wait another write started shows the line (`mutationNotice`)
+     * while [ConversationUiState.mutationLimit] is still null. The first refused tap there must flip the parity, or its
+     * description wouldn't change and TalkBack would stay silent.
+     */
+    @Test fun theFirstRefusalDuringAKnownWaitFlipsTheParity() = runTest(dispatcher) {
+        open()
+        fake.session.value = fake.session.value.copy(rateWaits = mapOf(io.github.thiesi.chitchat.core.session.RateBudget.ROOM_MESSAGE_MUTATION to
+            io.github.thiesi.chitchat.core.session.RateWait(Long.MAX_VALUE / 2, 1, 7)))
+        val request = begin(); model.updateAuthorBody(request, "Limited edit")
+        assertNull("Opening sets no notice of its own", model.state.value.mutationLimit)
+        assertEquals(0, model.state.value.mutationLimitRepeats)
+        fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120); model.submitAuthor(request); runCurrent()
+        assertNotNull(model.state.value.mutationLimit)
+        assertEquals("The first refused tap flips the parity", 1, model.state.value.mutationLimitRepeats)
+    }
+
     @Test fun aRateLimitedEditKeepsItsTextIsNotUnknownAndNeverResends() = runTest(dispatcher) {
         open(); fake.writeFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
         val request = begin(); model.updateAuthorBody(request, "Limited edit"); model.submitAuthor(request); runCurrent()
@@ -167,6 +184,8 @@ class RoomAuthorChangeTest {
         assertNull("Its line, not the error", model.state.value.error)
         assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(
             io.github.thiesi.chitchat.core.session.RateBudget.ROOM_MESSAGE_MUTATION, true), model.state.value.mutationLimit)
+        // Review of f6beb5b: the first refusal flips the parity too (the line may already show a wait known at opening).
+        assertEquals("Every refusal flips the parity", 1, model.state.value.mutationLimitRepeats)
         assertEquals("The edit dialog keeps its text", "Limited edit", model.state.value.authorDialog?.body)
         runCurrent(); assertEquals("Nothing resends", 1, fake.writes)
         fake.writeFailure = null; model.submitAuthor(request); runCurrent()
