@@ -619,15 +619,16 @@ class PresentationGateTests(unittest.TestCase):
     def test_rate_mutation_captures_are_copied_and_keep_the_original_status(self):
         self.results(4)
         files = [Path("rate-mutation-edit-light-default.png"), Path("rate-mutation-edit-opened-dark-font200.png"),
-            Path("rate-mutation-delete-light-default.png"), Path("rate-mutation-reactions-dark-default.png")]
+            Path("rate-mutation-delete-light-default.png"), Path("rate-mutation-reactions-dark-default.png"),
+            Path("rate-mutation-traversal.txt")]
         self.rate_mutation_files(files)
         self.assertEqual(4, runner.main()); self.assert_once()
         for path in files: self.copy.assert_any_call(path, runner.RATE_MUTATION_DESTINATION / path.name)
-        self.assertEqual(5, self.copy.call_count) # Four captures and the completion capture.
+        self.assertEqual(6, self.copy.call_count) # Four captures, the traversal record and the completion capture.
 
     def test_excess_ambiguous_or_foreign_rate_mutation_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"rate-mutation-edit-light-default-{n}.png") for n in range(14)],
+        for files in ([Path(f"rate-mutation-edit-light-default-{n}.png") for n in range(15)],
             [Path("a/rate-mutation-delete-light-default.png"), Path("b/rate-mutation-delete-light-default.png")],
             # Not taken: a dark delete, a 200% delete.
             [Path("rate-mutation-delete-dark-default.png")], [Path("rate-mutation-delete-light-font200.png")], [Path("other.png")]):

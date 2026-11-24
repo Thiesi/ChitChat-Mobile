@@ -121,18 +121,27 @@ class DirectReactionStateTest {
         assertEquals("Nothing resends after I agree",1,api.reacts)
     }
 
-    /** #323b2: a direct reaction add or removal refused by direct_message_mutation is definite; nothing resends. */
-    @Test fun aRateLimitedDirectReactionLeavesTheChipUnchangedIsNotUnknownAndNeverResends()=runTest(dispatcher) {
-        for (desired in listOf(true, false)) {
-            open(); val before=model.state.value.messages.map { it.id to it.reactions }
-            api.reactionFailure=ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
-            val request=begin(); model.setReaction(request,ReactionEmoji.HEART,desired); runCurrent()
-            assertNull("Definite ($desired)",model.state.value.reactionUnknown)
-            assertNotNull("The wait line ($desired)",model.state.value.mutationLimit)
-            assertEquals("The chip is unchanged",before,model.state.value.messages.map { it.id to it.reactions })
-            model.dismissReactions(request); assertNull(model.state.value.mutationLimit)
-            api.reactionFailure=null
-        }
+    /** #323b2: a direct reaction add (direct-messages/react.php) refused by direct_message_mutation is definite. */
+    @Test fun directReactRateLimitedIsDefinite()=runTest(dispatcher) { rateLimitedReaction("DM react", desired = true) }
+
+    /** #323b2: a direct reaction removal (direct-messages/unreact.php) refused by direct_message_mutation is definite. */
+    @Test fun directUnreactRateLimitedIsDefinite()=runTest(dispatcher) {
+        api.rows[8]=listOf(message(reactions=listOf(reaction(7)))) // The viewer's own 👍 to remove.
+        rateLimitedReaction("DM unreact", desired = false, ReactionEmoji.THUMBS_UP)
+    }
+
+    private fun kotlinx.coroutines.test.TestScope.rateLimitedReaction(path: String, desired: Boolean,
+        emoji: ReactionEmoji = ReactionEmoji.HEART) {
+        open(); val before=model.state.value.messages.map { it.id to it.reactions }
+        api.reactionFailure=ApiFailure(FailureKind.HTTP,429,"rate_limited",120)
+        val request=begin()
+        assertTrue("$path: the choice is allowed",model.canSetReaction(request,emoji,desired))
+        model.setReaction(request,emoji,desired); runCurrent()
+        assertNull("$path: definite, no reaction uncertainty",model.state.value.reactionUnknown)
+        assertNotNull("$path: the wait line",model.state.value.mutationLimit)
+        assertEquals("$path: the chip is unchanged",before,model.state.value.messages.map { it.id to it.reactions })
+        assertEquals("$path: one request, nothing resent",1,api.reacts)
+        model.dismissReactions(request); assertNull("$path: closing ends the line",model.state.value.mutationLimit)
     }
 
     /** Guard (TL, #323b2): a proxy's 429 on a direct reaction keeps M5b1's uncertainty. */

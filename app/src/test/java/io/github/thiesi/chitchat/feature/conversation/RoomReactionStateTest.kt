@@ -140,20 +140,30 @@ class RoomReactionStateTest {
         assertEquals("Nothing resends after I agree", 1, fake.writes)
     }
 
-    /** #323b2: a reaction add or removal refused by room_message_mutation is definite: the chip is unchanged, nothing resends. */
-    @Test fun aRateLimitedReactionLeavesTheChipUnchangedIsNotUnknownAndNeverResends() = runTest(dispatcher) {
-        for (desired in listOf(true, false)) {
-            open(); val before = model.state.value.messages.map { it.id to it.reactions }
-            fake.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
-            val request = begin(); model.setReaction(request, ReactionEmoji.HEART, desired); runCurrent()
-            assertNull("Definite ($desired)", model.state.value.reactionUnknown)
-            assertFalse(model.state.value.stale)
-            assertNotNull("The wait line ($desired)", model.state.value.mutationLimit)
-            assertEquals("The chip is unchanged", before, model.state.value.messages.map { it.id to it.reactions })
-            model.dismissReactions(request)
-            assertNull("Closing ends an unknown or shown line", model.state.value.mutationLimit)
-            fake.failure = null
-        }
+    /** #323b2: a room reaction add (react.php) refused by room_message_mutation is definite; the chip is unchanged. */
+    @Test fun roomReactRateLimitedIsDefinite() = runTest(dispatcher) { rateLimitedReaction("room react", desired = true) }
+
+    /** #323b2: a room reaction removal (unreact.php) refused by room_message_mutation is definite; the chip is unchanged. */
+    @Test fun roomUnreactRateLimitedIsDefinite() = runTest(dispatcher) {
+        // The viewer's own 👍 to remove (as in mutedDeletedRowAllowsOwnRemovalButNeverAnAdd).
+        fake.rows[42] = listOf(message(reactions = listOf(reaction(7, flag = false))))
+        rateLimitedReaction("room unreact", desired = false, ReactionEmoji.THUMBS_UP)
+    }
+
+    private fun kotlinx.coroutines.test.TestScope.rateLimitedReaction(path: String, desired: Boolean,
+        emoji: ReactionEmoji = ReactionEmoji.HEART) {
+        open(); val before = model.state.value.messages.map { it.id to it.reactions }
+        fake.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 120)
+        val request = begin()
+        assertTrue("$path: the choice is allowed", model.canSetReaction(request, emoji, desired))
+        model.setReaction(request, emoji, desired); runCurrent()
+        assertNull("$path: definite, no reaction uncertainty", model.state.value.reactionUnknown)
+        assertFalse("$path: not stale", model.state.value.stale)
+        assertNotNull("$path: the wait line", model.state.value.mutationLimit)
+        assertEquals("$path: the chip is unchanged", before, model.state.value.messages.map { it.id to it.reactions })
+        assertEquals("$path: one request, nothing resent", 1, fake.writes)
+        model.dismissReactions(request)
+        assertNull("$path: closing ends the line", model.state.value.mutationLimit)
     }
 
     /** Guard (TL, #323b2): a proxy's 429 on a reaction keeps M5b1's uncertainty. */

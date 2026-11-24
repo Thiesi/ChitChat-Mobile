@@ -84,6 +84,8 @@ class RateMutationPresentationTest {
                 block = {
                     capture("rate-mutation-$scene-$label-$name")
                     assertLine("author_rate_line")
+                    // PL: the line (below the body field, on the refusal line) is read before Cancel and Save.
+                    io.github.thiesi.chitchat.testing.assertLineBeforeEveryAction(full, "edit dialog ($scene, $label, $name)")
                 }
                 show(scale, dark, edit(AuthorChangeKind.EDIT, notice))
             }
@@ -92,7 +94,8 @@ class RateMutationPresentationTest {
 
     /** 6: the delete dialog with the line (default light). */
     @Test fun deleteDialog() {
-        block = { capture("rate-mutation-delete-light-default"); assertLine("author_rate_line") }
+        block = { capture("rate-mutation-delete-light-default"); assertLine("author_rate_line")
+            io.github.thiesi.chitchat.testing.assertLineBeforeEveryAction(full, "delete dialog") }
         show(1f, false, edit(AuthorChangeKind.DELETE, RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true)))
     }
 
@@ -100,7 +103,8 @@ class RateMutationPresentationTest {
     @Test fun reactionPicker() {
         for (dark in listOf(false, true)) for ((name, scale) in scales) {
             val label = if (dark) "dark" else "light"
-            block = { capture("rate-mutation-reactions-$label-$name"); assertLine("reaction_rate_line") }
+            block = { capture("rate-mutation-reactions-$label-$name"); assertLine("reaction_rate_line")
+                io.github.thiesi.chitchat.testing.assertLineBeforeEveryAction(full, "reaction picker ($label, $name)") }
             show(scale, dark) {
                 MessageReactionPicker(Any(), 101, emptyList(), deleted = false, viewer = 7, busy = false, checked = false,
                     changed = false, unknownMessageId = null, dialogTag = "reactions_dialog", choicesTag = "reaction_choices",

@@ -82,7 +82,7 @@ RATE_MUTATION_DESTINATION = ROOT / "app/build/reports/androidTests/rate-mutation
 # #323b2 (PL list 5-8): the shared mutation wait in the edit dialog, the delete dialog, an edit dialog opened during a
 # wait a reaction started, and the reaction picker.
 RATE_MUTATION_NAME = re.compile(r"rate-mutation-(?:edit-(?:light|dark)-(?:default|font200)|edit-opened-(?:light|dark)-(?:default|font200)|"
-    r"delete-light-default|reactions-(?:light|dark)-(?:default|font200))[.]png")
+    r"delete-light-default|reactions-(?:light|dark)-(?:default|font200))[.]png|rate-mutation-traversal[.]txt")
 RATE_DESTINATION = ROOT / "app/build/reports/androidTests/rate-presentation"
 RATE_NAME = re.compile(r"rate-(?:room-send-(?:light|dark)-(?:default|font200)|dm-send-(?:light|dark)-(?:default|font200)|"
     r"room-send-light-font200-landscape-ime|room-ping-light-default|room-send-unknown-light-default|"
@@ -507,14 +507,15 @@ def collect_prefill():
 
 def collect_rate_mutation():
     # #323b2 (PL): edit, light and dark x default and 200% (4); edit opened during a wait (4); delete (1); reactions (4).
-    files = list(islice(SOURCE.rglob("ccm-rate-mutation-presentation/*"), 14))
-    if (not files or len(files) > 13 or len({p.name for p in files}) != len(files)
+    # Plus the opened-with-known-wait traversal record (TL), one line of text.
+    files = list(islice(SOURCE.rglob("ccm-rate-mutation-presentation/*"), 15))
+    if (not files or len(files) > 14 or len({p.name for p in files}) != len(files)
         or any(RATE_MUTATION_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous rate mutation presentation output")
     RATE_MUTATION_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, RATE_MUTATION_DESTINATION / path.name)
-    print(f"Rate mutation presentation captures collected: {len(files)} of 13.")
+    print(f"Rate mutation presentation captures collected: {len(files)} of 14.")
 
 
 def collect_rate():
