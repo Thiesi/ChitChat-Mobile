@@ -127,17 +127,24 @@ fun mutationNotice(session: SessionState, notice: RateLimitNotice?, budget: io.g
 
 @Composable
 fun RateWaitDialogLine(session: SessionState, notice: RateLimitNotice?, @StringRes known: Int, @StringRes unknown: Int,
-    tag: String, modifier: Modifier = Modifier, parity: Boolean = false, short: Boolean = false,
-    drawnPadding: androidx.compose.foundation.layout.PaddingValues? = null) {
+    tag: String, modifier: Modifier = Modifier, parity: Boolean = false,
+    drawnPadding: androidx.compose.foundation.layout.PaddingValues? = null, onShown: ((initial: Boolean) -> Unit)? = null) {
     val now = current(session, notice)
     val full = now?.let { fullText(it, known, unknown) }
     val spoken = full?.let { if (parity) "$it " else it }
-    // Compact (TL, PL pre-approved): "Try again in {wait}." in the fixed area, the full line still spoken.
-    val visible = if (now == null || !short) full else now.words?.let { stringResource(R.string.rate_wait_short, it) }
-        ?: stringResource(R.string.rate_wait_short_unknown)
+    // [onShown] (TL, PL): each time the line appears (initial: it's there as the dialog opens) and on each refused tap
+    // (the parity flips), so the dialog can bring it into view. Nothing else: no focus or caret change.
+    if (onShown != null) {
+        val opening = remember { booleanArrayOf(true) }
+        val shown = full != null
+        LaunchedEffect(shown, parity) {
+            if (shown) onShown(opening[0])
+            opening[0] = false
+        }
+    }
     // [drawnPadding] applies only while the line is drawn: an empty carrier adds nothing to its container.
     val drawn = if (drawnPadding != null) Modifier.padding(drawnPadding) else Modifier
-    Text(visible.orEmpty(), modifier.then(if (full != null) drawn else ZeroFootprintStrip).clearAndSetSemantics {
+    Text(full.orEmpty(), modifier.then(if (full != null) drawn else ZeroFootprintStrip).clearAndSetSemantics {
         if (spoken != null) contentDescription = spoken
         liveRegion = LiveRegionMode.Polite
         testTag = tag

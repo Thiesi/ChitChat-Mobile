@@ -45,7 +45,7 @@ internal fun MessageReactionPicker(requestKey: Any, messageId: Long, groups: Lis
     unknownMessageId: Long?, dialogTag: String, choicesTag: String,
     canCheck: Boolean, canReview: Boolean, error: String?,
     canChoose: (ReactionEmoji, Boolean) -> Boolean, onChoose: (ReactionEmoji, Boolean) -> Unit,
-    onCheck: () -> Unit, onReview: () -> Unit, onDismiss: () -> Unit, rateLine: (@Composable () -> Unit)? = null) {
+    onCheck: () -> Unit, onReview: () -> Unit, onDismiss: () -> Unit, rateLine: (@Composable (RateLineSlot) -> Unit)? = null) {
     var people by remember(requestKey) { mutableStateOf(false) }
     AlertDialog(onDismissRequest = { if (!busy) onDismiss() }, modifier = Modifier.testTag(dialogTag).lanternDialogEdge(),
         title = { Text(stringResource(R.string.room_reactions_message, messageId.toString())) },
@@ -53,6 +53,9 @@ internal fun MessageReactionPicker(requestKey: Any, messageId: Long, groups: Lis
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp).testTag(choicesTag),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item(key = "status") { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // #323b2 (review of a942d9a): the wait line follows the status texts in an unspaced column, its gap
+                    // above drawn as padding only while it's drawn, so with no notice the picker is identical to main.
+                    Column { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     when {
                         unknownMessageId != null -> Text(stringResource(R.string.reaction_unconfirmed, unknownMessageId.toString()))
                         groups == null -> Text(stringResource(R.string.message_actions_unavailable))
@@ -61,8 +64,10 @@ internal fun MessageReactionPicker(requestKey: Any, messageId: Long, groups: Lis
                     }
                     if (deleted) Text(stringResource(R.string.reaction_deleted_removal))
                     if (busy) Text(stringResource(R.string.reaction_changing))
+                    }
                     // #323b2: the shared mutation wait above the emoji rows (PL); a choice isn't sent or kept.
-                    rateLine?.invoke()
+                    rateLine?.invoke(RateLineSlot(PickerLinePadding))
+                    }
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     if (unknownMessageId != null) TextButton(onClick = onCheck, enabled = canCheck && !busy,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("reaction_check_history")) {
@@ -111,3 +116,5 @@ internal fun MessageReactionPicker(requestKey: Any, messageId: Long, groups: Lis
             Text(stringResource(if (people) R.string.reaction_back else R.string.rooms_close))
         } })
 }
+
+private val PickerLinePadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp)

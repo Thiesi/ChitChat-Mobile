@@ -748,9 +748,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             onCheck = { if (paneInteractive() && pending != null) model.checkReactionHistory(request.expected, pending) },
             onReview = { if (paneInteractive()) model.reviewReactions(request) },
             onDismiss = { if (isCurrentEntry()) model.dismissReactions(request) },
-            rateLine = { if (pending == null) io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(displayedSession,
+            rateLine = { slot -> if (pending == null) io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(displayedSession,
                 mutationNotice(displayedSession, state.mutationLimit, io.github.thiesi.chitchat.core.session.RateBudget.ROOM_MESSAGE_MUTATION),
-                R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "reaction_rate_line", parity = state.mutationLimitRepeats % 2 == 1) })
+                R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "reaction_rate_line", parity = state.mutationLimitRepeats % 2 == 1,
+                drawnPadding = slot.padding, modifier = slot.modifier, onShown = slot.onShown) })
     }
     state.authorDialog?.takeIf { paneInteractive() }?.let { dialog ->
         val request = dialog.request
@@ -770,8 +771,8 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             // #323b2: never on the Check history path (PL).
             rateLine = { slot -> if (pending == null) io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(displayedSession,
                 mutationNotice(displayedSession, state.mutationLimit, io.github.thiesi.chitchat.core.session.RateBudget.ROOM_MESSAGE_MUTATION),
-                R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "author_rate_line", parity = state.mutationLimitRepeats % 2 == 1, short = slot.short,
-                drawnPadding = slot.padding) })
+                R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "author_rate_line", parity = state.mutationLimitRepeats % 2 == 1,
+                drawnPadding = slot.padding, modifier = slot.modifier, onShown = slot.onShown) })
     }
     replyOptions?.let { choice ->
         val current = state.composerReply === choice

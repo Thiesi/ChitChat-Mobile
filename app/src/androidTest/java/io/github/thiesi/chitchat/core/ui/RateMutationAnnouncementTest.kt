@@ -63,13 +63,13 @@ class RateMutationAnnouncementTest {
                     MessageReactionPicker(Any(), 101, emptyList(), deleted = false, viewer = 7, busy = false, checked = false,
                         changed = false, unknownMessageId = null, dialogTag = "reactions_dialog", choicesTag = "reaction_choices",
                         canCheck = false, canReview = false, error = null, canChoose = { _, _ -> true }, onChoose = { _, _ -> },
-                        onCheck = {}, onReview = {}, onDismiss = {}, rateLine = {
+                        onCheck = {}, onReview = {}, onDismiss = {}, rateLine = { slot ->
                             val view = LocalView.current
                             SideEffect { dialogView = view }
                             Column {
                                 RateWaitDialogLine(current, mutationNotice(current, notice, RateBudget.ROOM_MESSAGE_MUTATION),
                                     R.string.rate_wait_mutations, R.string.rate_wait_mutations_unknown, "reaction_rate_line",
-                                    parity = repeats % 2 == 1)
+                                    parity = repeats % 2 == 1, drawnPadding = slot.padding)
                                 // TL: the sentinel and the carrier share one AndroidComposeView (asserted in attachDialog).
                                 val sentinelHost = LocalView.current
                                 SideEffect { sentinelView = sentinelHost }
@@ -126,8 +126,10 @@ class RateMutationAnnouncementTest {
             heard.verify()
             val all = heard.spoken()
             assertEquals("None before: $all", 0, start)
-            assertEquals("The same carrier node ($idBefore -> $idAfter)", idBefore, idAfter)
-            assertEquals("Once when the 429 arrives while open: $all", 1, appeared - start)
+            val ids = "carrier node $idBefore -> $idAfter"
+            android.util.Log.i("CCMRateMutation", "unknown while open: $ids")
+            assertEquals("The same carrier node ($ids)", idBefore, idAfter)
+            assertEquals("Once when the 429 arrives while open ($ids): $all", 1, appeared - start)
             assertEquals("Once per refused tap: $all", 1, tapped - appeared)
             assertEquals("Clearing is silent: $all", 0, cleared - tapped)
         }
@@ -168,28 +170,36 @@ class RateMutationAnnouncementTest {
         java.io.File(folder, "rate-mutation-traversal.txt").writeText(line + "\n")
     }
 
+    /**
+     * TL: the appearance bracket uses a five-minute wait, so the line's deadline one-shot (a delay on the test's auto-advancing
+     * clock) can't clear it before the delegate's diff sends the appearance (a 2 s wait did, run 45426410650: no event at
+     * all). The clearing bracket then advances the clock explicitly past the deadline. No real-time sleeps.
+     */
     @Test fun aKnownWaitsDeadlineClearsTheLineSilently() {
-        announcements { context.getString(R.string.rate_wait_mutations, context.getString(R.string.rate_wait_under_minute)) }.use { heard ->
+        val known = context.getString(R.string.rate_wait_mutations, context.resources.getQuantityString(R.plurals.wait_about_minutes, 5, 5))
+        announcements { known }.use { heard ->
             picker() // Opened with no wait: the 429 with a known wait arrives while open.
             heard.attachDialog()
             val start = heard.mark(compose, sentinel)
             val idBefore = line().id
-            val known = context.getString(R.string.rate_wait_mutations, context.getString(R.string.rate_wait_under_minute))
             compose.runOnIdle {
-                deadline = base + compose.mainClock.currentTime + 2_000
+                deadline = base + compose.mainClock.currentTime + 5 * 60_000
                 notice = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true)
             }
             awaitDescription(known)
             val idAfter = line().id
             val appeared = heard.mark(compose, sentinel)
-            compose.mainClock.advanceTimeBy(2_100)
+            val afterMark = description() // Still the known line at the bracket's close? (null: cleared early.)
+            compose.mainClock.advanceTimeBy(5 * 60_000 + 100L) // Explicitly past the deadline: the clearing bracket.
             compose.waitForIdle()
             awaitDescription(null)
             val cleared = heard.mark(compose, sentinel)
             heard.verify()
             assertNull("Emptied at the deadline", line().config.getOrNull(SemanticsProperties.ContentDescription))
-            assertEquals("The same carrier node ($idBefore -> $idAfter)", idBefore, idAfter)
-            assertEquals("Once on appearance while open: ${heard.spoken()}", 1, appeared - start)
+            val ids = "carrier node $idBefore -> $idAfter, description at the bracket's close: $afterMark"
+            android.util.Log.i("CCMRateMutation", "known while open: $ids")
+            assertEquals("The same carrier node ($ids)", idBefore, idAfter)
+            assertEquals("Once on appearance while open ($ids): ${heard.spoken()}", 1, appeared - start)
             assertEquals("The deadline's clearing is silent: ${heard.spoken()}", 0, cleared - appeared)
         }
     }
