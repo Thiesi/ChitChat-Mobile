@@ -9,6 +9,7 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import io.github.thiesi.chitchat.ChitChatApplication
 import io.github.thiesi.chitchat.MainActivity
+import io.github.thiesi.chitchat.core.server.displayHost
 import io.github.thiesi.chitchat.testing.ForeignTaskCallerActivity
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -51,7 +52,7 @@ class LinkEntryTest {
 
     private fun prefillOf(main: MainActivity): String? {
         var value: String? = null
-        instrumentation.runOnMainSync { value = ViewModelProvider(main)[ServerLinkViewModel::class.java].editorPrefill.value?.value }
+        instrumentation.runOnMainSync { value = ViewModelProvider(main)[ServerLinkViewModel::class.java].editorPrefill.value?.address?.displayHost() }
         return value
     }
 

@@ -17,7 +17,9 @@ the same rules on first launch only.
 - **Shown and filled hosts are canonical ASCII** (`ServerAddress.displayHost()`: IDNs as punycode, IPv6 in brackets,
   port 443 omitted), so a link-borne lookalike reads as `xn--…` in the field and every line. Unicode the person types
   keeps M2a's display.
-- **An invalid value is never shown, logged or kept.** Only the fact that the link had no usable address is used.
+- **An invalid value is never shown, logged or kept.** Only the fact that the link had no usable address is used:
+  `ServerLink` holds only the parsed address (no raw text), and its `toString` names only validity. Each arrival is
+  its own instance (identity equality), so an older one is never taken in place of a newer one.
 
 ## Entry (TL)
 
@@ -40,7 +42,7 @@ changes.
 | B. Step 2, field empty | Filled, with the same line. The line goes on edit or Continue; once per arrival (cleared stays cleared). |
 | C. Step 2, typed text | Left alone. The same normalized address does nothing; otherwise "The link you opened points to {host}." with Use this address and a 48dp Dismiss. |
 | D. Saved server, Server found | The same host does nothing; otherwise "Use a different server" opens filled. The saved server stays until Continue; Back returns to Server found. |
-| E. Sign-in or create form open | No navigation; the C line at the top of the form. Only Use this address leaves it (to step 2 filled), dropping its typed text. |
+| E. Sign-in or create form open | No navigation; the C line at the top of the form. Only Use this address leaves it (to step 2 filled), dropping its typed text. Leaving the form any way drops the offer, so it never reappears later. |
 | F. Signed in | The same host does nothing; otherwise the dialog "You're already signed in" (one OK). No request, no switch, no departure; its own window suppresses read and typing proof; never stacked. |
 | G. Invalid value | With step 2's field empty (A, B, D): "The link you opened didn't contain a server address you can use. Type it instead." Otherwise silent. |
 

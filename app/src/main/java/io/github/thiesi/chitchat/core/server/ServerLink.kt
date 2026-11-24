@@ -12,9 +12,13 @@ import kotlinx.coroutines.flow.asStateFlow
  * itself, and nothing switches while signed in (the phishing guard: any site can craft these links).
  *
  * [address] is [ServerAddress.parse]'s verdict on the raw value, exactly as for typed input: the link adds no acceptance
- * rule of its own. [value] is the raw text (for a field prefill); [address] is null when it isn't a usable address.
+ * rule of its own; null means the link carried no usable address. The raw value isn't kept (G: an invalid value is never
+ * shown, logged or kept), and [toString] names only validity. Not a data class: each arrival is its own instance, so
+ * equality is identity and an older arrival can never be taken in place of a newer one.
  */
-data class ServerLink(val value: String, val address: ServerAddress?) {
+class ServerLink private constructor(val address: ServerAddress?) {
+    override fun toString() = if (address == null) "ServerLink(invalid)" else "ServerLink(valid)"
+
     companion object {
         const val SCHEME = "chitchat"
         const val HOST = "connect"
@@ -41,7 +45,7 @@ data class ServerLink(val value: String, val address: ServerAddress?) {
         }
 
         /** The link [uri] carries, with [ServerAddress.parse]'s verdict, or null when it isn't a server link at all. */
-        fun from(uri: String?): ServerLink? = value(uri)?.let { ServerLink(it, (ServerAddress.parse(it) as? AddressResult.Valid)?.address) }
+        fun from(uri: String?): ServerLink? = value(uri)?.let { ServerLink((ServerAddress.parse(it) as? AddressResult.Valid)?.address) }
     }
 }
 

@@ -339,6 +339,11 @@ fun ChitChatApp(model: SettingsViewModel, auth: AuthViewModel, account: AccountV
                 else -> serverLinks.take(link)
             }
         }
+        // E's offer belongs to the open form: leaving it (Back, Use this address, a session change) drops the offer, so a
+        // stale one never reappears on a later visit. A configuration change keeps it (chosen is saved).
+        LaunchedEffect(chosen, session.phase) {
+            if (!chosen || session.phase != SessionPhase.ANONYMOUS) linkUi?.formOffer?.value = null
+        }
         // Reselect at a tab root scrolls that root to the top (navigation-shell.md); one count per tab.
         var reselects by rememberSaveable { mutableStateOf(listOf(0, 0, 0, 0)) }
         fun savedScope(of: ShellTab) = tabScopes.firstOrNull { it.startsWith("${of.name}=") }?.substringAfter('=')

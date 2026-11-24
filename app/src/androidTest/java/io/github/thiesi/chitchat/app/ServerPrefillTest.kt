@@ -17,6 +17,7 @@ import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
@@ -165,7 +166,8 @@ class ServerPrefillTest {
             capture("prefill-offer-light-$name")
             assertTrue("The same normalized address does nothing", sameDoesNothing)
             assertEquals("Typed text unchanged until the tap", "typed.example.org", field())
-            compose.onNodeWithTag("prefill_offer_use").performNativeTap()
+            // At 200% the offer's button sits below the fold: scroll it into view, then one native tap.
+            compose.onNodeWithTag("prefill_offer_use").performScrollTo().performNativeTap()
             compose.waitForIdle()
             assertEquals("other.example.org", field())
             assertTrue(shown("prefill_filled"))
@@ -211,6 +213,22 @@ class ServerPrefillTest {
             assertEquals("other.example.org", field())
             assertEquals("The saved server stays", address("saved.example.org"), env.store.value.server)
         }
+    }
+
+    /** E's offer goes with its form: Back to Server found and into the form again shows no stale offer (TL). */
+    @Test fun aFormOfferGoesWhenTheFormIsLeft() = run("saved.example.org") { env ->
+        compose.waitUntil(5_000) { shown("onboarding_server_card") }
+        compose.onNodeWithTag("onboarding_sign_in").performNativeTap()
+        compose.waitUntil(5_000) { shown("sign_in_username") }
+        compose.runOnIdle { env.links.offer(link("other.example.org")) }
+        compose.waitUntil(5_000) { shown("prefill_offer") }
+        androidx.test.espresso.Espresso.pressBack()
+        compose.waitUntil(5_000) { shown("onboarding_server_card") }
+        compose.runOnIdle { assertEquals("Dropped on leaving", null, env.ui.formOffer.value) }
+        compose.onNodeWithTag("onboarding_sign_in").performNativeTap()
+        compose.waitUntil(5_000) { shown("sign_in_username") }
+        assertFalse("No stale offer on a later visit", shown("prefill_offer"))
+        assertEquals("The saved server stays", address("saved.example.org"), env.store.value.server)
     }
 
     // F: signed in. A dialog for another host (never stacked, no request); the same host does nothing; it takes window focus.

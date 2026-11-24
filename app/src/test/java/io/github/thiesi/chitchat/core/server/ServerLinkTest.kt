@@ -32,12 +32,12 @@ class ServerLinkTest {
     }
 
     @Test fun acceptanceIsServerAddressParseExactlyNeverWider() {
-        // A value parse rejects keeps the raw text but has no address: the link widens nothing.
+        // A value parse rejects is still a server link, with no address: the link widens nothing.
         for (value in listOf("http%3A%2F%2Fa.org", "a.org%2Fpath", "user%40a.org", "a%20b.org", "a.org%3Fq%3D1")) {
             val link = ServerLink.from(link("server=$value"))
             assertTrue(value, link != null)
             assertNull(value, link?.address)
-            assertTrue(value, ServerAddress.parse(link!!.value) is AddressResult.Invalid)
+            assertTrue(value, ServerAddress.parse(ServerLink.value(link("server=$value"))!!) is AddressResult.Invalid)
         }
         // https:// typed by hand is accepted by parse, so the link value is too, with the same verdict.
         assertEquals(ServerAddress.parse("https://a.org"), ServerLink.from(link("server=https%3A%2F%2Fa.org"))?.address?.let { AddressResult.Valid(it) })
@@ -50,6 +50,28 @@ class ServerLinkTest {
         assertEquals("chat.example.org:8443", ServerLink.from(link("server=chat.example.org%3A8443"))?.address?.displayHost())
         assertEquals("Port 443 is omitted", "chat.example.org", ServerLink.from(link("server=chat.example.org%3A443"))?.address?.displayHost())
         assertEquals("[2001:db8::1]", ServerLink.from(link("server=%5B2001%3Adb8%3A%3A1%5D"))?.address?.displayHost())
+    }
+
+    /** TL, G: an accidental log of the object must not leak the raw value, valid or not. */
+    @Test fun toStringNeverCarriesTheRawValue() {
+        val invalid = ServerLink.from(link("server=secret%20phish%2Fpath"))!!
+        val valid = ServerLink.from(link("server=private.example.org"))!!
+        assertEquals("ServerLink(invalid)", invalid.toString())
+        assertEquals("ServerLink(valid)", valid.toString())
+        for (text in listOf(invalid.toString(), valid.toString())) {
+            assertFalse(text, "secret" in text || "phish" in text || "private" in text || "example" in text)
+        }
+    }
+
+    @Test fun eachArrivalIsItsOwnLink() {
+        val first = ServerLink.from(link("server=a.org"))!!
+        val again = ServerLink.from(link("server=a.org"))!!
+        assertEquals(first.address, again.address)
+        assertFalse("The same text twice is two arrivals", first == again)
+        val pending = PendingServerLink()
+        pending.offer(first); pending.offer(again)
+        assertFalse("The older arrival can't be taken in place of the newer", pending.take(first))
+        assertTrue(pending.take(again))
     }
 
     @Test fun aNewerLinkReplacesAnOlderOneAndIsTakenOnce() {
