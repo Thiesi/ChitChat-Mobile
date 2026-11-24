@@ -138,6 +138,10 @@ class RatePresentationTest {
         flow("rate-broadcast-dark-default", dm = false, dark = true, 1f, reply = true, expect = FULL, broadcast = true)
     @Test fun roomBroadcastDarkFont200() =
         flow("rate-broadcast-dark-font200", dm = false, dark = true, 2f, reply = true, expect = SHORT, broadcast = true)
+    // TL (#364): a realistic two-line draft in the send set, the path that hid the broadcast line at 200% portrait with
+    // the keyboard down. Asserts only: the short form, never hidden outside compact with the keyboard up.
+    @Test fun roomSendTwoLineDraftFont200() =
+        flow(null, dm = false, dark = false, 2f, reply = true, expect = SHORT, draftText = "Unsent fixture that wraps onto two lines")
     @Test fun roomBroadcastUnknownWait() =
         flow("rate-broadcast-unknown-light-default", dm = false, dark = false, 1f, known = false, expect = FULL, broadcast = true)
 
@@ -145,9 +149,10 @@ class RatePresentationTest {
     private fun flow(capture: String?, dm: Boolean, dark: Boolean, fontScale: Float, expect: RateLineForm, reply: Boolean = false,
         ping: Boolean = false, known: Boolean = true, landscape: Boolean = false, keyboard: Boolean = false,
         noStatusRow: Boolean = false, details: Boolean = false, replyLater: Boolean = false, visibleTap: Boolean = false,
-        landscapeCase: Char? = null, broadcast: Boolean = false) {
+        landscapeCase: Char? = null, broadcast: Boolean = false, draftText: String? = null) {
         val name = capture ?: "rate-room-reply-during-wait"
         form = null
+        landscapeRun = landscape
         FontScaleTestActivity.requestedFontScale = fontScale
         val sessions = TestSessions()
         val api = NativeChatFixtures(sessions)
@@ -229,7 +234,7 @@ class RatePresentationTest {
             // line: the chip settled, the keyboard confirmed down, idle (TL).
             val input = if (dm) "dm_composer" else "conversation_composer"
             val send = if (dm) "dm_send" else "conversation_send"
-            val draft = if (ping) "/ping Peer fixture" else if (dm) "Unsent direct fixture"
+            val draft = draftText ?: if (ping) "/ping Peer fixture" else if (dm) "Unsent direct fixture"
                 else if (broadcast) "Unsent fixture for @room" else "Unsent fixture"
             compose.runOnIdle { if (dm) thread.updateDraft(draft) else room.updateDraft(draft) }
             keyboardDown()
@@ -521,7 +526,11 @@ class RatePresentationTest {
     private fun lineOrDot(name: String, moment: String, detailsLabel: String) {
         val drawn = lineDrawn()
         check(drawn || detailsState(detailsLabel) != null) { "$name: no wait line and no Details dot $moment" }
+        // TL (#364): never hidden outside compact with the keyboard up (the PL's J found it at 200% portrait). In this
+        // fixture only the 200% landscape cases are compact (the screen's content height under 240dp).
+        check(drawn || (landscapeRun && imeBottom > 0)) { "$name: hidden outside compact with the keyboard up $moment" }
     }
+    @Volatile private var landscapeRun = false
 
     private fun formIs(name: String, expect: RateLineForm, detailsLabel: String) {
         val drawn = when { !lineDrawn() -> HIDDEN; form?.first == true -> SHORT; else -> FULL }

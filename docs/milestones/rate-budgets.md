@@ -228,6 +228,11 @@ local gate's) is definite.
   - A known wait also ends at its deadline; an unknown one on the next edit or on leaving, as for send.
 - **Captures:** `rate-broadcast-*` (light and dark × default and 200%, the unknown variant at light default), collected
   into `rate-presentation`.
+- **An engine fix in #323b1's `RateWaitSlot` (PL's J on 734417c, TL):** hidden was decided by the timeline-versus-short
+  comparison alone, so a realistic two-line draft at 200% portrait with the keyboard down showed only the Details dot.
+  Hidden now needs `hiddenAllowed` (compact with the keyboard up, the TL's amended condition 3) as well; everywhere else
+  the line is full (with a 48dp timeline row) or short (the timeline absorbs it). A two-line send-set case and a "never
+  hidden outside compact with the keyboard up" assert at every check cover it.
 
 ## #323b3b (next)
 

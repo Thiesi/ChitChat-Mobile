@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -607,7 +608,10 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         io.github.thiesi.chitchat.core.ui.RateWaitSlot(rateFit, session, rateLimit, rateKnown, rateUnknown, rateWindow, rateBoxWidth - 32.dp, 6.dp,
             Modifier.fillMaxWidth().padding(horizontal = 16.dp), parity = state.sendLimitRepeats % 2 == 1,
             shortKnown = if (rateBroadcast) R.string.rate_wait_broadcast_short else R.string.rate_wait_short,
-            shortUnknown = if (rateBroadcast) R.string.rate_wait_broadcast_short_unknown else R.string.rate_wait_short_unknown)
+            shortUnknown = if (rateBroadcast) R.string.rate_wait_broadcast_short_unknown else R.string.rate_wait_short_unknown,
+            // TL's amended condition 3: hidden only in compact with the keyboard up (#364).
+            hiddenAllowed = compact && androidx.compose.foundation.layout.WindowInsets.ime
+                .getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0)
         }
         io.github.thiesi.chitchat.core.ui.ReceivedViewerHost(received, settled = state.loaded && !state.busy) { id ->
             state.messages.firstOrNull { it.attachment?.id == id && !it.deleted }?.let { message ->

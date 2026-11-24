@@ -194,7 +194,9 @@ fun Modifier.rateFitTimeline(fit: RateLineFit, window: Any): Modifier =
  * pass):
  * - **FULL** only if the timeline keeps one 48dp row beside the full line;
  * - **SHORT** if the short form still leaves the composer its natural height (the timeline absorbs it);
- * - **HIDDEN** otherwise (compact with the keyboard up): no text drawn; the screen lights the Details dot and puts the
+ * - **HIDDEN** only where [hiddenAllowed] (compact with the keyboard up, TL's amended condition 3; #364: the PL's J found
+ *   200% portrait with the keyboard down hidden, because this branch had no such gate) and even the short form doesn't
+ *   fit: no text drawn; the screen lights the Details dot and puts the
  *   full line first in Details. A drawn line with the timeline at 0 may be hiding a squeeze, so that reads HIDDEN. The
  *   node stays the carrier as a 1dp full-width strip at its place, directly above the composer block (TL's branch 2: a
  *   zero-height node announced nothing on run 45233308933); the one accepted extra swipe stop, in this rare state.
@@ -233,7 +235,7 @@ private val ZeroFootprintStrip = Modifier.layout { measurable, constraints ->
 fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotice?, @StringRes known: Int,
     @StringRes unknown: Int, window: Any, availableWidth: Dp, spacing: Dp, modifier: Modifier = Modifier,
     parity: Boolean = false, @StringRes shortKnown: Int = R.string.rate_wait_short,
-    @StringRes shortUnknown: Int = R.string.rate_wait_short_unknown) {
+    @StringRes shortUnknown: Int = R.string.rate_wait_short_unknown, hiddenAllowed: Boolean = false) {
     var last by remember(notice) { mutableStateOf<RateLineForm?>(null) }
     var decided by remember(notice, window) { mutableStateOf<RateLineForm?>(null) }
     val now = current(session, notice)
@@ -245,7 +247,7 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     val timeline = fit.timeline
     val fresh = if (full == null || short == null) null else decided ?: if (timeline?.first == window) {
         val drawn = fit.lineSlot
-        if (drawn > 0 && timeline.second == 0) RateLineForm.HIDDEN
+        if (drawn > 0 && timeline.second == 0) (if (hiddenAllowed) RateLineForm.HIDDEN else RateLineForm.SHORT)
         else with(density) {
             val widthPx = availableWidth.roundToPx().coerceAtLeast(1)
             fun height(text: String) = measurer.measure(AnnotatedString(text), style, constraints = Constraints(maxWidth = widthPx)).size.height
@@ -253,7 +255,8 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
             val spacingPx = spacing.roundToPx()
             when {
                 absent >= height(full) + spacingPx + 48.dp.roundToPx() -> RateLineForm.FULL
-                absent >= height(short) + spacingPx -> RateLineForm.SHORT
+                // Outside compact with the keyboard up the short form always shows (the timeline absorbs it).
+                !hiddenAllowed || absent >= height(short) + spacingPx -> RateLineForm.SHORT
                 else -> RateLineForm.HIDDEN
             }
         }
