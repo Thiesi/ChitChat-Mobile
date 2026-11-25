@@ -114,6 +114,13 @@ def load_record(repo, run):
 
 def body(repo, run, record):
     marker = "<!-- api36-observation: " + str(run["id"]) + " -->"
+    if record.get("unreadable"):
+        # #362: say what's known: the status couldn't be read, not that the run had no tests.
+        return "\n".join([marker, "**API36 observation: status unreadable** for `" + record["head"] + "`.", "",
+            "The run's status artifact couldn't be read (`" + record["unreadable"] + "`), so its counts aren't known here. "
+            f"The [original run and retained reports](https://github.com/{repo}/actions/runs/{run['id']}) hold the result.", "",
+            "The observation is separate from the API35 merge gate. Original failures remain failed; no test was retried. "
+            "Other or incomplete failures block via api36-product-defects. API36/current-Android release acceptance remains required."])
     lines = [marker, "**API36 observation: " + record["disposition"] + "** for `" + record["head"] + "`.",
         "", f"Original emulator/test step: **{record['originalOutcome']}**; {record['tests']} tests, "
         f"{record['failures']} failures, {record['skipped']} skipped. "
@@ -140,11 +147,21 @@ def report(repo, run_id):
     if len(prs) != 1 or type(prs[0]["number"]) is not int or prs[0]["number"] <= 0:
         raise ValueError("Ambiguous original PR")
     number = prs[0]["number"]
-    try:
-        record = load_record(repo, run)
-    except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile):
+    # #362: one bounded re-read of the status artifact (a transient fetch failure posted "incomplete, 0 tests" for a
+    # complete status); the tests themselves are never rerun.
+    unreadable = None
+    for _ in range(2):
+        try:
+            record = load_record(repo, run)
+            unreadable = None
+            break
+        except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile) as error:
+            unreadable = type(error).__name__
+    if unreadable is not None:
+        # The exception class only, from this fixed set: no message, URL or body reaches the log or the comment.
+        print("API36 status unreadable: " + unreadable)
         record = dict(head=run["head_sha"], disposition="incomplete", originalOutcome="unknown", tests=0,
-                      failures=0, skipped=0, failedTests=[])
+                      failures=0, skipped=0, failedTests=[], unreadable=unreadable)
     if record["disposition"] == "passed":
         return "passed_no_comment"
     comment = body(repo, run, record)
