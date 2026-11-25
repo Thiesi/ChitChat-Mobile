@@ -130,7 +130,8 @@ class RateSearchPresentationTest {
                 announcements(heard, sentinel, "message_search_rate_line",
                     refuse = { ops.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 300); model.search(entry) },
                     retry = { model.retry(checkNotNull(model.state.value.failedAttempt)) },
-                    clear = { ops.failure = null; model.search(entry) }, idle = { !model.state.value.busy })
+                    clear = { ops.failure = null; model.search(entry) }, idle = { !model.state.value.busy },
+                    whileShown = { realRows("with the line shown"); lineOrder() })
                 return@use
             }
             // Review of 027dc35: the results scrolled to their end first; the line must still show (it's outside the list).
@@ -209,13 +210,14 @@ class RateSearchPresentationTest {
 
     private fun announcements(heard: io.github.thiesi.chitchat.testing.LiveAnnouncements,
         sentinel: androidx.compose.runtime.MutableIntState, tag: String, refuse: () -> Unit, retry: () -> Unit,
-        clear: () -> Unit, idle: () -> Boolean) {
+        clear: () -> Unit, idle: () -> Boolean, whileShown: () -> Unit = {}) {
         assertEquals("The idle carrier says nothing", null, description(tag))
         realEmptyCarrier(heard, tag)
         val start = heard.mark(compose, sentinel)
         compose.runOnIdle(refuse)
         compose.waitUntil(5_000) { shown(tag) == full }
         heard.awaitCounted(compose, start + 1)
+        whileShown()
         val appeared = heard.mark(compose, sentinel)
         val before = description(tag)
         compose.runOnIdle(retry) // A refused retry: the parity flips (every refusal does, #364).
@@ -258,11 +260,41 @@ class RateSearchPresentationTest {
             compose.onAllNodes(androidx.compose.ui.test.hasText(text)).fetchSemanticsNodes().any { it.boundsInWindow.height > 1f } }
         assertTrue("$state: a result row is shown", shown.isNotEmpty())
         val root = checkNotNull(automation.rootInActiveWindow) { "$state: no active window" }
+        // Compose's node provider doesn't implement findAccessibilityNodeInfosByText: walk the real tree, as a screen reader.
+        val nodes = mutableListOf<android.view.accessibility.AccessibilityNodeInfo>()
+        fun walk(node: android.view.accessibility.AccessibilityNodeInfo) {
+            nodes += node
+            for (i in 0 until node.childCount) node.getChild(i)?.let(::walk)
+        }
+        walk(root)
         shown.forEach { text ->
-            val real = root.findAccessibilityNodeInfosByText(text)
+            val real = nodes.filter { (it.text?.toString().orEmpty() + " " + it.contentDescription?.toString().orEmpty()).contains(text) }
             assertTrue("$state: \"$text\" has a real node visible to the user: ${real.map { it.isVisibleToUser }}",
                 real.any { it.isVisibleToUser })
         }
+    }
+
+    /** PL (#365): in the real tree's traversal the line comes after the query field and before the first result. */
+    private fun lineOrder() {
+        val nodes = realNodes()
+        fun at(label: String, match: (android.view.accessibility.AccessibilityNodeInfo) -> Boolean) =
+            nodes.indexOfFirst(match).also { assertTrue("$label isn't in the real tree", it >= 0) }
+        val query = at("The query field") { it.isEditable }
+        val line = at("The line") { it.contentDescription?.toString()?.trimEnd() == full }
+        val row = at("The first result") { (it.text?.toString().orEmpty() + it.contentDescription?.toString().orEmpty()).contains("Fixture result 1") }
+        assertTrue("Traversal: query $query, line $line, first result $row", query < line && line < row)
+    }
+
+    /** The active window's real accessibility nodes in depth-first order (Compose implements no text lookup). */
+    private fun realNodes(): List<android.view.accessibility.AccessibilityNodeInfo> {
+        val root = checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow) { "No active window" }
+        val nodes = mutableListOf<android.view.accessibility.AccessibilityNodeInfo>()
+        fun walk(node: android.view.accessibility.AccessibilityNodeInfo) {
+            nodes += node
+            for (i in 0 until node.childCount) node.getChild(i)?.let(::walk)
+        }
+        walk(root)
+        return nodes
     }
 
     /** PL (#365, #360's lesson): in the node tree and visible without scrolling: unclipped through every ancestor. */
