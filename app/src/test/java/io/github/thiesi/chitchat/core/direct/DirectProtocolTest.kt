@@ -233,13 +233,19 @@ class DirectProtocolTest {
         failure { direct.send(8, "Unknown draft") }; assertEquals(count, server.requestCount)
     }
 
+    /** #323b3b: direct_message_user_search's 429 gates only the people search; the session and other calls carry on. */
     @Test fun retryAfterGatesFurtherRequestsWithoutAutomaticPosting() = runTest {
         login(); context()
         server.enqueue(MockResponse.Builder().code(429).addHeader("Content-Type", "application/json").addHeader("Retry-After", "120")
             .body("""{"error":{"code":"rate_limited","message":"Private fixture"}}""").build())
         assertEquals(120L, failure { direct.search("Al") }.retryAfterSeconds); take()
-        assertTrue(sessions.state.value.retryAtMillis > System.currentTimeMillis()); val count = server.requestCount
-        assertEquals(429, failure { direct.read(8) }.status); assertEquals(count, server.requestCount)
+        assertEquals("No session-wide wait", 0L, sessions.state.value.retryAtMillis); var count = server.requestCount
+        val gated = failure { direct.search("Al") }
+        assertTrue("Refused locally, typed", gated.localGate); assertEquals(429, gated.status); assertEquals(count, server.requestCount)
+        server.enqueue(MockResponse.Builder().code(400).addHeader("Content-Type", "application/json")
+            .body("""{"error":{"code":"validation_error","message":"x"}}""").build()); count = server.requestCount
+        assertEquals("Another call still reaches the server", 400, failure { direct.read(8) }.status)
+        assertEquals(count + 1, server.requestCount); take()
     }
 
     @Test fun duplicateOrDescendingHistoryAndContradictoryRelationshipAreIncompatible() = runTest {

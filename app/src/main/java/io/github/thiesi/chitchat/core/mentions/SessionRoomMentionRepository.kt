@@ -11,7 +11,8 @@ internal class SessionRoomMentionRepository(private val sessions: SessionReposit
         val limit = request.limit
         val prefix = normalizedRoomMentionPrefix(room,request.prefix,limit)
         val access = sessions.openAccess(expected)
-        val users = sessions.authorized(access) { roomMentionUsers(room,prefix,access.userId,limit) }
+        val users = sessions.authorized(access, io.github.thiesi.chitchat.core.session.RateBudget.ROOM_MENTIONABLE_USER_SEARCH) {
+            roomMentionUsers(room,prefix,access.userId,limit) }
         return RoomMentionBatch(request,prefix,users)
     }
 }

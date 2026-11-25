@@ -304,6 +304,20 @@ class DirectStateTest {
         assertTrue(thread.state.value.newerAvailable)
     }
 
+    /** #323b3b (PL): direct_message_user_search's own refusal is its line, not the error; nothing is sent on its own. */
+    @Test fun aRateLimitedPeopleSearchShowsItsLineNotTheError() = runTest(dispatcher) {
+        inbox.foreground(); runCurrent()
+        api.searchFailure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", null)
+        inbox.updateQuery("Pe"); inbox.search(); runCurrent()
+        assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(io.github.thiesi.chitchat.core.session.RateBudget.DIRECT_MESSAGE_USER_SEARCH, false), inbox.state.value.searchLimit)
+        assertNull("Its line, not the error", inbox.state.value.searchError)
+        assertEquals("The query stays", "Pe", inbox.state.value.query)
+        assertEquals(1, inbox.state.value.searchLimitRepeats)
+        inbox.updateQuery("Pee"); assertNull("An unknown wait ends at the next edit", inbox.state.value.searchLimit)
+        api.searchFailure = null; inbox.search(); runCurrent()
+        assertNull(inbox.state.value.searchLimit); assertEquals(listOf(8L), inbox.state.value.results.map { it.id })
+    }
+
     @Test fun inboxCoalescesHintsAndRejectsObsoleteUncancellableSearchResults() = runTest(dispatcher) {
         inbox.foreground(); runCurrent(); assertNotNull(inbox.state.value.inbox)
         api.gate = CompletableDeferred(); api.gated = "inbox"; inbox.invalidate(); runCurrent()
@@ -673,8 +687,10 @@ class DirectStateTest {
         override suspend fun inbox(): DirectInbox {
             inboxes++; await("inbox"); return DirectInbox(emptyList(), privacy, DisplayPreferences())
         }
+        var searchFailure: ApiFailure? = null
         override suspend fun search(prefix: String, limit: Int): List<MessagePerson> {
             if (ignoreCancellation) withContext(NonCancellable) { searchGate?.await() } else searchGate?.await()
+            searchFailure?.let { throw it }
             return listOf(MessagePerson(8, "Peer"))
         }
         override suspend fun history(peerId: Long, beforeId: Long?, limit: Int): DirectPage {

@@ -9,7 +9,7 @@ internal class SessionMessageSearchRepository(private val sessions: SessionRepos
 
     override suspend fun search(expected: SessionState, request: MessageSearchRequest): MessageSearchPage {
         val access = sessions.openAccess(expected)
-        return sessions.authorized(access) {
+        return sessions.authorized(access, io.github.thiesi.chitchat.core.session.RateBudget.MESSAGE_SEARCH) {
             if (request.scope != MessageSearchScope.ROOMS) validatedDirectPrivacy(session.value.privacy)
             searchMessages(request, access.userId, access.csrf).also {
                 if (request.scope != MessageSearchScope.ROOMS) validatedDirectPrivacy(session.value.privacy)

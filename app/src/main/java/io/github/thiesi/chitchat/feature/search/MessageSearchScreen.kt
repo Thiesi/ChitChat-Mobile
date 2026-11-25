@@ -142,6 +142,9 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item {
                         Text(stringResource(R.string.message_search_scope_current, scopeName(value.scope)))
+                        // #323b3b (PL): message_search's own wait, in place of message_search_rate; the persistent carrier.
+                        io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(expected, value.rateLimit, R.string.rate_wait_search,
+                            R.string.rate_wait_search_unknown, "message_search_rate_line", parity = value.rateRepeats % 2 == 1)
                         value.error?.let { failure ->
                             InlineError(stringResource(when {
                                 failure.status == 400 -> R.string.message_search_validation

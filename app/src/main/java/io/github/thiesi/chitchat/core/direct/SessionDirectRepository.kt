@@ -26,7 +26,7 @@ internal class SessionDirectRepository(private val sessions: SessionRepository) 
             DirectContext(peer, relationship, privacy, policy.display, policy.mutedEverywhere)
         }
     }
-    override suspend fun search(prefix: String, limit: Int) = using { directUsers(prefix, limit, it.userId) }
+    override suspend fun search(prefix: String, limit: Int) = using(RateBudget.DIRECT_MESSAGE_USER_SEARCH) { directUsers(prefix, limit, it.userId) }
     override suspend fun history(peerId: Long, beforeId: Long?, limit: Int) = using { directHistory(peerId, beforeId, limit, it.userId) }
     override suspend fun window(peerId: Long, lower: Long, upper: Long?) = using { access ->
         readCanonicalDirectWindow(peerId, access.userId, lower, upper) { before, limit ->

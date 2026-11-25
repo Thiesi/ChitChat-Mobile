@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.session.isRateBudgetRefusal
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.search.*
 import io.github.thiesi.chitchat.core.session.SessionPhase
@@ -47,6 +48,10 @@ data class MessageSearchState(
     val targetBinding: MessageSearchTargetBinding? = null,
     val failedAttempt: MessageSearchAttempt? = null,
     val error: ApiFailure? = null,
+    /** #323b3b: message_search's own refusal (PL): its line in place of the error; query, results and Retry stay. */
+    val rateLimit: io.github.thiesi.chitchat.core.session.RateLimitNotice? = null,
+    /** #323b3b: every refusal flips the line's spoken parity (one announcement per refused search). */
+    val rateRepeats: Int = 0,
     val inputTooLong: Boolean = false,
 ) {
     val busy get() = pending != null
@@ -112,15 +117,17 @@ class MessageSearchViewModel(private val operations: MessageSearchOperations,
         if (value == mutable.value.query && !mutable.value.inputTooLong) return true
         inputRevision++
         retireSelection()
+        // An unknown wait ends at the next interaction; a known one at its deadline (#323b3b).
         mutable.value = mutable.value.copy(query = value, inputTooLong = false, selection = null,
-            failedAttempt = null, error = null)
+            failedAttempt = null, error = null, rateLimit = mutable.value.rateLimit?.takeIf { it.knownWait })
         return true
     }
     fun scope(entry: MessageSearchEntry, value: MessageSearchScope) {
         if (usable(entry) && mutable.value.scope != value) {
             inputRevision++
             retireSelection()
-            mutable.value = mutable.value.copy(scope = value, selection = null, failedAttempt = null, error = null)
+            mutable.value = mutable.value.copy(scope = value, selection = null, failedAttempt = null, error = null,
+                rateLimit = mutable.value.rateLimit?.takeIf { it.knownWait })
         }
     }
     fun search(entry: MessageSearchEntry): MessageSearchAttempt? {
@@ -160,13 +167,19 @@ class MessageSearchViewModel(private val operations: MessageSearchOperations,
         val work = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
                 val reply = operations.search(entry.original, request)
-                if (current(attempt, token)) mutable.value = mutable.value.copy(results = MessageSearchResults(attempt, reply))
+                if (current(attempt, token)) mutable.value = mutable.value.copy(results = MessageSearchResults(attempt, reply), rateLimit = null)
             } catch (cancelled: CancellationException) {
                 if (current(attempt, token)) mutable.value = mutable.value.copy(results = null,
                     failedAttempt = attempt.takeIf { inputRevision == originalInputRevision }, error = ApiFailure(FailureKind.EXPIRED))
                 throw cancelled
             } catch (failure: ApiFailure) {
-                if (current(attempt, token)) {
+                if (current(attempt, token) && failure.isRateBudgetRefusal()) {
+                    // #323b3b (PL): the search's own policy refusal. Its line, not the error; the query and results stay,
+                    // nothing is sent on its own, and Retry stays an explicit press (refused locally during a known wait).
+                    mutable.value = mutable.value.copy(failedAttempt = attempt.takeIf { inputRevision == originalInputRevision },
+                        error = null, rateLimit = io.github.thiesi.chitchat.core.session.RateLimitNotice(io.github.thiesi.chitchat.core.session.RateBudget.MESSAGE_SEARCH, failure.retryAfterSeconds != null),
+                        rateRepeats = mutable.value.rateRepeats + 1)
+                } else if (current(attempt, token)) {
                     val denied = failure.kind in setOf(FailureKind.INCOMPATIBLE, FailureKind.EXPIRED) ||
                         failure.status in setOf(401, 403, 404) && failure.code != "csrf_failed"
                     mutable.value = mutable.value.copy(results = mutable.value.results.takeUnless { denied },

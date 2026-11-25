@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.github.thiesi.chitchat.core.mentions.*
 import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.session.isRateBudgetRefusal
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.session.SessionPhase
 import io.github.thiesi.chitchat.core.session.SessionState
@@ -53,6 +54,8 @@ data class CompletionState(val entryId: String? = null, val pane: CompletionPane
 /** One foreground pane, bounded ephemeral hints and safe GETs. No send/read/typing operations. */
 class CompletionViewModel(private val operations: RoomMentionOperations,
     private val now: () -> Long = System::currentTimeMillis) : ViewModel() {
+    /** #323b3b: room_mentionable_user_search refused; completion stays quiet until a lookup succeeds (PL ruling b). */
+    private var rateQuiet = false
     val session = operations.session
     private val mutable = MutableStateFlow(CompletionState())
     val state = mutable.asStateFlow()
@@ -102,7 +105,9 @@ class CompletionViewModel(private val operations: RoomMentionOperations,
         val room = target as CompletionTarget.Room
         val reserved = listOf("room", "here").filter { it.startsWith(token.prefix, ignoreCase = true) }
             .map { CompletionCandidate.Broadcast(it) }
-        mutable.value = mutable.value.copy(selection = choice, candidates = reserved, loading = true)
+        // #323b3b (PL ruling b): after the lookup's own refusal, completion stays quiet: nothing opens until a lookup
+        // succeeds (during a known wait the gate refuses locally, with no request), so no strip flashes and none goes stale.
+        mutable.value = mutable.value.copy(selection = choice, candidates = if (rateQuiet) emptyList() else reserved, loading = !rateQuiet)
         val attempt = sequence
         val request = RoomMentionRequest(room.id, token.prefix)
         val work = viewModelScope.launch(start = CoroutineStart.LAZY) {
@@ -118,10 +123,17 @@ class CompletionViewModel(private val operations: RoomMentionOperations,
                         "room","here" -> CompletionCandidate.Broadcast(person.username.lowercase())
                         else -> CompletionCandidate.Person(person.id,person.username)
                     } }
+                    rateQuiet = false
                     mutable.value = mutable.value.copy(candidates = (reserved+hints).distinctBy { it.username.lowercase() }.take(ROOM_MENTION_LIMIT))
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: ApiFailure) { if (selected(choice, attempt)) mutable.value = mutable.value.copy(failed = true) }
+            catch (failure: ApiFailure) {
+                if (failure.isRateBudgetRefusal()) {
+                    // Silence (PL): no line, no announcement, no status notice; an open strip closes; the draft is untouched.
+                    rateQuiet = true
+                    if (selected(choice, attempt)) mutable.value = mutable.value.copy(candidates = emptyList(), failed = false)
+                } else if (selected(choice, attempt)) mutable.value = mutable.value.copy(failed = true)
+            }
             finally {
                 if (selected(choice, attempt)) { queryJob = null; mutable.value = mutable.value.copy(loading = false) }
             }

@@ -153,6 +153,9 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
                 Text(stringResource(R.string.dm_search_help), style = MaterialTheme.typography.bodySmall)
                 if (state.invalidQuery) InlineError(stringResource(R.string.dm_search_help))
                 if (state.searching) CircularProgressIndicator()
+                // #323b3b (PL): the people search's own wait; the persistent carrier.
+                io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(session, state.searchLimit, R.string.rate_wait_search,
+                    R.string.rate_wait_search_unknown, "dm_search_rate_line", parity = state.searchLimitRepeats % 2 == 1)
                 state.searchError?.let { InlineError(directError(it)) }
                 if (state.searched && state.results.isEmpty()) Text(stringResource(R.string.dm_search_empty))
             }

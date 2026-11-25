@@ -121,13 +121,15 @@ class RoomMentionProtocolTest {
         assertTrue(sessions.state.value.refreshRequired)
         failure { repository.suggestions(original,target) }; assertEquals(3,server.requestCount)
     }
+    /** #323b3b: room_mentionable_user_search's 429 gates only the lookup (no session-wide wait), with no further query. */
     @Test fun rateLimitConsumesTheExistingSessionCooldownWithoutAnotherQuery() = runTest {
         val original=login()
         server.enqueue(MockResponse.Builder().code(429).addHeader("Content-Type","application/json").addHeader("Retry-After","30")
             .body("{\"error\":{\"code\":\"rate_limited\",\"message\":\"Private fixture\"}}").build())
         val bad=failure { repository.suggestions(original,target) }; take()
-        assertEquals(30L,bad.retryAfterSeconds); assertTrue(sessions.state.value.retryAtMillis>System.currentTimeMillis())
-        assertEquals(429,failure { repository.suggestions(original,target) }.status); assertEquals(3,server.requestCount)
+        assertEquals(30L,bad.retryAfterSeconds); assertEquals("No session-wide wait",0L,sessions.state.value.retryAtMillis)
+        val gated=failure { repository.suggestions(original,target) }
+        assertTrue("Refused locally, typed",gated.localGate); assertEquals(429,gated.status); assertEquals(3,server.requestCount)
     }
     @Test fun unauthorizedRetiresTheSessionAndOriginalRequestCapability() = runTest {
         val original=login(); server.enqueue(errorResponse("session_invalidated",401))

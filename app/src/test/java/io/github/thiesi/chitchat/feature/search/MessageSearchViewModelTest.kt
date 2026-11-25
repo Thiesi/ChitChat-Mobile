@@ -174,6 +174,34 @@ class MessageSearchViewModelTest {
         operations.failure = null; val retried = checkNotNull(model.retry(failed)); assertNull(model.retry(failed)); runCurrent()
         assertSame(retried, results().attempt); assertEquals(2, operations.calls.size)
     }
+    /** #323b3b (PL): message_search's own refusal is its line, not the error; the query, results and Retry stay. */
+    @Test fun aRateLimitedSearchShowsItsLineKeepsTheQueryAndResultsAndNeverResends() = runTest(dispatcher) {
+        val entry = open(); search(entry); runCurrent(); val shown = results()
+        operations.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 60)
+        val refused = checkNotNull(model.next(entry, shown) ?: model.search(entry)); runCurrent()
+        assertNull("Its line, not the error", model.state.value.error)
+        assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(io.github.thiesi.chitchat.core.session.RateBudget.MESSAGE_SEARCH, true), model.state.value.rateLimit)
+        assertSame("The results stay", shown, model.state.value.results)
+        assertEquals("original query", model.state.value.query)
+        assertSame("Retry stays an explicit press", refused, model.state.value.failedAttempt)
+        assertEquals(1, model.state.value.rateRepeats)
+        runCurrent(); assertEquals("Nothing is sent on its own", 2, operations.calls.size)
+        model.query(entry, "edited query")
+        assertNotNull("A known wait isn't dropped by an edit", model.state.value.rateLimit)
+        operations.failure = null; model.search(entry); runCurrent()
+        assertNull("A successful search ends it", model.state.value.rateLimit)
+    }
+
+    @Test fun anUnknownSearchWaitEndsAtTheNextEditAndAProxy429StaysAnError() = runTest(dispatcher) {
+        operations.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", null)
+        val entry = open(); search(entry); runCurrent()
+        assertEquals(io.github.thiesi.chitchat.core.session.RateLimitNotice(io.github.thiesi.chitchat.core.session.RateBudget.MESSAGE_SEARCH, false), model.state.value.rateLimit)
+        model.query(entry, "new"); assertNull("An unknown wait ends at the next interaction", model.state.value.rateLimit)
+        operations.failure = ApiFailure(FailureKind.HTTP, 429, null, 40); model.search(entry); runCurrent()
+        assertNull("A proxy's 429 isn't the policy's line", model.state.value.rateLimit)
+        assertEquals(429, model.state.value.error?.status)
+    }
+
     @Test fun editingAfterFailureRetiresTheOldRetryChoice() = runTest(dispatcher) {
         operations.failure = ApiFailure(FailureKind.HTTP, 400, "validation_error")
         val entry = open(); val failed = search(entry); runCurrent()

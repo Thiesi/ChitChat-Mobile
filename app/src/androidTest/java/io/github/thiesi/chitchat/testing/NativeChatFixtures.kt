@@ -221,7 +221,12 @@ internal class NativeChatFixtures(val sessions: TestSessions) {
         override suspend fun window(peerId: Long, lower: Long, upper: Long?) = DirectWindow(
             rows(peerId).filter { it.id >= lower && (upper == null || it.id <= upper) }, true, lower, lower > 1)
         override suspend fun inbox() = DirectInbox(emptyList(), privacy, policy.display)
-        override suspend fun search(prefix: String, limit: Int) = emptyList<MessagePerson>()
+        /** #323b3b: the people search's refusal, for the rate presentation test. */
+        var searchFailure: ApiFailure? = null
+        override suspend fun search(prefix: String, limit: Int): List<MessagePerson> {
+            searchFailure?.let { throw it }
+            return emptyList()
+        }
         override suspend fun send(peerId: Long, body: String, replyId: Long?): Long {
             sends++; sent += Triple(peerId, body, replyId)
             sendGate?.let { if (ignoreSendCancellation) withContext(NonCancellable) { it.await() } else it.await() }
