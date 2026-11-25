@@ -135,6 +135,13 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
             if (!ready) Text(stringResource(if (now < expected.retryAtMillis) R.string.message_search_rate else R.string.message_search_session),
                 Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall)
             if (value.busy) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("message_search_loading"))
+            // #323b3b (PL): message_search's own wait, in place of message_search_rate, on the persistent carrier. Outside
+            // the result list (review of 027dc35): Next and Previous sit below the list, so a refusal after scrolling the
+            // results must still show and announce; here it's always composed and in view, above the list.
+            io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(expected, value.rateLimit, R.string.rate_wait_search,
+                R.string.rate_wait_search_unknown, "message_search_rate_line", parity = value.rateRepeats % 2 == 1,
+                // TL (#348's A2): empty, it's the zero-footprint 1dp strip (no padding, no space, no stop); padded only drawn.
+                drawnPadding = PaddingValues(horizontal = 12.dp))
             val result = value.results
             val visible = result?.takeIf { privacyReady(it.attempt.request.scope, expected) }
             key(result) {
@@ -142,12 +149,6 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item {
                         Text(stringResource(R.string.message_search_scope_current, scopeName(value.scope)))
-                        // #323b3b (PL): message_search's own wait, in place of message_search_rate; the persistent carrier.
-                        // Brought into view when it appears (PL), so it's never left above a scrolled result list.
-                        val reveal = io.github.thiesi.chitchat.core.ui.rememberRateLineReveal()
-                        io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(expected, value.rateLimit, R.string.rate_wait_search,
-                            R.string.rate_wait_search_unknown, "message_search_rate_line", reveal.modifier,
-                            parity = value.rateRepeats % 2 == 1, onShown = reveal.onShown)
                         value.error?.let { failure ->
                             InlineError(stringResource(when {
                                 failure.status == 400 -> R.string.message_search_validation

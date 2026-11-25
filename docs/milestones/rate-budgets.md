@@ -263,8 +263,10 @@ local gate's) is definite.
 - **@-completion (PL ruling b):** silence. No line, no announcement, no status notice, the draft untouched; an open
   strip closes on the refusal, and completion stays quiet (not even the reserved names open) until a lookup succeeds,
   each refused locally with no request during a known wait.
-- **In view (PL):** each search line is brought into view when it appears and on each refused retry
-  (`rememberRateLineReveal`: no focus or caret change; a reveal before layout waits for the line's own positioning).
+- **In view (PL):** message search's line sits outside the result list, above it, so a refusal after scrolling the
+  results (Next and Previous are below the list) still shows and announces (review of 027dc35). The people search's
+  line is brought into view when it appears and on each refused retry (`rememberRateLineReveal`: no focus or caret
+  change; a reveal before layout waits for the line's own positioning).
 - **Captures:** `rate-search-{messages,people}-{light,dark}-{default,font200}` (PL list 9–10), collected into
   `rate-presentation`; each asserts the line and the query field fully in view without scrolling. The announcement
   contract (one at appearance, one per refused retry, none on clearing, a silent idle carrier) is asserted for both.

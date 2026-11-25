@@ -13,6 +13,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
@@ -117,11 +118,13 @@ class RateSearchPresentationTest {
                     clear = { ops.failure = null; model.search(entry) }, idle = { !model.state.value.busy })
                 return@use
             }
+            // Review of 027dc35: the results scrolled to their end first; the line must still show (it's outside the list).
+            compose.onNodeWithTag("message_search_results").performScrollToIndex(3)
             compose.runOnIdle { ops.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 300); model.search(entry) }
             compose.waitUntil(5_000) { model.state.value.rateLimit != null && !model.state.value.busy }
-            compose.waitUntil(5_000) { description("message_search_rate_line") == full }
-            capture(name("messages", dark, scale))
-            assertEquals(full, description("message_search_rate_line"))
+            capture(name("messages", dark, scale)) // Before any check (PL), so a failing case keeps its image.
+            compose.waitUntil(5_000) { shown("message_search_rate_line") == full }
+            assertEquals(full, shown("message_search_rate_line"))
             assertInView("message_search_rate_line"); assertInView("message_search_query")
             assertTrue("The results stay", model.state.value.results != null)
             assertTrue("No error line beside it", model.state.value.error == null)
@@ -165,9 +168,9 @@ class RateSearchPresentationTest {
                 inbox.updateQuery("Pe"); inbox.search()
             }
             compose.waitUntil(5_000) { inbox.state.value.searchLimit != null && !inbox.state.value.searching }
-            compose.waitUntil(5_000) { description("dm_search_rate_line") == full }
-            capture(name("people", dark, scale))
-            assertEquals(full, description("dm_search_rate_line"))
+            capture(name("people", dark, scale)) // Before any check (PL).
+            compose.waitUntil(5_000) { shown("dm_search_rate_line") == full }
+            assertEquals(full, shown("dm_search_rate_line"))
             assertInView("dm_search_rate_line"); assertInView("dm_search_input")
             assertEquals("The query stays", "Pe", inbox.state.value.query)
         }
@@ -193,13 +196,15 @@ class RateSearchPresentationTest {
         sentinel: androidx.compose.runtime.MutableIntState, tag: String, refuse: () -> Unit, retry: () -> Unit,
         clear: () -> Unit, idle: () -> Boolean) {
         assertEquals("The idle carrier says nothing", null, description(tag))
+        realEmptyCarrier(heard, tag)
         val start = heard.mark(compose, sentinel)
         compose.runOnIdle(refuse)
-        compose.waitUntil(5_000) { description(tag) == full }
+        compose.waitUntil(5_000) { shown(tag) == full }
         heard.awaitCounted(compose, start + 1)
         val appeared = heard.mark(compose, sentinel)
-        compose.runOnIdle(retry) // A refused retry.
-        compose.waitUntil(5_000) { description(tag) == "$full " }
+        val before = description(tag)
+        compose.runOnIdle(retry) // A refused retry: the parity flips (every refusal does, #364).
+        compose.waitUntil(5_000) { description(tag) != before && shown(tag) == full }
         heard.awaitCounted(compose, appeared + 1)
         val retried = heard.mark(compose, sentinel)
         compose.runOnIdle(clear) // A successful search clears it.
@@ -212,6 +217,22 @@ class RateSearchPresentationTest {
         assertEquals("Clearing is silent: ${heard.spoken()}", 0, cleared - retried)
     }
 
+    /**
+     * TL (#348's A2, for #365's moved carrier): exactly one real accessibility node with a live region and no text or
+     * description, the carrier's width and 1dp tall, visible, not focusable or clickable (no swipe stop).
+     */
+    private fun realEmptyCarrier(heard: io.github.thiesi.chitchat.testing.LiveAnnouncements, tag: String) {
+        val node = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().single()
+        val width = node.size.width
+        val oneDp = kotlin.math.round(context.resources.displayMetrics.density).toInt().coerceAtLeast(1)
+        assertTrue("$tag: zero footprint means a 1dp node, not ${node.size}", kotlin.math.abs(node.size.height - oneDp) <= 1)
+        val all = heard.emptyLiveNodes()
+        val carrier = all.filter { kotlin.math.abs(it.width - width) <= 1 && kotlin.math.abs(it.height - oneDp) <= 1 }
+        assertEquals("$tag: one real empty carrier ${width}x${oneDp}px: $all", 1, carrier.size)
+        val real = carrier.single()
+        assertTrue("$tag: the real carrier $real", real.visibleToUser && !real.focusable && !real.screenReaderFocusable && !real.clickable)
+    }
+
     /** PL (#365, #360's lesson): in the node tree and visible without scrolling: unclipped through every ancestor. */
     private fun assertInView(tag: String) {
         val node = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().single()
@@ -219,6 +240,9 @@ class RateSearchPresentationTest {
         assertTrue("$tag isn't fully in view: $shown, ${node.size}", node.size.height > 1 &&
             kotlin.math.abs(shown.height - node.size.height) <= 1f && kotlin.math.abs(shown.width - node.size.width) <= 1f)
     }
+
+    /** The spoken line without its parity space. */
+    private fun shown(tag: String) = description(tag)?.trimEnd()
 
     private fun description(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
         .singleOrNull()?.config?.getOrNull(SemanticsProperties.ContentDescription)?.singleOrNull()
