@@ -39,6 +39,18 @@ enum class RateBudget {
      */
     ROOM_BROADCAST_MENTION,
 
+    /** `message_search`: `public/api/v1/search/messages.php:23–24`, before the search (#323b3b). */
+    MESSAGE_SEARCH,
+
+    /** `direct_message_user_search`: `public/api/v1/direct-messages/users.php:21–22`, before the lookup (#323b3b). */
+    DIRECT_MESSAGE_USER_SEARCH,
+
+    /**
+     * `room_mentionable_user_search`: `public/api/v1/rooms/mentionable-users.php:21–22`, before the lookup (#323b3b). The
+     * @-completion goes quiet during its wait (PL): no line, no announcement, no status notice, the draft untouched.
+     */
+    ROOM_MENTIONABLE_USER_SEARCH,
+
     /** `direct_message_send`: `public/api/v1/direct-messages/send.php:23–24`, before DirectMessageService. */
     DIRECT_MESSAGE_SEND,
 

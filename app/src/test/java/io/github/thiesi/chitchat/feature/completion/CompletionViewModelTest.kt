@@ -86,6 +86,23 @@ class CompletionViewModelTest {
         api.gates.getValue(requestKey(prefix="An")).complete(Unit);runCurrent()
         assertSame(fresh,choice());assertEquals(listOf("Bob"),candidates());assertFalse(model.state.value.failed)
     }
+    /**
+     * #323b3b (PL ruling b): room_mentionable_user_search's own refusal makes completion quiet: the open strip closes, no
+     * failed notice, and nothing opens again (not even the reserved names) until a lookup succeeds.
+     */
+    @Test fun aRateLimitedLookupClosesTheStripAndStaysQuietUntilALookupSucceeds()=runTest(dispatcher) {
+        val pane=room()
+        api.failures[requestKey(prefix="An")]=ApiFailure(FailureKind.HTTP,429,"rate_limited",60)
+        suggest(pane)
+        assertTrue("The strip closed",candidates().isEmpty()); assertFalse("No failed notice",model.state.value.failed)
+        api.failures[requestKey(prefix="r")]=ApiFailure(FailureKind.HTTP,429,"rate_limited",59,localGate=true)
+        model.input(pane,edit("@r")); runCurrent()
+        assertTrue("Quiet: the reserved names don't open before a lookup succeeds",candidates().isEmpty())
+        advanceTimeBy(150); runCurrent(); assertTrue(candidates().isEmpty()); assertFalse(model.state.value.failed)
+        api.failures.clear(); model.input(pane,edit("@ro")); runCurrent(); advanceTimeBy(150); runCurrent()
+        assertTrue("A successful lookup ends the quiet",candidates().contains("room"))
+    }
+
     @Test fun queryFailureIsRetainedWithoutAutomaticReplayAndExplicitRetryGetsANewReference()=runTest(dispatcher) {
         api.failures[requestKey(prefix="An")]=ApiFailure(FailureKind.NETWORK)
         val pane=room();val old=suggest(pane);assertTrue(model.state.value.failed)

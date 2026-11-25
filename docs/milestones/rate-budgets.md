@@ -247,7 +247,36 @@ local gate's) is definite.
   - **Asserts:** the line's drawn height equals its laid-out text height (`didOverflowHeight` from its own text layout)
     wherever it's drawn; `unclipped` compares the ancestor-clipped `boundsInWindow` with the full size.
 
-## #323b3b (next)
+## #323b3b: search, people search and @-completion; the final unmapped list (TL plan, PL ruling, 2026-11-25)
 
-Message and people search, and the final unmapped list. After it, only proxy, non-JSON, bootstrap and revalidation 429s
-reach row 7.
+| Budget | Server policy | Consumed at (b2791a0), before any work | Client call site |
+| --- | --- | --- | --- |
+| `MESSAGE_SEARCH` | `message_search` | `search/messages.php:23–24` | message search |
+| `DIRECT_MESSAGE_USER_SEARCH` | `direct_message_user_search` | `direct-messages/users.php:21–22` | DM people search |
+| `ROOM_MENTIONABLE_USER_SEARCH` | `room_mentionable_user_search` | `rooms/mentionable-users.php:21–22` | room @-completion |
+
+- **Search and people search (PL):** "You've searched a lot recently. Try again in {wait}." (unknown: "…Try again
+  later.") replaces the old rate line in place, on the persistent carrier (polite live region, one trailing space
+  flipped per refusal). The query and results stay, nothing is sent on its own, and message search's Retry stays an
+  explicit press (refused locally during a known wait). A known wait ends at its deadline, an unknown one at the next
+  edit; a successful search ends either. A proxy's 429 keeps the old error.
+- **@-completion (PL ruling b):** silence. No line, no announcement, no status notice, the draft untouched; an open
+  strip closes on the refusal, and completion stays quiet (not even the reserved names open) until a lookup succeeds,
+  each refused locally with no request during a known wait.
+- **In view (PL):** message search's line sits outside the result list, above it, so a refusal after scrolling the
+  results (Next and Previous are below the list) still shows and announces (review of 027dc35). The people search's
+  line is brought into view when it appears and on each refused retry (`rememberRateLineReveal`: no focus or caret
+  change; a reveal before layout waits for the line's own positioning).
+- **Captures:** `rate-search-{messages,people}-{light,dark}-{default,font200}` (PL list 9–10), collected into
+  `rate-presentation`; each asserts the line and the query field fully in view without scrolling. The announcement
+  contract (one at appearance, one per refused retry, none on clearing, a silent idle carrier) is asserted for both.
+
+**The final unmapped list (condition 5).** After #323b3b, only proxy (non-JSON), bootstrap and revalidation 429s reach
+row 7 and the session-wide wait:
+- `push/subscribe.php`: `push_subscription_refresh` or `push_subscription_management`, two policies (#323a), unchanged
+  by design.
+- The anonymous auth flows (`register.php`, password reset, MFA login, TOTP, account restore, native auth): outside the
+  session, already typed on their own forms (AuthScreen's `rate_limited`, ResetPasswordForm's wait line), never row 7.
+- `guest_room_send`: guests are M7.
+- No client exists for `sessions_management`, MFA and TOTP management, moderation and admin, `application_icon_update`,
+  `username_change` or `policy_preview`.

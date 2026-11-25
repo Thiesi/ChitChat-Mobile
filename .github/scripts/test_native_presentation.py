@@ -646,15 +646,16 @@ class PresentationGateTests(unittest.TestCase):
             Path("rate-room-send-light-font200-landscape-ime.png"), Path("rate-room-ping-light-default.png"),
             Path("rate-room-send-unknown-light-default.png"), Path("rate-room-conversation-light-default.png"),
             Path("rate-room-send-light-font200-details.png"), Path("rate-room-send-light-font200-landscape-after-tap.png"),
-            Path("rate-broadcast-dark-font200.png"), Path("rate-broadcast-unknown-light-default.png"), Path("rate-fit-log.txt")]
+            Path("rate-broadcast-dark-font200.png"), Path("rate-broadcast-unknown-light-default.png"), Path("rate-fit-log.txt"),
+            Path("rate-search-messages-light-default.png"), Path("rate-search-people-light-default.png")]
         self.rate_files(files)
         self.assertEqual(4, runner.main()); self.assert_once()
         for path in files: self.copy.assert_any_call(path, runner.RATE_DESTINATION / path.name)
-        self.assertEqual(12, self.copy.call_count) # Ten captures, the fit log and the completion capture.
+        self.assertEqual(14, self.copy.call_count) # Twelve captures, the fit log and the completion capture.
 
     def test_excess_ambiguous_or_foreign_rate_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"rate-room-send-light-default-{n}.png") for n in range(22)],
+        for files in ([Path(f"rate-room-send-light-default-{n}.png") for n in range(30)],
             [Path("a/rate-room-ping-light-default.png"), Path("b/rate-room-ping-light-default.png")],
             # Not taken: a dark ping, a DM landscape shot, a 150% send.
             [Path("rate-room-ping-dark-default.png")], [Path("rate-dm-send-light-font200-landscape-ime.png")],

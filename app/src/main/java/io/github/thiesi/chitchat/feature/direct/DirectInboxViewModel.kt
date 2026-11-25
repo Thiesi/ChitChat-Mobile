@@ -10,6 +10,7 @@ import io.github.thiesi.chitchat.core.direct.DirectInbox
 import io.github.thiesi.chitchat.core.direct.DirectOperations
 import io.github.thiesi.chitchat.core.direct.validateDirectSearch
 import io.github.thiesi.chitchat.core.network.ApiFailure
+import io.github.thiesi.chitchat.core.session.isRateBudgetRefusal
 import io.github.thiesi.chitchat.core.network.FailureKind
 import io.github.thiesi.chitchat.core.realtime.RealtimeController
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
@@ -23,7 +24,9 @@ import kotlinx.coroutines.launch
 data class DirectInboxState(val inbox: DirectInbox? = null, val busy: Boolean = false, val stale: Boolean = true,
     val query: String = "", val results: List<MessagePerson> = emptyList(), val searched: Boolean = false,
     val searching: Boolean = false, val invalidQuery: Boolean = false, val error: ApiFailure? = null,
-    val searchError: ApiFailure? = null) { override fun toString() = "DirectInboxState" }
+    val searchError: ApiFailure? = null,
+    /** #323b3b: direct_message_user_search's own refusal (PL): its line in place of the error. */
+    val searchLimit: io.github.thiesi.chitchat.core.session.RateLimitNotice? = null, val searchLimitRepeats: Int = 0) { override fun toString() = "DirectInboxState" }
 
 class DirectInboxViewModel(private val operations: DirectOperations,
     private val realtime: RealtimeController? = null) : ViewModel() {
@@ -79,7 +82,8 @@ class DirectInboxViewModel(private val operations: DirectOperations,
     fun updateQuery(value: String) {
         searchJob?.cancel(); searchSequence++
         mutable.value = mutable.value.copy(query = value, results = emptyList(), searched = false,
-            searching = false, invalidQuery = false, searchError = null)
+            searching = false, invalidQuery = false, searchError = null,
+            searchLimit = mutable.value.searchLimit?.takeIf { it.knownWait }) // An unknown wait ends at the next edit.
     }
     fun search() {
         val state = mutable.value
@@ -92,9 +96,13 @@ class DirectInboxViewModel(private val operations: DirectOperations,
             try {
                 if (!valid()) return@launch
                 val users = operations.search(query)
-                if (valid()) mutable.value = mutable.value.copy(results = users, searched = true)
+                if (valid()) mutable.value = mutable.value.copy(results = users, searched = true, searchLimit = null)
             } catch (_: CancellationException) { /* No cross-account or obsolete-prefix results. */ }
-            catch (failure: ApiFailure) { if (valid()) mutable.value = mutable.value.copy(searchError = failure) }
+            catch (failure: ApiFailure) { if (valid()) mutable.value =
+                // #323b3b (PL): the lookup's own policy refusal is its line, not the error; nothing is sent on its own.
+                if (failure.isRateBudgetRefusal()) mutable.value.copy(searchLimit = io.github.thiesi.chitchat.core.session.RateLimitNotice(io.github.thiesi.chitchat.core.session.RateBudget.DIRECT_MESSAGE_USER_SEARCH,
+                    failure.retryAfterSeconds != null), searchLimitRepeats = mutable.value.searchLimitRepeats + 1)
+                else mutable.value.copy(searchError = failure) }
             finally { if (valid()) mutable.value = mutable.value.copy(searching = false) }
         }
     }

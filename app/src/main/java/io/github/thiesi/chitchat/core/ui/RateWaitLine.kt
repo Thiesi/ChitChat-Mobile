@@ -16,6 +16,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -349,4 +351,31 @@ fun rateHeaderCap(fit: RateLineFit, limit: Dp, natural: Int): Dp {
     val fitProbe = LocalRateLineFitProbe.current
     SideEffect { fitProbe?.invoke("cap natural=${natural}px yield=${yieldPx}px limit=$limit cap=$cap floor=$RateHeaderYieldFloor") }
     return cap
+}
+
+/** #365 (PL, as in the edit dialog): the [modifier] and [onShown] that bring a wait line into view. */
+class RateLineReveal(val modifier: Modifier, val onShown: (initial: Boolean) -> Unit)
+
+/**
+ * #365: brings a wait line in a scrolling screen into view when it appears and on each refused retry, with no focus or
+ * caret change. A reveal asked for while the line isn't drawn yet (its appearance: the 1dp strip still in place, or a
+ * screen reopened with the notice) waits for the line's own positioning at its drawn size and runs once (run 45562924472:
+ * revealing the strip left the 114px line off screen at 200%).
+ */
+@Composable
+fun rememberRateLineReveal(): RateLineReveal {
+    val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val pending = remember { booleanArrayOf(false) }
+    val drawnHeight = remember { intArrayOf(0) }
+    return remember {
+        RateLineReveal(Modifier.bringIntoViewRequester(requester).onGloballyPositioned {
+            drawnHeight[0] = it.size.height
+            if (pending[0] && it.size.height > 1) { pending[0] = false; scope.launch { requester.bringIntoView() } }
+        }) { _ ->
+            // Not drawn yet (the strip): wait for the drawn size; drawn already (a refused retry): reveal now.
+            if (drawnHeight[0] <= 1) pending[0] = true
+            else scope.launch { requester.bringIntoView() }
+        }
+    }
 }

@@ -152,13 +152,15 @@ class MessageSearchProtocolTest {
         assertTrue(sessions.state.value.refreshRequired)
         failure { repository.search(original, query) }; assertEquals(3, server.requestCount)
     }
+    /** #323b3b: message_search's 429 gates only the search (no session-wide wait); the next search is refused locally. */
     @Test fun rateLimitUsesTheSharedCooldownRatherThanASecondSearchTransport() = runTest {
         val original = login()
         server.enqueue(MockResponse.Builder().code(429).addHeader("Content-Type", "application/json").addHeader("Retry-After", "30")
             .body("""{"error":{"code":"rate_limited","message":"Private fixture"}}""").build())
         val bad = failure { repository.search(original, query) }; take()
-        assertEquals(30L, bad.retryAfterSeconds); assertTrue(sessions.state.value.retryAtMillis > System.currentTimeMillis())
-        assertEquals(429, failure { repository.search(original, query) }.status); assertEquals(3, server.requestCount)
+        assertEquals(30L, bad.retryAfterSeconds); assertEquals("No session-wide wait", 0L, sessions.state.value.retryAtMillis)
+        val gated = failure { repository.search(original, query) }
+        assertTrue("Refused locally, typed", gated.localGate); assertEquals(429, gated.status); assertEquals(3, server.requestCount)
     }
     @Test fun unauthorizedRetiresTheSessionAndOldSearchCannotPublish() = runTest {
         val original = login(); server.enqueue(errorResponse("session_invalidated", 401))

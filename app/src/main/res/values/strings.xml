@@ -219,6 +219,9 @@
     <string name="rate_wait_broadcast_unknown">You\'ve used @room or @here a lot recently. You can send without it now, or try again later. Your message is kept.</string>
     <string name="rate_wait_broadcast_short">Send without @room or @here, or try again in %1$s.</string>
     <string name="rate_wait_broadcast_short_unknown">Send without @room or @here, or try again later.</string>
+    <!-- #323b3b (PL): message and people search waits, in place of the old search rate line. -->
+    <string name="rate_wait_search">You\'ve searched a lot recently. Try again in %1$s.</string>
+    <string name="rate_wait_search_unknown">You\'ve searched a lot recently. Try again later.</string>
     <!-- #323b2 (PL): edit, delete and reaction waits in their dialogs (full line only). -->
     <string name="rate_wait_mutations">You\'ve changed a lot of messages and reactions recently. Try again in %1$s.</string>
     <string name="rate_wait_mutations_unknown">You\'ve changed a lot of messages and reactions recently. Try again later.</string>
