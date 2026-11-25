@@ -45,6 +45,7 @@ import io.github.thiesi.chitchat.testing.nativeAuthorImeBottom
 import io.github.thiesi.chitchat.testing.nativeAuthorSaveGeometry
 import io.github.thiesi.chitchat.testing.openTab
 import io.github.thiesi.chitchat.testing.performNativeTap
+import io.github.thiesi.chitchat.testing.caretToEnd
 import io.github.thiesi.chitchat.testing.tapNativeInput
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -113,10 +114,11 @@ class AuthorPresentationTest {
                     targets = ViewModelProvider(activity, MessageTargetViewModel.factory(api.lookups))[MessageTargetViewModel::class.java]
                     val settings = ViewModelProvider(activity, SettingsViewModel.factory(settingsStore))[SettingsViewModel::class.java]
                     val auth = ViewModelProvider(activity, AuthViewModel.factory(sessions))[AuthViewModel::class.java]
-                    activity.setContent {
+                    // #350: the caret drawn steadily in every capture (no blink phase), test-only.
+                    activity.setContent { androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalCursorBlinkEnabled provides false) {
                         Box(Modifier.fillMaxSize()) { TestChitChatApp(settings, auth, conversationModel = room, directInbox = inbox,
                             directThread = thread, notifications = notices, messageTargets = targets) }
-                    }
+                    } }
                 }
                 // Into the conversation, as the journeys do: sign in, Activity, the notification for the room or the DM.
                 compose.waitUntil(5_000) { sessions.state.value.phase == SessionPhase.ANONYMOUS }
@@ -198,6 +200,8 @@ class AuthorPresentationTest {
                 if ("editing" in only) {
                     compose.tapNativeInput("author_edit_body", { compose.nativeAuthorImeBottom() })
                     compose.waitForIdle()
+                    // #350 (PL): the editing capture shows the keyboard up and a caret, not where the tap landed.
+                    compose.caretToEnd("author_edit_body")
                     if (landscape) {
                         // PL J and TL (2026-11-23): in the compact layout (keyboard up, short and wide) the confirm shows its
                         // own label, as on main. "Save edit" is displayed, whole, above the keyboard, on one line beside Cancel.
