@@ -172,7 +172,8 @@ class RateWaitLineTest {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
                     Box(Modifier.weight(1f).fillMaxWidth().testTag("slot_timeline").then(if (measured) Modifier.rateFitTimeline(held, window) else Modifier))
                     RateWaitSlot(held, session(deadline), notice, R.string.rate_wait_messages, R.string.rate_wait_messages_unknown,
-                        window, 320.dp, 6.dp, Modifier.fillMaxWidth(), parity = repeats % 2 == 1)
+                        window, 320.dp, 6.dp, Modifier.fillMaxWidth(), parity = repeats % 2 == 1,
+                        hiddenAllowed = true) // The keyboard-up scenarios (#364): hidden only where even short won't fit.
                 }
                 Box(Modifier.fillMaxWidth().height(composerHeight).testTag("slot_composer"))
             }

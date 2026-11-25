@@ -500,8 +500,8 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     io.github.thiesi.chitchat.core.ui.RateWaitSlot(rateFit, session, rateLimit, R.string.rate_wait_messages,
                         R.string.rate_wait_messages_unknown, rateWindow, rateBoxWidth - 24.dp, 6.dp,
                         Modifier.fillMaxWidth().padding(horizontal = 12.dp), parity = state.sendLimitRepeats % 2 == 1,
-                        // TL's amended condition 3: hidden only in compact with the keyboard up (#364).
-                        hiddenAllowed = compact && androidx.compose.foundation.layout.WindowInsets.ime
+                        // TL and PL (#364): hidden only while the keyboard is up; with it down the line always shows.
+                        hiddenAllowed = androidx.compose.foundation.layout.WindowInsets.ime
                             .getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0)
                     }
                     io.github.thiesi.chitchat.core.ui.ReceivedViewerHost(received, settled = state.loaded && !state.busy) { id ->

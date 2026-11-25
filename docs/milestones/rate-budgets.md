@@ -230,9 +230,11 @@ local gate's) is definite.
   into `rate-presentation`.
 - **An engine fix in #323b1's `RateWaitSlot` (PL's J on 734417c, TL):** hidden was decided by the timeline-versus-short
   comparison alone, so a realistic two-line draft at 200% portrait with the keyboard down showed only the Details dot.
-  Hidden now needs `hiddenAllowed` (compact with the keyboard up, the TL's amended condition 3) as well; everywhere else
-  the line is full (with a 48dp timeline row) or short (the timeline absorbs it). A two-line send-set case and a "never
-  hidden outside compact with the keyboard up" assert at every check cover it.
+  Hidden now needs `hiddenAllowed`, the keyboard up (TL and PL; compact alone was too narrow: 200% portrait with a reply
+  chip and the keyboard up leaves the timeline nothing, as in #348). With the keyboard down the line is full (with a 48dp
+  timeline row) or short (the timeline absorbs it). In the packed keyboard-up state a refusal resolves to hidden, the app
+  hides the keyboard once, and the line returns unclipped with the composer at its baseline. "Never hidden with the
+  keyboard down" is asserted at every check, with a two-line send-set case.
 
 ## #323b3b (next)
 

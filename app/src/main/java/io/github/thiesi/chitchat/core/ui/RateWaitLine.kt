@@ -194,9 +194,10 @@ fun Modifier.rateFitTimeline(fit: RateLineFit, window: Any): Modifier =
  * pass):
  * - **FULL** only if the timeline keeps one 48dp row beside the full line;
  * - **SHORT** if the short form still leaves the composer its natural height (the timeline absorbs it);
- * - **HIDDEN** only where [hiddenAllowed] (compact with the keyboard up, TL's amended condition 3; #364: the PL's J found
- *   200% portrait with the keyboard down hidden, because this branch had no such gate) and even the short form doesn't
- *   fit: no text drawn; the screen lights the Details dot and puts the
+ * - **HIDDEN** only where [hiddenAllowed] (the keyboard is up, TL and PL, #364: the J found 200% portrait with the
+ *   keyboard down hidden, because this branch had no such gate) and even the short form doesn't fit (compact, or 200%
+ *   portrait with a reply chip, as in #348). A refused send then hides the keyboard once and the line returns. No text
+ *   drawn; the screen lights the Details dot and puts the
  *   full line first in Details. A drawn line with the timeline at 0 may be hiding a squeeze, so that reads HIDDEN. The
  *   node stays the carrier as a 1dp full-width strip at its place, directly above the composer block (TL's branch 2: a
  *   zero-height node announced nothing on run 45233308933); the one accepted extra swipe stop, in this rare state.
@@ -255,7 +256,7 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
             val spacingPx = spacing.roundToPx()
             when {
                 absent >= height(full) + spacingPx + 48.dp.roundToPx() -> RateLineForm.FULL
-                // Outside compact with the keyboard up the short form always shows (the timeline absorbs it).
+                // With the keyboard down the short form always shows (the timeline absorbs it).
                 !hiddenAllowed || absent >= height(short) + spacingPx -> RateLineForm.SHORT
                 else -> RateLineForm.HIDDEN
             }

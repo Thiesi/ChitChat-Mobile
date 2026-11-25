@@ -101,9 +101,10 @@ class RatePresentationTest {
     @Test fun roomSendLightDefault() = flow("rate-room-send-light-default", dm = false, dark = false, 1f, reply = true,
         expect = FULL, details = true, visibleTap = true)
     @Test fun roomSendLightFont200() = flow("rate-room-send-light-font200", dm = false, dark = false, 2f, reply = true,
-        expect = SHORT, details = true)
+        expect = SHORT, details = true, packed = true)
     @Test fun roomSendDarkDefault() = flow("rate-room-send-dark-default", dm = false, dark = true, 1f, reply = true, expect = FULL)
-    @Test fun roomSendDarkFont200() = flow("rate-room-send-dark-font200", dm = false, dark = true, 2f, reply = true, expect = SHORT)
+    @Test fun roomSendDarkFont200() = flow("rate-room-send-dark-font200", dm = false, dark = true, 2f, reply = true, expect = SHORT,
+        packed = true)
     // 2. DM composer with the send line: light and dark × default and 200% (short at 200%, as the rule picks).
     @Test fun dmSendLightDefault() = flow("rate-dm-send-light-default", dm = true, dark = false, 1f, expect = FULL)
     @Test fun dmSendLightFont200() = flow("rate-dm-send-light-font200", dm = true, dark = false, 2f, expect = SHORT)
@@ -133,15 +134,18 @@ class RatePresentationTest {
     @Test fun roomBroadcastLightDefault() =
         flow("rate-broadcast-light-default", dm = false, dark = false, 1f, reply = true, expect = FULL, broadcast = true)
     @Test fun roomBroadcastLightFont200() =
-        flow("rate-broadcast-light-font200", dm = false, dark = false, 2f, reply = true, expect = SHORT, broadcast = true)
+        flow("rate-broadcast-light-font200", dm = false, dark = false, 2f, reply = true, expect = SHORT, broadcast = true,
+            packed = true)
     @Test fun roomBroadcastDarkDefault() =
         flow("rate-broadcast-dark-default", dm = false, dark = true, 1f, reply = true, expect = FULL, broadcast = true)
     @Test fun roomBroadcastDarkFont200() =
-        flow("rate-broadcast-dark-font200", dm = false, dark = true, 2f, reply = true, expect = SHORT, broadcast = true)
+        flow("rate-broadcast-dark-font200", dm = false, dark = true, 2f, reply = true, expect = SHORT, broadcast = true,
+            packed = true)
     // TL (#364): a realistic two-line draft in the send set, the path that hid the broadcast line at 200% portrait with
     // the keyboard down. Asserts only: the short form, never hidden outside compact with the keyboard up.
     @Test fun roomSendTwoLineDraftFont200() =
-        flow(null, dm = false, dark = false, 2f, reply = true, expect = SHORT, draftText = "Unsent fixture that wraps onto two lines")
+        flow(null, dm = false, dark = false, 2f, reply = true, expect = SHORT, draftText = "Unsent fixture that wraps onto two lines",
+            packed = true)
     @Test fun roomBroadcastUnknownWait() =
         flow("rate-broadcast-unknown-light-default", dm = false, dark = false, 1f, known = false, expect = FULL, broadcast = true)
 
@@ -149,10 +153,9 @@ class RatePresentationTest {
     private fun flow(capture: String?, dm: Boolean, dark: Boolean, fontScale: Float, expect: RateLineForm, reply: Boolean = false,
         ping: Boolean = false, known: Boolean = true, landscape: Boolean = false, keyboard: Boolean = false,
         noStatusRow: Boolean = false, details: Boolean = false, replyLater: Boolean = false, visibleTap: Boolean = false,
-        landscapeCase: Char? = null, broadcast: Boolean = false, draftText: String? = null) {
+        landscapeCase: Char? = null, broadcast: Boolean = false, draftText: String? = null, packed: Boolean = false) {
         val name = capture ?: "rate-room-reply-during-wait"
         form = null
-        landscapeRun = landscape
         FontScaleTestActivity.requestedFontScale = fontScale
         val sessions = TestSessions()
         val api = NativeChatFixtures(sessions)
@@ -272,6 +275,18 @@ class RatePresentationTest {
             compose.waitUntil(5_000) { (if (dm) thread.state.value.sendLimit else room.state.value.sendLimit) != null }
             compose.waitForIdle()
             lineOrDot(name, "with the keyboard up", detailsLabel)
+            if (packed) {
+                // TL (#364): 200% portrait, a reply chip and the keyboard up: even the short form has no room, so the
+                // refusal resolves to hidden with the dot, and the app (not this test) hides the keyboard once. The hide
+                // is the proof of that settled hidden form (only a hidden form hides). Then the line is drawn,
+                // unclipped, with the composer at its no-line baseline.
+                compose.waitUntil(5_000) { imeBottom == 0 }
+                compose.waitUntil(5_000) { lineDrawn() }
+                compose.waitForIdle()
+                unclipped("$name after the refusal-hide", "rate_wait_line")
+                val afterHide = arrangement(input, send)
+                check(afterHide == before) { "$name: the composer moved after the refusal-hide $before -> $afterHide" }
+            }
             // TL diagnostic (run 45244641951): the carrier's height when the notice appears; a zero-size node announces nothing.
             val heightAtAppearance = lineHeight()
             val drawnAtAppearance = lineDrawn()
@@ -526,11 +541,9 @@ class RatePresentationTest {
     private fun lineOrDot(name: String, moment: String, detailsLabel: String) {
         val drawn = lineDrawn()
         check(drawn || detailsState(detailsLabel) != null) { "$name: no wait line and no Details dot $moment" }
-        // TL (#364): never hidden outside compact with the keyboard up (the PL's J found it at 200% portrait). In this
-        // fixture only the 200% landscape cases are compact (the screen's content height under 240dp).
-        check(drawn || (landscapeRun && imeBottom > 0)) { "$name: hidden outside compact with the keyboard up $moment" }
+        // TL and PL (#364): never hidden with the keyboard down (the J found the dot alone at 200% portrait).
+        check(drawn || imeBottom > 0) { "$name: hidden with the keyboard down $moment" }
     }
-    @Volatile private var landscapeRun = false
 
     private fun formIs(name: String, expect: RateLineForm, detailsLabel: String) {
         val drawn = when { !lineDrawn() -> HIDDEN; form?.first == true -> SHORT; else -> FULL }
