@@ -87,6 +87,11 @@ over letting the classifier read results after a cancel: Gradle writes the resul
 there is nothing to read when the job is cancelled at that point, and a step-level limit below the job's would cut the
 suite itself. Only the two limits changed, as in 2026-11-20.
 
+**An unreadable status is named, not counted (#362, 2026-11-25):** run 45426410650's report posted "incomplete, 0 tests"
+although its status artifact was complete; the privileged reporter's fetch had failed and its fallback said nothing about
+why. `report_api36_observation.py` now reads the status artifact once more after a failure (never the tests), logs only
+the exception's class, and words the fallback comment "status unreadable" with that class instead of a zero count.
+
 | Run | `journey` job (API35) | `api36-observation` job |
 | --- | --- | --- |
 | 45299066691 | 44.6 min | 36.0 min |

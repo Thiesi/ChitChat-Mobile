@@ -67,6 +67,22 @@ class ReportingTests(unittest.TestCase):
                 patch.object(reporter,"load_record",return_value=reporter.validate_record(good,HEAD)):
             self.assertEqual("passed_no_comment",reporter.report(REPO,12));api.assert_called_once()
 
+    def test_unreadable_status_is_reread_once_then_named_by_class_never_as_zero_tests(self):
+        # #362: a transient failure is read again once; a second failure names only the exception class.
+        with patch.object(reporter,"api",side_effect=[run(),[],dict(id=14)]) as api, \
+                patch.object(reporter,"load_record",side_effect=[OSError("private-url-canary"),ValueError("private-body-canary")]) as load:
+            self.assertEqual("failure_reported",reporter.report(REPO,12)); self.assertEqual(2,load.call_count)
+            comment=api.call_args.args[2]["body"]
+            self.assertIn("status unreadable",comment); self.assertIn("`ValueError`",comment)
+            self.assertNotIn("0 tests",comment); self.assertNotIn("canary",comment)
+        # A transient first failure and a good re-read posts the real record.
+        good=reporter.validate_record(value(),HEAD)
+        with patch.object(reporter,"api",side_effect=[run(),[],dict(id=14)]) as api, \
+                patch.object(reporter,"load_record",side_effect=[OSError("x"),good]) as load:
+            self.assertEqual("failure_reported",reporter.report(REPO,12)); self.assertEqual(2,load.call_count)
+            comment=api.call_args.args[2]["body"]
+            self.assertIn("known_ime",comment); self.assertNotIn("unreadable",comment)
+
     def test_wrong_workflow_or_ambiguous_pr_never_posts(self):
         for field,item in [("path",".github/workflows/other.yml"),("status","in_progress"),("pull_requests",[])]:
             data=run();data[field]=item
