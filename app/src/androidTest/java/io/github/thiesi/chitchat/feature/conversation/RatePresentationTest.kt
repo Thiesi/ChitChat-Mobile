@@ -59,6 +59,7 @@ import io.github.thiesi.chitchat.testing.LiveFlushSentinel
 import io.github.thiesi.chitchat.testing.NativeChatFixtures
 import io.github.thiesi.chitchat.testing.openTab
 import io.github.thiesi.chitchat.testing.performNativeTap
+import io.github.thiesi.chitchat.testing.caretToEnd
 import io.github.thiesi.chitchat.testing.tapNativeInput
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -203,7 +204,8 @@ class RatePresentationTest {
                 activity.setContent {
                     val bottom = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
                     androidx.compose.runtime.SideEffect { imeBottom = bottom }
-                    androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalRateLineProbe provides
+                    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalCursorBlinkEnabled provides false, // #350: a steady caret.
+                        io.github.thiesi.chitchat.core.ui.LocalRateLineProbe provides
                         { isShort, visible -> form = isShort to visible },
                         io.github.thiesi.chitchat.core.ui.LocalRateLineOverflowProbe provides { lineOverflow = it },
                         io.github.thiesi.chitchat.core.ui.LocalRateLineFloorProbe provides { floorReached = true },
@@ -261,6 +263,7 @@ class RatePresentationTest {
             // A native first tap brings the keyboard up; then the server's own refusal, with a known wait's deadline as the
             // repository records it.
             compose.tapNativeInput(input, { imeBottom })
+            compose.caretToEnd(input) // #350 (PL): not where the tap landed.
             compose.waitForIdle()
             val beforeKeyboard = arrangement(input, send) // The landscape-ime capture's state, still without the line.
             val budget = if (dm) RateBudget.DIRECT_MESSAGE_SEND else if (ping) RateBudget.ROOM_PING
@@ -421,6 +424,7 @@ class RatePresentationTest {
             // Case A: a native first tap on the unfocused field brings the keyboard up (the strict proof); the refusal's
             // form resolves to hidden, so the one-shot hide runs.
             compose.tapNativeInput(input, { imeBottom })
+            compose.caretToEnd(input) // #350 (PL): not where the tap landed.
             compose.waitForIdle()
             compose.onNodeWithTag(send).performNativeTap()
             compose.waitUntil(5_000) { room.state.value.sendLimit != null }
@@ -455,6 +459,7 @@ class RatePresentationTest {
             val refused = heard.mark(compose, sentinel)
             // A native first tap on the never-focused field: the keyboard comes up, the line hides behind the dot, no hide.
             compose.tapNativeInput(input, { imeBottom })
+            compose.caretToEnd(input) // #350 (PL): not where the tap landed.
             compose.waitForIdle()
             capture(name)
             val returned = heard.mark(compose, sentinel)

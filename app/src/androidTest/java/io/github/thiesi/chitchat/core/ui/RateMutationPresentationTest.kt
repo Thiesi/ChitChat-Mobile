@@ -27,6 +27,7 @@ import io.github.thiesi.chitchat.core.theme.ChitChatTheme
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
 import io.github.thiesi.chitchat.testing.nativeAuthorSaveGeometry
 import io.github.thiesi.chitchat.testing.nativeAuthorImeBottom
+import io.github.thiesi.chitchat.testing.caretToEnd
 import io.github.thiesi.chitchat.testing.tapNativeInput
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -59,7 +60,7 @@ class RateMutationPresentationTest {
         ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 assertEquals("A real Configuration font scale", fontScale, activity.resources.configuration.fontScale)
-                activity.setContent { CompositionLocalProvider(LocalMonotonicClock provides { now }) {
+                activity.setContent { CompositionLocalProvider(LocalMonotonicClock provides { now }, androidx.compose.ui.platform.LocalCursorBlinkEnabled provides false) {
                     ChitChatTheme(dark = dark) { content() }
                 } }
             }
@@ -151,7 +152,7 @@ class RateMutationPresentationTest {
             }
             lateinit var activity: androidx.activity.ComponentActivity
             scenario.onActivity { host -> activity = host
-                host.setContent { CompositionLocalProvider(LocalMonotonicClock provides { now }) { ChitChatTheme(dark = false) { LiveEdit() } } }
+                host.setContent { CompositionLocalProvider(LocalMonotonicClock provides { now }, androidx.compose.ui.platform.LocalCursorBlinkEnabled provides false) { ChitChatTheme(dark = false) { LiveEdit() } } }
             }
             compose.waitForIdle()
             try { block(activity) } finally { androidx.test.espresso.Espresso.closeSoftKeyboard() }
@@ -174,6 +175,7 @@ class RateMutationPresentationTest {
     @Test fun portraitWithTheKeyboardUp() = launchAt200(landscape = false) { activity ->
         compose.onNodeWithTag("author_edit_body").performScrollTo()
         compose.tapNativeInput("author_edit_body", { compose.nativeAuthorImeBottom() })
+        compose.caretToEnd("author_edit_body") // #350 (PL): not where the tap landed.
         assertSaveAboveTheKeyboard(activity, "portrait, before the refusal")
         compose.runOnIdle { live.value = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true) } // A refused Save.
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("author_rate_line", useUnmergedTree = true).fetchSemanticsNodes()
@@ -198,6 +200,7 @@ class RateMutationPresentationTest {
     @Test fun compactEditWithTheKeyboardUp() = launchAt200(landscape = true) { activity ->
         compose.onNodeWithTag("author_edit_body").performScrollTo()
         compose.tapNativeInput("author_edit_body", { compose.nativeAuthorImeBottom() })
+        compose.caretToEnd("author_edit_body") // #350 (PL): not where the tap landed.
         assertSaveAboveTheKeyboard(activity, "compact, before the refusal")
         compose.runOnIdle { live.value = RateLimitNotice(RateBudget.ROOM_MESSAGE_MUTATION, true) } // A refused Save.
         compose.waitUntil(5_000) { compose.nativeAuthorImeBottom() == 0 }
