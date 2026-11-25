@@ -228,7 +228,9 @@ class ReportPresentationTest {
                         }
                     }
                     scenario.onActivity { activity ->
-                        activity.setContent { ChitChatTheme(dark = dark) { CompositionLocalProvider(LocalReports provides reports) {
+                        // #351 (found by #367's stability rerun): a steady caret in the form captures, test-only.
+                        activity.setContent { ChitChatTheme(dark = dark) { CompositionLocalProvider(LocalReports provides reports,
+                            androidx.compose.ui.platform.LocalCursorBlinkEnabled provides false) {
                             Surface(Modifier.fillMaxSize().testTag("report_host"), color = MaterialTheme.colorScheme.background) {
                                 if (shot.stepUp) io.github.thiesi.chitchat.feature.auth.StepUpDialog(
                                     androidx.compose.ui.res.stringResource(R.string.step_up_title_export),

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -39,6 +40,10 @@ class AuthPinnedPresentationTest {
     @get:Rule val compose = createEmptyComposeRule()
     @After fun reset() { FontScaleTestActivity.requestedFontScale = 1f }
     @Volatile private var imeBottom = 0
+    // #351: where the keyboard's inset animation is headed. A capture with the keyboard up waits until the inset has
+    // arrived there (a bounded positive condition), not for a time: Compose is idle between the platform's inset frames,
+    // so waitForIdle alone could capture the form one inset frame early (the 1px shift).
+    @Volatile private var imeTarget = 0
     private val rules = PolicyDiscovery(PolicyLink("https://chat.example.test/rules", 4, "2026-11-08T12:00:00+00:00"), null, null)
 
     @Test fun presentationLight() = presentation(dark = false)
@@ -65,8 +70,12 @@ class AuthPinnedPresentationTest {
                     assertEquals("A real Configuration font scale", fontScale, activity.resources.configuration.fontScale)
                     activity.setContent {
                         val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
-                        SideEffect { imeBottom = bottom }
-                        Box(Modifier.fillMaxSize().testTag("auth_host")) { TestChitChatApp(settings, auth) }
+                        val target = imeTargetBottom()
+                        SideEffect { imeBottom = bottom; imeTarget = target }
+                        // #350/#351: the caret drawn steadily (no blink phase) in the keyboard-up captures, test-only.
+                        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalCursorBlinkEnabled provides false) {
+                            Box(Modifier.fillMaxSize().testTag("auth_host")) { TestChitChatApp(settings, auth) }
+                        }
                     }
                 }
                 compose.waitUntil(5_000) { !settings.state.value.loading }
@@ -92,7 +101,12 @@ class AuthPinnedPresentationTest {
         }
     }
 
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+    @androidx.compose.runtime.Composable
+    private fun imeTargetBottom(): Int = WindowInsets.imeAnimationTarget.getBottom(LocalDensity.current)
+
     private fun capture(name: String) {
+        if (name.endsWith("-keyboard")) compose.waitUntil(5_000) { imeBottom > 0 && imeBottom == imeTarget }
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }

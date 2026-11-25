@@ -84,3 +84,12 @@ development-build prefix; PL wording, recorded in copy-deck.md with the F4 and F
   wrapping captions, light and dark at default and 200%, plus black for a loaded frame and the raised box. The
   Welcome "What works in this preview" sheet (`preview_limit`) is captured light and dark at default and 200%; the journey
   test pins both disclosure strings' exact text, including the signed-in `auth_preview_limit`.
+- **Known per-session renderer variant (#351, TL and PL, 2026-11-25):** one anti-aliased corner pixel of the Gone card's
+  dashed frame takes one of two values, fixed per emulator session rather than by when the capture is taken. Across 32
+  CI runs it was `524b61` in 7 and `524b62` in 25. The two dark Gone captures always agreed, and the light capture never
+  varied. No test change can settle it; changing the rendering to hide it would make the capture unlike production.
+  - **Accepted only here, at the current geometry:** (30, 450) in `files-dark-default-gone` and (30, 500) in
+    `files-dark-font200-gone`.
+  - **Accepted only with `524b61` or `524b62` at that pixel, and only when both captures agree.**
+  - **Any other value, position or disagreement still counts as a difference,** as does any other pixel in those images.
+  - **If the Gone card's layout moves,** the coordinates move with it in the same PR.
