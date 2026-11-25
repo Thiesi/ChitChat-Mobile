@@ -189,8 +189,6 @@ class RateLineFit {
         internal set
     /** What the header actually gave for [headerYield] (its natural height minus its capped one), set by the screen. */
     var headerGiven by mutableIntStateOf(0)
-    /** The most the header can give: its natural height less [RateHeaderYieldFloor]; 0 with no header (compact). */
-    var headerCanGive by mutableIntStateOf(0)
     val hidden get() = form == RateLineForm.HIDDEN
     val detailsFirst get() = form == RateLineForm.SHORT || form == RateLineForm.HIDDEN
 }
@@ -203,6 +201,9 @@ val LocalRateLineOverflowProbe = staticCompositionLocalOf<((Boolean) -> Unit)?> 
 
 /** Test-only (#364): the floor fallback was decided (keyboard down, the header at its floor, short still not whole). */
 val LocalRateLineFloorProbe = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/** Test-only (#364, PL and TL): one record per decision and per header cap (shortfall, allowance, cap, window tag). */
+val LocalRateLineFitProbe = staticCompositionLocalOf<((String) -> Unit)?> { null }
 
 /** On the screen's timeline (the column's only weighted block): its height in each layout pass, tagged with the window. */
 fun Modifier.rateFitTimeline(fit: RateLineFit, window: Any): Modifier =
@@ -256,7 +257,8 @@ private val ZeroFootprintStrip = Modifier.layout { measurable, constraints ->
 fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotice?, @StringRes known: Int,
     @StringRes unknown: Int, window: Any, availableWidth: Dp, spacing: Dp, modifier: Modifier = Modifier,
     parity: Boolean = false, @StringRes shortKnown: Int = R.string.rate_wait_short,
-    @StringRes shortUnknown: Int = R.string.rate_wait_short_unknown, hiddenAllowed: Boolean = false) {
+    @StringRes shortUnknown: Int = R.string.rate_wait_short_unknown, hiddenAllowed: Boolean = false,
+    headerAllowance: Pair<Any, Int>? = null) {
     var last by remember(notice) { mutableStateOf<RateLineForm?>(null) }
     var decided by remember(notice, window) { mutableStateOf<RateLineForm?>(null) }
     var lastYield by remember(notice) { mutableIntStateOf(0) }
@@ -270,7 +272,12 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     val timeline = fit.timeline
     var freshYield = 0
     var floorFallback = false
-    val fresh = if (full == null || short == null) null else decided ?: if (timeline?.first == window) {
+    var record: String? = null
+    // TL (#364): decide only when the timeline AND the header's allowance were measured under this window; until then
+    // the previous form holds (pending), so the floor fallback can't be latched from a stale allowance. Null: no header.
+    val headerCurrent = headerAllowance == null || headerAllowance.first == window
+    val headerCanGive = headerAllowance?.second ?: 0
+    val fresh = if (full == null || short == null) null else decided ?: if (timeline?.first == window && headerCurrent) {
         val drawn = fit.lineSlot
         if (hiddenAllowed && drawn > 0 && timeline.second == 0) RateLineForm.HIDDEN
         else with(density) {
@@ -284,19 +291,27 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
                 absent >= height(full) + spacingPx + 48.dp.roundToPx() -> RateLineForm.FULL
                 absent >= shortNeed -> RateLineForm.SHORT
                 // With the keyboard down the short form always shows, whole: the header yields the shortfall (#364).
-                !hiddenAllowed && shortNeed - absent <= fit.headerCanGive -> { freshYield = shortNeed - absent; RateLineForm.SHORT }
+                // [headerCanGive]: the header's natural height less its floor, measured under this window (above).
+                !hiddenAllowed && shortNeed - absent <= headerCanGive -> { freshYield = shortNeed - absent; RateLineForm.SHORT }
                 // The one keyboard-down exception (PL, TL, #364): even the header at its floor can't make room for the
                 // short form whole. Never a clipped line: hidden with the Details dot and the full line first there.
                 !hiddenAllowed -> { floorFallback = true; RateLineForm.HIDDEN }
                 else -> RateLineForm.HIDDEN
+            }.also { decision ->
+                record = "decide window=$window keyboardUp=$hiddenAllowed form=$decision absent=$absent shortNeed=$shortNeed " +
+                    "shortfall=${(shortNeed - absent).coerceAtLeast(0)} headerCanGive=$headerCanGive yield=$freshYield"
             }
         }
     } else null
     val floorProbe = LocalRateLineFloorProbe.current
+    val fitProbe = LocalRateLineFitProbe.current
     if (fresh != null && decided == null) SideEffect {
         decided = fresh; last = fresh; decidedYield = freshYield; lastYield = freshYield
         if (floorFallback) floorProbe?.invoke()
+        record?.let { fitProbe?.invoke(it) }
     }
+    // While this window's decision is pending the previous yield holds (the header's natural height is known from its
+    // content without restoring its cap: no visible jump, PL); the new yield applies once decided.
     val yieldNow = if (full == null) 0 else decidedYield ?: lastYield
     SideEffect { fit.headerYield = yieldNow }
     val form = if (full == null) null else fresh ?: last ?: RateLineForm.SHORT
@@ -326,8 +341,11 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
 @Composable
 fun rateHeaderCap(fit: RateLineFit, limit: Dp, natural: Int): Dp {
     val yieldPx = fit.headerYield
-    if (yieldPx <= 0 || natural <= 0) return limit
     val density = LocalDensity.current
-    val wanted = with(density) { (natural - yieldPx).toDp() }
-    return wanted.coerceAtLeast(RateHeaderYieldFloor).coerceAtMost(limit)
+    val cap = if (yieldPx <= 0 || natural <= 0) limit
+        else with(density) { (natural - yieldPx).toDp() }.coerceAtLeast(RateHeaderYieldFloor).coerceAtMost(limit)
+    // Every pass is recorded (with no yield too), so a test can follow the cap through a transition (PL).
+    val fitProbe = LocalRateLineFitProbe.current
+    SideEffect { fitProbe?.invoke("cap natural=${natural}px yield=${yieldPx}px limit=$limit cap=$cap floor=$RateHeaderYieldFloor") }
+    return cap
 }

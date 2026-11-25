@@ -409,9 +409,11 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     var headerNatural by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     // #364: how much the header can give the wait line (none in compact, which has no header).
     val headerFloorPx = with(androidx.compose.ui.platform.LocalDensity.current) { io.github.thiesi.chitchat.core.ui.RateHeaderYieldFloor.roundToPx() }
-    androidx.compose.runtime.SideEffect {
-        rateFit.headerCanGive = if (compact || headerNatural <= 0) 0 else (headerNatural - headerFloorPx).coerceAtLeast(0)
-    }
+    // TL (#364): the header's natural height tagged with the window it was measured under, like the timeline.
+    var headerMeasure by remember { mutableStateOf<Pair<Any, Int>?>(null) }
+    val headerLimitPx = with(androidx.compose.ui.platform.LocalDensity.current) { headerLimit.roundToPx() }
+    val headerAllowance: Pair<Any, Int> = if (compact) rateWindow to 0
+        else headerMeasure?.let { (tag, height) -> tag to (height - headerFloorPx).coerceAtLeast(0) } ?: (Unit to 0)
     val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
     val inlineCompletion=maxHeight>=360.dp && androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.3f && selectedReply==null
     val detailsSource = completionDetailsToken
@@ -529,8 +531,13 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
         if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(
             io.github.thiesi.chitchat.core.ui.rateHeaderCap(rateFit, headerLimit, headerNatural),
             Modifier.onSizeChanged { size ->
-                if (rateFit.headerYield == 0) headerNatural = size.height
                 rateFit.headerGiven = if (rateFit.headerYield > 0) (headerNatural - size.height).coerceAtLeast(0) else 0
+            },
+            // The header's natural height (its content, or its limit when the content overflows), tagged with the
+            // window of this layout pass: known without restoring its cap (no visible jump, PL; TL's tag).
+            onContentHeight = { content ->
+                val natural = minOf(content, headerLimitPx)
+                headerNatural = natural; headerMeasure = rateWindow to natural
             }) {
             header(false) {}
         }
@@ -625,7 +632,7 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             shortUnknown = if (rateBroadcast) R.string.rate_wait_broadcast_short_unknown else R.string.rate_wait_short_unknown,
             // TL and PL (#364): hidden only while the keyboard is up; with it down the line always shows.
             hiddenAllowed = androidx.compose.foundation.layout.WindowInsets.ime
-                .getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0)
+                .getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0, headerAllowance = headerAllowance)
         }
         io.github.thiesi.chitchat.core.ui.ReceivedViewerHost(received, settled = state.loaded && !state.busy) { id ->
             state.messages.firstOrNull { it.attachment?.id == id && !it.deleted }?.let { message ->

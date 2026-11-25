@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -30,7 +31,8 @@ import kotlinx.coroutines.launch
  * appears. Content, status precedence and the bound itself are the caller's.
  */
 @Composable
-internal fun BoundedHeader(maxHeight: Dp, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun BoundedHeader(maxHeight: Dp, modifier: Modifier = Modifier, onContentHeight: ((Int) -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit) {
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     val overflow = scroll.maxValue > 0
@@ -42,7 +44,11 @@ internal fun BoundedHeader(maxHeight: Dp, modifier: Modifier = Modifier, content
     // edge is ordinary scrolling (F2, P-216). When it fits there is no band, fade or reserve.
     Column(modifier.fillMaxWidth().heightIn(max = maxHeight).testTag("bounded_header")) {
         Box(Modifier.weight(1f, fill = false)) {
-            Column(Modifier.fillMaxWidth().verticalScroll(scroll).padding(horizontal = 16.dp), content = content)
+            // #364: the content's full height (measured unbounded inside the scroll), reported in every layout pass, so a
+            // caller can know the header's natural height without changing its cap (no restore, nothing drawn twice).
+            Column(Modifier.fillMaxWidth().verticalScroll(scroll)
+                .then(if (onContentHeight != null) Modifier.onSizeChanged { onContentHeight(it.height) } else Modifier)
+                .padding(horizontal = 16.dp), content = content)
             if (overflow && !atEnd) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(24.dp)
                 .background(Brush.verticalGradient(listOf(Color.Transparent, colors.ground))))
         }

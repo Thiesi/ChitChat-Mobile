@@ -92,6 +92,11 @@ class RatePresentationTest {
     // #364: the drawn line's own text overflow (a clipped line), and whether the floor fallback was ever decided.
     @Volatile private var lineOverflow = false
     @Volatile private var floorReached = false
+    private val fitLog = java.util.concurrent.CopyOnWriteArrayList<String>()
+    /** PL (#364): checks before the capture are deferred, so a failing case still leaves its image; thrown after it. */
+    private val deferred = mutableListOf<Throwable>()
+    private fun later(block: () -> Unit) { runCatching(block).exceptionOrNull()?.let { deferred += it } }
+    private fun fitTail() = fitLog.takeLast(6).joinToString(" | ")
     /** The form the composer's wait line last drew (short?) and its visible text, from the observation-only probe. */
     @Volatile private var form: Pair<Boolean, String>? = null
 
@@ -158,7 +163,7 @@ class RatePresentationTest {
         noStatusRow: Boolean = false, details: Boolean = false, replyLater: Boolean = false, visibleTap: Boolean = false,
         landscapeCase: Char? = null, broadcast: Boolean = false, draftText: String? = null, packed: Boolean = false) {
         val name = capture ?: "rate-room-reply-during-wait"
-        form = null; lineOverflow = false; floorReached = false
+        form = null; lineOverflow = false; floorReached = false; fitLog.clear(); deferred.clear()
         FontScaleTestActivity.requestedFontScale = fontScale
         val sessions = TestSessions()
         val api = NativeChatFixtures(sessions)
@@ -201,7 +206,8 @@ class RatePresentationTest {
                     androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalRateLineProbe provides
                         { isShort, visible -> form = isShort to visible },
                         io.github.thiesi.chitchat.core.ui.LocalRateLineOverflowProbe provides { lineOverflow = it },
-                        io.github.thiesi.chitchat.core.ui.LocalRateLineFloorProbe provides { floorReached = true }) {
+                        io.github.thiesi.chitchat.core.ui.LocalRateLineFloorProbe provides { floorReached = true },
+                        io.github.thiesi.chitchat.core.ui.LocalRateLineFitProbe provides { fitLog += it }) {
                         Box(Modifier.fillMaxSize()) {
                             TestChitChatApp(settings, auth, conversationModel = room, directInbox = inbox,
                                 directThread = thread, notifications = notices, messageTargets = targets)
@@ -280,8 +286,8 @@ class RatePresentationTest {
             compose.onNodeWithTag(send).performNativeTap()
             compose.waitUntil(5_000) { (if (dm) thread.state.value.sendLimit else room.state.value.sendLimit) != null }
             compose.waitForIdle()
-            lineOrDot(name, "with the keyboard up", detailsLabel)
-            if (packed) {
+            later { lineOrDot(name, "with the keyboard up", detailsLabel) }
+            if (packed) later {
                 // TL (#364): 200% portrait, a reply chip and the keyboard up: even the short form has no room, so the
                 // refusal resolves to hidden with the dot, and the app (not this test) hides the keyboard once. The hide
                 // is the proof of that settled hidden form (only a hidden form hides). Then the line is drawn,
@@ -290,7 +296,7 @@ class RatePresentationTest {
                 compose.waitUntil(5_000) { lineDrawn() }
                 compose.waitForIdle()
                 unclipped("$name after the refusal-hide", "rate_wait_line")
-                check(!lineOverflow) { "$name: the line's text is cut after the refusal-hide (drawn height < laid-out height)" }
+                check(!lineOverflow) { "$name: the line's text is cut after the refusal-hide (drawn height < laid-out height); ${fitTail()}" }
                 check(compose.onAllNodesWithTag("bounded_header").fetchSemanticsNodes().isNotEmpty()) {
                     "$name: the header is gone (it only yields, PL)" }
                 val afterHide = arrangement(input, send)
@@ -302,18 +308,35 @@ class RatePresentationTest {
             val appeared = heard.mark(compose, sentinel)
             if (!keyboard) {
                 keyboardDown()
-                lineOrDot(name, "after the keyboard hid", detailsLabel) // TL condition 3.
+                later { lineOrDot(name, "after the keyboard hid", detailsLabel) } // TL condition 3.
             }
             if (replyLater) {
                 // PL: the notice shown with no chip, then a reply: re-decided from the new layout, the composer unchanged.
                 startReply(room)
                 keyboardDown()
-                lineOrDot(name, "after the reply started", detailsLabel)
+                later { lineOrDot(name, "after the reply started", detailsLabel) }
             }
             val swapped = heard.mark(compose, sentinel)
             val expectedArrangement = if (keyboard) beforeKeyboard else before
             // Capture first, so a failing assert (announcements included) still leaves its image (PL).
             if (capture != null) capture(capture)
+            writeFitLog(name)
+            // PL (#364): the header's cap follows decisions only. Every cap record carries the most recently decided yield
+            // (0 before any): while a decision is pending it holds (no grow-back mid-transition), and a decided form that
+            // needs no yield restores the full cap in that pass. The notice stands throughout this flow.
+            later {
+                var decided = 0
+                val yieldOf = Regex("yield=(\\d+)")
+                fitLog.forEach { record ->
+                    val value = yieldOf.find(record)?.groupValues?.get(1)?.toInt() ?: return@forEach
+                    if (record.startsWith("decide ")) decided = value
+                    else if (record.startsWith("cap ")) check(value == decided) {
+                        "$name: a header cap off its decided yield ($value px, decided $decided px): ${fitLog.joinToString(" | ")}" }
+                }
+            }
+            // The deferred checks, now that the image exists (PL): the first failure, with every message and the fit log.
+            deferred.firstOrNull()?.let { first ->
+                throw AssertionError("${deferred.joinToString(" // ") { it.message.orEmpty() }}; fit: ${fitTail()}", first) }
             // Details is captured before any assert too (PL): the full line first only while short or hidden, never twice.
             var inDetails = -1
             if (details) {
@@ -557,7 +580,7 @@ class RatePresentationTest {
         val drawn = lineDrawn()
         check(drawn || detailsState(detailsLabel) != null) { "$name: no wait line and no Details dot $moment" }
         // TL and PL (#364): never hidden with the keyboard down (the J found the dot alone at 200% portrait).
-        check(drawn || imeBottom > 0) { "$name: hidden with the keyboard down $moment" }
+        check(drawn || imeBottom > 0) { "$name: hidden with the keyboard down $moment; fit: ${fitTail()}" }
     }
 
     private fun formIs(name: String, expect: RateLineForm, detailsLabel: String) {
@@ -590,6 +613,15 @@ class RatePresentationTest {
      * run 45211530633), which made the plain root ambiguous for the capture.
      */
     private fun appRoot() = compose.onNode(isRoot() and hasAnyDescendant(hasTestTag("conversation_composer") or hasTestTag("dm_composer")))
+
+    /** TL and PL (#364): every decision and header cap of this flow, appended to one log beside the captures. */
+    private fun writeFitLog(name: String) {
+        val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }
+            ?: checkNotNull(context.getExternalFilesDir(null))
+        val folder = java.io.File(output, "ccm-rate-presentation")
+        check(folder.isDirectory || folder.mkdirs())
+        java.io.File(folder, "rate-fit-log.txt").appendText(fitLog.joinToString("\n", prefix = "== $name\n", postfix = "\n"))
+    }
 
     private fun capture(name: String, dialog: Boolean = false) {
         compose.waitForIdle()
