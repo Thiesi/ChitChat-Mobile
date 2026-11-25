@@ -157,7 +157,7 @@ fun DirectInboxScreen(model: DirectInboxViewModel, thread: DirectThreadViewModel
                 // Brought into view when it appears (PL).
                 val searchReveal = io.github.thiesi.chitchat.core.ui.rememberRateLineReveal()
                 io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(session, state.searchLimit, R.string.rate_wait_search,
-                    R.string.rate_wait_search_unknown, "dm_search_rate_line", searchReveal.modifier,
+                    R.string.rate_wait_search_unknown, "dm_search_rate_line", Modifier.fillMaxWidth().then(searchReveal.modifier),
                     parity = state.searchLimitRepeats % 2 == 1, onShown = searchReveal.onShown)
                 state.searchError?.let { InlineError(directError(it)) }
                 if (state.searched && state.results.isEmpty()) Text(stringResource(R.string.dm_search_empty))

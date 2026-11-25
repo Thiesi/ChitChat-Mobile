@@ -139,7 +139,8 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
             // the result list (review of 027dc35): Next and Previous sit below the list, so a refusal after scrolling the
             // results must still show and announce; here it's always composed and in view, above the list.
             io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(expected, value.rateLimit, R.string.rate_wait_search,
-                R.string.rate_wait_search_unknown, "message_search_rate_line", parity = value.rateRepeats % 2 == 1,
+                R.string.rate_wait_search_unknown, "message_search_rate_line", Modifier.fillMaxWidth(),
+                parity = value.rateRepeats % 2 == 1,
                 // TL (#348's A2): empty, it's the zero-footprint 1dp strip (no padding, no space, no stop); padded only drawn.
                 drawnPadding = PaddingValues(horizontal = 12.dp))
             val result = value.results
