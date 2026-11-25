@@ -263,8 +263,11 @@ local gate's) is definite.
 - **@-completion (PL ruling b):** silence. No line, no announcement, no status notice, the draft untouched; an open
   strip closes on the refusal, and completion stays quiet (not even the reserved names open) until a lookup succeeds,
   each refused locally with no request during a known wait.
-- **Captures:** `rate-search-messages-light-default` and `rate-search-people-light-default` (PL list 9–10), collected
-  into `rate-presentation`.
+- **In view (PL):** each search line is brought into view when it appears and on each refused retry
+  (`rememberRateLineReveal`: no focus or caret change; a reveal before layout waits for the line's own positioning).
+- **Captures:** `rate-search-{messages,people}-{light,dark}-{default,font200}` (PL list 9–10), collected into
+  `rate-presentation`; each asserts the line and the query field fully in view without scrolling. The announcement
+  contract (one at appearance, one per refused retry, none on clearing, a silent idle carrier) is asserted for both.
 
 **The final unmapped list (condition 5).** After #323b3b, only proxy (non-JSON), bootstrap and revalidation 429s reach
 row 7 and the session-wide wait:

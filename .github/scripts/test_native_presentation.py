@@ -655,7 +655,7 @@ class PresentationGateTests(unittest.TestCase):
 
     def test_excess_ambiguous_or_foreign_rate_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"rate-room-send-light-default-{n}.png") for n in range(24)],
+        for files in ([Path(f"rate-room-send-light-default-{n}.png") for n in range(30)],
             [Path("a/rate-room-ping-light-default.png"), Path("b/rate-room-ping-light-default.png")],
             # Not taken: a dark ping, a DM landscape shot, a 150% send.
             [Path("rate-room-ping-dark-default.png")], [Path("rate-dm-send-light-font200-landscape-ime.png")],

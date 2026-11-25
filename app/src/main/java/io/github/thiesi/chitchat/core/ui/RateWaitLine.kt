@@ -16,6 +16,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -349,4 +351,27 @@ fun rateHeaderCap(fit: RateLineFit, limit: Dp, natural: Int): Dp {
     val fitProbe = LocalRateLineFitProbe.current
     SideEffect { fitProbe?.invoke("cap natural=${natural}px yield=${yieldPx}px limit=$limit cap=$cap floor=$RateHeaderYieldFloor") }
     return cap
+}
+
+/** #365 (PL, as in the edit dialog): the [modifier] and [onShown] that bring a wait line into view. */
+class RateLineReveal(val modifier: Modifier, val onShown: (initial: Boolean) -> Unit)
+
+/**
+ * #365: brings a wait line in a scrolling screen into view when it appears and on each refused retry, with no focus or
+ * caret change. A reveal asked for before the line is laid out (a screen reopened with the notice) waits for the line's
+ * own positioning and runs once.
+ */
+@Composable
+fun rememberRateLineReveal(): RateLineReveal {
+    val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val pending = remember { booleanArrayOf(false) }
+    return remember {
+        RateLineReveal(Modifier.bringIntoViewRequester(requester).onGloballyPositioned {
+            if (pending[0] && it.size.height > 1) { pending[0] = false; scope.launch { requester.bringIntoView() } }
+        }) { initial ->
+            if (initial) pending[0] = true
+            scope.launch { requester.bringIntoView() }
+        }
+    }
 }

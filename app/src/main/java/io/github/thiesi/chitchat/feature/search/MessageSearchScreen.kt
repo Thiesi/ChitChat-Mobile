@@ -143,8 +143,11 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
                     item {
                         Text(stringResource(R.string.message_search_scope_current, scopeName(value.scope)))
                         // #323b3b (PL): message_search's own wait, in place of message_search_rate; the persistent carrier.
+                        // Brought into view when it appears (PL), so it's never left above a scrolled result list.
+                        val reveal = io.github.thiesi.chitchat.core.ui.rememberRateLineReveal()
                         io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(expected, value.rateLimit, R.string.rate_wait_search,
-                            R.string.rate_wait_search_unknown, "message_search_rate_line", parity = value.rateRepeats % 2 == 1)
+                            R.string.rate_wait_search_unknown, "message_search_rate_line", reveal.modifier,
+                            parity = value.rateRepeats % 2 == 1, onShown = reveal.onShown)
                         value.error?.let { failure ->
                             InlineError(stringResource(when {
                                 failure.status == 400 -> R.string.message_search_validation

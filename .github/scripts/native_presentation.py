@@ -88,7 +88,7 @@ RATE_NAME = re.compile(r"rate-(?:room-send-(?:light|dark)-(?:default|font200)|dm
     r"room-send-light-font200-landscape-ime|room-ping-light-default|room-send-unknown-light-default|"
     r"room-conversation-light-default|room-send-light-font200-details|room-send-light-font200-landscape-after-tap|"
     r"broadcast-(?:light|dark)-(?:default|font200)|broadcast-unknown-light-default|room-send-twoline-light-font200|"
-    r"search-(?:messages|people)-light-default)[.]png"
+    r"search-(?:messages|people)-(?:light|dark)-(?:default|font200))[.]png"
     r"|rate-fit-log[.]txt")
 AUTHOR_DESTINATION = ROOT / "app/build/reports/androidTests/author-presentation"
 AUTHOR_NAME = re.compile(r"author-edit-(?:room-(?:light|dark)-(?:default|font200)-(?:unknown|reviewed|editing)|"
@@ -530,15 +530,15 @@ def collect_rate():
     # while the composer shows the short form (1); the 200% landscape case after a refused tap hid the keyboard (1).
     # #323b3 (PL): the @room/@here line, light and dark x default and 200%, and its unknown variant (5).
     # #364 (PL): the plain two-line draft at 200% with the header yielded (1); the fit decisions' log (TL, PL), text.
-    # #323b3b (PL list 9-10): message and people search with the line (2).
-    files = list(islice(SOURCE.rglob("ccm-rate-presentation/*"), 24))
-    if (not files or len(files) > 23 or len({p.name for p in files}) != len(files)
+    # #323b3b (PL list 9-10): message and people search with the line, light and dark x default and 200% (8).
+    files = list(islice(SOURCE.rglob("ccm-rate-presentation/*"), 30))
+    if (not files or len(files) > 29 or len({p.name for p in files}) != len(files)
         or any(RATE_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous rate presentation output")
     RATE_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, RATE_DESTINATION / path.name)
-    print(f"Rate presentation captures collected: {len(files)} of 23.")
+    print(f"Rate presentation captures collected: {len(files)} of 29.")
 
 
 def collect_onboarding():
