@@ -210,7 +210,44 @@ class ReportPresentationTest {
     @Test fun presentationLight() = presentation(dark = false, scales = listOf("default" to 1f, "font200" to 2f), only = null)
     @Test fun presentationDark() = presentation(dark = true, scales = listOf("default" to 1f), only = setOf("form-room", "sent-sheet-room"))
 
-    private fun presentation(dark: Boolean, scales: List<Pair<String, Float>>, only: Set<String>?) {
+    /** #369 DIAGNOSTIC (uncommitted): opt-in by `-e scrollSettleDiagnostic report`; observation only. */
+    @Test fun scrollSettleDiagnostic() {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("scrollSettleDiagnostic") == "report")
+        val tags = listOf("report_details", "report_counter")
+        val reps = org.json.JSONArray()
+        for (rep in 0 until 40) presentation(dark = false, scales = listOf("font200" to 2f), only = setOf("form-toolong")) {
+            report(3); choose(ReportCategory.SPAM)
+            val roots = compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes()
+            .mapNotNull { it.root as? androidx.compose.ui.platform.ViewRootForTest }
+            val before = io.github.thiesi.chitchat.testing.ScrollSettleRecorder.snapshotNow(roots, tags)
+            val recorder = io.github.thiesi.chitchat.testing.ScrollSettleRecorder(roots, tags).start()
+            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
+            val typed = recorder.elapsed()
+            val afterTyping = io.github.thiesi.chitchat.testing.ScrollSettleRecorder.snapshotNow(roots, tags)
+            compose.onNodeWithTag("report_counter").performScrollTo()
+            val scrolled = recorder.elapsed()
+            compose.waitForIdle()
+            val captureAt = recorder.elapsed()
+            // Roots again: the keyboard can arrive after the first list was taken (a dialog keeps its own root).
+            val rootsNow = compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes()
+            .mapNotNull { it.root as? androidx.compose.ui.platform.ViewRootForTest }
+            val atCapture = io.github.thiesi.chitchat.testing.ScrollSettleRecorder.snapshotNow(rootsNow, tags)
+            capture("diag-report-$rep", "report_dialog")
+            compose.waitUntil(5_000) { recorder.done }
+            val after = io.github.thiesi.chitchat.testing.ScrollSettleRecorder.snapshotNow(rootsNow, tags)
+            reps.put(org.json.JSONObject().put("rep", rep).put("typedMs", typed).put("scrolledMs", scrolled).put("captureMs", captureAt)
+                .put("png", io.github.thiesi.chitchat.testing.ScrollSettleRecorder.pngHash("ccm-report-presentation", "diag-report-$rep"))
+                .put("roots", roots.size).put("rootsAtCapture", rootsNow.size)
+                .put("before", before).put("afterTyping", afterTyping).put("atCapture", atCapture).put("after", after)
+                .put("frames", recorder.samples))
+        }
+        FontScaleTestActivity.requestedFontScale = 1f
+        io.github.thiesi.chitchat.testing.ScrollSettleRecorder.write("scroll-settle-report.json",
+            org.json.JSONObject().put("api", android.os.Build.VERSION.SDK_INT).put("form", "report-light-font200-form-toolong").put("reps", reps))
+    }
+
+    private fun presentation(dark: Boolean, scales: List<Pair<String, Float>>, only: Set<String>?,
+        diagnostic: (ReportPresentationTest.() -> Unit)? = null) {
         val theme = if (dark) "dark" else "light"
         for ((scaleName, fontScale) in scales) for (shot in shots().filter { (only == null || it.name in only) && (it.onlyAt == null || it.onlyAt == scaleName) }) {
             FontScaleTestActivity.requestedFontScale = fontScale
@@ -265,8 +302,10 @@ class ReportPresentationTest {
                     if (!shot.stepUp) compose.waitUntil(5_000) {
                         if (shot.dm) direct.state.value.loaded && !direct.state.value.busy else room.state.value.loaded && !room.state.value.busy
                     }
-                    shot.act(this, Fixture(reports, gate) { screen = it })
-                    capture("report-$theme-$scaleName-${shot.name}", shot.node)
+                    if (diagnostic != null) diagnostic(this) else {
+                        shot.act(this, Fixture(reports, gate) { screen = it })
+                        capture("report-$theme-$scaleName-${shot.name}", shot.node)
+                    }
                 }
             } finally { gate.complete(Unit); compose.runOnIdle { room.cancel(); direct.background(); reports.close() } }
         }
