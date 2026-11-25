@@ -83,7 +83,7 @@ class RateLineAnnouncementTest {
                                 Box(Modifier.weight(1f).fillMaxWidth().rateFitTimeline(held, window))
                                 RateWaitSlot(held, session(deadline), notice, R.string.rate_wait_messages,
                                     R.string.rate_wait_messages_unknown, window, 320.dp, 6.dp, Modifier.fillMaxWidth(),
-                                    parity = repeats % 2 == 1)
+                                    parity = repeats % 2 == 1, hiddenAllowed = true) // Keyboard-up scenarios (#364).
                             }
                             Box(Modifier.fillMaxWidth().height(48.dp))
                         }

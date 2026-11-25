@@ -931,7 +931,7 @@ class SessionRepository internal constructor(
      * takes the unchanged session-wide path; so does everything from a call site without a budget.
      */
     internal suspend fun <T> authorized(access: SessionAccess, budget: RateBudget? = null,
-        operation: suspend SessionHttp.() -> T): T {
+        alsoGatedBy: RateBudget? = null, operation: suspend SessionHttp.() -> T): T {
         lock.withLock {
             ensureCurrent(access)
             val active = runtime ?: throw CancellationException("Session retired")
@@ -942,13 +942,16 @@ class SessionRepository internal constructor(
             if (active.csrf != access.csrf) throw CancellationException("Session token changed")
             if (clock.millis() < mutable.value.retryAtMillis) throw ApiFailure(FailureKind.HTTP, 429,
                 retryAfterSeconds = (mutable.value.retryAtMillis - clock.millis() + 999) / 1000)
-            if (budget != null) active.budgets[budget]?.let { wait ->
+            // #323b3: [alsoGatedBy] first (a policy the server consumes before [budget], such as room_send before
+            // room_broadcast_mention), so its wait takes precedence; a server 429 is still recorded under [budget].
+            for (gate in listOfNotNull(alsoGatedBy, budget)) active.budgets[gate]?.let { wait ->
                 val left = wait.untilElapsed - elapsed()
                 if (wait.generation != access.generation || wait.userId != access.userId || left <= 0) {
-                    active.budgets.remove(budget)
-                    mutable.value = mutable.value.copy(rateWaits = mutable.value.rateWaits - budget)
+                    active.budgets.remove(gate)
+                    mutable.value = mutable.value.copy(rateWaits = mutable.value.rateWaits - gate)
                 }
-                else throw ApiFailure(FailureKind.HTTP, 429, "rate_limited", retryAfterSeconds = (left + 999) / 1000, localGate = true)
+                else throw ApiFailure(FailureKind.HTTP, 429, "rate_limited", retryAfterSeconds = (left + 999) / 1000,
+                    localGate = true, gatedBudget = gate)
             }
         }
         try {

@@ -29,6 +29,16 @@ enum class RateBudget {
      */
     ROOM_PING,
 
+    /**
+     * `room_broadcast_mention`: `public/api/v1/rooms/send.php:39–41`, consumed after `room_send` (:31–32) and before any
+     * work, for a non-ping body where `MentionParser::containsBroadcastToken` (`src/Mentions/MentionParser.php:62–70`)
+     * finds `@room` or `@here`; [io.github.thiesi.chitchat.core.conversation.containsBroadcastToken] mirrors it exactly.
+     * The server's 429 doesn't say which of the two policies refused, so a broadcast body's refusal goes to this narrower
+     * budget (gating only further broadcast sends; a plain message still goes to the server), never to `ROOM_SEND`.
+     * A broadcast send is also gated by a known `ROOM_SEND` wait, since the server consumes that first.
+     */
+    ROOM_BROADCAST_MENTION,
+
     /** `direct_message_send`: `public/api/v1/direct-messages/send.php:23–24`, before DirectMessageService. */
     DIRECT_MESSAGE_SEND,
 

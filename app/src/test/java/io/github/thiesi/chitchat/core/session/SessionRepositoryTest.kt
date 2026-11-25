@@ -460,6 +460,34 @@ class SessionRepositoryTest {
     private suspend fun budgeted(access: SessionAccess, budget: RateBudget): ApiFailure? =
         try { sessions.authorized(access, budget) { verificationMethods() }; null } catch (failure: ApiFailure) { failure }
 
+    private suspend fun broadcastSend(access: SessionAccess): ApiFailure? = try {
+        sessions.authorized(access, RateBudget.ROOM_BROADCAST_MENTION, RateBudget.ROOM_SEND) { verificationMethods() }; null
+    } catch (failure: ApiFailure) { failure }
+
+    /**
+     * #323b3: a broadcast send's 429 gates only further broadcast sends (a plain send still reaches the server, never
+     * over-gated); during a known room_send wait a broadcast send is refused under room_send, which takes precedence.
+     */
+    @Test fun aBroadcastWaitGatesOnlyBroadcastSendsAndASendWaitGatesBoth() = runTest {
+        login(); val access = sessions.openAccess()
+        server.enqueue(limited(60)); assertEquals(429, broadcastSend(access)?.status); server.takeRequest()
+        var count = server.requestCount
+        server.enqueue(error("validation_error", 400))
+        assertEquals("A plain send still goes to the server", 400, budgeted(access, RateBudget.ROOM_SEND)?.status)
+        assertEquals(count + 1, server.requestCount); server.takeRequest()
+        count = server.requestCount
+        val gated = checkNotNull(broadcastSend(access))
+        assertTrue(gated.localGate); assertEquals(RateBudget.ROOM_BROADCAST_MENTION, gated.gatedBudget)
+        assertEquals("No request during the broadcast wait", count, server.requestCount)
+        // A known room_send wait gates the broadcast send too, named as room_send (its line takes precedence, PL).
+        server.enqueue(limited(30)); budgeted(access, RateBudget.ROOM_SEND); server.takeRequest()
+        count = server.requestCount
+        val first = checkNotNull(broadcastSend(access))
+        assertEquals(RateBudget.ROOM_SEND, first.gatedBudget); assertEquals(30L, first.retryAfterSeconds)
+        assertEquals(count, server.requestCount)
+        assertEquals(0L, sessions.state.value.retryAtMillis)
+    }
+
     @Test fun aBudgetedRateLimitGatesOnlyItsOwnPolicyAndNeverTheSession() = runTest {
         login(); val access = sessions.openAccess()
         server.enqueue(limited(30))

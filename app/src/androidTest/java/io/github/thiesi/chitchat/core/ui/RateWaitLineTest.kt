@@ -164,6 +164,9 @@ class RateWaitLineTest {
     private var notice by mutableStateOf<RateLimitNotice?>(null)
     private var deadline by mutableStateOf<Long?>(null)
     private var repeats by mutableIntStateOf(0)
+    private var keyboardUp by mutableStateOf(true)
+    private var allowance by mutableStateOf<Pair<Any, Int>?>(null)
+    private var floorReached = false
 
     private fun slot(measured: Boolean = true, paused: Boolean = true) = host(paused) {
         val held = remember { RateLineFit() }.also { fit = it }
@@ -171,8 +174,12 @@ class RateWaitLineTest {
             Column(Modifier.width(320.dp).height(columnHeight), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
                     Box(Modifier.weight(1f).fillMaxWidth().testTag("slot_timeline").then(if (measured) Modifier.rateFitTimeline(held, window) else Modifier))
-                    RateWaitSlot(held, session(deadline), notice, R.string.rate_wait_messages, R.string.rate_wait_messages_unknown,
-                        window, 320.dp, 6.dp, Modifier.fillMaxWidth(), parity = repeats % 2 == 1)
+                    CompositionLocalProvider(LocalRateLineFloorProbe provides { floorReached = true }) {
+                        RateWaitSlot(held, session(deadline), notice, R.string.rate_wait_messages, R.string.rate_wait_messages_unknown,
+                            window, 320.dp, 6.dp, Modifier.fillMaxWidth(), parity = repeats % 2 == 1,
+                            // The keyboard-up scenarios (#364) by default: hidden only where even short won't fit.
+                            hiddenAllowed = keyboardUp, headerAllowance = allowance)
+                    }
                 }
                 Box(Modifier.fillMaxWidth().height(composerHeight).testTag("slot_composer"))
             }
@@ -205,6 +212,31 @@ class RateWaitLineTest {
         assertEquals(true, drawn())
         assertEquals(true, shown?.first)
         assertEquals(RateLineForm.SHORT, fit?.form)
+    }
+
+    /**
+     * TL (#364): with the keyboard down and no room for the short form, a header allowance still tagged with the previous
+     * window holds the decision (pending, the previous form kept), however small it is; once measured under the current
+     * window, the right form is decided. The floor fallback is never latched from the stale allowance.
+     */
+    @Test fun aLaggingHeaderMeasurementGivesPendingThenTheRightFormNeverTheFloor() {
+        keyboardUp = false; columnHeight = 70.dp; window = "tight-1"; allowance = "tight-1" to 2_000
+        deadline = known5(); notice = RateLimitNotice(RateBudget.ROOM_SEND, true)
+        slot()
+        settle()
+        assertEquals("Short, the header yielding the shortfall", RateLineForm.SHORT, fit?.form)
+        assertTrue("A yield", checkNotNull(fit).headerYield > 0)
+        // A new window whose header measurement lags a pass: the old tag with a tiny allowance (it would mean the floor).
+        window = "tight-2"; allowance = "tight-1" to 0
+        settle()
+        assertFalse("Pending until the header is measured under this window", checkNotNull(fit).settled)
+        assertEquals("The previous form holds", RateLineForm.SHORT, fit?.form)
+        assertTrue("The decided yield holds while pending (no grow-back, PL)", checkNotNull(fit).headerYield > 0)
+        allowance = "tight-2" to 2_000
+        settle()
+        assertTrue(checkNotNull(fit).settled)
+        assertEquals(RateLineForm.SHORT, fit?.form)
+        assertFalse("Never the floor from the stale allowance", floorReached)
     }
 
     /** TL's amended condition 3: no room for the short form, nothing drawn (zero height, still the carrier); it returns. */

@@ -50,6 +50,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.*
@@ -418,6 +419,17 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         })
                 } }
                 val headerLimit = maxHeight * 0.3f
+                // #364 (review of 7a2743a, TL): the header's raw content height, from its own layout. It's measured unbounded inside
+                // the header's scroll, so it depends only on the content, the width and the font, never on the height or the keyboard:
+                // a keyboard-only window change leaves it valid, and a width or font change fires its onSizeChanged in the same layout
+                // pass that re-tags the timeline. A decision waits for the timeline's tag, so computing the natural height and the
+                // allowance here, in this composition, for this window, never reads a stale value.
+                var headerContent by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+                val headerLimitPx = with(androidx.compose.ui.platform.LocalDensity.current) { headerLimit.roundToPx() }
+                val headerFloorPx = with(androidx.compose.ui.platform.LocalDensity.current) { io.github.thiesi.chitchat.core.ui.RateHeaderYieldFloor.roundToPx() }
+                val headerNatural = if (headerContent > 0) minOf(headerContent, headerLimitPx) else 0
+                val headerAllowance: Pair<Any, Int> = if (compact) rateWindow to 0
+                    else if (headerContent > 0) rateWindow to (headerNatural - headerFloorPx).coerceAtLeast(0) else (Unit to 0)
                 val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
                 val inlineCompletion=maxHeight>=360.dp && androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.3f && selectedReply==null
                 val completionSource=profileDetailsToken
@@ -440,7 +452,15 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     onTextChanged={ model.typing?.input(displayedSession,TypingTarget.Direct(peer),hasTypingContent(it)) },inlineChoices=inlineCompletion && !detailsOpen)
                 io.github.thiesi.chitchat.feature.status.ReportScreenStatus(syncing = false, stale = state.stale && state.loaded)
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(headerLimit) {
+                    // #364 (PL, TL): with the keyboard down, the header yields the wait line's shortfall.
+                    if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(
+                        io.github.thiesi.chitchat.core.ui.rateHeaderCap(rateFit, headerLimit, headerNatural),
+                        Modifier.onSizeChanged { size ->
+                            rateFit.headerGiven = if (rateFit.headerYield > 0) (headerNatural - size.height).coerceAtLeast(0) else 0
+            },
+            // The header's natural height (its content, or its limit when the content overflows), tagged with the
+            // window of this layout pass: known without restoring its cap (no visible jump, PL; TL's tag).
+                        onContentHeight = { content -> headerContent = content }) {
                         Text(state.context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleLarge)
                         state.context?.let { Text(stringResource(R.string.dm_privacy_short, it.privacy.direct.retention), style = MaterialTheme.typography.bodySmall) }
                         ThreadFeedback(model, state, attention[peer], ready, onAuthorCheck = checkAuthorHistory,
@@ -499,7 +519,10 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     // form here and the full line first in Details; decided per notice and window, never per draft.
                     io.github.thiesi.chitchat.core.ui.RateWaitSlot(rateFit, session, rateLimit, R.string.rate_wait_messages,
                         R.string.rate_wait_messages_unknown, rateWindow, rateBoxWidth - 24.dp, 6.dp,
-                        Modifier.fillMaxWidth().padding(horizontal = 12.dp), parity = state.sendLimitRepeats % 2 == 1)
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp), parity = state.sendLimitRepeats % 2 == 1,
+                        // TL and PL (#364): hidden only while the keyboard is up; with it down the line always shows.
+                        hiddenAllowed = androidx.compose.foundation.layout.WindowInsets.ime
+                            .getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0, headerAllowance = headerAllowance)
                     }
                     io.github.thiesi.chitchat.core.ui.ReceivedViewerHost(received, settled = state.loaded && !state.busy) { id ->
                         state.messages.firstOrNull { it.attachment?.id == id && !it.deleted }?.let { message ->

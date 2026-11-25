@@ -47,7 +47,8 @@ import io.github.thiesi.chitchat.core.typing.TypingTarget
 import io.github.thiesi.chitchat.core.realtime.RealtimePhase
 import io.github.thiesi.chitchat.core.realtime.awaitSendWhenBackOnline
 import io.github.thiesi.chitchat.core.session.SessionPhase
-import io.github.thiesi.chitchat.core.conversation.isPrivatePingCommand
+import io.github.thiesi.chitchat.core.conversation.containsBroadcastToken
+import io.github.thiesi.chitchat.core.conversation.roomSendBudget
 import io.github.thiesi.chitchat.core.session.RateBudget
 import io.github.thiesi.chitchat.core.session.RateLimitNotice
 import io.github.thiesi.chitchat.core.session.isRateBudgetRefusal
@@ -268,8 +269,10 @@ class ConversationViewModel internal constructor(private val operations: Convers
             waiting != null || mutable.value.attachmentReview != null || mutable.value.authorDialog != null || mutable.value.authorWriting || mutable.value.reactionDialog != null ||
             mutable.value.reactionWriting) return false
         if (!canEditDraft() && value.isNotEmpty()) { mutable.value = mutable.value.copy(draftLimit = true); return false }
+        // #323b3 (PL): the @room/@here line ends silently once the draft has no counted broadcast token (the server's rule).
         mutable.value = mutable.value.copy(draft = value, validation = null, draftLimit = false,
-            sendLimit = mutable.value.sendLimit?.takeIf { it.knownWait })
+            sendLimit = mutable.value.sendLimit?.takeIf { it.knownWait &&
+                (it.budget != RateBudget.ROOM_BROADCAST_MENTION || containsBroadcastToken(value)) })
         rememberDraft(); return true
     }
     fun canUseMessage(expected: SessionState, roomId: Long?, message: RoomMessage): Boolean {
@@ -1258,7 +1261,7 @@ class ConversationViewModel internal constructor(private val operations: Convers
     private fun performSend(body: String, replyId: Long?) {
         val value = mutable.value
         val typingSession = session.value
-        request(sending = true, rateBudget = if (isPrivatePingCommand(body)) RateBudget.ROOM_PING else RateBudget.ROOM_SEND) { current ->
+        request(sending = true, rateBudget = roomSendBudget(body)) { current ->
             postInFlight = true
             val result = operations.send(checkNotNull(value.roomId), body, replyId)
             current(); postInFlight = false
@@ -1566,7 +1569,10 @@ class ConversationViewModel internal constructor(private val operations: Convers
                     // changed on the server, so history isn't marked stale and Send stays enabled (PL); a tap during the
                     // wait is refused locally with no request and keeps the line.
                     if (rateBudget != null && failure.isRateBudgetRefusal())
-                        mutable.value = mutable.value.copy(sendLimit = RateLimitNotice(rateBudget, failure.retryAfterSeconds != null),
+                        // #323b3: a local gate names the budget that refused (a known room_send wait gates a broadcast
+                        // send too, and its line takes precedence, PL).
+                        mutable.value = mutable.value.copy(sendLimit = RateLimitNotice(failure.gatedBudget ?: rateBudget,
+                            failure.retryAfterSeconds != null),
                             sendLimitRepeats = mutable.value.sendLimitRepeats + if (mutable.value.sendLimit != null) 1 else 0,
                             sendLimitRefusals = mutable.value.sendLimitRefusals + 1)
                     else if (failure.status in setOf(403, 404) && failure.code != "csrf_failed" &&

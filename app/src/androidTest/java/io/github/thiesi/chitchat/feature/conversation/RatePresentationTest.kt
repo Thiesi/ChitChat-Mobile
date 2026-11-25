@@ -89,6 +89,14 @@ class RatePresentationTest {
     private fun text(id: Int) = context.getString(id)
     /** The activity window's IME inset, read in composition (as the conversation journeys do) for the one native tap. */
     @Volatile private var imeBottom = 0
+    // #364: the drawn line's own text overflow (a clipped line), and whether the floor fallback was ever decided.
+    @Volatile private var lineOverflow = false
+    @Volatile private var floorReached = false
+    private val fitLog = java.util.concurrent.CopyOnWriteArrayList<String>()
+    /** PL (#364): checks before the capture are deferred, so a failing case still leaves its image; thrown after it. */
+    private val deferred = mutableListOf<Throwable>()
+    private fun later(block: () -> Unit) { runCatching(block).exceptionOrNull()?.let { deferred += it } }
+    private fun fitTail() = fitLog.takeLast(6).joinToString(" | ")
     /** The form the composer's wait line last drew (short?) and its visible text, from the observation-only probe. */
     @Volatile private var form: Pair<Boolean, String>? = null
 
@@ -101,9 +109,10 @@ class RatePresentationTest {
     @Test fun roomSendLightDefault() = flow("rate-room-send-light-default", dm = false, dark = false, 1f, reply = true,
         expect = FULL, details = true, visibleTap = true)
     @Test fun roomSendLightFont200() = flow("rate-room-send-light-font200", dm = false, dark = false, 2f, reply = true,
-        expect = SHORT, details = true)
+        expect = SHORT, details = true, packed = true)
     @Test fun roomSendDarkDefault() = flow("rate-room-send-dark-default", dm = false, dark = true, 1f, reply = true, expect = FULL)
-    @Test fun roomSendDarkFont200() = flow("rate-room-send-dark-font200", dm = false, dark = true, 2f, reply = true, expect = SHORT)
+    @Test fun roomSendDarkFont200() = flow("rate-room-send-dark-font200", dm = false, dark = true, 2f, reply = true, expect = SHORT,
+        packed = true)
     // 2. DM composer with the send line: light and dark × default and 200% (short at 200%, as the rule picks).
     @Test fun dmSendLightDefault() = flow("rate-dm-send-light-default", dm = true, dark = false, 1f, expect = FULL)
     @Test fun dmSendLightFont200() = flow("rate-dm-send-light-font200", dm = true, dark = false, 2f, expect = SHORT)
@@ -128,14 +137,33 @@ class RatePresentationTest {
     // re-decided (here, to short). Asserts only, no capture.
     @Test fun roomReplyStartedDuringTheWait() =
         flow(null, dm = false, dark = false, 2f, replyLater = true, expect = SHORT)
+    // #323b3 (PL): the @room/@here line (a draft with @room, its own budget): light and dark × default and 200%, and the
+    // unknown variant (light default). Same placement, carrier, forms and announcement counts as the send line.
+    @Test fun roomBroadcastLightDefault() =
+        flow("rate-broadcast-light-default", dm = false, dark = false, 1f, reply = true, expect = FULL, broadcast = true)
+    @Test fun roomBroadcastLightFont200() =
+        flow("rate-broadcast-light-font200", dm = false, dark = false, 2f, reply = true, expect = SHORT, broadcast = true,
+            packed = true)
+    @Test fun roomBroadcastDarkDefault() =
+        flow("rate-broadcast-dark-default", dm = false, dark = true, 1f, reply = true, expect = FULL, broadcast = true)
+    @Test fun roomBroadcastDarkFont200() =
+        flow("rate-broadcast-dark-font200", dm = false, dark = true, 2f, reply = true, expect = SHORT, broadcast = true,
+            packed = true)
+    // TL (#364): a realistic two-line draft in the send set, the path that hid the broadcast line at 200% portrait with
+    // the keyboard down. Asserts only: the short form, never hidden outside compact with the keyboard up.
+    @Test fun roomSendTwoLineDraftFont200() =
+        flow("rate-room-send-twoline-light-font200", dm = false, dark = false, 2f, reply = true, expect = SHORT,
+            draftText = "Unsent fixture that wraps onto two lines", packed = true)
+    @Test fun roomBroadcastUnknownWait() =
+        flow("rate-broadcast-unknown-light-default", dm = false, dark = false, 1f, known = false, expect = FULL, broadcast = true)
 
 
     private fun flow(capture: String?, dm: Boolean, dark: Boolean, fontScale: Float, expect: RateLineForm, reply: Boolean = false,
         ping: Boolean = false, known: Boolean = true, landscape: Boolean = false, keyboard: Boolean = false,
         noStatusRow: Boolean = false, details: Boolean = false, replyLater: Boolean = false, visibleTap: Boolean = false,
-        landscapeCase: Char? = null) {
+        landscapeCase: Char? = null, broadcast: Boolean = false, draftText: String? = null, packed: Boolean = false) {
         val name = capture ?: "rate-room-reply-during-wait"
-        form = null
+        form = null; lineOverflow = false; floorReached = false; fitLog.clear(); deferred.clear()
         FontScaleTestActivity.requestedFontScale = fontScale
         val sessions = TestSessions()
         val api = NativeChatFixtures(sessions)
@@ -147,7 +175,7 @@ class RatePresentationTest {
             override suspend fun savePureBlack(enabled: Boolean) = Unit
             override suspend fun saveTheme(theme: ThemePreference) { settings.value = settings.value.copy(theme = theme) }
         }
-        val waitText = fullLine(dm, ping, known)
+        val waitText = fullLine(dm, ping, known, broadcast)
         val detailsLabel = text(if (dm) R.string.dm_details else R.string.conversation_details)
         // TL/PL: the wait line carries every announcement; counted from real accessibility events, connected before launch.
         LiveAnnouncements { node -> node.contentDescription?.toString()?.trimEnd() == waitText }.use { heard ->
@@ -176,7 +204,10 @@ class RatePresentationTest {
                     val bottom = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
                     androidx.compose.runtime.SideEffect { imeBottom = bottom }
                     androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalRateLineProbe provides
-                        { isShort, visible -> form = isShort to visible }) {
+                        { isShort, visible -> form = isShort to visible },
+                        io.github.thiesi.chitchat.core.ui.LocalRateLineOverflowProbe provides { lineOverflow = it },
+                        io.github.thiesi.chitchat.core.ui.LocalRateLineFloorProbe provides { floorReached = true },
+                        io.github.thiesi.chitchat.core.ui.LocalRateLineFitProbe provides { fitLog += it }) {
                         Box(Modifier.fillMaxSize()) {
                             TestChitChatApp(settings, auth, conversationModel = room, directInbox = inbox,
                                 directThread = thread, notifications = notices, messageTargets = targets)
@@ -217,12 +248,14 @@ class RatePresentationTest {
             // line: the chip settled, the keyboard confirmed down, idle (TL).
             val input = if (dm) "dm_composer" else "conversation_composer"
             val send = if (dm) "dm_send" else "conversation_send"
-            val draft = if (ping) "/ping Peer fixture" else if (dm) "Unsent direct fixture" else "Unsent fixture"
+            val draft = draftText ?: if (ping) "/ping Peer fixture" else if (dm) "Unsent direct fixture"
+                else if (broadcast) "Unsent fixture for @room" else "Unsent fixture"
             compose.runOnIdle { if (dm) thread.updateDraft(draft) else room.updateDraft(draft) }
             keyboardDown()
             val before = arrangement(input, send)
             if (landscapeCase != null) {
                 landscape(landscapeCase, room, sessions, api, heard, input, send, detailsLabel, before)
+                check(!floorReached) { "$name landscape $landscapeCase: the floor fallback was reached" }
                 return@use
             }
             // A native first tap brings the keyboard up; then the server's own refusal, with a known wait's deadline as the
@@ -230,7 +263,8 @@ class RatePresentationTest {
             compose.tapNativeInput(input, { imeBottom })
             compose.waitForIdle()
             val beforeKeyboard = arrangement(input, send) // The landscape-ime capture's state, still without the line.
-            val budget = if (dm) RateBudget.DIRECT_MESSAGE_SEND else if (ping) RateBudget.ROOM_PING else RateBudget.ROOM_SEND
+            val budget = if (dm) RateBudget.DIRECT_MESSAGE_SEND else if (ping) RateBudget.ROOM_PING
+                else if (broadcast) RateBudget.ROOM_BROADCAST_MENTION else RateBudget.ROOM_SEND
             compose.runOnIdle {
                 val refusal = ApiFailure(FailureKind.HTTP, 429, "rate_limited", if (known) 300 else null)
                 if (dm) api.directs.sendFailure = refusal else api.rooms.sendFailure = refusal
@@ -252,32 +286,64 @@ class RatePresentationTest {
             compose.onNodeWithTag(send).performNativeTap()
             compose.waitUntil(5_000) { (if (dm) thread.state.value.sendLimit else room.state.value.sendLimit) != null }
             compose.waitForIdle()
-            lineOrDot(name, "with the keyboard up", detailsLabel)
+            later { lineOrDot(name, "with the keyboard up", detailsLabel) }
+            if (packed) later {
+                // TL (#364): 200% portrait, a reply chip and the keyboard up: even the short form has no room, so the
+                // refusal resolves to hidden with the dot, and the app (not this test) hides the keyboard once. The hide
+                // is the proof of that settled hidden form (only a hidden form hides). Then the line is drawn,
+                // unclipped, with the composer at its no-line baseline.
+                compose.waitUntil(5_000) { imeBottom == 0 }
+                compose.waitUntil(5_000) { lineDrawn() }
+                compose.waitForIdle()
+                unclipped("$name after the refusal-hide", "rate_wait_line")
+                check(!lineOverflow) { "$name: the line's text is cut after the refusal-hide (drawn height < laid-out height); ${fitTail()}" }
+                check(compose.onAllNodesWithTag("bounded_header").fetchSemanticsNodes().isNotEmpty()) {
+                    "$name: the header is gone (it only yields, PL)" }
+                val afterHide = arrangement(input, send)
+                check(afterHide == before) { "$name: the composer moved after the refusal-hide $before -> $afterHide" }
+            }
             // TL diagnostic (run 45244641951): the carrier's height when the notice appears; a zero-size node announces nothing.
             val heightAtAppearance = lineHeight()
             val drawnAtAppearance = lineDrawn()
             val appeared = heard.mark(compose, sentinel)
             if (!keyboard) {
                 keyboardDown()
-                lineOrDot(name, "after the keyboard hid", detailsLabel) // TL condition 3.
+                later { lineOrDot(name, "after the keyboard hid", detailsLabel) } // TL condition 3.
             }
             if (replyLater) {
                 // PL: the notice shown with no chip, then a reply: re-decided from the new layout, the composer unchanged.
                 startReply(room)
                 keyboardDown()
-                lineOrDot(name, "after the reply started", detailsLabel)
+                later { lineOrDot(name, "after the reply started", detailsLabel) }
             }
             val swapped = heard.mark(compose, sentinel)
             val expectedArrangement = if (keyboard) beforeKeyboard else before
             // Capture first, so a failing assert (announcements included) still leaves its image (PL).
             if (capture != null) capture(capture)
+            writeFitLog(name)
+            // PL (#364): the header's cap follows decisions only. Every cap record carries the most recently decided yield
+            // (0 before any): while a decision is pending it holds (no grow-back mid-transition), and a decided form that
+            // needs no yield restores the full cap in that pass. The notice stands throughout this flow.
+            later {
+                var decided = 0
+                val yieldOf = Regex("yield=(\\d+)")
+                fitLog.forEach { record ->
+                    val value = yieldOf.find(record)?.groupValues?.get(1)?.toInt() ?: return@forEach
+                    if (record.startsWith("decide ")) decided = value
+                    else if (record.startsWith("cap ")) check(value == decided) {
+                        "$name: a header cap off its decided yield ($value px, decided $decided px): ${fitLog.joinToString(" | ")}" }
+                }
+            }
+            // The deferred checks, now that the image exists (PL): the first failure, with every message and the fit log.
+            deferred.firstOrNull()?.let { first ->
+                throw AssertionError("${deferred.joinToString(" // ") { it.message.orEmpty() }}; fit: ${fitTail()}", first) }
             // Details is captured before any assert too (PL): the full line first only while short or hidden, never twice.
             var inDetails = -1
             if (details) {
                 compose.onNodeWithContentDescription(detailsLabel).performNativeTap()
                 compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isNotEmpty() }
                 compose.waitForIdle()
-                inDetails = compose.onAllNodes(hasContentDescription(fullLine(dm, ping, known)) and hasAnyAncestor(isDialog()))
+                inDetails = compose.onAllNodes(hasContentDescription(fullLine(dm, ping, known, broadcast)) and hasAnyAncestor(isDialog()))
                     .fetchSemanticsNodes().size
                 if (expect != FULL) capture("rate-room-send-light-font200-details", dialog = true)
                 androidx.test.espresso.Espresso.pressBack()
@@ -300,7 +366,13 @@ class RatePresentationTest {
             // and Send are each unclipped and inside the window, and above the keyboard top when it's up.
             formIs(name, expect, detailsLabel)
             oneWaitNode(name, waitText)
-            if (expect != HIDDEN) unclipped(name, "rate_wait_line")
+            if (expect != HIDDEN) {
+                unclipped(name, "rate_wait_line")
+                // PL (#364): a drawn line is always whole: its drawn height is its laid-out text height.
+                check(!lineOverflow) { "$name: the line's text is cut (drawn height < laid-out height)" }
+            }
+            // TL (#364): the floor fallback (keyboard down, header at its floor) is never reached by these fixtures.
+            check(!floorReached) { "$name: the floor fallback was reached" }
             unclipped(name, input)
             unclipped(name, send)
             // PL refinement: the composer's field width, arrangement and field height never change because of the line.
@@ -432,9 +504,11 @@ class RatePresentationTest {
         compose.waitForIdle()
     }
 
-    private fun fullLine(dm: Boolean, ping: Boolean, known: Boolean): String {
+    private fun fullLine(dm: Boolean, ping: Boolean, known: Boolean, broadcast: Boolean = false): String {
         val wait = context.resources.getQuantityString(R.plurals.wait_about_minutes, 5, 5)
         return when {
+            broadcast && !known -> text(R.string.rate_wait_broadcast_unknown)
+            broadcast -> context.getString(R.string.rate_wait_broadcast, wait)
             !known -> text(R.string.rate_wait_messages_unknown)
             ping && !dm -> context.getString(R.string.rate_wait_pings, wait)
             else -> context.getString(R.string.rate_wait_messages, wait)
@@ -505,6 +579,8 @@ class RatePresentationTest {
     private fun lineOrDot(name: String, moment: String, detailsLabel: String) {
         val drawn = lineDrawn()
         check(drawn || detailsState(detailsLabel) != null) { "$name: no wait line and no Details dot $moment" }
+        // TL and PL (#364): never hidden with the keyboard down (the J found the dot alone at 200% portrait).
+        check(drawn || imeBottom > 0) { "$name: hidden with the keyboard down $moment; fit: ${fitTail()}" }
     }
 
     private fun formIs(name: String, expect: RateLineForm, detailsLabel: String) {
@@ -537,6 +613,15 @@ class RatePresentationTest {
      * run 45211530633), which made the plain root ambiguous for the capture.
      */
     private fun appRoot() = compose.onNode(isRoot() and hasAnyDescendant(hasTestTag("conversation_composer") or hasTestTag("dm_composer")))
+
+    /** TL and PL (#364): every decision and header cap of this flow, appended to one log beside the captures. */
+    private fun writeFitLog(name: String) {
+        val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }
+            ?: checkNotNull(context.getExternalFilesDir(null))
+        val folder = java.io.File(output, "ccm-rate-presentation")
+        check(folder.isDirectory || folder.mkdirs())
+        java.io.File(folder, "rate-fit-log.txt").appendText(fitLog.joinToString("\n", prefix = "== $name\n", postfix = "\n"))
+    }
 
     private fun capture(name: String, dialog: Boolean = false) {
         compose.waitForIdle()
