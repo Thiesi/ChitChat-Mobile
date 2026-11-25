@@ -105,6 +105,66 @@ class AuthPinnedPresentationTest {
     @androidx.compose.runtime.Composable
     private fun imeTargetBottom(): Int = WindowInsets.imeAnimationTarget.getBottom(LocalDensity.current)
 
+    /** #351 DIAGNOSTIC (uncommitted): opt-in by `-e scrollSettleDiagnostic auth`; observation only. */
+    @Test fun scrollSettleDiagnostic() {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("scrollSettleDiagnostic") == "auth")
+        val tags = listOf("registration_username")
+        val reps = org.json.JSONArray()
+        for (rep in 0 until 40) {
+            FontScaleTestActivity.requestedFontScale = 2f
+            val sessions = TestSessions().apply {
+                registrationEnabled = true
+                nextConnect = { it.copy(installationName = "The Common Room", public = it.public!!.copy(policies = rules)) }
+            }
+            val auth = AuthViewModel(sessions)
+            val settings = SettingsViewModel(object : SettingsStore {
+                override val settings = MutableStateFlow(AppSettings(server = (ServerAddress.parse("chat.example.test") as AddressResult.Valid).address,
+                    theme = ThemePreference.LIGHT))
+                override suspend fun saveServer(server: ServerAddress?) { settings.value = settings.value.copy(server = server) }
+                override suspend fun savePureBlack(enabled: Boolean) = Unit
+                override suspend fun saveTheme(theme: ThemePreference) = Unit
+            })
+            ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.setContent {
+                        val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
+                        val target = imeTargetBottom()
+                        SideEffect { imeBottom = bottom; imeTarget = target }
+                        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalCursorBlinkEnabled provides false) {
+                            Box(Modifier.fillMaxSize().testTag("auth_host")) { TestChitChatApp(settings, auth) }
+                        }
+                    }
+                }
+                compose.waitUntil(5_000) { !settings.state.value.loading }
+                compose.onNodeWithTag("onboarding_create").performScrollTo().performClick()
+                assertEquals("Create block pinned", true, compose.onAllNodesWithTag("pinned_action").fetchSemanticsNodes().isNotEmpty())
+                compose.onNodeWithTag("registration_rules_consent").assertIsDisplayed()
+                capture("diag-auth-$rep-block")
+                compose.onNodeWithTag("registration_username").performScrollTo()
+                val roots = compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes()
+            .mapNotNull { it.root as? androidx.compose.ui.platform.ViewRootForTest }
+                val before = io.github.thiesi.chitchat.testing.ScrollSettleRecorder.snapshotNow(roots, tags)
+                val recorder = io.github.thiesi.chitchat.testing.ScrollSettleRecorder(roots, tags).start()
+                compose.tapNativeInput("registration_username", imeBottom = { imeBottom })
+                val tapped = recorder.elapsed()
+                compose.waitUntil(5_000) { imeBottom > 0 && imeBottom == imeTarget }
+                compose.waitForIdle()
+                val captureAt = recorder.elapsed()
+                val atCapture = io.github.thiesi.chitchat.testing.ScrollSettleRecorder.snapshotNow(roots, tags)
+                capture("diag-auth-$rep-keyboard")
+                compose.waitUntil(5_000) { recorder.done }
+                val after = io.github.thiesi.chitchat.testing.ScrollSettleRecorder.snapshotNow(roots, tags)
+                reps.put(org.json.JSONObject().put("rep", rep).put("tappedMs", tapped).put("captureMs", captureAt)
+                    .put("png", io.github.thiesi.chitchat.testing.ScrollSettleRecorder.pngHash("ccm-auth-presentation", "diag-auth-$rep-keyboard"))
+                    .put("imeBottomAtCapture", imeBottom).put("imeTargetAtCapture", imeTarget)
+                    .put("before", before).put("atCapture", atCapture).put("after", after).put("frames", recorder.samples))
+            }
+        }
+        FontScaleTestActivity.requestedFontScale = 1f
+        io.github.thiesi.chitchat.testing.ScrollSettleRecorder.write("scroll-settle-auth.json",
+            org.json.JSONObject().put("api", android.os.Build.VERSION.SDK_INT).put("form", "auth-light-font200-create-keyboard").put("reps", reps))
+    }
+
     private fun capture(name: String) {
         if (name.endsWith("-keyboard")) compose.waitUntil(5_000) { imeBottom > 0 && imeBottom == imeTarget }
         compose.waitForIdle()
