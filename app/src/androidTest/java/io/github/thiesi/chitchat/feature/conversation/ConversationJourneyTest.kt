@@ -113,9 +113,10 @@ class ConversationJourneyTest {
         compose.runOnIdle { assertTrue("Fixture input reached its VM", body == model.state.value.draft) }
         val semantics = compose.onNodeWithTag("conversation_composer").fetchSemanticsNode().config
         assertEquals(body, semantics[SemanticsProperties.EditableText].text)
-        assertFalse(semantics.contains(SemanticsProperties.ContentDescription))
         val label = InstrumentationRegistry.getInstrumentation().targetContext.getString(io.github.thiesi.chitchat.R.string.conversation_message)
         assertTrue(semantics[SemanticsProperties.Text].any { it.text == label })
+        // #331b (TL, PL): a filled composer is named by exactly its label (never the draft); the draft stays its text.
+        assertEquals(listOf(label), semantics[SemanticsProperties.ContentDescription])
         if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true")
             compose.waitUntil(5_000) { imeBottom > 0 }
         // Send is pinned beside the field: no composer scroll that can race cursor bring-into-view.

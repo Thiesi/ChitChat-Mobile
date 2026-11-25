@@ -13,9 +13,9 @@ such as TalkBack uses, as `ReportDetailsAccessibilityTest` does), empty and fill
   preceding text-bearing node in traversal order.
 - **Output:** `ccm-a11y-nodes/text-field-nodes-api<level>.json`, collected into the `a11y-nodes` report folder
   (`collect_a11y_nodes`, validated whole: fixed name, size cap, exact keys, fixture-only text).
-- **Measurement only:** no outcome asserts. It fails only if a node can't be obtained or the file can't be written. It
-  reads nodes only (no keyboard, IME or focus request), and runs once per level in the normal unfiltered suite. #331b
-  turns it into strict asserts or removes it.
+- **Measurement only** in #331a: no outcome asserts. It fails only if a node can't be obtained or the file can't be
+  written. It reads nodes only (no keyboard, IME or focus request), and runs once per level in the normal unfiltered
+  suite. **#331b turned it into strict asserts** (see the fix below); it still writes the same JSON.
 - **Spoken output** isn't measured; it stays with the owner's manual TalkBack checks.
 
 **Cases:**
@@ -142,7 +142,11 @@ text in it.
   - what lands on the node (hintText, contentDescription, labeledBy);
   - that the typed text stays the node's text, and the name doesn't replace it;
   - whether the visible label also shows as a child, which would duplicate it.
-- **Results:** pending this push's run.
+- **Results (run 45180056044, head 81ace25; API35 and API36 identical):** the description doesn't reach the EditText
+  node either (hint, contentDescription and labeledBy stay null). It lands on a **visible, non-focusable depth-1 child
+  View** of the field, the same structure as the label child. The typed text stays the node's text.
+  - **While empty, it duplicates the name:** the description View and the visible label TextView both carry the label.
+  - **While filled, it's the only name:** the label TextView is no longer visible, and the description View remains.
 
 ## #331b: ATF as a second signal (run 45169512402, head 23bf3d6) is a documented negative
 
@@ -156,6 +160,41 @@ and API36. So did every other case. ATF 4.1.1 gives no signal for Compose editab
 evaluate them through this path, or its speakable-text check exempts editable fields. The code stays inside the probe as
 a canary, with no assert (TL): if a future ATF or Compose version flags the control, revisit. The owner's TalkBack check
 remains the decider.
+
+## #331b: the fix (TL and PL, 2026-11-25)
+
+**The decision (TL):** the owner runs the real-phone TalkBack checks only once the pre-Play roadmap is done, so #331b
+goes ahead on the likely TalkBack behaviour: a focused field's non-focusable child text is read with it.
+- **The 19 label-slot fields stay as they are.** Their label is a visible, non-focusable child, empty and filled.
+- **MessageInput (both overloads) carries its label as a description only while filled.** That covers the room
+  composer, the DM composer and the author edit body. While empty, the visible label child names it, and a description
+  as well would name it twice (the mechanism results above). No new parameter: it's the `label` the call sites already
+  pass.
+- **Wording (PL):** exactly the existing label, unchanged ("Message", "Edited message"...). No role words, since TalkBack
+  already says "Edit box". No draft, count or state words. The name is the same whether the field is empty or filled.
+- **No visible change:** the PL's byte check covers the three fields at default and 200%, light and dark.
+
+**The asserts** (`TextFieldNodeNamesTest`, on the real AccessibilityNodeInfo, on every level the suite runs; still nodes
+only, with no keyboard, IME or focus request). The JSON is written before the asserts, so a failure keeps its evidence.
+- **The 5 Material label-slot cases and step-up's secret:** exactly one depth-1 child carrying the label, as text,
+  visible, important and not focusable or screen-reader focusable, empty and filled. The node's text is the field's text
+  (masked for a password, with `isPassword`), and nothing on the node itself names it.
+- **MessageInput, both overloads (PL conditions 1 to 3):** exactly one visible child carrying the label in each state.
+  While empty, that's the label text and no description exists. While filled, it's a description equal to the label,
+  on a visible, important, non-focusable child, and no other description exists. The full draft stays the node's text.
+- **The switches (PL condition 2):** the first character typed and the last cleared, for both overloads, driven in
+  composition. The same asserts hold at each step.
+- **The report pattern:** the label stays the preceding node.
+- **Not asserted:** the synthetic comparison cases and the ATF canary, recorded as before. The mechanism cases are
+  dropped, superseded by the real MessageInput.
+- **The journeys:** `ConversationJourneyTest` and `DirectJourneyTest` asserted that a filled composer had no
+  contentDescription (the old contract). They now assert exactly `[label]`, with the draft as the editable text.
+
+**Real speech is verified at the owner's final phone check, before the Play upload.** If TalkBack doesn't read the
+child, the report-pattern fix (a visible label kept before the field) comes first. On the owner's list:
+- a label-slot field (sign-in Username), empty and filled, is read with its label;
+- a filled composer is read as its label plus the draft, once (PL);
+- typing the first character or clearing the field doesn't re-announce the label (TL).
 
 ## Compose versions
 

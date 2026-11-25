@@ -10,6 +10,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -54,6 +55,17 @@ import org.junit.Test
  * evidence, not proof of spoken output. `synthetic-unnamed` (no label, placeholder or description) is the control: ATF
  * must flag it, or its silence on the other cases proves nothing.
  *
+ * #331b fix (TL and PL, 2026-11-25): the probe now asserts, strictly and on every level it runs on, the facts the
+ * likely TalkBack behaviour relies on (a focused field's non-focusable child text is read with it). The owner's final
+ * phone check verifies real speech before the Play upload; the report pattern is the fallback if it fails.
+ * - Each label-slot field (the Material cases and step-up's secret): exactly one depth-1 child carrying its label,
+ *   visible, important and not focusable, empty and filled; the node's text is the field's text.
+ * - MessageInput (both overloads): exactly one visible child carrying the label in each state, as the label text while
+ *   empty and as the description (exactly the label) once filled, never both; the draft stays the node's text; also
+ *   across the switches (the first character typed, the last cleared), driven in composition with no keyboard or focus.
+ * - The report pattern: the label stays the preceding node.
+ * The synthetic cases and the ATF canary stay recorded, with no asserts. The JSON is still written and collected.
+ *
  * Cases (see docs/milestones/text-field-names.md for the call sites each covers):
  * - real: the app's own composables, reusable in isolation (MessageInput in both overloads, StepUpDialog's secret).
  * - material: the Material OutlinedTextField with exactly the parameters the call sites pass (label, singleLine,
@@ -77,18 +89,6 @@ class TextFieldNodeNamesTest {
         },
         Case("message-input-value", "real") { filled ->
             MessageInput(TextFieldValue(if (filled) typed else ""), {}, enabled = true, label = label, compact = false)
-        },
-        Case("mechanism-message-input-description", "mechanism") { filled ->
-            MessageInput(if (filled) typed else "", {}, enabled = true, label = label, compact = false,
-                modifier = Modifier.semantics { contentDescription = label })
-        },
-        Case("mechanism-message-input-value-description", "mechanism") { filled ->
-            MessageInput(TextFieldValue(if (filled) typed else ""), {}, enabled = true, label = label, compact = false,
-                modifier = Modifier.semantics { contentDescription = label })
-        },
-        Case("mechanism-outlined-label-description", "mechanism") { filled ->
-            OutlinedTextField(if (filled) typed else "", {}, Modifier.semantics { contentDescription = label },
-                label = { Text(label) }, singleLine = true)
         },
         // The secret lives in the dialog's own state; filling it needs text input, which requests focus. Empty only.
         Case("step-up-password", "real", canFill = false) { _ ->
@@ -149,12 +149,12 @@ class TextFieldNodeNamesTest {
 
     private fun CharSequence?.fact(): String? = this?.toString()?.take(160)
 
-    private fun facts(case: Case, state: String): JSONObject {
+    private fun facts(case: Case, state: String, expectText: String? = null): JSONObject {
         var found: Pair<List<AccessibilityNodeInfo>, AccessibilityNodeInfo>? = null
         compose.waitUntil(5_000) {
             val candidates = ordered().flatMap { nodes -> nodes.filter { it.isEditable }.map { nodes to it } }
             found = candidates.singleOrNull()
-            found != null
+            found != null && (expectText == null || (found!!.second.text?.toString() ?: "") == expectText)
         }
         val (nodes, node) = checkNotNull(found) { "${case.id} $state: no single editable node" }
         val at = nodes.indexOf(node)
@@ -242,6 +242,22 @@ class TextFieldNodeNamesTest {
                 compose.waitForIdle()
                 entries.put(facts(case, if (filled) "filled" else "empty"))
             }
+            // PL condition 2: the switches, typing the first character and clearing the last, in composition (no
+            // keyboard, IME or focus request), for both overloads.
+            for (overload in listOf("string", "value")) {
+                val draft = mutableStateOf("")
+                scenario.onActivity { activity -> activity.setContent { ChitChatTheme(dark = false) {
+                    Surface(Modifier.fillMaxSize()) { Column(Modifier.padding(16.dp)) {
+                        if (overload == "string") MessageInput(draft.value, {}, enabled = true, label = label, compact = false)
+                        else MessageInput(TextFieldValue(draft.value), {}, enabled = true, label = label, compact = false)
+                    } }
+                } } }
+                for ((state, value) in listOf("switch-empty" to "", "switch-first" to "F", "switch-cleared" to "")) {
+                    compose.runOnIdle { draft.value = value }
+                    compose.waitForIdle()
+                    entries.put(facts(Case("message-input-$overload-switch", "real") {}, state, expectText = value))
+                }
+            }
         }
         val api = android.os.Build.VERSION.SDK_INT
         val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }
@@ -251,5 +267,77 @@ class TextFieldNodeNamesTest {
         val file = java.io.File(folder, "text-field-nodes-api$api.json")
         file.writeText(JSONObject().put("api", api).put("entries", entries).toString(), Charsets.UTF_8)
         check(file.length() > 0) { "The node probe wrote nothing" }
+        // The facts are on file first, so a failed assert below still leaves the evidence.
+        val password = InstrumentationRegistry.getInstrumentation().targetContext.getString(io.github.thiesi.chitchat.R.string.current_password)
+        var asserted = 0
+        for (index in 0 until entries.length()) {
+            val entry = entries.getJSONObject(index)
+            val case = entry.getString("case")
+            val filled = entry.getString("state") == "filled"
+            when {
+                case.startsWith("outlined-label-") -> assertLabelSlot(entry, label, if (filled) typed else "")
+                case == "step-up-password" -> assertLabelSlot(entry, password, "")
+                case == "message-input-string" || case == "message-input-value" ->
+                    assertMessageInput(entry, if (filled) typed else "")
+                case.endsWith("-switch") -> assertMessageInput(entry, if (entry.getString("state") == "switch-first") "F" else "")
+                case == "synthetic-visible-label-before" ->
+                    check(entry.str("preceding") == "Fixture question") { "$case: the label isn't the preceding node (${entry.str("preceding")})" }
+                else -> continue // synthetic comparison cases: recorded, not asserted
+            }
+            asserted++
+        }
+        // 5 Material cases x 2 states, step-up's 1, MessageInput's 2 x 2, the switches' 2 x 3, the report pattern's 2.
+        check(asserted == 10 + 1 + 4 + 6 + 2) { "Asserted $asserted entries, expected 23" }
+    }
+
+    private fun JSONObject.str(key: String): String? = if (isNull(key)) null else getString(key)
+
+    private fun JSONObject.children(): List<JSONObject> =
+        getJSONArray("descendants").let { array -> (0 until array.length()).map { array.getJSONObject(it) } }
+
+    /** Nothing on the node itself names it or replaces its text (the label isn't merged into the node). */
+    private fun assertNodeText(entry: JSONObject, id: String, text: String) {
+        val nodeText = entry.str("text") ?: ""
+        if (entry.getBoolean("password") && text.isNotEmpty()) {
+            check(nodeText.length == text.length && nodeText != text) { "$id: the masked text isn't on the node" }
+        } else check(nodeText == text) { "$id: the node's text isn't the field's text ($nodeText)" }
+        check(entry.str("contentDescription") == null && entry.str("hintText") == null && entry.str("labeledBy") == null) {
+            "$id: something on the node itself (${entry.str("contentDescription")}, ${entry.str("hintText")}, ${entry.str("labeledBy")})" }
+    }
+
+    /** A visible, important, non-focusable direct child: read with the focused field, never a stop of its own. */
+    private fun checkReadWithField(child: JSONObject, id: String) {
+        check(child.getInt("depth") == 1 && child.getBoolean("visible") && child.getBoolean("important") &&
+            !child.getBoolean("focusable") && !child.getBoolean("screenReaderFocusable")) { "$id: the name child isn't read with the field ($child)" }
+    }
+
+    private fun assertLabelSlot(entry: JSONObject, name: String, text: String) {
+        val id = "${entry.getString("case")} ${entry.getString("state")}"
+        val carriers = entry.children().filter { it.str("text") == name || it.str("contentDescription") == name }
+        check(carriers.size == 1) { "$id: ${carriers.size} children carry the label" }
+        val child = carriers.single()
+        check(child.str("text") == name && child.str("contentDescription") == null) { "$id: the label isn't a text child ($child)" }
+        checkReadWithField(child, id)
+        val passwordCase = "password" in entry.getString("case")
+        check(entry.getBoolean("password") == passwordCase) { "$id: isPassword is ${entry.getBoolean("password")}" }
+        assertNodeText(entry, id, text)
+    }
+
+    /** PL conditions 1 to 3: one visible name per state, exactly the label, and the draft stays the node's text. */
+    private fun assertMessageInput(entry: JSONObject, draft: String) {
+        val id = "${entry.getString("case")} ${entry.getString("state")}"
+        val named = entry.children().filter { it.getBoolean("visible") && (it.str("text") == label || it.str("contentDescription") == label) }
+        check(named.size == 1) { "$id: ${named.size} visible children carry the label" }
+        val child = named.single()
+        if (draft.isEmpty()) {
+            check(child.str("text") == label && child.str("contentDescription") == null) { "$id: the empty field's name isn't its label text ($child)" }
+            check(entry.children().none { it.str("contentDescription") != null }) { "$id: a description while empty duplicates the label" }
+        } else {
+            check(child.str("contentDescription") == label && child.str("text") == null) { "$id: the filled field's name isn't the label description ($child)" }
+            checkReadWithField(child, id)
+            check(entry.children().none { it.str("contentDescription").let { d -> d != null && d != label } }) { "$id: a description other than the label" }
+        }
+        check(!entry.getBoolean("password")) { "$id: isPassword" }
+        assertNodeText(entry, id, draft)
     }
 }

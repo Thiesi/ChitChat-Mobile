@@ -131,9 +131,10 @@ class DirectJourneyTest {
         tapInput("dm_composer").performTextInput(body)
         val semantics = compose.onNodeWithTag("dm_composer").fetchSemanticsNode().config
         assertEquals(body, semantics[SemanticsProperties.EditableText].text)
-        assertFalse(semantics.contains(SemanticsProperties.ContentDescription))
         val label = InstrumentationRegistry.getInstrumentation().targetContext.getString(io.github.thiesi.chitchat.R.string.dm_message)
         assertTrue(semantics[SemanticsProperties.Text].any { it.text == label })
+        // #331b (TL, PL): a filled composer is named by exactly its label (never the draft); the draft stays its text.
+        assertEquals(listOf(label), semantics[SemanticsProperties.ContentDescription])
         val action = keyboardSend()
         captureFixture("dm-composer-before-send.png")
         action.performClick()
