@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -139,7 +140,10 @@ internal fun MessageSearchScreen(model: MessageSearchViewModel, expected: Sessio
             // the result list (review of 027dc35): Next and Previous sit below the list, so a refusal after scrolling the
             // results must still show and announce; here it's always composed and in view, above the list.
             io.github.thiesi.chitchat.core.ui.RateWaitDialogLine(expected, value.rateLimit, R.string.rate_wait_search,
-                R.string.rate_wait_search_unknown, "message_search_rate_line", Modifier.fillMaxWidth(),
+                // zIndex (run 45570081543): the empty strip's 1dp overhang lies on the result list's top padding, part of
+                // the list's node, and Compose drops a node a later one covers; drawn last, it stays a real node. It
+                // draws nothing when empty and overlaps nothing when drawn, so nothing visible changes.
+                R.string.rate_wait_search_unknown, "message_search_rate_line", Modifier.fillMaxWidth().zIndex(1f),
                 parity = value.rateRepeats % 2 == 1,
                 // TL (#348's A2): empty, it's the zero-footprint 1dp strip (no padding, no space, no stop); padded only drawn.
                 drawnPadding = PaddingValues(horizontal = 12.dp))

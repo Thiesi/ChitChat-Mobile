@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.feature.search
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -86,6 +87,15 @@ class RateSearchPresentationTest {
     @Test fun peopleSearchDarkDefault() = peopleSearch(dark = true, scale = 1f)
     @Test fun peopleSearchDarkFont200() = peopleSearch(dark = true, scale = 2f)
 
+    /**
+     * PL (#365, as #359): the screens composed here sit on the theme's own background, as in the app (the activity window
+     * alone is cream, which made the dark captures dark text on cream). Test-only.
+     */
+    @androidx.compose.runtime.Composable
+    private fun RealSurface(content: @androidx.compose.runtime.Composable () -> Unit) =
+        androidx.compose.material3.Surface(androidx.compose.ui.Modifier.fillMaxSize(),
+            color = androidx.compose.material3.MaterialTheme.colorScheme.background, content = content)
+
     private fun name(kind: String, dark: Boolean, scale: Float) =
         "rate-search-$kind-${if (dark) "dark" else "light"}-${if (scale > 1f) "font200" else "default"}"
 
@@ -99,11 +109,11 @@ class RateSearchPresentationTest {
             scenario.onActivity { activity ->
                 model = ViewModelProvider(activity, MessageSearchViewModel.factory(ops))[MessageSearchViewModel::class.java]
                 activity.setContent { CompositionLocalProvider(LocalMonotonicClock provides { now }) {
-                    ChitChatTheme(dark = dark) { androidx.compose.foundation.layout.Box {
+                    ChitChatTheme(dark = dark) { RealSurface { androidx.compose.foundation.layout.Box {
                         val session by ops.session.collectAsState()
                         MessageSearchScreen(model, session, "entry", refreshSession = {}, isCurrentEntry = { true })
                         sentinel?.let { io.github.thiesi.chitchat.testing.LiveFlushSentinel(it.intValue) }
-                    } }
+                    } } }
                 } }
             }
             compose.waitUntil(5_000) { model.state.value.entry != null }
@@ -112,6 +122,11 @@ class RateSearchPresentationTest {
             compose.runOnIdle { model.scope(entry, MessageSearchScope.ROOMS); model.query(entry, "fixture"); model.search(entry) }
             compose.waitUntil(5_000) { model.state.value.results != null && !model.state.value.busy }
             if (heard != null && sentinel != null) {
+                // TL (#365): the raised (zIndex) empty carrier never makes Compose prune a result row's real node.
+                realRows("unscrolled")
+                compose.onNodeWithTag("message_search_results").performScrollToIndex(3); compose.waitForIdle()
+                realRows("scrolled to the end")
+                compose.onNodeWithTag("message_search_results").performScrollToIndex(0); compose.waitForIdle()
                 announcements(heard, sentinel, "message_search_rate_line",
                     refuse = { ops.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 300); model.search(entry) },
                     retry = { model.retry(checkNotNull(model.state.value.failedAttempt)) },
@@ -122,7 +137,7 @@ class RateSearchPresentationTest {
             compose.onNodeWithTag("message_search_results").performScrollToIndex(3)
             compose.runOnIdle { ops.failure = ApiFailure(FailureKind.HTTP, 429, "rate_limited", 300); model.search(entry) }
             compose.waitUntil(5_000) { model.state.value.rateLimit != null && !model.state.value.busy }
-            capture(name("messages", dark, scale)) // Before any check (PL), so a failing case keeps its image.
+            capture(name("messages", dark, scale), dark) // Before any check (PL), so a failing case keeps its image.
             compose.waitUntil(5_000) { shown("message_search_rate_line") == full }
             assertEquals(full, shown("message_search_rate_line"))
             assertInView("message_search_rate_line"); assertInView("message_search_query")
@@ -147,10 +162,10 @@ class RateSearchPresentationTest {
                 inbox = ViewModelProvider(activity, DirectInboxViewModel.factory(api.directs))[DirectInboxViewModel::class.java]
                 val thread = ViewModelProvider(activity, DirectThreadViewModel.factory(api.directs))[DirectThreadViewModel::class.java]
                 activity.setContent { CompositionLocalProvider(LocalMonotonicClock provides { now }) {
-                    ChitChatTheme(dark = dark) { androidx.compose.foundation.layout.Box {
+                    ChitChatTheme(dark = dark) { RealSurface { androidx.compose.foundation.layout.Box {
                         DirectInboxScreen(inbox, thread, onRefreshSession = {}, isCurrentEntry = { true }, onSelect = {})
                         sentinel?.let { io.github.thiesi.chitchat.testing.LiveFlushSentinel(it.intValue) }
-                    } }
+                    } } }
                 } }
             }
             compose.waitUntil(5_000) { inbox.state.value.inbox != null && !inbox.state.value.stale && !inbox.state.value.busy }
@@ -168,7 +183,7 @@ class RateSearchPresentationTest {
                 inbox.updateQuery("Pe"); inbox.search()
             }
             compose.waitUntil(5_000) { inbox.state.value.searchLimit != null && !inbox.state.value.searching }
-            capture(name("people", dark, scale)) // Before any check (PL).
+            capture(name("people", dark, scale), dark) // Before any check (PL).
             compose.waitUntil(5_000) { shown("dm_search_rate_line") == full }
             assertEquals(full, shown("dm_search_rate_line"))
             assertInView("dm_search_rate_line"); assertInView("dm_search_input")
@@ -233,6 +248,23 @@ class RateSearchPresentationTest {
         assertTrue("$tag: the real carrier $real", real.visibleToUser && !real.focusable && !real.screenReaderFocusable && !real.clickable)
     }
 
+    /**
+     * TL (#365): every result row Compose shows has its real accessibility node, present and visible to the user, with the
+     * empty carrier drawn last above the list (a covered node is dropped; the carrier must cover none).
+     */
+    private fun realRows(state: String) {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val shown = (1..3).map { "Fixture result $it" }.filter { text ->
+            compose.onAllNodes(androidx.compose.ui.test.hasText(text)).fetchSemanticsNodes().any { it.boundsInWindow.height > 1f } }
+        assertTrue("$state: a result row is shown", shown.isNotEmpty())
+        val root = checkNotNull(automation.rootInActiveWindow) { "$state: no active window" }
+        shown.forEach { text ->
+            val real = root.findAccessibilityNodeInfosByText(text)
+            assertTrue("$state: \"$text\" has a real node visible to the user: ${real.map { it.isVisibleToUser }}",
+                real.any { it.isVisibleToUser })
+        }
+    }
+
     /** PL (#365, #360's lesson): in the node tree and visible without scrolling: unclipped through every ancestor. */
     private fun assertInView(tag: String) {
         val node = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().single()
@@ -247,14 +279,21 @@ class RateSearchPresentationTest {
     private fun description(tag: String) = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes()
         .singleOrNull()?.config?.getOrNull(SemanticsProperties.ContentDescription)?.singleOrNull()
 
-    private fun capture(name: String) {
+    private fun capture(name: String, dark: Boolean? = null) {
         compose.waitForIdle()
         val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }
             ?: checkNotNull(context.getExternalFilesDir(null))
         val folder = java.io.File(output, "ccm-rate-presentation")
         check(folder.isDirectory || folder.mkdirs())
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
-        try { java.io.File(folder, "$name.png").outputStream().use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) } }
-        finally { bitmap.recycle() }
+        try {
+            java.io.File(folder, "$name.png").outputStream().use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
+            // TL (#365, the PL's re-J): the theme's own surface is behind the screen; the bottom corner is background.
+            if (dark != null) {
+                val ground = android.graphics.Color.luminance(bitmap.getPixel(bitmap.width - 4, bitmap.height - 4))
+                assertTrue("$name: the background is ${if (dark) "dark" else "light"} (luminance $ground)",
+                    if (dark) ground < 0.2f else ground > 0.6f)
+            }
+        } finally { bitmap.recycle() }
     }
 }
