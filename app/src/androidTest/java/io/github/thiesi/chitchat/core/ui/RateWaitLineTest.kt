@@ -231,7 +231,7 @@ class RateWaitLineTest {
         settle()
         assertFalse("Pending until the header is measured under this window", checkNotNull(fit).settled)
         assertEquals("The previous form holds", RateLineForm.SHORT, fit?.form)
-        assertEquals("The header gets its full cap back while pending", 0, fit?.headerYield)
+        assertTrue("The decided yield holds while pending (no grow-back, PL)", checkNotNull(fit).headerYield > 0)
         allowance = "tight-2" to 2_000
         settle()
         assertTrue(checkNotNull(fit).settled)

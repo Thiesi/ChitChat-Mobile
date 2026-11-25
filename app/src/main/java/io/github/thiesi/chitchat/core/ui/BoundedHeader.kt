@@ -44,8 +44,8 @@ internal fun BoundedHeader(maxHeight: Dp, modifier: Modifier = Modifier, onConte
     // edge is ordinary scrolling (F2, P-216). When it fits there is no band, fade or reserve.
     Column(modifier.fillMaxWidth().heightIn(max = maxHeight).testTag("bounded_header")) {
         Box(Modifier.weight(1f, fill = false)) {
-            // #364: the content's full height (measured unbounded inside the scroll), reported in every layout pass, so a
-            // caller can know the header's natural height without changing its cap (no restore, nothing drawn twice).
+            // #364: the content's full height (measured unbounded inside the scroll), reported when it changes, so a caller
+            // can know the header's natural height without changing its cap (no restore, nothing drawn twice).
             Column(Modifier.fillMaxWidth().verticalScroll(scroll)
                 .then(if (onContentHeight != null) Modifier.onSizeChanged { onContentHeight(it.height) } else Modifier)
                 .padding(horizontal = 16.dp), content = content)

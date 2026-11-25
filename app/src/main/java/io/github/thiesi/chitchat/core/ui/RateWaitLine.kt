@@ -312,7 +312,8 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     }
     // While this window's decision is pending the previous yield holds (the header's natural height is known from its
     // content without restoring its cap: no visible jump, PL); the new yield applies once decided.
-    val yieldNow = if (full == null) 0 else decidedYield ?: lastYield
+    // The decision's own pass already carries its yield (the header follows in the next pass, not one later).
+    val yieldNow = if (full == null) 0 else decidedYield ?: if (fresh != null) freshYield else lastYield
     SideEffect { fit.headerYield = yieldNow }
     val form = if (full == null) null else fresh ?: last ?: RateLineForm.SHORT
     val settled = fresh != null

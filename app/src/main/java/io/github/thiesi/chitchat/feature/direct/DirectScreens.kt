@@ -419,14 +419,17 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         })
                 } }
                 val headerLimit = maxHeight * 0.3f
-                var headerNatural by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-                // #364: how much the header can give the wait line (none in compact, which has no header).
-                val headerFloorPx = with(androidx.compose.ui.platform.LocalDensity.current) { io.github.thiesi.chitchat.core.ui.RateHeaderYieldFloor.roundToPx() }
-                // TL (#364): the header's natural height tagged with the window it was measured under, like the timeline.
-                var headerMeasure by remember { mutableStateOf<Pair<Any, Int>?>(null) }
+                // #364 (review of 7a2743a, TL): the header's raw content height, from its own layout. It's measured unbounded inside
+                // the header's scroll, so it depends only on the content, the width and the font, never on the height or the keyboard:
+                // a keyboard-only window change leaves it valid, and a width or font change fires its onSizeChanged in the same layout
+                // pass that re-tags the timeline. A decision waits for the timeline's tag, so computing the natural height and the
+                // allowance here, in this composition, for this window, never reads a stale value.
+                var headerContent by remember { androidx.compose.runtime.mutableIntStateOf(0) }
                 val headerLimitPx = with(androidx.compose.ui.platform.LocalDensity.current) { headerLimit.roundToPx() }
+                val headerFloorPx = with(androidx.compose.ui.platform.LocalDensity.current) { io.github.thiesi.chitchat.core.ui.RateHeaderYieldFloor.roundToPx() }
+                val headerNatural = if (headerContent > 0) minOf(headerContent, headerLimitPx) else 0
                 val headerAllowance: Pair<Any, Int> = if (compact) rateWindow to 0
-                    else headerMeasure?.let { (tag, height) -> tag to (height - headerFloorPx).coerceAtLeast(0) } ?: (Unit to 0)
+                    else if (headerContent > 0) rateWindow to (headerNatural - headerFloorPx).coerceAtLeast(0) else (Unit to 0)
                 val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
                 val inlineCompletion=maxHeight>=360.dp && androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.3f && selectedReply==null
                 val completionSource=profileDetailsToken
@@ -457,10 +460,7 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
             },
             // The header's natural height (its content, or its limit when the content overflows), tagged with the
             // window of this layout pass: known without restoring its cap (no visible jump, PL; TL's tag).
-            onContentHeight = { content ->
-                val natural = minOf(content, headerLimitPx)
-                headerNatural = natural; headerMeasure = rateWindow to natural
-                        }) {
+                        onContentHeight = { content -> headerContent = content }) {
                         Text(state.context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleLarge)
                         state.context?.let { Text(stringResource(R.string.dm_privacy_short, it.privacy.direct.retention), style = MaterialTheme.typography.bodySmall) }
                         ThreadFeedback(model, state, attention[peer], ready, onAuthorCheck = checkAuthorHistory,
