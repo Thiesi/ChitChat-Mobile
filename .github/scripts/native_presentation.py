@@ -87,7 +87,7 @@ RATE_DESTINATION = ROOT / "app/build/reports/androidTests/rate-presentation"
 RATE_NAME = re.compile(r"rate-(?:room-send-(?:light|dark)-(?:default|font200)|dm-send-(?:light|dark)-(?:default|font200)|"
     r"room-send-light-font200-landscape-ime|room-ping-light-default|room-send-unknown-light-default|"
     r"room-conversation-light-default|room-send-light-font200-details|room-send-light-font200-landscape-after-tap|"
-    r"broadcast-(?:light|dark)-(?:default|font200)|broadcast-unknown-light-default)[.]png")
+    r"broadcast-(?:light|dark)-(?:default|font200)|broadcast-unknown-light-default|room-send-twoline-light-font200)[.]png")
 AUTHOR_DESTINATION = ROOT / "app/build/reports/androidTests/author-presentation"
 AUTHOR_NAME = re.compile(r"author-edit-(?:room-(?:light|dark)-(?:default|font200)-(?:unknown|reviewed|editing)|"
     r"room-light-(?:default|font200)-first|room-dark-font200-first|room-light-font150-(?:unknown|reviewed)|"
@@ -527,14 +527,15 @@ def collect_rate():
     # conversation with a composer wait and no status row (1); PL refinement: Details at 200% with the full line first,
     # while the composer shows the short form (1); the 200% landscape case after a refused tap hid the keyboard (1).
     # #323b3 (PL): the @room/@here line, light and dark x default and 200%, and its unknown variant (5).
-    files = list(islice(SOURCE.rglob("ccm-rate-presentation/*"), 20))
-    if (not files or len(files) > 19 or len({p.name for p in files}) != len(files)
+    # #364 (PL): the plain two-line draft at 200% with the header yielded (1).
+    files = list(islice(SOURCE.rglob("ccm-rate-presentation/*"), 21))
+    if (not files or len(files) > 20 or len({p.name for p in files}) != len(files)
         or any(RATE_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous rate presentation output")
     RATE_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, RATE_DESTINATION / path.name)
-    print(f"Rate presentation captures collected: {len(files)} of 19.")
+    print(f"Rate presentation captures collected: {len(files)} of 20.")
 
 
 def collect_onboarding():

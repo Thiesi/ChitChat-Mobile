@@ -76,6 +76,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -405,6 +406,12 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
             }, warning = replyIsPing)
     } }
     val headerLimit = maxHeight * 0.3f
+    var headerNatural by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    // #364: how much the header can give the wait line (none in compact, which has no header).
+    val headerFloorPx = with(androidx.compose.ui.platform.LocalDensity.current) { io.github.thiesi.chitchat.core.ui.RateHeaderYieldFloor.roundToPx() }
+    androidx.compose.runtime.SideEffect {
+        rateFit.headerCanGive = if (compact || headerNatural <= 0) 0 else (headerNatural - headerFloorPx).coerceAtLeast(0)
+    }
     val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
     val inlineCompletion=maxHeight>=360.dp && androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.3f && selectedReply==null
     val detailsSource = completionDetailsToken
@@ -517,7 +524,14 @@ private fun ConversationContent(model: ConversationViewModel, roomId: Long, onRe
     }
     io.github.thiesi.chitchat.feature.status.ReportScreenStatus(syncing = state.syncing, stale = state.stale && state.loaded)
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(headerLimit) {
+        // #364 (PL, TL): with the keyboard down, the header yields the wait line's shortfall (composer, line, header,
+        // timeline); its natural height is measured while nothing is yielded. No motion, no announcement of its own.
+        if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(
+            io.github.thiesi.chitchat.core.ui.rateHeaderCap(rateFit, headerLimit, headerNatural),
+            Modifier.onSizeChanged { size ->
+                if (rateFit.headerYield == 0) headerNatural = size.height
+                rateFit.headerGiven = if (rateFit.headerYield > 0) (headerNatural - size.height).coerceAtLeast(0) else 0
+            }) {
             header(false) {}
         }
         // F5b: Save, Share and Open's notice in the conversation's stack (PL).

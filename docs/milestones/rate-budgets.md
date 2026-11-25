@@ -235,6 +235,17 @@ local gate's) is definite.
   timeline row) or short (the timeline absorbs it). In the packed keyboard-up state a refusal resolves to hidden, the app
   hides the keyboard once, and the line returns unclipped with the composer at its baseline. "Never hidden with the
   keyboard down" is asserted at every check, with a two-line send-set case.
+- **A drawn line is always whole (PL's re-J on 325af51, TL):** with the keyboard down, where even the short form doesn't
+  fit whole (3 lines at 200% with a reply chip), the bounded header yields exactly the shortfall first: composer, then
+  line, then header, then timeline. The shortfall is measured before any yield and latched per notice and window, so it
+  can't oscillate; the header keeps scrolling within its smaller cap and is back to normal once the line ends or a window
+  fits. No motion or announcement of its own.
+  - **The one keyboard-down exception:** if even the header at its floor (`RateHeaderYieldFloor`: its 48dp More band
+    plus a 48dp viewport; compact has no header) can't make room, the line goes hidden with the Details dot and the full
+    line first in Details, never clipped or ellipsized. It's reached only after full, short and the header's yield; the
+    carrier still announces once. The fixtures assert it's never reached.
+  - **Asserts:** the line's drawn height equals its laid-out text height (`didOverflowHeight` from its own text layout)
+    wherever it's drawn; `unclipped` compares the ancestor-clipped `boundsInWindow` with the full size.
 
 ## #323b3b (next)
 

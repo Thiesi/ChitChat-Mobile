@@ -180,9 +180,29 @@ class RateLineFit {
     /** True when [form] was decided for the current window (not a held or fallback form): a decision after layout. */
     var settled by mutableStateOf(false)
         internal set
+    /**
+     * #364 (PL, TL): with the keyboard down, when even the short form doesn't fit whole, the px the screen's bounded header
+     * gives up (composer, then line, then header, then timeline). Measured before any yield, latched per notice and
+     * window like [form], 0 otherwise; the header's cap is back to normal once the line ends or a window fits.
+     */
+    var headerYield by mutableIntStateOf(0)
+        internal set
+    /** What the header actually gave for [headerYield] (its natural height minus its capped one), set by the screen. */
+    var headerGiven by mutableIntStateOf(0)
+    /** The most the header can give: its natural height less [RateHeaderYieldFloor]; 0 with no header (compact). */
+    var headerCanGive by mutableIntStateOf(0)
     val hidden get() = form == RateLineForm.HIDDEN
     val detailsFirst get() = form == RateLineForm.SHORT || form == RateLineForm.HIDDEN
 }
+
+/** #364: the bounded header never yields below its 48dp More band plus a 48dp viewport (beyond it: TL and PL). */
+val RateHeaderYieldFloor = 96.dp
+
+/** Test-only (#364): the drawn wait line's text overflowed its node (a clipped line), from its own text layout. */
+val LocalRateLineOverflowProbe = staticCompositionLocalOf<((Boolean) -> Unit)?> { null }
+
+/** Test-only (#364): the floor fallback was decided (keyboard down, the header at its floor, short still not whole). */
+val LocalRateLineFloorProbe = staticCompositionLocalOf<(() -> Unit)?> { null }
 
 /** On the screen's timeline (the column's only weighted block): its height in each layout pass, tagged with the window. */
 fun Modifier.rateFitTimeline(fit: RateLineFit, window: Any): Modifier =
@@ -239,6 +259,8 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     @StringRes shortUnknown: Int = R.string.rate_wait_short_unknown, hiddenAllowed: Boolean = false) {
     var last by remember(notice) { mutableStateOf<RateLineForm?>(null) }
     var decided by remember(notice, window) { mutableStateOf<RateLineForm?>(null) }
+    var lastYield by remember(notice) { mutableIntStateOf(0) }
+    var decidedYield by remember(notice, window) { mutableStateOf<Int?>(null) }
     val now = current(session, notice)
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -246,23 +268,37 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     val full = now?.let { fullText(it, known, unknown) }
     val short = now?.let { it.words?.let { w -> stringResource(shortKnown, w) } ?: stringResource(shortUnknown) }
     val timeline = fit.timeline
+    var freshYield = 0
+    var floorFallback = false
     val fresh = if (full == null || short == null) null else decided ?: if (timeline?.first == window) {
         val drawn = fit.lineSlot
-        if (drawn > 0 && timeline.second == 0) (if (hiddenAllowed) RateLineForm.HIDDEN else RateLineForm.SHORT)
+        if (hiddenAllowed && drawn > 0 && timeline.second == 0) RateLineForm.HIDDEN
         else with(density) {
             val widthPx = availableWidth.roundToPx().coerceAtLeast(1)
             fun height(text: String) = measurer.measure(AnnotatedString(text), style, constraints = Constraints(maxWidth = widthPx)).size.height
-            val absent = timeline.second + drawn
+            // Before any yield: what the header already gives (a previous window's) isn't counted as room (#364).
+            val absent = timeline.second + drawn - fit.headerGiven
             val spacingPx = spacing.roundToPx()
+            val shortNeed = height(short) + spacingPx
             when {
                 absent >= height(full) + spacingPx + 48.dp.roundToPx() -> RateLineForm.FULL
-                // With the keyboard down the short form always shows (the timeline absorbs it).
-                !hiddenAllowed || absent >= height(short) + spacingPx -> RateLineForm.SHORT
+                absent >= shortNeed -> RateLineForm.SHORT
+                // With the keyboard down the short form always shows, whole: the header yields the shortfall (#364).
+                !hiddenAllowed && shortNeed - absent <= fit.headerCanGive -> { freshYield = shortNeed - absent; RateLineForm.SHORT }
+                // The one keyboard-down exception (PL, TL, #364): even the header at its floor can't make room for the
+                // short form whole. Never a clipped line: hidden with the Details dot and the full line first there.
+                !hiddenAllowed -> { floorFallback = true; RateLineForm.HIDDEN }
                 else -> RateLineForm.HIDDEN
             }
         }
     } else null
-    if (fresh != null && decided == null) SideEffect { decided = fresh; last = fresh }
+    val floorProbe = LocalRateLineFloorProbe.current
+    if (fresh != null && decided == null) SideEffect {
+        decided = fresh; last = fresh; decidedYield = freshYield; lastYield = freshYield
+        if (floorFallback) floorProbe?.invoke()
+    }
+    val yieldNow = if (full == null) 0 else decidedYield ?: lastYield
+    SideEffect { fit.headerYield = yieldNow }
     val form = if (full == null) null else fresh ?: last ?: RateLineForm.SHORT
     val settled = fresh != null
     SideEffect { fit.form = form; fit.settled = settled }
@@ -271,11 +307,27 @@ fun RateWaitSlot(fit: RateLineFit, session: SessionState, notice: RateLimitNotic
     val spoken = full?.let { if (parity) "$it " else it }
     // Drawn: the text with its top spacing. Otherwise (no notice, or hidden) the 1dp strip with zero footprint (A2): the
     // node always has a real size, and the layout is exactly as with no node at all.
+    val overflowProbe = LocalRateLineOverflowProbe.current
     Text(shown.orEmpty(), modifier.then(if (shown != null) Modifier.padding(top = spacing) else ZeroFootprintStrip)
         .onGloballyPositioned { fit.lineSlot = if (shown != null) it.size.height else 0 }
         .clearAndSetSemantics {
             if (spoken != null) contentDescription = spoken
             liveRegion = LiveRegionMode.Polite
             testTag = "rate_wait_line"
-        }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+        onTextLayout = { result -> if (shown != null) overflowProbe?.invoke(result.didOverflowHeight) })
+}
+
+/**
+ * #364: the bounded header's cap while the wait line needs [fit]'s yield: its natural height less the yield, never below
+ * [RateHeaderYieldFloor] (beyond it the engine takes the floor fallback instead), never above [limit]. [natural] is
+ * the header's height measured while nothing is yielded.
+ */
+@Composable
+fun rateHeaderCap(fit: RateLineFit, limit: Dp, natural: Int): Dp {
+    val yieldPx = fit.headerYield
+    if (yieldPx <= 0 || natural <= 0) return limit
+    val density = LocalDensity.current
+    val wanted = with(density) { (natural - yieldPx).toDp() }
+    return wanted.coerceAtLeast(RateHeaderYieldFloor).coerceAtMost(limit)
 }

@@ -50,6 +50,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.*
@@ -418,6 +419,12 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                         })
                 } }
                 val headerLimit = maxHeight * 0.3f
+                var headerNatural by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+                // #364: how much the header can give the wait line (none in compact, which has no header).
+                val headerFloorPx = with(androidx.compose.ui.platform.LocalDensity.current) { io.github.thiesi.chitchat.core.ui.RateHeaderYieldFloor.roundToPx() }
+                androidx.compose.runtime.SideEffect {
+                    rateFit.headerCanGive = if (compact || headerNatural <= 0) 0 else (headerNatural - headerFloorPx).coerceAtLeast(0)
+                }
                 val composerLimit = (maxHeight * 0.45f).coerceAtLeast(64.dp)
                 val inlineCompletion=maxHeight>=360.dp && androidx.compose.ui.platform.LocalDensity.current.fontScale<=1.3f && selectedReply==null
                 val completionSource=profileDetailsToken
@@ -440,7 +447,13 @@ fun DirectThreadScreen(model: DirectThreadViewModel, peer: Long, onRefreshSessio
                     onTextChanged={ model.typing?.input(displayedSession,TypingTarget.Direct(peer),hasTypingContent(it)) },inlineChoices=inlineCompletion && !detailsOpen)
                 io.github.thiesi.chitchat.feature.status.ReportScreenStatus(syncing = false, stale = state.stale && state.loaded)
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(headerLimit) {
+                    // #364 (PL, TL): with the keyboard down, the header yields the wait line's shortfall.
+                    if (!compact) io.github.thiesi.chitchat.core.ui.BoundedHeader(
+                        io.github.thiesi.chitchat.core.ui.rateHeaderCap(rateFit, headerLimit, headerNatural),
+                        Modifier.onSizeChanged { size ->
+                            if (rateFit.headerYield == 0) headerNatural = size.height
+                            rateFit.headerGiven = if (rateFit.headerYield > 0) (headerNatural - size.height).coerceAtLeast(0) else 0
+                        }) {
                         Text(state.context?.peer?.username ?: stringResource(R.string.dm_title), style = MaterialTheme.typography.titleLarge)
                         state.context?.let { Text(stringResource(R.string.dm_privacy_short, it.privacy.direct.retention), style = MaterialTheme.typography.bodySmall) }
                         ThreadFeedback(model, state, attention[peer], ready, onAuthorCheck = checkAuthorHistory,

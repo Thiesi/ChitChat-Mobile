@@ -89,6 +89,9 @@ class RatePresentationTest {
     private fun text(id: Int) = context.getString(id)
     /** The activity window's IME inset, read in composition (as the conversation journeys do) for the one native tap. */
     @Volatile private var imeBottom = 0
+    // #364: the drawn line's own text overflow (a clipped line), and whether the floor fallback was ever decided.
+    @Volatile private var lineOverflow = false
+    @Volatile private var floorReached = false
     /** The form the composer's wait line last drew (short?) and its visible text, from the observation-only probe. */
     @Volatile private var form: Pair<Boolean, String>? = null
 
@@ -144,8 +147,8 @@ class RatePresentationTest {
     // TL (#364): a realistic two-line draft in the send set, the path that hid the broadcast line at 200% portrait with
     // the keyboard down. Asserts only: the short form, never hidden outside compact with the keyboard up.
     @Test fun roomSendTwoLineDraftFont200() =
-        flow(null, dm = false, dark = false, 2f, reply = true, expect = SHORT, draftText = "Unsent fixture that wraps onto two lines",
-            packed = true)
+        flow("rate-room-send-twoline-light-font200", dm = false, dark = false, 2f, reply = true, expect = SHORT,
+            draftText = "Unsent fixture that wraps onto two lines", packed = true)
     @Test fun roomBroadcastUnknownWait() =
         flow("rate-broadcast-unknown-light-default", dm = false, dark = false, 1f, known = false, expect = FULL, broadcast = true)
 
@@ -155,7 +158,7 @@ class RatePresentationTest {
         noStatusRow: Boolean = false, details: Boolean = false, replyLater: Boolean = false, visibleTap: Boolean = false,
         landscapeCase: Char? = null, broadcast: Boolean = false, draftText: String? = null, packed: Boolean = false) {
         val name = capture ?: "rate-room-reply-during-wait"
-        form = null
+        form = null; lineOverflow = false; floorReached = false
         FontScaleTestActivity.requestedFontScale = fontScale
         val sessions = TestSessions()
         val api = NativeChatFixtures(sessions)
@@ -196,7 +199,9 @@ class RatePresentationTest {
                     val bottom = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current)
                     androidx.compose.runtime.SideEffect { imeBottom = bottom }
                     androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalRateLineProbe provides
-                        { isShort, visible -> form = isShort to visible }) {
+                        { isShort, visible -> form = isShort to visible },
+                        io.github.thiesi.chitchat.core.ui.LocalRateLineOverflowProbe provides { lineOverflow = it },
+                        io.github.thiesi.chitchat.core.ui.LocalRateLineFloorProbe provides { floorReached = true }) {
                         Box(Modifier.fillMaxSize()) {
                             TestChitChatApp(settings, auth, conversationModel = room, directInbox = inbox,
                                 directThread = thread, notifications = notices, messageTargets = targets)
@@ -244,6 +249,7 @@ class RatePresentationTest {
             val before = arrangement(input, send)
             if (landscapeCase != null) {
                 landscape(landscapeCase, room, sessions, api, heard, input, send, detailsLabel, before)
+                check(!floorReached) { "$name landscape $landscapeCase: the floor fallback was reached" }
                 return@use
             }
             // A native first tap brings the keyboard up; then the server's own refusal, with a known wait's deadline as the
@@ -284,6 +290,9 @@ class RatePresentationTest {
                 compose.waitUntil(5_000) { lineDrawn() }
                 compose.waitForIdle()
                 unclipped("$name after the refusal-hide", "rate_wait_line")
+                check(!lineOverflow) { "$name: the line's text is cut after the refusal-hide (drawn height < laid-out height)" }
+                check(compose.onAllNodesWithTag("bounded_header").fetchSemanticsNodes().isNotEmpty()) {
+                    "$name: the header is gone (it only yields, PL)" }
                 val afterHide = arrangement(input, send)
                 check(afterHide == before) { "$name: the composer moved after the refusal-hide $before -> $afterHide" }
             }
@@ -334,7 +343,13 @@ class RatePresentationTest {
             // and Send are each unclipped and inside the window, and above the keyboard top when it's up.
             formIs(name, expect, detailsLabel)
             oneWaitNode(name, waitText)
-            if (expect != HIDDEN) unclipped(name, "rate_wait_line")
+            if (expect != HIDDEN) {
+                unclipped(name, "rate_wait_line")
+                // PL (#364): a drawn line is always whole: its drawn height is its laid-out text height.
+                check(!lineOverflow) { "$name: the line's text is cut (drawn height < laid-out height)" }
+            }
+            // TL (#364): the floor fallback (keyboard down, header at its floor) is never reached by these fixtures.
+            check(!floorReached) { "$name: the floor fallback was reached" }
             unclipped(name, input)
             unclipped(name, send)
             // PL refinement: the composer's field width, arrangement and field height never change because of the line.
