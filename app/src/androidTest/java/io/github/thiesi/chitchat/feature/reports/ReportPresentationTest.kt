@@ -224,8 +224,7 @@ class ReportPresentationTest {
             compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
             val typed = recorder.elapsed()
             val afterTyping = io.github.thiesi.chitchat.testing.ScrollSettleRecorder.snapshotNow(roots, tags)
-            awaitKeyboardLayout() // As A's form-toolong act (#369).
-            compose.onNodeWithTag("report_counter").performScrollTo()
+            awaitKeyboardLayout() // As A's form-toolong act (#369), which no longer scrolls to the counter.
             val scrolled = recorder.elapsed()
             compose.waitForIdle()
             val captureAt = recorder.elapsed()
