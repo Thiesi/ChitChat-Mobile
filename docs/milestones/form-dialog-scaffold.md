@@ -73,6 +73,10 @@ app window's bounds, not whether the keyboard covers a node.
     counter's bottom, and moves into view by the minimum distance, in both the height and the text steps; when it doesn't
     fit, the caret's line wins. The counter publishes its position to `LocalFormDialogCaret` and unpublishes when it
     leaves composition; fields that publish no trailing line behave as before.
+    - **Priority (TL):** the caret's line first, then the span when it fits, then the label rule. The label rule moves the
+      label in only if the kept range (the span when it fits, else the caret's line) stays wholly in view; otherwise it
+      takes the label entirely out if the range's top stays in view; never half. `FormDialogKeepInViewTest` (JVM) checks
+      the label-versus-span case and the others on the pure geometry.
     - **Assert:** `ReportFormLayoutTest` at default size and 200% portrait, in the too-long state (typed through
       semantics, the caret on the last line): the counter line is in the viewport with the caret's line, logged to the
       metrics.

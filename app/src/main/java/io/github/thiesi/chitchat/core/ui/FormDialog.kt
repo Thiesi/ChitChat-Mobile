@@ -180,8 +180,11 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 if (box.top - margin < target) target = box.top - margin
                 else if (box.bottom > target + v) target = box.bottom - v
             }
-            if (caret != null) target = lastLineSpan(target, box, caret, focused.trailingIn(inside), v)
-            if (caret != null) target = labelRule(target, box, caret, v, margin, labelBand)
+            if (caret != null) {
+                val trailing = focused.trailingIn(inside)
+                target = lastLineSpan(target, box, caret, trailing, v)
+                target = labelRule(target, box, keptRange(box, caret, trailing, v), v, margin, labelBand)
+            }
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
         }
@@ -206,8 +209,9 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val spanned = lastLineSpan(top, box, caret, focused.trailingIn(inside), v)
             if (caret.top >= top && caret.bottom <= top + v && spanned == top) return@LaunchedEffect
             var target = if (caret.top < top) caret.top else if (caret.bottom > top + v) caret.bottom - v else top
-            target = lastLineSpan(target, box, caret, focused.trailingIn(inside), v)
-            target = labelRule(target, box, caret, v, margin, labelBand)
+            val trailing = focused.trailingIn(inside)
+            target = lastLineSpan(target, box, caret, trailing, v)
+            target = labelRule(target, box, keptRange(box, caret, trailing, v), v, margin, labelBand)
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
         }
@@ -256,7 +260,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
  * moves into view by the minimum distance. When it doesn't fit, the caret's line wins (the target is unchanged).
  * [trailing] is null unless the caret is on the last line and a trailing line is published.
  */
-private fun lastLineSpan(target: Float, box: androidx.compose.ui.geometry.Rect, caret: androidx.compose.ui.geometry.Rect,
+internal fun lastLineSpan(target: Float, box: androidx.compose.ui.geometry.Rect, caret: androidx.compose.ui.geometry.Rect,
     trailing: androidx.compose.ui.geometry.Rect?, v: Float): Float {
     trailing ?: return target
     val top = caret.top
@@ -270,19 +274,34 @@ private fun lastLineSpan(target: Float, box: androidx.compose.ui.geometry.Rect, 
 }
 
 /**
- * The label rule (#369, PL): a field's top keeps its floating label plus [margin] below the viewport's top edge, or the
- * label is entirely out of view, never half; the caret's line wins when both can't fit. Returns the adjusted target.
+ * What must stay in view (A2; TL priority: the caret's line, then the last-line span when it fits): the span from the
+ * caret line's top to the lower of the field's bottom and the trailing line's bottom when the caret is on the last line
+ * and it fits, else the caret's line. The label rule may only move within this.
  */
-private fun labelRule(target: Float, box: androidx.compose.ui.geometry.Rect, caret: androidx.compose.ui.geometry.Rect,
+internal fun keptRange(box: androidx.compose.ui.geometry.Rect, caret: androidx.compose.ui.geometry.Rect,
+    trailing: androidx.compose.ui.geometry.Rect?, v: Float): ClosedFloatingPointRange<Float> {
+    if (trailing != null) {
+        val bottom = maxOf(box.bottom, trailing.bottom)
+        if (bottom - caret.top <= v) return caret.top..bottom
+    }
+    return caret.top..caret.bottom
+}
+
+/**
+ * The label rule (#369, PL), last in priority (TL): a field's top keeps its floating label plus [margin] below the
+ * viewport's top edge, or the label is entirely out of view, never half. It moves the label in only if [kept] (the caret's
+ * line, or the last-line span when it fits) stays wholly in view; otherwise it takes the label out if [kept]'s top stays
+ * in view; otherwise nothing moves. Returns the adjusted target.
+ */
+internal fun labelRule(target: Float, box: androidx.compose.ui.geometry.Rect, kept: ClosedFloatingPointRange<Float>,
     v: Float, margin: Float, labelBand: Float): Float {
     val fieldRel = box.top - target
-    val caretRel = caret.top - target
     if (fieldRel <= -labelBand || fieldRel >= margin) return target
     val up = margin - fieldRel
     val down = fieldRel + labelBand
     return when {
-        caretRel + up <= v - caret.height -> target - up
-        caretRel - down >= 0f -> target + down
+        kept.endInclusive - (target - up) <= v -> target - up
+        kept.start - (target + down) >= 0f -> target + down
         else -> target
     }
 }
