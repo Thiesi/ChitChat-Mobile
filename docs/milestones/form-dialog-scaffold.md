@@ -38,6 +38,29 @@ app window's bounds, not whether the keyboard covers a node.
   field keeps its node and the keyboard stays up. When the space changes, an `onFocusedBoundsChanged` observer scrolls
   the active scroller to the focused field. That's a scroll, never a focus request. Typing then keeps the caret in view
   as usual.
+- **What was in view stays in view (#369; TL and PL, 2026-11-25).**
+  - **The defect:** a switch swaps scrollers, which lost the scroll position. The old rule then sent a field taller than
+    the view to its top, so with long report details at 200% the caret could leave the view after a keyboard show
+    (measured on API35, N=40, runs 45649326278 and 45650479874).
+  - **Now:** the scaffold records, on every layout, where the focused field and its caret's line sit relative to the top
+    of the scroller in use (window coordinates). The caret's line is the latest of the text field's own character-sized
+    bring-into-view requests, read by a pass-through `BringIntoViewResponder`. After a height or mode change it restores
+    the same offset in the scroller now in use, clamped so the caret's line (or a short field, whole) stays inside. It
+    acts on every height change, so during the keyboard's slide the field rides the edge.
+  - **The old rule applies only when the field wasn't in view before,** or has no earlier position (it just gained
+    focus), with the label rule's margin. A recorded position is reused only for the same focused field.
+  - **The caret's line, when known, is always inside the view** afterwards, so a field entering from unfocused or taller
+    than the view never leaves its caret out.
+  - **The label rule:** a field's top keeps its floating label plus 8 dp below the viewport's top edge, or the label is
+    entirely out of view, never half. The caret's line wins when both can't fit.
+  - **Asserts:** `ReportFormLayoutTest` at 200%, portrait and landscape, with long details. The caret's line is inside
+    the field's visible part and above the keyboard after typing, a keyboard hide, a first real tap after focus moved to
+    Send (test-side, through its semantics; TL: not an already-focused re-tap), and a paste; the label is never cut in
+    half. A rotation recreates the Activity and focus doesn't survive it, so it ends in the same first tap.
+  - **The `report-light-font200-form-toolong` capture's reasons-list variant** was test timing, not something a user can
+    reach. The keyboard arrived after the 1,012-character input, and the act's own `performScrollTo` landed mid-swap
+    with a delta from the old layout. The act now waits for the dialog's layout to reach the keyboard's final inset (a
+    bounded positive condition) before it scrolls.
 - **The 24 dp padding scrolls with the content.** In a one-column layout the viewport is then the whole surface. With
   the keyboard up at 200% landscape only about 80 dp is left, and a fixed padding would have left 34 dp, too little for
   a 48 dp button.

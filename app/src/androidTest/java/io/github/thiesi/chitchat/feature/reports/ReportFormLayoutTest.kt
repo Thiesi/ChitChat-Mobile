@@ -19,6 +19,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -265,6 +266,86 @@ class ReportFormLayoutTest {
             assertEquals("The question comes right before the field", listOf(question),
                 textual[at - 1].config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.map { it.text })
         }
+    }
+
+    /**
+     * #369 (TL, PL, 2026-11-25): the form dialog swaps between pinned and one column when the keyboard shows or hides,
+     * which used to lose the scroll position and send a field taller than the view to its top, so its caret could leave
+     * the view. With long details at 200%, the caret's line stays inside the field's visible part and above the keyboard
+     * after typing, a keyboard hide (a swap), a first real tap after focus moved away (the swap back) and a paste, in portrait and
+     * landscape. A rotation recreates the Activity and focus doesn't survive it, so it ends in the same real tap. The
+     * label is never cut in half: the field's top is either uncut or cut by at least the label's line.
+     */
+    @Test fun at200PercentPortraitTheCaretLineStaysInViewAcrossKeyboardAndModeChanges() = caretStaysInView(landscape = false)
+
+    @Test fun at200PercentLandscapeTheCaretLineStaysInViewAcrossKeyboardAndModeChanges() = caretStaysInView(landscape = true)
+
+    @Volatile private var labelBand = 0f
+
+    private fun caretStaysInView(landscape: Boolean) {
+        FontScaleTestActivity.requestedFontScale = 2f
+        val reports = ReportViewModel(operations)
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            if (landscape) {
+                scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                compose.waitUntil(5_000) {
+                    var orientation = 0
+                    scenario.onActivity { orientation = it.resources.configuration.orientation }
+                    orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                }
+            }
+            scenario.onActivity { activity ->
+                activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
+                    val band = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toPx() }
+                    SideEffect { labelBand = band }
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
+                } } }
+            }
+            report()
+            val ime = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } }
+            val case = "report-font200-${if (landscape) "landscape" else "portrait"}"
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = ime)
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms. ".repeat(24))
+            assertCaretInView("$case typed")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+            assertCaretInView("$case keyboard hidden")
+            // TL: the swap back is a first tap on an unfocused field (tap away, then back in), not an already-focused
+            // re-tap. Focus moves to Send through its semantics (test-side), then one native tap with the strict IME proof.
+            // This is scenario setup on another node, never a repair of a missed input (TL, 2026-11-25): the field under
+            // test still gets focus and the keyboard only from that one native tap.
+            compose.onNodeWithTag("report_send").performSemanticsAction(SemanticsActions.RequestFocus)
+            compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("report_details").assertIsNotFocused() }.isSuccess }
+            compose.tapNativeInput("report_details", imeBottom = ime)
+            assertCaretInView("$case keyboard shown again")
+            compose.onNodeWithTag("report_details").performTextInput(" Pasted: the same link again, in another room.".repeat(4))
+            assertCaretInView("$case pasted")
+        }
+    }
+
+    /** The caret's line (from the field's own text layout and selection) inside the field's visible part, above the IME. */
+    private fun assertCaretInView(step: String) {
+        compose.waitForIdle()
+        val node = compose.onNodeWithTag("report_details").fetchSemanticsNode()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        node.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+        val layout = layouts.single()
+        val selection = node.config[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange]
+        val cursor = layout.getCursorRect(selection.end.coerceIn(0, layout.layoutInput.text.length))
+        // The outlined field's text sits 16dp inside its bottom edge (no supporting text); its top follows from the layout.
+        val density = context.resources.displayMetrics.density
+        val textTop = node.positionInWindow.y + node.size.height - 16 * density - layout.size.height
+        val caretTop = textTop + cursor.top; val caretBottom = textTop + cursor.bottom
+        val visible = node.boundsInWindow
+        val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
+        val floor = if (window.visible) minOf(visible.bottom, window.imeTop.toFloat()) else visible.bottom
+        val cut = visible.top - node.positionInWindow.y
+        val detail = "$step: caret=[$caretTop, $caretBottom] visible=$visible imeTop=${window.imeTop} imeVisible=${window.visible} " +
+            "cut=$cut labelBand=$labelBand selection=$selection"
+        assertTrue("The caret line is in view ($detail)", caretTop >= visible.top - 1f && caretBottom <= floor + 1f)
+        assertTrue("The label is never cut in half ($detail)", cut <= 0.5f || cut >= labelBand - 0.5f)
+        compose.onNodeWithTag("report_details").assertIsFocused()
     }
 
     @Test fun at200PercentPortraitTheButtonsStayReachableWithTheKeyboardUp() = buttonsAboveTheKeyboard(landscape = false)

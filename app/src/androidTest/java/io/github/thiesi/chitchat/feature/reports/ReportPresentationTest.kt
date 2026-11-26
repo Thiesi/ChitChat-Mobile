@@ -111,6 +111,10 @@ class ReportPresentationTest {
         Shot("form-toolong", node = "report_dialog", act = {
             report(3); choose(ReportCategory.SPAM)
             compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
+            // #369: the keyboard arrives after the input and swaps the dialog to one column; a scroll issued mid-swap used
+            // a delta from the old layout (the reasons-list variant, 5 of 40). Wait for the dialog's layout to reach the
+            // keyboard's final inset (a bounded positive condition), then scroll.
+            awaitKeyboardLayout()
             compose.onNodeWithTag("report_counter").performScrollTo()
         }),
         Shot("sending", node = "report_dialog", hold = true, act = { report(3); fill(); send() }),
@@ -152,6 +156,16 @@ class ReportPresentationTest {
     private val unknown = ReportResult.Unknown(ApiFailure(FailureKind.TIMEOUT))
 
     private fun present(tag: String) = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+    /** The dialog's content bottom at the window height less the keyboard's final inset: the inset has settled. */
+    private fun awaitKeyboardLayout() {
+        if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") != "true") return
+        compose.waitUntil(5_000) {
+            val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
+            val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
+            window.visible && kotlin.math.abs(area.bottom - (window.height - window.imeBottom)) <= 1f
+        }
+        compose.waitForIdle()
+    }
     private fun await(tag: String) = compose.waitUntil(5_000) { present(tag) }
     private var dmScreen = false
 
