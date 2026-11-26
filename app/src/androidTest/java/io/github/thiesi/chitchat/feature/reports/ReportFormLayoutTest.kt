@@ -416,6 +416,36 @@ class ReportFormLayoutTest {
         return top to top + target.size.height
     }
 
+    /**
+     * DIAGNOSTIC, never merged (#374, TL): opt-in by `-e keyboardRepeat alone|after-counter`. Repeats the cases whose
+     * keyboard didn't show on API36 (text first in landscape at 200%, the 200% short field), 20 times each on fresh
+     * activities, recording per repetition whether it passed and, if not, the failure's type (a ComposeTimeoutException
+     * is the bounded wait for the keyboard's inset). `after-counter` runs the two counter cases before them, in CI's order.
+     * Observation only: no retry inside a case, no forced focus or IME.
+     */
+    @Test fun keyboardRepeatDiagnostic() {
+        val mode = InstrumentationRegistry.getArguments().getString("keyboardRepeat")
+        org.junit.Assume.assumeTrue(mode == "alone" || mode == "after-counter")
+        val cases = buildList<Pair<String, () -> Unit>> {
+            if (mode == "after-counter") {
+                add("counter-font200" to { counterInView(2f) })
+                add("counter-default" to { counterInView(1f) })
+            }
+            add("text-first-landscape" to { textFirst(landscape = true) })
+            add("short-field-font200" to { shortFieldStaysWhole(2f) })
+        }
+        val reps = org.json.JSONArray()
+        for (rep in 0 until 20) for ((name, case) in cases) {
+            val outcome = runCatching { case() }
+            val failure = outcome.exceptionOrNull()
+            reps.put(org.json.JSONObject().put("rep", rep).put("case", name).put("ok", outcome.isSuccess)
+                .put("failure", failure?.javaClass?.simpleName ?: org.json.JSONObject.NULL))
+            FontScaleTestActivity.requestedFontScale = 1f
+        }
+        io.github.thiesi.chitchat.testing.ScrollSettleRecorder.write("keyboard-repeat-$mode.json",
+            org.json.JSONObject().put("api", android.os.Build.VERSION.SDK_INT).put("mode", mode).put("reps", reps))
+    }
+
     /** Every vertical scroller's value, to show a change that keeps the caret's line in view moves nothing. */
     private fun scrollValues(): List<Float> = compose.onAllNodes(
         SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange), useUnmergedTree = true)
