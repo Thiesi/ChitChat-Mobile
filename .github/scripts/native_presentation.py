@@ -29,8 +29,10 @@ CLEANUP_LINE = re.compile(r"test=([A-Za-z][A-Za-z0-9_]{0,63}[.][A-Za-z][A-Za-z0-
 CLEANUP_MAX_FILES = 64
 FORM_DIALOG_DESTINATION = ROOT / "app/build/reports/androidTests/form-dialog-presentation"
 FORM_DIALOG_LINE = re.compile(r"case=[a-z0-9-]{1,64}(?: [A-Za-z0-9=.,;:()/ -]{1,1200})?")
-FORM_DIALOG_MAX_LINES = 32
-FORM_DIALOG_MAX_BYTES = 16384
+# Raised from 32 lines and 16 KiB (TL, 2026-11-26): several tests share the file, and the total had passed 32 lines, so
+# the whole file was dropped silently on every run since at least #367. A rejection now says which limit failed.
+FORM_DIALOG_MAX_LINES = 128
+FORM_DIALOG_MAX_BYTES = 32768
 # #331a: the text-field accessibility node probe (text-field-names.md), one JSON file per API level, fixture strings only.
 A11Y_NODES_DESTINATION = ROOT / "app/build/reports/androidTests/a11y-nodes"
 A11Y_NODES_NAME = re.compile(r"text-field-nodes-api[0-9]{2}[.]json")
@@ -256,17 +258,30 @@ def collect_cleanup_samples():
     print(f"Completion cleanup samples collected: {len(files)}.")
 
 
+class MetricsRejected(ValueError):
+    """A form-dialog metrics rejection: its message holds limits, counts and line numbers only (never content)."""
+
+
 def collect_form_dialog_metrics():
     # The form-dialog scaffold's measured keyboard geometry (form-dialog-scaffold.md), for the PL's J record: one file
     # of scalar lines, each starting with its case; anything foreign, malformed, oversized or excess rejects it all.
+    # Rejection messages carry limits, counts and line numbers only, never a line's content.
     files = list(islice(SOURCE.rglob("ccm-form-dialog-presentation/*"), 2))
     if not files:
         return
-    if len(files) != 1 or files[0].name != "form-dialog-metrics.txt" or files[0].stat().st_size > FORM_DIALOG_MAX_BYTES:
-        raise ValueError("Foreign, excess or oversized form-dialog metrics")
+    if len(files) != 1 or files[0].name != "form-dialog-metrics.txt":
+        raise MetricsRejected("a foreign or extra file in the metrics folder")
+    size = files[0].stat().st_size
+    if size > FORM_DIALOG_MAX_BYTES:
+        raise MetricsRejected(f"{size} bytes, over the {FORM_DIALOG_MAX_BYTES}-byte cap")
     lines = files[0].read_text(encoding="utf-8").splitlines()
-    if not lines or len(lines) > FORM_DIALOG_MAX_LINES or any(FORM_DIALOG_LINE.fullmatch(line) is None for line in lines):
-        raise ValueError("Malformed form-dialog metrics")
+    if not lines:
+        raise MetricsRejected("an empty metrics file")
+    if len(lines) > FORM_DIALOG_MAX_LINES:
+        raise MetricsRejected(f"{len(lines)} lines, over the {FORM_DIALOG_MAX_LINES}-line cap")
+    bad = [number for number, line in enumerate(lines, 1) if FORM_DIALOG_LINE.fullmatch(line) is None]
+    if bad:
+        raise MetricsRejected(f"{len(bad)} malformed of {len(lines)} lines, first at line {bad[0]}")
     FORM_DIALOG_DESTINATION.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(files[0], FORM_DIALOG_DESTINATION / files[0].name)
     print(f"Form-dialog metrics collected: {len(lines)} lines.")
@@ -683,8 +698,10 @@ def main() -> int:
         print("Step-up presentation captures unavailable; original native status retained.", file=sys.stderr)
     try:
         collect_form_dialog_metrics()
-    except Exception:
-        print("Form-dialog metrics unavailable; original native status retained.", file=sys.stderr)
+    except MetricsRejected as error:  # The collector's own rejections: limits and counts only.
+        print(f"Form-dialog metrics unavailable ({error}); original native status retained.", file=sys.stderr)
+    except Exception as error:  # Anything else: its type only, never a path or text.
+        print(f"Form-dialog metrics unavailable ({type(error).__name__}); original native status retained.", file=sys.stderr)
     try:
         collect_a11y_nodes()
     except Exception:

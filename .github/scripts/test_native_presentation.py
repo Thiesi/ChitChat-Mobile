@@ -374,13 +374,29 @@ class PresentationGateTests(unittest.TestCase):
         self.copy.assert_any_call(path, runner.FORM_DIALOG_DESTINATION / "form-dialog-metrics.txt")
 
     def test_foreign_malformed_or_oversized_form_dialog_metrics_are_rejected_before_copy(self):
-        for name, text in (("other.txt", self.METRICS), ("form-dialog-metrics.txt", "secret=hunter2\n"),
-                ("form-dialog-metrics.txt", "case=a body=\"hello\"\n"), ("form-dialog-metrics.txt", ""),
-                ("form-dialog-metrics.txt", "case=a x=1\n" * 33), ("form-dialog-metrics.txt", "case=a " + "x" * 17000 + "\n")):
+        import contextlib, io
+        for name, text, reason in (("other.txt", self.METRICS, "a foreign or extra file"),
+                ("form-dialog-metrics.txt", "secret=hunter2\n", "1 malformed of 1 lines, first at line 1"),
+                ("form-dialog-metrics.txt", "case=a x=1\ncase=a body=\"hello\"\n", "1 malformed of 2 lines, first at line 2"),
+                ("form-dialog-metrics.txt", "", "an empty metrics file"),
+                ("form-dialog-metrics.txt", "case=a x=1\n" * 129, "129 lines, over the 128-line cap"),
+                ("form-dialog-metrics.txt", "case=a " + "x" * 33000 + "\n", "over the 32768-byte cap")):
             self.results(0); self.copy.reset_mock()
             self.metrics_file(name, text)
-            self.assertEqual(0, runner.main())
+            errors = io.StringIO()
+            with contextlib.redirect_stderr(errors):
+                self.assertEqual(0, runner.main())
             self.assertFalse(any(call.args[1].parent == runner.FORM_DIALOG_DESTINATION for call in self.copy.call_args_list), name)
+            # #TL: the log names the limit that failed, and never a line's content.
+            self.assertIn(reason, errors.getvalue(), name)
+            self.assertNotIn("hunter2", errors.getvalue()); self.assertNotIn("hello", errors.getvalue())
+
+    def test_form_dialog_metrics_up_to_the_raised_cap_are_collected(self):
+        # The shared file passed 32 lines (dropped silently since at least #367); up to 128 lines are collected.
+        self.results(0)
+        path = self.metrics_file("form-dialog-metrics.txt", "case=a x=1\n" * 128)
+        self.assertEqual(0, runner.main())
+        self.copy.assert_any_call(path, runner.FORM_DIALOG_DESTINATION / "form-dialog-metrics.txt")
 
     def nodes_file(self, name, text):
         import shutil, tempfile
