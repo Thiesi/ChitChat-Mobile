@@ -113,7 +113,9 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
     val density = LocalDensity.current
     // The 24dp padding scrolls with the content, so a short window's viewport is the whole surface: with the keyboard
     // up in landscape at 200% only about 80dp may be left, and a fixed padding would leave no room for a 48dp button.
-    BoxWithConstraints {
+    // The tags name the two viewports (this box's content is the one-column scroller's; the body box's is the pinned
+    // body scroller's), for tests to measure a field against the area that actually clips it. Semantics only (#369, TL).
+    BoxWithConstraints(Modifier.testTag("form_dialog_viewport")) {
         var titleHeight by remember { mutableIntStateOf(0) }
         var buttonsHeight by remember { mutableIntStateOf(0) }
         // What the pinned layout leaves the body: the height above the keyboard less the title, the buttons and their gaps.
@@ -125,7 +127,14 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         val inner = rememberScrollState()
         // Keep the focused field in view when the space changes (the keyboard shows or hides, or the mode switches): the
         // scroller in use scrolls to it. A scroll, never a focus request; typing then keeps the caret in view as usual.
+        // #369 (TL, PL, 2026-11-25): a mode switch swaps scrollers, which lost the position, and a field taller than the
+        // view went to its top, so its caret could leave the view. Now what was in view stays in view: the caret's line
+        // (or the field) keeps its offset from the viewport's top, clamped inside the new viewport, and the label rule
+        // holds (the label plus 8dp below the top edge, or the label entirely out; the caret line wins).
         val focused = remember { FocusedChild() }
+        val margin = with(density) { FormDialogLabelMargin.toPx() }
+        val labelBand = with(density) { MaterialTheme.typography.bodySmall.lineHeight.toPx() }
+        val key = maxHeight to pinned
         // The hook (PL and TL, 2026-11-22): while the caller holds an in-form notice, a layout change doesn't scroll back to
         // the focused field; the notice keeps the view until the person's next interaction. Off by default: unchanged.
         val held by androidx.compose.runtime.rememberUpdatedState(holdFocusedInView)
@@ -135,17 +144,73 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return@LaunchedEffect
             val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
                 else Triple(outer, focused.outerContent, focused.outerViewport)
-            val box = content?.takeIf { it.isAttached }?.localBoundingBoxOf(child, clipBounds = false) ?: return@LaunchedEffect
-            val top = state.value.toFloat(); val bottom = top + viewport
-            val target = when {
-                box.top < top || box.height > viewport -> box.top          // Above, or taller than the view: its top.
-                box.bottom > bottom -> box.bottom - viewport                // Below: just enough to show it whole.
-                else -> return@LaunchedEffect
+            val inside = content?.takeIf { it.isAttached } ?: return@LaunchedEffect
+            val box = inside.localBoundingBoxOf(child, clipBounds = false)
+            val caret = focused.caretIn(inside, box)
+            val before = focused.before(key, child)
+            val v = viewport.toFloat()
+            var target: Float
+            if (before != null && before.visible) {
+                // What was in view stays in view: the anchor keeps its offset from the viewport's top, clamped inside.
+                val caretBefore = before.caret
+                if (caret != null && caretBefore != null) {
+                    target = caret.top - caretBefore.coerceIn(0f, (v - caret.height).coerceAtLeast(0f))
+                } else {
+                    val lo = margin; val hi = v - box.height
+                    target = box.top - (if (hi >= lo) before.field.coerceIn(lo, hi) else before.field.coerceIn(hi, lo))
+                }
+            } else {
+                val top = state.value.toFloat(); val bottom = top + v
+                target = when {
+                    box.top - margin < top || box.height + margin > v -> box.top - margin // Above, or taller: its top.
+                    box.bottom > bottom -> box.bottom - v                                   // Below: just enough.
+                    else -> state.value.toFloat()
+                }
             }
-            state.scrollTo(target.roundToInt())
+            // The caret's line, when known, is always inside: a field entering from unfocused (no earlier position for
+            // it) or taller than the view never leaves it out (#369, TL).
+            if (caret != null) {
+                if (caret.top - target < 0f) target = caret.top
+                else if (caret.top + caret.height - target > v) target = caret.top + caret.height - v
+            }
+            // A field that fits whole (with the label's margin) stays whole in view, just enough, as Compose's own
+            // keep-in-view did before this step superseded it (#371's captures: a short filled field was left cut at the
+            // bottom edge). Its caret is inside it, so the line stays in view; a taller field keeps the caret rule above.
+            if (box.height + margin <= v) {
+                if (box.top - margin < target) target = box.top - margin
+                else if (box.bottom > target + v) target = box.bottom - v
+            }
+            if (caret != null) target = labelRule(target, box, caret, v, margin, labelBand)
+            val next = target.roundToInt().coerceIn(0, state.maxValue)
+            if (next != state.value) state.scrollTo(next)
         }
-        Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it }
+        // A text or selection change (any input path: the keyboard, a paste, or an accessibility service setting the text
+        // through semantics, which doesn't bring the caret into view by itself) that put the caret's line outside the view
+        // brings it back, just enough, then the label rule. When the line is still inside, nothing moves (#369, TL).
+        LaunchedEffect(focused.caret.version) {
+            if (focused.caret.version == 0) return@LaunchedEffect
+            withFrameNanos { } // After the layout of the change.
+            // A selection-only change lays nothing out, so the body's position callback doesn't record it: record here, so
+            // a later height or mode change restores from where the caret is now, not where it was (#371's restore assert).
+            focused.record(key, pinned)
+            if (held) return@LaunchedEffect
+            val child = focused.coordinates?.takeIf { it.isAttached } ?: return@LaunchedEffect
+            val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
+                else Triple(outer, focused.outerContent, focused.outerViewport)
+            val inside = content?.takeIf { it.isAttached } ?: return@LaunchedEffect
+            val box = inside.localBoundingBoxOf(child, clipBounds = false)
+            val caret = focused.caretIn(inside, box) ?: return@LaunchedEffect
+            val v = viewport.toFloat()
+            val top = state.value.toFloat()
+            if (caret.top >= top && caret.bottom <= top + v) return@LaunchedEffect
+            var target = if (caret.top < top) caret.top else caret.bottom - v
+            target = labelRule(target, box, caret, v, margin, labelBand)
+            val next = target.roundToInt().coerceIn(0, state.maxValue)
+            if (next != state.value) state.scrollTo(next)
+        }
+        Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it; focused.record(key, pinned) }
             .onSizeChanged { focused.outerViewport = it.height }
+            .onGloballyPositioned { focused.outerFrame = it }
             .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline).verticalScroll(outer)
             .onGloballyPositioned { focused.outerContent = it }
             .testTag(if (pinned) "form_dialog_pinned" else "form_dialog_column").padding(24.dp)) {
@@ -156,13 +221,18 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // The modes differ only in modifiers, never in the tree, so a focused field keeps its node across a switch:
             // pinned, the body gets the leftover height and scrolls inside it; one column, it takes its own height and the
             // whole dialog scrolls.
-            Box(Modifier.padding(bottom = 24.dp).then(if (pinned) Modifier.heightIn(max = available) else Modifier)) {
+            Box(Modifier.padding(bottom = 24.dp).then(if (pinned) Modifier.heightIn(max = available) else Modifier)
+                .testTag("form_dialog_body_viewport")) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.textContentColor,
                     LocalTextStyle provides MaterialTheme.typography.bodyMedium,
-                    LocalFormDialogLayout provides layoutKey) {
+                    LocalFormDialogLayout provides layoutKey, LocalFormDialogCaret provides focused.caret) {
                     Column(Modifier.onSizeChanged { focused.innerViewport = it.height }
+                        .onGloballyPositioned { focused.innerFrame = it }
                         .then(if (pinned) Modifier.scrollEdgeDividers(inner, MaterialTheme.colorScheme.outline)
-                        .verticalScroll(inner) else Modifier).onGloballyPositioned { focused.innerContent = it },
+                        .verticalScroll(inner) else Modifier).onGloballyPositioned {
+                            focused.innerContent = it
+                            focused.record(key, pinned)
+                        },
                         verticalArrangement = bodyArrangement, content = body)
                 }
             }
@@ -176,13 +246,105 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
     }
 }
 
-/** Where the focused child is, and the two scrollers' content and viewport, for keeping it in view. Not state. */
+/**
+ * The label rule (#369, PL): a field's top keeps its floating label plus [margin] below the viewport's top edge, or the
+ * label is entirely out of view, never half; the caret's line wins when both can't fit. Returns the adjusted target.
+ */
+private fun labelRule(target: Float, box: androidx.compose.ui.geometry.Rect, caret: androidx.compose.ui.geometry.Rect,
+    v: Float, margin: Float, labelBand: Float): Float {
+    val fieldRel = box.top - target
+    val caretRel = caret.top - target
+    if (fieldRel <= -labelBand || fieldRel >= margin) return target
+    val up = margin - fieldRel
+    val down = fieldRel + labelBand
+    return when {
+        caretRel + up <= v - caret.height -> target - up
+        caretRel - down >= 0f -> target + down
+        else -> target
+    }
+}
+
+/**
+ * Where a focused form-dialog field's caret is (#369, TL): its line in [coordinates] (the field's text area), from the
+ * field's own selection and text layout, so it's known whatever put the text there. Published on every layout or
+ * selection change; [version] tells the dialog to check that the line is still in view. Not saved; memory only.
+ */
+internal class FormDialogCaret {
+    var coordinates: LayoutCoordinates? = null
+        private set
+    var rect: androidx.compose.ui.geometry.Rect? = null
+        private set
+    var version by androidx.compose.runtime.mutableIntStateOf(0)
+        private set
+
+    fun publish(coordinates: LayoutCoordinates, rect: androidx.compose.ui.geometry.Rect) {
+        if (coordinates === this.coordinates && rect == this.rect) return
+        this.coordinates = coordinates; this.rect = rect
+        version++
+    }
+}
+
+/** The form dialog's caret holder, for a field inside its body to publish to; null outside a form dialog. */
+internal val LocalFormDialogCaret = androidx.compose.runtime.staticCompositionLocalOf<FormDialogCaret?> { null }
+
+/** The label's air above a field brought into view (#369, PL): 8dp below the viewport's top edge. */
+internal val FormDialogLabelMargin: Dp = 8.dp
+
+/**
+ * Where the focused child is, and the two scrollers' content and viewport, for keeping it in view. Not state.
+ *
+ * #369: it also records, on every layout, where the focused field and its caret line sit relative to the top of the
+ * scroller in use (in that viewport's own coordinates, so a mode switch doesn't change their meaning), tagged with the
+ * layout they were measured in, so the keep-in-view step can read where they were just before a height or mode change.
+ */
 private class FocusedChild {
     var coordinates: LayoutCoordinates? = null
     var outerContent: LayoutCoordinates? = null
     var innerContent: LayoutCoordinates? = null
+    var outerFrame: LayoutCoordinates? = null
+    var innerFrame: LayoutCoordinates? = null
     var outerViewport = 0
     var innerViewport = 0
+
+    /** A field and caret-line offset from the viewport's top, and whether the anchor was in view. */
+    class Seen(val child: LayoutCoordinates, val field: Float, val caret: Float?, val visible: Boolean)
+
+    private var lastKey: Any? = null
+    private var last: Seen? = null
+    private var previous: Seen? = null
+
+    /** The focused field's caret, published by a field that reports it (see [FormDialogCaret]). */
+    val caret = FormDialogCaret()
+
+    /** The caret's line in [inside]'s coordinates, if a field published one and it lies within the focused field. */
+    fun caretIn(inside: LayoutCoordinates, box: androidx.compose.ui.geometry.Rect): androidx.compose.ui.geometry.Rect? {
+        val rect = caret.rect ?: return null
+        val from = caret.coordinates?.takeIf { it.isAttached } ?: return null
+        val topLeft = inside.localPositionOf(from, rect.topLeft)
+        val mapped = androidx.compose.ui.geometry.Rect(topLeft, rect.size)
+        return mapped.takeIf { it.top >= box.top - 1f && it.bottom <= box.bottom + 1f }
+    }
+
+    fun record(key: Any, pinned: Boolean) {
+        val child = coordinates?.takeIf { it.isAttached } ?: return
+        val frame = (if (pinned) innerFrame else outerFrame)?.takeIf { it.isAttached } ?: return
+        val inside = innerContent?.takeIf { it.isAttached } ?: return
+        // Relative to the viewport's own coordinates, never through a window conversion: in this dialog localToWindow
+        // measured off by the inner scroller's value, which changes across a mode switch (#371, #372, TL).
+        val box = inside.localBoundingBoxOf(child, clipBounds = false)
+        val field = frame.localPositionOf(inside, box.topLeft).y
+        val caret = caretIn(inside, box)?.let { frame.localPositionOf(inside, it.topLeft).y }
+        val height = frame.size.height
+        val anchorTop = caret ?: field
+        val anchorHeight = caret?.let { caretIn(inside, box)!!.height } ?: box.height
+        val seen = Seen(child, field, caret, anchorTop + anchorHeight > 0f && anchorTop < height)
+        if (key != lastKey) { previous = last; lastKey = key }
+        last = seen
+    }
+
+    /** Where they were in the layout before [key], only if measured for the same focused [child]. */
+    fun before(key: Any, child: LayoutCoordinates): Seen? =
+        (if (key == lastKey) previous else last)?.takeIf { it.child === child }
 }
 
 /** M3's arrangement: side by side (dismiss, then the primary) when both fit, else the primary on top; end-aligned. */

@@ -38,6 +38,62 @@ app window's bounds, not whether the keyboard covers a node.
   field keeps its node and the keyboard stays up. When the space changes, an `onFocusedBoundsChanged` observer scrolls
   the active scroller to the focused field. That's a scroll, never a focus request. Typing then keeps the caret in view
   as usual.
+- **What was in view stays in view (#369; TL and PL, 2026-11-25 and 2026-11-26).**
+  - **The defects:**
+    - A switch swaps scrollers, which lost the scroll position. The old rule then sent a field taller than the view to
+      its top, so with long report details at 200% the caret could leave the view after a keyboard show (measured on
+      API35, N=40, runs 45649326278 and 45650479874).
+    - **Text set through semantics, as an accessibility service sets it, never brings the caret into view by itself**
+      (measured on #371's first head): the legacy text field does that only on the keyboard's edit path.
+  - **The caret's line comes from the field itself.** A field that reports it (the report details field) publishes its
+    caret's line, from its own selection and text layout, to `LocalFormDialogCaret`. It's known whatever put the text
+    there. The details field is the `MessageInput` pattern: a `BasicTextField(TextFieldValue)` with M3's
+    `OutlinedTextFieldDefaults.DecorationBox`, exactly what `OutlinedTextField` composes with its parameters, so it looks
+    and behaves as before, and adds `onTextLayout`. StepUp's single-line secret publishes nothing and is unchanged.
+  - **On a height or mode change:** the scaffold records, on every layout and focus change, where the focused field and
+    its caret's line sit relative to the top of the scroller in use, in that viewport's own coordinates (not window
+    coordinates, which measured off by the inner scroller's value in this dialog; #372). After a height or mode change
+    it restores the same offset in the scroller now in use, clamped so the caret's line stays inside. A field that fits
+    whole, with the label's margin, then stays whole in view, as Compose's own keep-in-view did before this step
+    superseded it (#371's captures had left a short filled field cut at the bottom edge). It acts on every height
+    change, so during the keyboard's slide the field rides the edge.
+  - **On a text or selection change:** if the change put the caret's line outside the view, it's brought back, just
+    enough, then the label rule applies. When the line is still inside, nothing moves, so keyboard typing (already kept in
+    view by the field) adds no scroll.
+  - **The old rule applies only when the field wasn't in view before,** or has no earlier position (it just gained
+    focus), with the label rule's margin. A recorded position is reused only for the same focused field.
+  - **The caret's line, when known, is always inside the view** afterwards, so a field entering from unfocused or taller
+    than the view never leaves its caret out.
+  - **The label rule:** a field's top keeps its floating label plus 8 dp below the viewport's top edge, or the label is
+    entirely out of view, never half. The caret's line wins when both can't fit.
+  - **Asserts:** `ReportFormLayoutTest` at 200%, portrait and landscape, with long details typed through semantics (the
+    accessibility path). The caret's line is inside the viewport of the scroller that holds the field, which already
+    ends above the keyboard, after each of:
+    - typing;
+    - a keyboard hide;
+    - a paste;
+    - the late-keyboard order (text first, then the keyboard), which is also the keyboard showing again over existing
+      text.
+
+    The label is never cut in half. A change that keeps the caret's line in view leaves every scroller where it was. In
+    portrait, a caret placed in the viewport's upper third keeps its offset within 1 px across the keyboard hide (one
+    column to pinned): the restore holds it, not the clamp.
+  - **How the asserts measure:** against the container that clips the field: the pinned body's viewport
+    (`form_dialog_body_viewport`) or, in one column, the whole dialog's (`form_dialog_viewport`). These are semantics-only
+    tags on two existing nodes. The field's position is taken in that container's own layout coordinates, plus M3's
+    outlined content padding and the caret's rect from the field's layout. There's no padding constant and no
+    scroll-value arithmetic, and each step logs a cross-check against `boundsInWindow`, written to the collected
+    `form-dialog-metrics.txt` before its asserts. In this dialog the window-coordinate paths (`positionInWindow`,
+    `localToWindow`) disagreed with `boundsInWindow` by the inner scroll value (#372). There is
+    no "first tap after focus moved away" step: in touch mode nothing in this dialog can take focus from the field
+    without a tap on an already-focused field, which the strict input contract avoids. A rotation recreates the Activity
+    and focus doesn't survive it.
+  - **The `report-light-font200-form-toolong` capture's reasons-list variant** was test timing, not something a user can
+    reach. The keyboard arrived after the 1,012-character input, and the act's own `performScrollTo` to the counter
+    moved the view to the reasons list, even when the counter was already visible (N=40 runs 45746286440 and
+    45753087572). The act now waits for the dialog's layout to reach the keyboard's final inset (a bounded positive
+    condition) and doesn't scroll on its own: the form dialog keeps the caret's line in view. The counter below it
+    can be out of view at the default size; keeping it in view is a separate follow-up (PL).
 - **The 24 dp padding scrolls with the content.** In a one-column layout the viewport is then the whole surface. With
   the keyboard up at 200% landscape only about 80 dp is left, and a fixed padding would have left 34 dp, too little for
   a 48 dp button.

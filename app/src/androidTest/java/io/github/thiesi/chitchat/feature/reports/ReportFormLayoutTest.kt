@@ -16,6 +16,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.performTextInputSelection
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
@@ -265,6 +267,239 @@ class ReportFormLayoutTest {
             assertEquals("The question comes right before the field", listOf(question),
                 textual[at - 1].config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.map { it.text })
         }
+    }
+
+    /**
+     * #369 (TL, PL, 2026-11-25): the form dialog swaps between pinned and one column when the keyboard shows or hides,
+     * which used to lose the scroll position and send a field taller than the view to its top, so its caret could leave
+     * the view. With long details at 200%, the caret's line stays inside the field's visible part and above the keyboard
+     * after typing, a keyboard hide (a swap) and a paste, in portrait and
+     * landscape; the keyboard showing over existing text (the swap back) is the text-first cases. The
+     * label is never cut in half: the field's top is either uncut or cut by at least the label's line.
+     */
+    @Test fun at200PercentPortraitTheCaretLineStaysInViewAcrossKeyboardAndModeChanges() = caretStaysInView(landscape = false)
+
+    @Test fun at200PercentLandscapeTheCaretLineStaysInViewAcrossKeyboardAndModeChanges() = caretStaysInView(landscape = true)
+
+    /**
+     * #369 (TL): the late-keyboard order. The text arrives first, through semantics (as an accessibility service sets it),
+     * and the keyboard shows after it, swapping the dialog to one column: the caret's line ends in view.
+     */
+    @Test fun at200PercentPortraitTextFirstThenTheKeyboardKeepsTheCaretLineInView() = textFirst(landscape = false)
+
+    @Test fun at200PercentLandscapeTextFirstThenTheKeyboardKeepsTheCaretLineInView() = textFirst(landscape = true)
+
+    private fun launchAt200(landscape: Boolean, reports: ReportViewModel, body: () -> Unit) =
+        launchAt(2f, landscape, reports, body)
+
+    private fun launchAt(fontScale: Float, landscape: Boolean, reports: ReportViewModel, body: () -> Unit) {
+        FontScaleTestActivity.requestedFontScale = fontScale
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            if (landscape) {
+                scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                compose.waitUntil(5_000) {
+                    var orientation = 0
+                    scenario.onActivity { orientation = it.resources.configuration.orientation }
+                    orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                }
+            }
+            scenario.onActivity { activity ->
+                activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
+                    val band = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toPx() }
+                    SideEffect { labelBand = band }
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
+                } } }
+            }
+            body()
+        }
+    }
+
+    private fun textFirst(landscape: Boolean) {
+        val reports = ReportViewModel(operations)
+        launchAt200(landscape, reports) {
+            report()
+            val case = "report-font200-${if (landscape) "landscape" else "portrait"} text first"
+            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(24))
+            if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
+                // The dialog's content bottom at the window height less the keyboard's final inset: the inset has settled.
+                compose.waitUntil(5_000) {
+                    val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
+                    val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
+                    window.visible && kotlin.math.abs(area.bottom - (window.height - window.imeBottom)) <= 1f
+                }
+            }
+            assertCaretInView(case)
+        }
+    }
+
+    /**
+     * #371 (TL): the proof case (it failed on bc154c1 without the fix, diagnostic run 45787378337: field 153–245 in a 189px
+     * viewport). A short filled field stays whole in view, with the label's 8dp margin, when the keyboard arrives (a
+     * height change). The height step's caret clamp alone had left it cut at the bottom edge (the form-filled captures on
+     * bc154c1), where Compose's own keep-in-view had shown it whole. The same container-based math as the caret asserts.
+     */
+    @Test fun atDefaultSizeAShortFilledFieldStaysWholeInViewWhenTheKeyboardArrives() = shortFieldStaysWhole(1f)
+
+    /**
+     * A regression guard, not proof (TL): unlike the default-size case, this one passed on bc154c1 without the fix
+     * (diagnostic run 45787378337), so it guards the 200% geometry without showing the defect.
+     */
+    @Test fun at200PercentAShortFilledFieldStaysWholeInViewWhenTheKeyboardArrives() = shortFieldStaysWhole(2f)
+
+    private fun shortFieldStaysWhole(fontScale: Float) {
+        val reports = ReportViewModel(operations)
+        launchAt(fontScale, landscape = false, reports = reports) {
+            report()
+            compose.onNodeWithTag("report_category:${ReportCategory.HARASSMENT.wire}").performScrollTo().performClick()
+            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms")
+            if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
+                compose.waitUntil(5_000) {
+                    val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
+                    val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
+                    window.visible && kotlin.math.abs(area.bottom - (window.height - window.imeBottom)) <= 1f
+                }
+            }
+            val step = "report-${if (fontScale == 1f) "default" else "font200"} short field"
+            val line = assertCaretInView(step)
+            val margin = 8 * context.resources.displayMetrics.density
+            assertTrue("The short field is whole in view, with the label's margin (${line.detail})",
+                line.fieldTop >= margin - 1f && line.fieldBottom <= line.height + 1f)
+        }
+    }
+
+    /** Every vertical scroller's value, to show a change that keeps the caret's line in view moves nothing. */
+    private fun scrollValues(): List<Float> = compose.onAllNodes(
+        SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange), useUnmergedTree = true)
+        .fetchSemanticsNodes().map { it.config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].value() }
+
+    @Volatile private var labelBand = 0f
+
+    private fun caretStaysInView(landscape: Boolean) {
+        FontScaleTestActivity.requestedFontScale = 2f
+        val reports = ReportViewModel(operations)
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            if (landscape) {
+                scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                compose.waitUntil(5_000) {
+                    var orientation = 0
+                    scenario.onActivity { orientation = it.resources.configuration.orientation }
+                    orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                }
+            }
+            scenario.onActivity { activity ->
+                activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
+                    val band = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toPx() }
+                    SideEffect { labelBand = band }
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
+                } } }
+            }
+            report()
+            val ime = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } }
+            val case = "report-font200-${if (landscape) "landscape" else "portrait"}"
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = ime)
+            // TL: a change that keeps the caret's line in view moves nothing.
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link")
+            assertCaretInView("$case short")
+            val still = scrollValues()
+            compose.onNodeWithTag("report_details").performTextInput(" twice")
+            compose.waitForIdle()
+            assertEquals("$case: a change that keeps the caret's line in view moves nothing", still, scrollValues())
+            compose.onNodeWithTag("report_details").performTextInput(" in 3 rooms. " + "Posted the same link in 3 rooms. ".repeat(23))
+            val typed = assertCaretInView("$case typed")
+            if (!landscape) {
+                // TL: the restore itself, not the caret clamp, keeps the offset across a mode swap. The caret goes to a line
+                // in the viewport's upper third (a selection change, which moves nothing while the line is in view), then
+                // the keyboard hides (one column to pinned): the caret's line keeps its offset from the viewport's top.
+                compose.onNodeWithTag("report_details").performTextInputSelection(
+                    androidx.compose.ui.text.TextRange(offsetAt(typed.height / 3f)))
+                val placed = assertCaretInView("$case caret placed")
+                check(placed.top > 8f && placed.bottom < placed.height - 8f) { "Not clear of the edges: ${placed.detail}" }
+                androidx.test.espresso.Espresso.closeSoftKeyboard()
+                compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+                val restored = assertCaretInView("$case keyboard hidden")
+                assertTrue("The restore keeps the caret's offset across the swap (${placed.detail} -> ${restored.detail})",
+                    kotlin.math.abs(restored.top - placed.top) <= 1f)
+            } else {
+                androidx.test.espresso.Espresso.closeSoftKeyboard()
+                compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+                assertCaretInView("$case keyboard hidden")
+            }
+            // The keyboard showing again over existing text (the swap back) is the text-first cases below: in touch mode
+            // nothing in this dialog can take focus from the field without a tap on an already-focused field, which the
+            // strict input contract avoids (TL).
+            compose.onNodeWithTag("report_details").performTextInput(" Pasted: the same link again, in another room.".repeat(4))
+            assertCaretInView("$case pasted")
+        }
+    }
+
+    /**
+     * The caret's line (from the field's own text layout and selection) inside the viewport of the scroller that holds
+     * the field, measured in that scroller's own layout coordinates. In this dialog the window-coordinate paths
+     * (positionInWindow, localToWindow) disagreed with boundsInWindow by the inner scroll value (#371's runs, #372), so
+     * nothing here converts to the window. The dialog's viewport already ends above the keyboard (imePadding).
+     */
+    private class CaretLine(val top: Float, val bottom: Float, val height: Float, val cut: Float, val detail: String,
+        val metrics: String, val fieldTop: Float = 0f, val fieldBottom: Float = 0f)
+
+    private fun assertCaretInView(step: String): CaretLine {
+        val line = caretLine(step)
+        val case = "report-caret-" + step.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(50)
+        io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=$case ${line.metrics}")
+        assertTrue("The caret line is in view (${line.detail})", line.top >= -1f && line.bottom <= line.height + 1f)
+        assertTrue("The label is never cut in half (${line.detail})", line.cut <= 0.5f || line.cut >= labelBand - 0.5f)
+        compose.onNodeWithTag("report_details").assertIsFocused()
+        return line
+    }
+
+    /** The field's text layout, and where its top sits in the viewport of the scroller in use. */
+    private fun caretLine(step: String, offset: Int? = null): CaretLine {
+        compose.waitForIdle()
+        val node = compose.onNodeWithTag("report_details").fetchSemanticsNode()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        node.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+        val layout = layouts.single()
+        val selection = node.config[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange]
+        val cursor = layout.getCursorRect((offset ?: selection.end).coerceIn(0, layout.layoutInput.text.length))
+        // The area that clips the field: the pinned body's viewport, or (one column) the whole dialog's. Measured in that
+        // container's own layout coordinates (its content box is the viewport), so no padding constant or scroll value
+        // enters; the field's text starts at M3's outlined content padding. Cross-checked against boundsInWindow below.
+        val pinned = compose.onAllNodesWithTag("form_dialog_pinned", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val container = compose.onNodeWithTag(if (pinned) "form_dialog_body_viewport" else "form_dialog_viewport", useUnmergedTree = true)
+            .fetchSemanticsNode()
+        val viewport = container.layoutInfo.coordinates
+        val field = node.layoutInfo.coordinates
+        val fieldTop = viewport.localPositionOf(field, androidx.compose.ui.geometry.Offset.Zero).y
+        val inset = with(androidx.compose.ui.unit.Density(context)) {
+            androidx.compose.material3.OutlinedTextFieldDefaults.contentPadding().calculateTopPadding().toPx()
+        }
+        val caretTop = fieldTop + inset + cursor.top
+        val caretBottom = fieldTop + inset + cursor.bottom
+        val height = viewport.size.height.toFloat()
+        val cut = -fieldTop
+        // The cross-check: where the visible field begins in the window, against the container's visible top plus the
+        // field's offset (they agree while the field's top is inside the viewport).
+        val visible = node.boundsInWindow
+        val crossCheck = container.boundsInWindow.top + maxOf(fieldTop, 0f)
+        val detail = "$step: caret=[$caretTop, $caretBottom] viewport height=$height fieldTop=$fieldTop pinned=$pinned " +
+            "visibleTop=${visible.top} crossCheck=$crossCheck cut=$cut labelBand=$labelBand selection=$selection"
+        fun Float.r() = "%.1f".format(java.util.Locale.ROOT, this)
+        val metrics = "caretTop=${caretTop.r()} caretBottom=${caretBottom.r()} viewport=${height.r()} fieldTop=${fieldTop.r()} " +
+            "pinned=$pinned visibleTop=${visible.top.r()} crossCheck=${crossCheck.r()} cut=${cut.r()} selection=${selection.start}.${selection.end}"
+        val fieldBottom = fieldTop + field.size.height
+        return CaretLine(caretTop, caretBottom, height, cut, "$detail fieldBottom=$fieldBottom", "$metrics fieldBottom=${fieldBottom.r()}",
+            fieldTop, fieldBottom)
+    }
+
+    /** The text offset whose line sits at [y] in the viewport (the field's own layout), for a caret away from the edges. */
+    private fun offsetAt(y: Float): Int {
+        val node = compose.onNodeWithTag("report_details").fetchSemanticsNode()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        node.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+        val line = caretLine("offset", 0)
+        // caretLine(…, 0) gives the first line's top in the viewport; the text's top is that minus offset 0's cursor top.
+        val textTop = line.top - layouts.single().getCursorRect(0).top
+        return layouts.single().getOffsetForPosition(androidx.compose.ui.geometry.Offset(8f, y - textTop))
     }
 
     @Test fun at200PercentPortraitTheButtonsStayReachableWithTheKeyboardUp() = buttonsAboveTheKeyboard(landscape = false)

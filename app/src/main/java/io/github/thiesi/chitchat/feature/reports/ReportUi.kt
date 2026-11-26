@@ -11,6 +11,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.ui.graphics.takeOrElse
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,7 +29,6 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -408,11 +411,52 @@ private fun Form(reports: ReportViewModel, state: ReportState, sending: Boolean)
         // here, once, as a scroll only.
         if (shownNow && hadFocus && reports.keyboardShown()) { androidx.compose.runtime.withFrameNanos { }; fieldInView.bringIntoView() }
     }
-    OutlinedTextField(field, { field = it; reports.edit(it.text) }, enabled = !sending, minLines = 3,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).bringIntoViewRequester(fieldInView).onFocusChanged { focus ->
-            if (focus.isFocused && !hadFocus) reports.fieldFocused()
-            hadFocus = focus.isFocused
-        }.testTag("report_details"))
+    // #369 (TL, PL): the MessageInput pattern, a BasicTextField with M3's outlined decoration, exactly what
+    // OutlinedTextField composes with these parameters (same colours, text style, cursor, minimum size, container and
+    // keyboard defaults), so the field looks and behaves as before. What it adds is onTextLayout: the field publishes its
+    // caret's line to the form dialog from its own selection and layout, so the dialog can keep that line in view after
+    // any change, including text an accessibility service sets through semantics (which doesn't bring the caret into
+    // view by itself).
+    val enabled = !sending
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors()
+    val fieldFocused by interaction.collectIsFocusedAsState()
+    val style = androidx.compose.material3.LocalTextStyle.current
+    val textColor = style.color.takeOrElse {
+        when { !enabled -> colors.disabledTextColor; fieldFocused -> colors.focusedTextColor; else -> colors.unfocusedTextColor }
+    }
+    val caret = io.github.thiesi.chitchat.core.ui.LocalFormDialogCaret.current
+    var layout by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    var textArea by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+    LaunchedEffect(layout, field.selection, textArea) {
+        val result = layout ?: return@LaunchedEffect
+        val area = textArea ?: return@LaunchedEffect
+        caret?.publish(area, result.getCursorRect(field.selection.end.coerceIn(0, result.layoutInput.text.length)))
+    }
+    CompositionLocalProvider(androidx.compose.foundation.text.selection.LocalTextSelectionColors provides colors.textSelectionColors) {
+        androidx.compose.foundation.text.BasicTextField(field, { field = it; reports.edit(it.text) },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).bringIntoViewRequester(fieldInView).onFocusChanged { focus ->
+                if (focus.isFocused && !hadFocus) reports.fieldFocused()
+                hadFocus = focus.isFocused
+            }.testTag("report_details").defaultMinSize(minWidth = androidx.compose.material3.OutlinedTextFieldDefaults.MinWidth,
+                minHeight = androidx.compose.material3.OutlinedTextFieldDefaults.MinHeight),
+            enabled = enabled, textStyle = style.merge(androidx.compose.ui.text.TextStyle(color = textColor)),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.cursorColor), interactionSource = interaction,
+            minLines = 3, onTextLayout = { layout = it },
+            decorationBox = { inner ->
+                androidx.compose.material3.OutlinedTextFieldDefaults.DecorationBox(value = field.text,
+                    innerTextField = {
+                        // Transparent to layout (the child keeps its constraints); only reports where the text area is.
+                        Box(Modifier.onGloballyPositioned { textArea = it }, propagateMinConstraints = true) { inner() }
+                    },
+                    enabled = enabled, singleLine = false, visualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
+                    interactionSource = interaction, colors = colors,
+                    container = {
+                        androidx.compose.material3.OutlinedTextFieldDefaults.Container(enabled = enabled, isError = false,
+                            interactionSource = interaction, colors = colors, shape = androidx.compose.material3.OutlinedTextFieldDefaults.shape)
+                    })
+            })
+    }
     Counter(state.details)
 }
 
