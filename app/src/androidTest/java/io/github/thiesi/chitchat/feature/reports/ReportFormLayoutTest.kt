@@ -289,8 +289,11 @@ class ReportFormLayoutTest {
 
     @Test fun at200PercentLandscapeTextFirstThenTheKeyboardKeepsTheCaretLineInView() = textFirst(landscape = true)
 
-    private fun launchAt200(landscape: Boolean, reports: ReportViewModel, body: () -> Unit) {
-        FontScaleTestActivity.requestedFontScale = 2f
+    private fun launchAt200(landscape: Boolean, reports: ReportViewModel, body: () -> Unit) =
+        launchAt(2f, landscape, reports, body)
+
+    private fun launchAt(fontScale: Float, landscape: Boolean, reports: ReportViewModel, body: () -> Unit) {
+        FontScaleTestActivity.requestedFontScale = fontScale
         ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
             if (landscape) {
                 scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
@@ -326,6 +329,36 @@ class ReportFormLayoutTest {
                 }
             }
             assertCaretInView(case)
+        }
+    }
+
+    /**
+     * #371 (TL): a short filled field stays whole in view, with the label's 8dp margin, when the keyboard arrives (a
+     * height change). The height step's caret clamp alone had left it cut at the bottom edge (the form-filled captures on
+     * bc154c1), where Compose's own keep-in-view had shown it whole. The same container-based math as the caret asserts.
+     */
+    @Test fun atDefaultSizeAShortFilledFieldStaysWholeInViewWhenTheKeyboardArrives() = shortFieldStaysWhole(1f)
+
+    @Test fun at200PercentAShortFilledFieldStaysWholeInViewWhenTheKeyboardArrives() = shortFieldStaysWhole(2f)
+
+    private fun shortFieldStaysWhole(fontScale: Float) {
+        val reports = ReportViewModel(operations)
+        launchAt(fontScale, landscape = false, reports = reports) {
+            report()
+            compose.onNodeWithTag("report_category:${ReportCategory.HARASSMENT.wire}").performScrollTo().performClick()
+            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms")
+            if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
+                compose.waitUntil(5_000) {
+                    val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
+                    val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
+                    window.visible && kotlin.math.abs(area.bottom - (window.height - window.imeBottom)) <= 1f
+                }
+            }
+            val step = "report-${if (fontScale == 1f) "default" else "font200"} short field"
+            val line = assertCaretInView(step)
+            val margin = 8 * context.resources.displayMetrics.density
+            assertTrue("The short field is whole in view, with the label's margin (${line.detail})",
+                line.fieldTop >= margin - 1f && line.fieldBottom <= line.height + 1f)
         }
     }
 
@@ -402,7 +435,7 @@ class ReportFormLayoutTest {
      * nothing here converts to the window. The dialog's viewport already ends above the keyboard (imePadding).
      */
     private class CaretLine(val top: Float, val bottom: Float, val height: Float, val cut: Float, val detail: String,
-        val metrics: String)
+        val metrics: String, val fieldTop: Float = 0f, val fieldBottom: Float = 0f)
 
     private fun assertCaretInView(step: String): CaretLine {
         val line = caretLine(step)
@@ -448,7 +481,9 @@ class ReportFormLayoutTest {
         fun Float.r() = "%.1f".format(java.util.Locale.ROOT, this)
         val metrics = "caretTop=${caretTop.r()} caretBottom=${caretBottom.r()} viewport=${height.r()} fieldTop=${fieldTop.r()} " +
             "pinned=$pinned visibleTop=${visible.top.r()} crossCheck=${crossCheck.r()} cut=${cut.r()} selection=${selection.start}.${selection.end}"
-        return CaretLine(caretTop, caretBottom, height, cut, detail, metrics)
+        val fieldBottom = fieldTop + field.size.height
+        return CaretLine(caretTop, caretBottom, height, cut, "$detail fieldBottom=$fieldBottom", "$metrics fieldBottom=${fieldBottom.r()}",
+            fieldTop, fieldBottom)
     }
 
     /** The text offset whose line sits at [y] in the viewport (the field's own layout), for a caret away from the edges. */

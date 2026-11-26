@@ -53,8 +53,10 @@ app window's bounds, not whether the keyboard covers a node.
   - **On a height or mode change:** the scaffold records, on every layout and focus change, where the focused field and
     its caret's line sit relative to the top of the scroller in use, in that viewport's own coordinates (not window
     coordinates, which measured off by the inner scroller's value in this dialog; #372). After a height or mode change
-    it restores the same offset in the scroller now in use, clamped so the caret's line (or a short field, whole) stays
-    inside. It acts on every height change, so during the keyboard's slide the field rides the edge.
+    it restores the same offset in the scroller now in use, clamped so the caret's line stays inside. A field that fits
+    whole, with the label's margin, then stays whole in view, as Compose's own keep-in-view did before this step
+    superseded it (#371's captures had left a short filled field cut at the bottom edge). It acts on every height
+    change, so during the keyboard's slide the field rides the edge.
   - **On a text or selection change:** if the change put the caret's line outside the view, it's brought back, just
     enough, then the label rule applies. When the line is still inside, nothing moves, so keyboard typing (already kept in
     view by the field) adds no scroll.

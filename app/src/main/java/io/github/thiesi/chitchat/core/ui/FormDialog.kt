@@ -173,6 +173,13 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 if (caret.top - target < 0f) target = caret.top
                 else if (caret.top + caret.height - target > v) target = caret.top + caret.height - v
             }
+            // A field that fits whole (with the label's margin) stays whole in view, just enough, as Compose's own
+            // keep-in-view did before this step superseded it (#371's captures: a short filled field was left cut at the
+            // bottom edge). Its caret is inside it, so the line stays in view; a taller field keeps the caret rule above.
+            if (box.height + margin <= v) {
+                if (box.top - margin < target) target = box.top - margin
+                else if (box.bottom > target + v) target = box.bottom - v
+            }
             if (caret != null) target = labelRule(target, box, caret, v, margin, labelBand)
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
