@@ -333,12 +333,17 @@ class ReportFormLayoutTest {
     }
 
     /**
-     * #371 (TL): a short filled field stays whole in view, with the label's 8dp margin, when the keyboard arrives (a
+     * #371 (TL): the proof case (it failed on bc154c1 without the fix, diagnostic run 45787378337: field 153–245 in a 189px
+     * viewport). A short filled field stays whole in view, with the label's 8dp margin, when the keyboard arrives (a
      * height change). The height step's caret clamp alone had left it cut at the bottom edge (the form-filled captures on
      * bc154c1), where Compose's own keep-in-view had shown it whole. The same container-based math as the caret asserts.
      */
     @Test fun atDefaultSizeAShortFilledFieldStaysWholeInViewWhenTheKeyboardArrives() = shortFieldStaysWhole(1f)
 
+    /**
+     * A regression guard, not proof (TL): unlike the default-size case, this one passed on bc154c1 without the fix
+     * (diagnostic run 45787378337), so it guards the 200% geometry without showing the defect.
+     */
     @Test fun at200PercentAShortFilledFieldStaysWholeInViewWhenTheKeyboardArrives() = shortFieldStaysWhole(2f)
 
     private fun shortFieldStaysWhole(fontScale: Float) {
