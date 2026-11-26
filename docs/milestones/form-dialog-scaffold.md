@@ -73,10 +73,21 @@ app window's bounds, not whether the keyboard covers a node.
     counter's bottom, and moves into view by the minimum distance, in both the height and the text steps; when it doesn't
     fit, the caret's line wins. The counter publishes its position to `LocalFormDialogCaret` and unpublishes when it
     leaves composition; fields that publish no trailing line behave as before.
-    - **Priority (TL):** the caret's line first, then the span when it fits, then the label rule. The label rule moves the
-      label in only if the kept range (the span when it fits, else the caret's line) stays wholly in view; otherwise it
-      takes the label entirely out if the range's top stays in view; never half. `FormDialogKeepInViewTest` (JVM) checks
-      the label-versus-span case and the others on the pure geometry.
+    - **Priority (TL and PL, 2026-11-26):**
+      1. the caret's line;
+      2. the span (the field's bottom and the counter) when it fits;
+      3. an 8 dp bottom margin under the span, which gives first;
+      4. the label rule.
+
+      The bottom margin keeps the scroll-edge divider from reading as an underline under the counter (in Lantern, an
+      underline means a link). The label rule moves the label in only if the kept range (the span with its margin, else
+      the span, else the caret's line) stays wholly in view; otherwise it takes the label entirely out if the range's top
+      stays in view; never half. `FormDialogKeepInViewTest` (JVM) checks these on the pure geometry.
+    - **Two end states, both intended (PL, 2026-11-26).** Keyboard first, typing brings the span in from below, so it ends
+      8 dp above the bottom edge. Text first, A's restore keeps the person's place across the keyboard's swap, and a span
+      already clear of the margin doesn't move. In both, the caret's line, the field's bottom and the counter are in view
+      (N=40 run 45820138541: 40/40, 35 keyboard-first and 5 text-first). The `form-toolong` capture uses the keyboard-first
+      order (the keyboard shown and settled before the input); text first is covered by asserts.
     - **Assert:** `ReportFormLayoutTest` at default size and 200% portrait, in the too-long state (typed through
       semantics, the caret on the last line): the counter line is in the viewport with the caret's line, logged to the
       metrics.

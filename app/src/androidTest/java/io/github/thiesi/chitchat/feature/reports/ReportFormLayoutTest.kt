@@ -402,6 +402,11 @@ class ReportFormLayoutTest {
                 "caretTop=${"%.1f".format(java.util.Locale.ROOT, line.top)} caretBottom=${"%.1f".format(java.util.Locale.ROOT, line.bottom)}")
             assertTrue("The counter line is in view with the caret's line ($step: counter=[${counter.first}, ${counter.second}] ${line.detail})",
                 counter.first >= -1f && counter.second <= line.height + 1f)
+            // PL: keyboard first, the span came in from below, so it ends 8dp above the edge when that fits.
+            val margin = 8 * context.resources.displayMetrics.density
+            if (counter.second + margin - line.top <= line.height)
+                assertTrue("The counter keeps its 8dp bottom margin ($step: counter=[${counter.first}, ${counter.second}] ${line.detail})",
+                    kotlin.math.abs(line.height - counter.second - margin) <= 1f)
         }
     }
 

@@ -182,8 +182,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             }
             if (caret != null) {
                 val trailing = focused.trailingIn(inside)
-                target = lastLineSpan(target, box, caret, trailing, v)
-                target = labelRule(target, box, keptRange(box, caret, trailing, v), v, margin, labelBand)
+                target = lastLineSpan(target, box, caret, trailing, v, margin)
+                target = labelRule(target, box, keptRange(box, caret, trailing, v, margin), v, margin, labelBand)
             }
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
@@ -206,12 +206,12 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val caret = focused.caretIn(inside, box) ?: return@LaunchedEffect
             val v = viewport.toFloat()
             val top = state.value.toFloat()
-            val spanned = lastLineSpan(top, box, caret, focused.trailingIn(inside), v)
+            val spanned = lastLineSpan(top, box, caret, focused.trailingIn(inside), v, margin)
             if (caret.top >= top && caret.bottom <= top + v && spanned == top) return@LaunchedEffect
             var target = if (caret.top < top) caret.top else if (caret.bottom > top + v) caret.bottom - v else top
             val trailing = focused.trailingIn(inside)
-            target = lastLineSpan(target, box, caret, trailing, v)
-            target = labelRule(target, box, keptRange(box, caret, trailing, v), v, margin, labelBand)
+            target = lastLineSpan(target, box, caret, trailing, v, margin)
+            target = labelRule(target, box, keptRange(box, caret, trailing, v, margin), v, margin, labelBand)
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
         }
@@ -261,27 +261,33 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
  * [trailing] is null unless the caret is on the last line and a trailing line is published.
  */
 internal fun lastLineSpan(target: Float, box: androidx.compose.ui.geometry.Rect, caret: androidx.compose.ui.geometry.Rect,
-    trailing: androidx.compose.ui.geometry.Rect?, v: Float): Float {
+    trailing: androidx.compose.ui.geometry.Rect?, v: Float, margin: Float): Float {
     trailing ?: return target
     val top = caret.top
     val bottom = maxOf(box.bottom, trailing.bottom)
     if (bottom - top > v) return target
     return when {
         top < target -> top
-        bottom > target + v -> bottom - v
+        // From below, or within the bottom margin (PL, 2026-11-26): the span ends [margin] above the edge, so the
+        // scroll-edge divider doesn't read as an underline under the counter; the margin gives first (flush) when only
+        // the span fits. A span already clear of the margin doesn't move (text first keeps its restored place).
+        bottom > target + v - margin -> if (bottom + margin - top <= v) bottom + margin - v else maxOf(target, bottom - v)
         else -> target
     }
 }
 
 /**
- * What must stay in view (A2; TL priority: the caret's line, then the last-line span when it fits): the span from the
+ * What must stay in view (A2; TL priority: the caret's line, then the last-line span, then its 8dp bottom margin, then
+ * the label): the span from the
  * caret line's top to the lower of the field's bottom and the trailing line's bottom when the caret is on the last line
  * and it fits, else the caret's line. The label rule may only move within this.
  */
 internal fun keptRange(box: androidx.compose.ui.geometry.Rect, caret: androidx.compose.ui.geometry.Rect,
-    trailing: androidx.compose.ui.geometry.Rect?, v: Float): ClosedFloatingPointRange<Float> {
+    trailing: androidx.compose.ui.geometry.Rect?, v: Float, margin: Float): ClosedFloatingPointRange<Float> {
     if (trailing != null) {
         val bottom = maxOf(box.bottom, trailing.bottom)
+        // The span with its bottom margin when that fits (it ranks above the label), else the span, else the caret line.
+        if (bottom + margin - caret.top <= v) return caret.top..(bottom + margin)
         if (bottom - caret.top <= v) return caret.top..bottom
     }
     return caret.top..caret.bottom

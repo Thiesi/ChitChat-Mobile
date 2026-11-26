@@ -20,9 +20,9 @@ class FormDialogKeepInViewTest {
         val caret = Rect(16f, 1050f, 18f, 1064f)      // its last line
         val counter = Rect(0f, 1088f, 300f, 1100f)    // the trailing line
         // The span is 1050..1100 (50px), which fits; at target 1000 the field's top sits at 0 (inside the label band).
-        val spanned = lastLineSpan(1000f, box, caret, counter, v)
-        val kept = keptRange(box, caret, counter, v)
-        assertEquals(1050f..1100f, kept)
+        val spanned = lastLineSpan(1000f, box, caret, counter, v, margin)
+        val kept = keptRange(box, caret, counter, v, margin)
+        assertEquals(1050f..1108f, kept) // the span plus its bottom margin fits (58 of 100)
         val target = labelRule(spanned, box, kept, v, margin, band)
         // Label in (target 992) would leave the counter's bottom at 108 > 100; the label goes out (target 1016) instead.
         assertEquals(1016f, target)
@@ -36,7 +36,7 @@ class FormDialogKeepInViewTest {
         val box = Rect(0f, 1000f, 300f, 1080f)
         val caret = Rect(16f, 1050f, 18f, 1064f)
         val counter = Rect(0f, 1088f, 300f, 1100f)
-        val kept = keptRange(box, caret, counter, v)
+        val kept = keptRange(box, caret, counter, v, margin)
         val target = labelRule(1000f, box, kept, v, margin, band)
         assertEquals(992f, target)
         assertEquals(true, counter.bottom - target <= v)
@@ -48,15 +48,52 @@ class FormDialogKeepInViewTest {
         val box = Rect(0f, 1000f, 300f, 1080f)
         val caret = Rect(16f, 1050f, 18f, 1064f)
         val counter = Rect(0f, 1088f, 300f, 1100f)
-        assertEquals(caret.top..caret.bottom, keptRange(box, caret, counter, v))
-        assertEquals(1030f, lastLineSpan(1030f, box, caret, counter, v)) // unchanged: the span doesn't fit
+        assertEquals(caret.top..caret.bottom, keptRange(box, caret, counter, v, margin))
+        assertEquals(1030f, lastLineSpan(1030f, box, caret, counter, v, margin)) // unchanged: the span doesn't fit
     }
 
     /** Without a trailing line (the caret not on the last line, or no counter), the span changes nothing. */
     @Test fun noTrailingLineChangesNothing() {
         val box = Rect(0f, 1000f, 300f, 1080f)
         val caret = Rect(16f, 1020f, 18f, 1034f)
-        assertEquals(1000f, lastLineSpan(1000f, box, caret, null, 100f))
-        assertEquals(caret.top..caret.bottom, keptRange(box, caret, null, 100f))
+        assertEquals(1000f, lastLineSpan(1000f, box, caret, null, 100f, margin))
+        assertEquals(caret.top..caret.bottom, keptRange(box, caret, null, 100f, margin))
+    }
+
+    /** (e) From below with room: the span ends exactly [margin] above the viewport's bottom edge. */
+    @Test fun fromBelowTheSpanEndsTheMarginAboveTheEdge() {
+        val v = 100f
+        val box = Rect(0f, 1000f, 300f, 1080f)
+        val caret = Rect(16f, 1050f, 18f, 1064f)
+        val counter = Rect(0f, 1088f, 300f, 1100f)
+        val target = lastLineSpan(900f, box, caret, counter, v, margin)
+        assertEquals(1008f, target)
+        assertEquals(v - margin, counter.bottom - target)
+    }
+
+    /** (f) Room for the span but not its margin: the margin gives first, and the span ends flush. */
+    @Test fun withoutRoomForTheMarginTheSpanEndsFlush() {
+        val v = 55f
+        val box = Rect(0f, 1000f, 300f, 1080f)
+        val caret = Rect(16f, 1050f, 18f, 1064f)
+        val counter = Rect(0f, 1088f, 300f, 1100f)
+        val target = lastLineSpan(900f, box, caret, counter, v, margin)
+        assertEquals(1045f, target)
+        assertEquals(v, counter.bottom - target)
+        assertEquals(caret.top..counter.bottom, keptRange(box, caret, counter, v, margin))
+    }
+
+    /** (g) The label can't come in without eating the bottom margin, so it goes out (the margin ranks above it). */
+    @Test fun theLabelGoesOutRatherThanEatTheBottomMargin() {
+        val v = 110f
+        val box = Rect(0f, 1000f, 300f, 1080f)
+        val caret = Rect(16f, 1050f, 18f, 1064f)
+        val counter = Rect(0f, 1088f, 300f, 1100f)
+        val spanned = lastLineSpan(1000f, box, caret, counter, v, margin) // 1100 <= 1000 + 110 - 8: already clear
+        assertEquals(1000f, spanned)
+        // Label-in (992) would keep the span (1100 - 992 = 108 <= 110) but leave only 2 of the 8dp margin.
+        val target = labelRule(spanned, box, keptRange(box, caret, counter, v, margin), v, margin, band)
+        assertEquals(1016f, target)
+        assertEquals(true, v - (counter.bottom - target) >= margin && box.top - target <= -band)
     }
 }
