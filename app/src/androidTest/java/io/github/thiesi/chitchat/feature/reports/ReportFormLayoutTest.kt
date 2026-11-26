@@ -324,6 +324,10 @@ class ReportFormLayoutTest {
             // keyboard and leaves the dialog; then one tap on the field brings the keyboard back over the existing text
             // (the swap). That tap isn't a retry: the first tap's own proof passed.
             compose.onNodeWithTag("report_details").performScrollTo()
+            // TL: the pre-keyboard layout, measured (keyboard down, dialog settled), for the wait after Back below.
+            compose.waitForIdle()
+            val before = dialogLayout()
+            check(!before.imeVisible) { "$case: the keyboard was already up before the first tap ($before)" }
             compose.tapNativeInput("report_details", imeBottom = {
                 io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
             compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms. ".repeat(24))
@@ -332,28 +336,54 @@ class ReportFormLayoutTest {
                     it[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange] }
             val beforeBack = fieldState()
             androidx.test.espresso.Espresso.pressBack()
-            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+            awaitLayout("$case: the keyboard hidden after Back", before) { !it.imeVisible }
             // PL: the first system Back only hides the keyboard; the dialog stays open with the same text and selection.
             check(present("report_dialog")) { "$case: system Back dismissed the report dialog instead of only the keyboard" }
             assertEquals("$case: Back kept the text", beforeBack.first, fieldState().first)
             assertEquals("$case: Back kept the selection", beforeBack.second, fieldState().second)
-            // The keyboard's inset gone from the dialog's layout (a bounded positive condition).
-            compose.waitUntil(5_000) {
-                val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
-                val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
-                !window.visible && kotlin.math.abs(area.bottom - window.height) <= 1f
+            // TL: back to the measured pre-keyboard layout (area bounds within 1px, same pinned state), whatever that
+            // geometry is, so the second tap starts the same transition the scenario names. A timeout here means the
+            // dialog didn't return to its pre-keyboard layout after Back: a finding, not a wait to loosen.
+            awaitLayout("$case: the pre-keyboard layout after Back", before) {
+                !it.imeVisible && it.pinned == before.pinned && it.area.sameAs(before.area)
             }
+            compose.waitForIdle()
             compose.tapNativeInput("report_details", imeBottom = {
                 io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
             if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
                 // The dialog's content bottom at the window height less the keyboard's final inset: the inset has settled.
-                compose.waitUntil(5_000) {
-                    val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
-                    val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
-                    window.visible && kotlin.math.abs(area.bottom - (window.height - window.imeBottom)) <= 1f
+                awaitLayout("$case: the keyboard's layout after the second tap", before) {
+                    it.imeVisible && kotlin.math.abs(it.area.bottom - (it.windowHeight - it.imeBottom)) <= 1f
                 }
             }
             assertCaretInView(case)
+        }
+    }
+
+    /** The dialog's layout as the text-first waits see it: area bounds, pinned state and the focused window's keyboard. */
+    private data class DialogLayout(
+        val area: androidx.compose.ui.geometry.Rect, val pinned: Boolean,
+        val imeVisible: Boolean, val imeBottom: Int, val windowHeight: Int,
+    )
+
+    private fun dialogLayout(): DialogLayout {
+        val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
+        val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
+        val pinned = compose.onAllNodesWithTag("form_dialog_pinned", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        return DialogLayout(area, pinned, window.visible, window.imeBottom, window.height)
+    }
+
+    private fun androidx.compose.ui.geometry.Rect.sameAs(other: androidx.compose.ui.geometry.Rect) =
+        kotlin.math.abs(left - other.left) <= 1f && kotlin.math.abs(top - other.top) <= 1f &&
+            kotlin.math.abs(right - other.right) <= 1f && kotlin.math.abs(bottom - other.bottom) <= 1f
+
+    /** A bounded wait (5s) whose failure names the recorded and the last observed layout (TL: no wait fails without values). */
+    private fun awaitLayout(what: String, recorded: DialogLayout, condition: (DialogLayout) -> Boolean) {
+        var last: DialogLayout? = null
+        try {
+            compose.waitUntil(5_000) { dialogLayout().also { last = it }.let(condition) }
+        } catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("$what: not reached in 5000ms; recorded=$recorded, last=$last", timeout)
         }
     }
 
