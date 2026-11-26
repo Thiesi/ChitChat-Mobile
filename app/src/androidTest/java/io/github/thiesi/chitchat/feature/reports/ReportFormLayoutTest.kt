@@ -178,6 +178,9 @@ class ReportFormLayoutTest {
             compose.onNodeWithTag("report_category:${ReportCategory.SPAM.wire}").performScrollTo().performClick()
             compose.onNodeWithTag("report_details").performScrollTo().performTextInput("kept why")
             compose.waitForIdle()
+            // The keyboard goes first (as FormDialogGeometryTest): with it up the outside point can land on it, a vacuous pass.
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
             io.github.thiesi.chitchat.core.ui.tapOutsideSurface(compose.onNodeWithTag("report_dialog", useUnmergedTree = true))
             compose.waitForIdle()
             assertTrue("The form stays open", present("report_dialog"))
@@ -212,12 +215,17 @@ class ReportFormLayoutTest {
             compose.onNodeWithTag("report_category:${ReportCategory.OFFENSIVE_USERNAME.wire}").performScrollTo().performClick()
             compose.onNodeWithTag("report_details").performScrollTo().performTextInput("kept why")
             compose.waitForIdle()
+            // The keyboard goes first (as FormDialogGeometryTest): with it up the outside point can land on it, a vacuous pass.
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
             io.github.thiesi.chitchat.core.ui.tapOutsideSurface(compose.onNodeWithTag("report_dialog", useUnmergedTree = true))
             compose.waitForIdle()
             assertTrue("Editing: the form stays open", present("report_dialog"))
             assertEquals("kept why", reports.state.value?.details)
             compose.onNodeWithTag("report_send").performScrollTo().performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
             compose.waitUntil(5_000) { present("report_check") }
+            // Still no keyboard before this outside tap either (the same vacuous-pass reason).
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
             io.github.thiesi.chitchat.core.ui.tapOutsideSurface(compose.onNodeWithTag("report_dialog", useUnmergedTree = true))
             compose.waitForIdle()
             assertTrue("Unknown: the summary stays", present("report_check"))
