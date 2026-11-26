@@ -13,7 +13,7 @@ on:
       scroll_diagnostic:
         description: 'DIAGNOSTIC branch only (#351/#369): one scroll-settle form, N=40, observation only'
         type: choice
-        options: [none, auth, report]
+        options: [none, auth, report, report-layout]
         default: none
         required: true
 
@@ -63,7 +63,7 @@ jobs:
             app/build/reports/nativeInputObservation/
 
   scroll-settle:
-    if: inputs.scroll_diagnostic == 'auth' || inputs.scroll_diagnostic == 'report'
+    if: inputs.scroll_diagnostic == 'auth' || inputs.scroll_diagnostic == 'report' || inputs.scroll_diagnostic == 'report-layout'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -101,7 +101,7 @@ jobs:
           script: |
             adb shell settings put secure show_ime_with_hard_keyboard 1
             python3 -B .github/scripts/native_environment.py
-            if [ "$FORM" = auth ]; then CLASS=io.github.thiesi.chitchat.feature.auth.AuthPinnedPresentationTest; else CLASS=io.github.thiesi.chitchat.feature.reports.ReportPresentationTest; fi; ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=$CLASS#scrollSettleDiagnostic -Pandroid.testInstrumentationRunnerArguments.scrollSettleDiagnostic=$FORM -Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true --max-workers=2 || echo "diagnostic exit $?"
+            if [ "$FORM" = report-layout ]; then FILTER=io.github.thiesi.chitchat.feature.reports.ReportFormLayoutTest; elif [ "$FORM" = auth ]; then FILTER=io.github.thiesi.chitchat.feature.auth.AuthPinnedPresentationTest#scrollSettleDiagnostic; else FILTER=io.github.thiesi.chitchat.feature.reports.ReportPresentationTest#scrollSettleDiagnostic; fi; ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=$FILTER -Pandroid.testInstrumentationRunnerArguments.scrollSettleDiagnostic=$FORM -Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true --max-workers=2 || echo "diagnostic exit $?"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
