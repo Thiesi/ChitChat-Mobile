@@ -183,6 +183,9 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         LaunchedEffect(focused.caret.version) {
             if (focused.caret.version == 0) return@LaunchedEffect
             withFrameNanos { } // After the layout of the change.
+            // A selection-only change lays nothing out, so the body's position callback doesn't record it: record here, so
+            // a later height or mode change restores from where the caret is now, not where it was (#371's restore assert).
+            focused.record(key, pinned)
             if (held) return@LaunchedEffect
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return@LaunchedEffect
             val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
