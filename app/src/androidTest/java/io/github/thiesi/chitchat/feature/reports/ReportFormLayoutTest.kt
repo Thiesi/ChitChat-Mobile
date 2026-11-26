@@ -319,7 +319,32 @@ class ReportFormLayoutTest {
         launchAt200(landscape, reports) {
             report()
             val case = "report-font200-${if (landscape) "landscape" else "portrait"} text first"
-            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(24))
+            // NativeInput's contract (TL ruling, #374): the keyboard comes from native taps, never a semantic-only focus.
+            // Text first by the real user path: one tap (strict IME proof), the text, then system Back, which hides the
+            // keyboard and leaves the dialog; then one tap on the field brings the keyboard back over the existing text
+            // (the swap). That tap isn't a retry: the first tap's own proof passed.
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms. ".repeat(24))
+            fun fieldState() = compose.onNodeWithTag("report_details").fetchSemanticsNode().config.let {
+                it[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text to
+                    it[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange] }
+            val beforeBack = fieldState()
+            androidx.test.espresso.Espresso.pressBack()
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+            // PL: the first system Back only hides the keyboard; the dialog stays open with the same text and selection.
+            check(present("report_dialog")) { "$case: system Back dismissed the report dialog instead of only the keyboard" }
+            assertEquals("$case: Back kept the text", beforeBack.first, fieldState().first)
+            assertEquals("$case: Back kept the selection", beforeBack.second, fieldState().second)
+            // The keyboard's inset gone from the dialog's layout (a bounded positive condition).
+            compose.waitUntil(5_000) {
+                val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
+                val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
+                !window.visible && kotlin.math.abs(area.bottom - window.height) <= 1f
+            }
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
             if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
                 // The dialog's content bottom at the window height less the keyboard's final inset: the inset has settled.
                 compose.waitUntil(5_000) {
@@ -351,7 +376,11 @@ class ReportFormLayoutTest {
         launchAt(fontScale, landscape = false, reports = reports) {
             report()
             compose.onNodeWithTag("report_category:${ReportCategory.HARASSMENT.wire}").performScrollTo().performClick()
-            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms")
+            // NativeInput's contract (TL ruling, #374): the keyboard from one native tap, then the semantic input.
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms")
             if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
                 compose.waitUntil(5_000) {
                     val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
@@ -407,6 +436,10 @@ class ReportFormLayoutTest {
             if (counter.second + margin - line.top <= line.height)
                 assertTrue("The counter keeps its 8dp bottom margin ($step: counter=[${counter.first}, ${counter.second}] ${line.detail})",
                     kotlin.math.abs(line.height - counter.second - margin) <= 1f)
+            // NativeInput's contract (#374, TL): the keyboard this case opened with its native tap is closed, and seen
+            // hidden, before the activity is destroyed, the existing pattern (closeSoftKeyboard, then a bounded wait).
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
         }
     }
 

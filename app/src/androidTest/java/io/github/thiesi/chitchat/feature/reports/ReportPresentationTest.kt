@@ -108,7 +108,17 @@ class ReportPresentationTest {
         // PL: the attachment line ("They'll see the file's name…") at the form's end, light default.
         Shot("form-file-end", node = "report_dialog", onlyAt = "default", rooms = listOf(roomMessage(3, null, file(71, longFile))), act = {
             report(3); compose.onNodeWithTag("report_who_attachment").performScrollTo() }),
-        Shot("form-filled", node = "report_dialog", act = { report(3); fill() }),
+        // NativeInput's contract (TL ruling, #374): the keyboard from one native tap before the input; the other fill()
+        // users are on the list for a later sweep.
+        Shot("form-filled", node = "report_dialog", act = {
+            report(3); choose(ReportCategory.HARASSMENT)
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+            awaitKeyboardLayout()
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms")
+            compose.waitForIdle()
+        }),
         Shot("form-toolong", node = "report_dialog", act = {
             report(3); choose(ReportCategory.SPAM)
             // A2 (PL): the keyboard first, so the capture shows one of the two intended end states deterministically (the
