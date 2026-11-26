@@ -280,6 +280,59 @@ class ReportFormLayoutTest {
 
     @Test fun at200PercentLandscapeTheCaretLineStaysInViewAcrossKeyboardAndModeChanges() = caretStaysInView(landscape = true)
 
+    /**
+     * #369 (TL): the late-keyboard order. The text arrives first, through semantics (as an accessibility service sets it),
+     * and the keyboard shows after it, swapping the dialog to one column: the caret's line ends in view.
+     */
+    @Test fun at200PercentPortraitTextFirstThenTheKeyboardKeepsTheCaretLineInView() = textFirst(landscape = false)
+
+    @Test fun at200PercentLandscapeTextFirstThenTheKeyboardKeepsTheCaretLineInView() = textFirst(landscape = true)
+
+    private fun launchAt200(landscape: Boolean, reports: ReportViewModel, body: () -> Unit) {
+        FontScaleTestActivity.requestedFontScale = 2f
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            if (landscape) {
+                scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                compose.waitUntil(5_000) {
+                    var orientation = 0
+                    scenario.onActivity { orientation = it.resources.configuration.orientation }
+                    orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                }
+            }
+            scenario.onActivity { activity ->
+                activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
+                    val band = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toPx() }
+                    SideEffect { labelBand = band }
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
+                } } }
+            }
+            body()
+        }
+    }
+
+    private fun textFirst(landscape: Boolean) {
+        val reports = ReportViewModel(operations)
+        launchAt200(landscape, reports) {
+            report()
+            val case = "report-font200-${if (landscape) "landscape" else "portrait"} text first"
+            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(24))
+            if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
+                // The dialog's content bottom at the window height less the keyboard's final inset: the inset has settled.
+                compose.waitUntil(5_000) {
+                    val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
+                    val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
+                    window.visible && kotlin.math.abs(area.bottom - (window.height - window.imeBottom)) <= 1f
+                }
+            }
+            assertCaretInView(case)
+        }
+    }
+
+    /** Every vertical scroller's value, to show a change that keeps the caret's line in view moves nothing. */
+    private fun scrollValues(): List<Float> = compose.onAllNodes(
+        SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange), useUnmergedTree = true)
+        .fetchSemanticsNodes().map { it.config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].value() }
+
     @Volatile private var labelBand = 0f
 
     private fun caretStaysInView(landscape: Boolean) {
@@ -306,7 +359,14 @@ class ReportFormLayoutTest {
             val case = "report-font200-${if (landscape) "landscape" else "portrait"}"
             compose.onNodeWithTag("report_details").performScrollTo()
             compose.tapNativeInput("report_details", imeBottom = ime)
-            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms. ".repeat(24))
+            // TL: a change that keeps the caret's line in view moves nothing.
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link")
+            assertCaretInView("$case short")
+            val still = scrollValues()
+            compose.onNodeWithTag("report_details").performTextInput(" twice")
+            compose.waitForIdle()
+            assertEquals("$case: a change that keeps the caret's line in view moves nothing", still, scrollValues())
+            compose.onNodeWithTag("report_details").performTextInput(" in 3 rooms. " + "Posted the same link in 3 rooms. ".repeat(23))
             assertCaretInView("$case typed")
             androidx.test.espresso.Espresso.closeSoftKeyboard()
             compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
