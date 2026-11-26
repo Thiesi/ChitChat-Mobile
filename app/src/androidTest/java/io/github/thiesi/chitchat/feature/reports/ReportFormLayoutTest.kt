@@ -319,16 +319,71 @@ class ReportFormLayoutTest {
         launchAt200(landscape, reports) {
             report()
             val case = "report-font200-${if (landscape) "landscape" else "portrait"} text first"
-            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(24))
+            // NativeInput's contract (TL ruling, #374): the keyboard comes from native taps, never a semantic-only focus.
+            // Text first by the real user path: one tap (strict IME proof), the text, then system Back, which hides the
+            // keyboard and leaves the dialog; then one tap on the field brings the keyboard back over the existing text
+            // (the swap). That tap isn't a retry: the first tap's own proof passed.
+            compose.onNodeWithTag("report_details").performScrollTo()
+            // TL: the pre-keyboard layout, measured (keyboard down, dialog settled), for the wait after Back below.
+            compose.waitForIdle()
+            val before = dialogLayout()
+            check(!before.imeVisible) { "$case: the keyboard was already up before the first tap ($before)" }
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms. ".repeat(24))
+            fun fieldState() = compose.onNodeWithTag("report_details").fetchSemanticsNode().config.let {
+                it[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text to
+                    it[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange] }
+            val beforeBack = fieldState()
+            androidx.test.espresso.Espresso.pressBack()
+            awaitLayout("$case: the keyboard hidden after Back", before) { !it.imeVisible }
+            // PL: the first system Back only hides the keyboard; the dialog stays open with the same text and selection.
+            check(present("report_dialog")) { "$case: system Back dismissed the report dialog instead of only the keyboard" }
+            assertEquals("$case: Back kept the text", beforeBack.first, fieldState().first)
+            assertEquals("$case: Back kept the selection", beforeBack.second, fieldState().second)
+            // TL: back to the measured pre-keyboard layout (area bounds within 1px, same pinned state), whatever that
+            // geometry is, so the second tap starts the same transition the scenario names. A timeout here means the
+            // dialog didn't return to its pre-keyboard layout after Back: a finding, not a wait to loosen.
+            awaitLayout("$case: the pre-keyboard layout after Back", before) {
+                !it.imeVisible && it.pinned == before.pinned && it.area.sameAs(before.area)
+            }
+            compose.waitForIdle()
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
             if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
                 // The dialog's content bottom at the window height less the keyboard's final inset: the inset has settled.
-                compose.waitUntil(5_000) {
-                    val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
-                    val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
-                    window.visible && kotlin.math.abs(area.bottom - (window.height - window.imeBottom)) <= 1f
+                awaitLayout("$case: the keyboard's layout after the second tap", before) {
+                    it.imeVisible && kotlin.math.abs(it.area.bottom - (it.windowHeight - it.imeBottom)) <= 1f
                 }
             }
             assertCaretInView(case)
+        }
+    }
+
+    /** The dialog's layout as the text-first waits see it: area bounds, pinned state and the focused window's keyboard. */
+    private data class DialogLayout(
+        val area: androidx.compose.ui.geometry.Rect, val pinned: Boolean,
+        val imeVisible: Boolean, val imeBottom: Int, val windowHeight: Int,
+    )
+
+    private fun dialogLayout(): DialogLayout {
+        val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
+        val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
+        val pinned = compose.onAllNodesWithTag("form_dialog_pinned", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        return DialogLayout(area, pinned, window.visible, window.imeBottom, window.height)
+    }
+
+    private fun androidx.compose.ui.geometry.Rect.sameAs(other: androidx.compose.ui.geometry.Rect) =
+        kotlin.math.abs(left - other.left) <= 1f && kotlin.math.abs(top - other.top) <= 1f &&
+            kotlin.math.abs(right - other.right) <= 1f && kotlin.math.abs(bottom - other.bottom) <= 1f
+
+    /** A bounded wait (5s) whose failure names the recorded and the last observed layout (TL: no wait fails without values). */
+    private fun awaitLayout(what: String, recorded: DialogLayout, condition: (DialogLayout) -> Boolean) {
+        var last: DialogLayout? = null
+        try {
+            compose.waitUntil(5_000) { dialogLayout().also { last = it }.let(condition) }
+        } catch (timeout: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("$what: not reached in 5000ms; recorded=$recorded, last=$last", timeout)
         }
     }
 
@@ -351,7 +406,11 @@ class ReportFormLayoutTest {
         launchAt(fontScale, landscape = false, reports = reports) {
             report()
             compose.onNodeWithTag("report_category:${ReportCategory.HARASSMENT.wire}").performScrollTo().performClick()
-            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms")
+            // NativeInput's contract (TL ruling, #374): the keyboard from one native tap, then the semantic input.
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms")
             if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
                 compose.waitUntil(5_000) {
                     val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
@@ -365,6 +424,64 @@ class ReportFormLayoutTest {
             assertTrue("The short field is whole in view, with the label's margin (${line.detail})",
                 line.fieldTop >= margin - 1f && line.fieldBottom <= line.height + 1f)
         }
+    }
+
+    /**
+     * A2 (PL ruling, "a disabled action must not hide its reason"): in the too-long state, with the caret on the field's
+     * last line (by line index), the counter line ("Too long: 1012 / 1000") is in view together with the caret's line.
+     * The text is typed through semantics with the keyboard up. The same container math as the caret asserts, logged.
+     */
+    @Test fun atDefaultSizeTheTooLongCounterStaysInViewWithTheCaretOnTheLastLine() = counterInView(1f)
+
+    @Test fun at200PercentTheTooLongCounterStaysInViewWithTheCaretOnTheLastLine() = counterInView(2f)
+
+    private fun counterInView(fontScale: Float) {
+        val reports = ReportViewModel(operations)
+        launchAt(fontScale, landscape = false, reports = reports) {
+            report()
+            compose.onNodeWithTag("report_category:${ReportCategory.SPAM.wire}").performScrollTo().performClick()
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
+            val step = "report-${if (fontScale == 1f) "default" else "font200"} toolong counter"
+            val line = assertCaretInView(step)
+            // The caret is on the field's last line (line index, not pixels; TL).
+            val node = compose.onNodeWithTag("report_details").fetchSemanticsNode()
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            node.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+            val layout = layouts.single()
+            val end = node.config[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange].end
+            check(layout.getLineForOffset(end.coerceIn(0, layout.layoutInput.text.length)) == layout.lineCount - 1) {
+                "$step: the caret isn't on the last line (${line.detail})" }
+            val counter = rectInViewport("report_counter")
+            io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=report-counter-" +
+                (if (fontScale == 1f) "default" else "font200") + " counterTop=${"%.1f".format(java.util.Locale.ROOT, counter.first)} " +
+                "counterBottom=${"%.1f".format(java.util.Locale.ROOT, counter.second)} viewport=${"%.1f".format(java.util.Locale.ROOT, line.height)} " +
+                "caretTop=${"%.1f".format(java.util.Locale.ROOT, line.top)} caretBottom=${"%.1f".format(java.util.Locale.ROOT, line.bottom)}")
+            assertTrue("The counter line is in view with the caret's line ($step: counter=[${counter.first}, ${counter.second}] ${line.detail})",
+                counter.first >= -1f && counter.second <= line.height + 1f)
+            // PL: keyboard first, the span came in from below, so it ends 8dp above the edge when that fits.
+            val margin = 8 * context.resources.displayMetrics.density
+            if (counter.second + margin - line.top <= line.height)
+                assertTrue("The counter keeps its 8dp bottom margin ($step: counter=[${counter.first}, ${counter.second}] ${line.detail})",
+                    kotlin.math.abs(line.height - counter.second - margin) <= 1f)
+            // NativeInput's contract (#374, TL): the keyboard this case opened with its native tap is closed, and seen
+            // hidden, before the activity is destroyed, the existing pattern (closeSoftKeyboard, then a bounded wait).
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+        }
+    }
+
+    /** A tagged node's top and bottom in the viewport that clips it (the same container math as [caretLine]). */
+    private fun rectInViewport(tag: String): Pair<Float, Float> {
+        compose.waitForIdle()
+        val pinned = compose.onAllNodesWithTag("form_dialog_pinned", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val viewport = compose.onNodeWithTag(if (pinned) "form_dialog_body_viewport" else "form_dialog_viewport", useUnmergedTree = true)
+            .fetchSemanticsNode().layoutInfo.coordinates
+        val target = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().layoutInfo.coordinates
+        val top = viewport.localPositionOf(target, androidx.compose.ui.geometry.Offset.Zero).y
+        return top to top + target.size.height
     }
 
     /** Every vertical scroller's value, to show a change that keeps the caret's line in view moves nothing. */

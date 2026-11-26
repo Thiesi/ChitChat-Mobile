@@ -55,6 +55,7 @@ import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
 import io.github.thiesi.chitchat.feature.direct.DirectThreadScreen
 import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
+import io.github.thiesi.chitchat.testing.tapNativeInput
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Rule
@@ -107,17 +108,30 @@ class ReportPresentationTest {
         // PL: the attachment line ("They'll see the file's name…") at the form's end, light default.
         Shot("form-file-end", node = "report_dialog", onlyAt = "default", rooms = listOf(roomMessage(3, null, file(71, longFile))), act = {
             report(3); compose.onNodeWithTag("report_who_attachment").performScrollTo() }),
-        Shot("form-filled", node = "report_dialog", act = { report(3); fill() }),
+        // NativeInput's contract (TL ruling, #374): the keyboard from one native tap before the input; the other fill()
+        // users are on the list for a later sweep.
+        Shot("form-filled", node = "report_dialog", act = {
+            report(3); choose(ReportCategory.HARASSMENT)
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+            awaitKeyboardLayout()
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms")
+            compose.waitForIdle()
+        }),
         Shot("form-toolong", node = "report_dialog", act = {
             report(3); choose(ReportCategory.SPAM)
-            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
-            // #369: the keyboard can arrive after the input and swap the dialog to one column. The form dialog keeps the
-            // caret's line in view through that (the counter below it can be out of view at the default size), so the
-            // capture waits for the dialog's layout to reach the keyboard's final inset (a bounded positive condition)
-            // and doesn't scroll on its own:
-            // a performScrollTo to the already visible counter moved the view to the reasons list (N=40 runs
-            // 45746286440, 45753087572).
+            // A2 (PL): the keyboard first, so the capture shows one of the two intended end states deterministically (the
+            // keyboard-first one: the span comes in from below and ends 8dp above the edge). The keyboard shows from one
+            // native tap and its inset settles (bounded positive conditions) before the input; text first is covered by
+            // ReportFormLayoutTest's asserts. The act doesn't scroll on its own (#369: a performScrollTo to the already
+            // visible counter once moved the view to the reasons list).
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
             awaitKeyboardLayout()
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
+            compose.waitForIdle()
         }),
         Shot("sending", node = "report_dialog", hold = true, act = { report(3); fill(); send() }),
         Shot("rate", node = "report_dialog", results = listOf(ReportResult.RateLimited(900)), act = { report(3); fill(); send()

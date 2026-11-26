@@ -48,6 +48,7 @@ import io.github.thiesi.chitchat.feature.direct.DirectThreadViewModel
 import io.github.thiesi.chitchat.feature.profile.ProfileDialog
 import io.github.thiesi.chitchat.feature.profile.ProfileState
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
+import io.github.thiesi.chitchat.testing.tapNativeInput
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.After
 import org.junit.Rule
@@ -91,7 +92,11 @@ class PersonReportPresentationTest {
         // Filled with the keyboard up: a click focuses the field and brings up the IME, which the dialog window sits above.
         Shot("form-room-keyboard", at = FONT200, act = {
             choose(ReportCategory.OFFENSIVE_USERNAME)
-            compose.onNodeWithTag("report_details").performScrollTo().performClick().performTextInput("Uses a slur as their name")
+            // NativeInput's contract (TL ruling, #374): the keyboard from one native tap (strict IME proof), then the input.
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+            compose.onNodeWithTag("report_details").performTextInput("Uses a slur as their name")
         }),
         Shot("form-global", at = DEFAULT, dm = true, roomId = null),
         Shot("form-global-end", at = FONT200, dm = true, roomId = null, act = { end() }),

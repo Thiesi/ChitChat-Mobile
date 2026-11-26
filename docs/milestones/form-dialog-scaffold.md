@@ -66,6 +66,31 @@ app window's bounds, not whether the keyboard covers a node.
     than the view never leaves its caret out.
   - **The label rule:** a field's top keeps its floating label plus 8 dp below the viewport's top edge, or the label is
     entirely out of view, never half. The caret's line wins when both can't fit.
+  - **A disabled action doesn't hide its reason (A2; PL ruling, 2026-11-26).** While the caret is on the field's last
+    line (by line index; an empty field counts), the view also keeps the field's bottom edge and its trailing line in
+    view when they fit with the caret's line. The trailing line is the report form's counter ("Too long: 1012 / 1000"
+    while Send report is disabled). The span runs from the caret line's top to the lower of the field's bottom and the
+    counter's bottom, and moves into view by the minimum distance, in both the height and the text steps; when it doesn't
+    fit, the caret's line wins. The counter publishes its position to `LocalFormDialogCaret` and unpublishes when it
+    leaves composition; fields that publish no trailing line behave as before.
+    - **Priority (TL and PL, 2026-11-26):**
+      1. the caret's line;
+      2. the span (the field's bottom and the counter) when it fits;
+      3. an 8 dp bottom margin under the span, which gives first;
+      4. the label rule.
+
+      The bottom margin keeps the scroll-edge divider from reading as an underline under the counter (in Lantern, an
+      underline means a link). The label rule moves the label in only if the kept range (the span with its margin, else
+      the span, else the caret's line) stays wholly in view; otherwise it takes the label entirely out if the range's top
+      stays in view; never half. `FormDialogKeepInViewTest` (JVM) checks these on the pure geometry.
+    - **Two end states, both intended (PL, 2026-11-26).** Keyboard first, typing brings the span in from below, so it ends
+      8 dp above the bottom edge. Text first, A's restore keeps the person's place across the keyboard's swap, and a span
+      already clear of the margin doesn't move. In both, the caret's line, the field's bottom and the counter are in view
+      (N=40 run 45820138541: 40/40, 35 keyboard-first and 5 text-first). The `form-toolong` capture uses the keyboard-first
+      order (the keyboard shown and settled before the input); text first is covered by asserts.
+    - **Assert:** `ReportFormLayoutTest` at default size and 200% portrait, in the too-long state (typed through
+      semantics, the caret on the last line): the counter line is in the viewport with the caret's line, logged to the
+      metrics.
   - **Asserts:** `ReportFormLayoutTest` at 200%, portrait and landscape, with long details typed through semantics (the
     accessibility path). The caret's line is inside the viewport of the scroller that holds the field, which already
     ends above the keyboard, after each of:
