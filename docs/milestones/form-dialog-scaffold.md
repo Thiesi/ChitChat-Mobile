@@ -92,8 +92,8 @@ app window's bounds, not whether the keyboard covers a node.
     reach. The keyboard arrived after the 1,012-character input, and the act's own `performScrollTo` to the counter
     moved the view to the reasons list, even when the counter was already visible (N=40 runs 45746286440 and
     45753087572). The act now waits for the dialog's layout to reach the keyboard's final inset (a bounded positive
-    condition) and doesn't scroll on its own: the form dialog keeps the caret's line in view, with the counter just
-    below it.
+    condition) and doesn't scroll on its own: the form dialog keeps the caret's line in view. The counter below it
+    can be out of view at the default size; keeping it in view is a separate follow-up (PL).
 - **The 24 dp padding scrolls with the content.** In a one-column layout the viewport is then the whole surface. With
   the keyboard up at 200% landscape only about 80 dp is left, and a fixed padding would have left 34 dp, too little for
   a 48 dp button.

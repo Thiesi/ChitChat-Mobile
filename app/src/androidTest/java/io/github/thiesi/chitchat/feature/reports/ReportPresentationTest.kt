@@ -112,8 +112,9 @@ class ReportPresentationTest {
             report(3); choose(ReportCategory.SPAM)
             compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
             // #369: the keyboard can arrive after the input and swap the dialog to one column. The form dialog keeps the
-            // caret's line in view through that (with the counter just below it), so the capture waits for the dialog's
-            // layout to reach the keyboard's final inset (a bounded positive condition) and doesn't scroll on its own:
+            // caret's line in view through that (the counter below it can be out of view at the default size), so the
+            // capture waits for the dialog's layout to reach the keyboard's final inset (a bounded positive condition)
+            // and doesn't scroll on its own:
             // a performScrollTo to the already visible counter moved the view to the reasons list (N=40 runs
             // 45746286440, 45753087572).
             awaitKeyboardLayout()
