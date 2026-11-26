@@ -113,7 +113,9 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
     val density = LocalDensity.current
     // The 24dp padding scrolls with the content, so a short window's viewport is the whole surface: with the keyboard
     // up in landscape at 200% only about 80dp may be left, and a fixed padding would leave no room for a 48dp button.
-    BoxWithConstraints {
+    // The tags name the two viewports (this box's content is the one-column scroller's; the body box's is the pinned
+    // body scroller's), for tests to measure a field against the area that actually clips it. Semantics only (#369, TL).
+    BoxWithConstraints(Modifier.testTag("form_dialog_viewport")) {
         var titleHeight by remember { mutableIntStateOf(0) }
         var buttonsHeight by remember { mutableIntStateOf(0) }
         // What the pinned layout leaves the body: the height above the keyboard less the title, the buttons and their gaps.
@@ -209,7 +211,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // The modes differ only in modifiers, never in the tree, so a focused field keeps its node across a switch:
             // pinned, the body gets the leftover height and scrolls inside it; one column, it takes its own height and the
             // whole dialog scrolls.
-            Box(Modifier.padding(bottom = 24.dp).then(if (pinned) Modifier.heightIn(max = available) else Modifier)) {
+            Box(Modifier.padding(bottom = 24.dp).then(if (pinned) Modifier.heightIn(max = available) else Modifier)
+                .testTag("form_dialog_body_viewport")) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.textContentColor,
                     LocalTextStyle provides MaterialTheme.typography.bodyMedium,
                     LocalFormDialogLayout provides layoutKey, LocalFormDialogCaret provides focused.caret) {

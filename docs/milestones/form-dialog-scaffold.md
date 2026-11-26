@@ -76,8 +76,13 @@ app window's bounds, not whether the keyboard covers a node.
     The label is never cut in half. A change that keeps the caret's line in view leaves every scroller where it was. In
     portrait, a caret placed in the viewport's upper third keeps its offset within 1 px across the keyboard hide (one
     column to pinned): the restore holds it, not the clamp.
-  - **How the asserts measure:** in the field's scroller's own layout coordinates. In this dialog the window-coordinate
-    paths (`positionInWindow`, `localToWindow`) disagreed with `boundsInWindow` by the inner scroll value (#372). There is
+  - **How the asserts measure:** against the container that clips the field: the pinned body's viewport
+    (`form_dialog_body_viewport`) or, in one column, the whole dialog's (`form_dialog_viewport`). These are semantics-only
+    tags on two existing nodes. The field's position is taken in that container's own layout coordinates, plus M3's
+    outlined content padding and the caret's rect from the field's layout. There's no padding constant and no
+    scroll-value arithmetic, and each step logs a cross-check against `boundsInWindow`, written to the collected
+    `form-dialog-metrics.txt` before its asserts. In this dialog the window-coordinate paths (`positionInWindow`,
+    `localToWindow`) disagreed with `boundsInWindow` by the inner scroll value (#372). There is
     no "first tap after focus moved away" step: in touch mode nothing in this dialog can take focus from the field
     without a tap on an already-focused field, which the strict input contract avoids. A rotation recreates the Activity
     and focus doesn't survive it.

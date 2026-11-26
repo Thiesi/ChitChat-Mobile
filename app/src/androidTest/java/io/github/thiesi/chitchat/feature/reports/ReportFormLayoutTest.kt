@@ -401,10 +401,13 @@ class ReportFormLayoutTest {
      * (positionInWindow, localToWindow) disagreed with boundsInWindow by the inner scroll value (#371's runs, #372), so
      * nothing here converts to the window. The dialog's viewport already ends above the keyboard (imePadding).
      */
-    private class CaretLine(val top: Float, val bottom: Float, val height: Float, val cut: Float, val detail: String)
+    private class CaretLine(val top: Float, val bottom: Float, val height: Float, val cut: Float, val detail: String,
+        val metrics: String)
 
     private fun assertCaretInView(step: String): CaretLine {
         val line = caretLine(step)
+        val case = "report-caret-" + step.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(50)
+        io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=$case ${line.metrics}")
         assertTrue("The caret line is in view (${line.detail})", line.top >= -1f && line.bottom <= line.height + 1f)
         assertTrue("The label is never cut in half (${line.detail})", line.cut <= 0.5f || line.cut >= labelBand - 0.5f)
         compose.onNodeWithTag("report_details").assertIsFocused()
@@ -420,23 +423,32 @@ class ReportFormLayoutTest {
         val layout = layouts.single()
         val selection = node.config[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange]
         val cursor = layout.getCursorRect((offset ?: selection.end).coerceIn(0, layout.layoutInput.text.length))
-        val range = androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange
-        val scrollers = compose.onAllNodes(SemanticsMatcher.keyIsDefined(range) and hasAnyDescendant(hasTestTag("report_details")),
-            useUnmergedTree = true).fetchSemanticsNodes()
-        // The scroller in use: the one that can scroll (pinned: the body; one column: the whole dialog), else the innermost.
-        val scroller = (scrollers.filter { it.config[range].maxValue() > 0f }.minByOrNull { it.size.height }
-            ?: scrollers.minByOrNull { it.size.height })!!
-        val viewport = scroller.layoutInfo.coordinates
-        // The outlined field's text starts 16dp inside its top edge (no label in the slot).
-        val density = context.resources.displayMetrics.density
-        val fieldTop = viewport.localPositionOf(node.layoutInfo.coordinates, androidx.compose.ui.geometry.Offset.Zero).y
-        val caretTop = fieldTop + 16 * density + cursor.top
-        val caretBottom = fieldTop + 16 * density + cursor.bottom
+        // The area that clips the field: the pinned body's viewport, or (one column) the whole dialog's. Measured in that
+        // container's own layout coordinates (its content box is the viewport), so no padding constant or scroll value
+        // enters; the field's text starts at M3's outlined content padding. Cross-checked against boundsInWindow below.
+        val pinned = compose.onAllNodesWithTag("form_dialog_pinned", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val container = compose.onNodeWithTag(if (pinned) "form_dialog_body_viewport" else "form_dialog_viewport", useUnmergedTree = true)
+            .fetchSemanticsNode()
+        val viewport = container.layoutInfo.coordinates
+        val field = node.layoutInfo.coordinates
+        val fieldTop = viewport.localPositionOf(field, androidx.compose.ui.geometry.Offset.Zero).y
+        val inset = with(androidx.compose.ui.unit.Density(context)) {
+            androidx.compose.material3.OutlinedTextFieldDefaults.contentPadding().calculateTopPadding().toPx()
+        }
+        val caretTop = fieldTop + inset + cursor.top
+        val caretBottom = fieldTop + inset + cursor.bottom
         val height = viewport.size.height.toFloat()
         val cut = -fieldTop
-        val detail = "$step: caret=[$caretTop, $caretBottom] in viewport height=$height fieldTop=$fieldTop " +
-            "scroll=${scroller.config[range].value()}/${scroller.config[range].maxValue()} cut=$cut labelBand=$labelBand selection=$selection"
-        return CaretLine(caretTop, caretBottom, height, cut, detail)
+        // The cross-check: where the visible field begins in the window, against the container's visible top plus the
+        // field's offset (they agree while the field's top is inside the viewport).
+        val visible = node.boundsInWindow
+        val crossCheck = container.boundsInWindow.top + maxOf(fieldTop, 0f)
+        val detail = "$step: caret=[$caretTop, $caretBottom] viewport height=$height fieldTop=$fieldTop pinned=$pinned " +
+            "visibleTop=${visible.top} crossCheck=$crossCheck cut=$cut labelBand=$labelBand selection=$selection"
+        fun Float.r() = "%.1f".format(java.util.Locale.ROOT, this)
+        val metrics = "caretTop=${caretTop.r()} caretBottom=${caretBottom.r()} viewport=${height.r()} fieldTop=${fieldTop.r()} " +
+            "pinned=$pinned visibleTop=${visible.top.r()} crossCheck=${crossCheck.r()} cut=${cut.r()} selection=${selection.start}.${selection.end}"
+        return CaretLine(caretTop, caretBottom, height, cut, detail, metrics)
     }
 
     /** The text offset whose line sits at [y] in the viewport (the field's own layout), for a caret away from the edges. */
