@@ -138,13 +138,20 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         // The hook (PL and TL, 2026-11-22): while the caller holds an in-form notice, a layout change doesn't scroll back to
         // the focused field; the notice keeps the view until the person's next interaction. Off by default: unchanged.
         val held by androidx.compose.runtime.rememberUpdatedState(holdFocusedInView)
-        LaunchedEffect(maxHeight, pinned) {
-            withFrameNanos { } // After the layout at the new height.
-            if (held) return@LaunchedEffect
-            val child = focused.coordinates?.takeIf { it.isAttached } ?: return@LaunchedEffect
+        // A3 (TL, 2026-11-26): the height step runs where the new layout is first known, in the outer scroller content's
+        // position callback, after the layout pass and before the frame is drawn: each scroller's new maxValue is already
+        // measured there, so a synchronous delta lands the restore in the first frame drawn at the new layout, where the
+        // after-a-frame step alone drew one frame at the swapped-in scroller's old value (often 0) first. Once per key:
+        // later callbacks for the same key (a scroll fires them too) never re-apply it against the person's own scrolling.
+        // A scroll in progress (a fling, a bring-into-view) or a target outside 0..maxValue is left to the after-a-frame
+        // step, which goes through the scroll mutex and keeps A's clamp. That step stays as the fallback for a key no
+        // callback came for; after a same-frame restore it finds the target already reached and does nothing.
+        fun heightStep(): Pair<androidx.compose.foundation.ScrollState, Int>? {
+            if (held) return null
+            val child = focused.coordinates?.takeIf { it.isAttached } ?: return null
             val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
                 else Triple(outer, focused.outerContent, focused.outerViewport)
-            val inside = content?.takeIf { it.isAttached } ?: return@LaunchedEffect
+            val inside = content?.takeIf { it.isAttached } ?: return null
             val box = inside.localBoundingBoxOf(child, clipBounds = false)
             val caret = focused.caretIn(inside, box)
             val before = focused.before(key, child)
@@ -185,7 +192,18 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 target = lastLineSpan(target, box, caret, trailing, v, margin)
                 target = labelRule(target, box, keptRange(box, caret, trailing, v, margin), v, margin, labelBand)
             }
-            val next = target.roundToInt().coerceIn(0, state.maxValue)
+            return state to target.roundToInt()
+        }
+        val sameFrame = remember { FormDialogSameFrameRestore() }
+        fun restoreInLayoutPass() {
+            if (!sameFrame.claim(key)) return
+            val (state, target) = heightStep() ?: return
+            sameFrameDelta(target, state.value, state.maxValue, state.isScrollInProgress)?.let(state::dispatchRawDelta)
+        }
+        LaunchedEffect(maxHeight, pinned) {
+            withFrameNanos { } // After the layout at the new height: the fallback.
+            val (state, target) = heightStep() ?: return@LaunchedEffect
+            val next = target.coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
         }
         // A text or selection change (any input path: the keyboard, a paste, or an accessibility service setting the text
@@ -219,7 +237,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             .onSizeChanged { focused.outerViewport = it.height }
             .onGloballyPositioned { focused.outerFrame = it }
             .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline).verticalScroll(outer)
-            .onGloballyPositioned { focused.outerContent = it }
+            .onGloballyPositioned { focused.outerContent = it; restoreInLayoutPass() }
             .testTag(if (pinned) "form_dialog_pinned" else "form_dialog_column").padding(24.dp)) {
             Box(Modifier.padding(bottom = 16.dp).onSizeChanged { titleHeight = it.height }) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.titleContentColor,
@@ -251,6 +269,28 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             }
         }
     }
+}
+
+/** A3: claims each layout key once, so only the first position callback after a height or mode change restores. */
+internal class FormDialogSameFrameRestore {
+    private var claimed: Any? = null
+
+    /** True the first time for [key] (a change back to an earlier key is a new change); false for later callbacks. */
+    fun claim(key: Any): Boolean {
+        if (claimed == key) return false
+        claimed = key
+        return true
+    }
+}
+
+/**
+ * A3: the synchronous delta for the same-frame restore, or null to leave it to the after-a-frame step: no move needed,
+ * a scroll in progress (it goes through the scroll mutex there), or a target outside 0..[maxValue] (A's clamp applies
+ * there, never a clipped value here).
+ */
+internal fun sameFrameDelta(target: Int, value: Int, maxValue: Int, inProgress: Boolean): Float? = when {
+    inProgress || target !in 0..maxValue || target == value -> null
+    else -> (target - value).toFloat()
 }
 
 /**

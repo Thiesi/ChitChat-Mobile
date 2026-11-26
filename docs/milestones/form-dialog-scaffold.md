@@ -57,6 +57,13 @@ app window's bounds, not whether the keyboard covers a node.
     whole, with the label's margin, then stays whole in view, as Compose's own keep-in-view did before this step
     superseded it (#371's captures had left a short filled field cut at the bottom edge). It acts on every height
     change, so during the keyboard's slide the field rides the edge.
+    **A3 (TL, 2026-11-26): the restore lands in the layout pass, before the frame is drawn.** It runs once per height
+    or mode change in the outer scroller content's position callback, where the new layout's scroll range is already
+    known, and moves the scroller synchronously. The first frame drawn at the new layout is then already at the restored
+    place; before, a mode switch drew one frame at the swapped-in scroller's old value (often the top) first (37 of 40
+    text-first and 33 of 40 keyboard-first repetitions, none with A3; diagnostic runs 45903840557 and 45903834879). A
+    scroll already in progress, or a target outside the scroll range, is left to the step after the frame, which stays as
+    the fallback and keeps the clamp; later callbacks for the same change never re-apply it.
   - **On a text or selection change:** if the change put the caret's line outside the view, it's brought back, just
     enough, then the label rule applies. When the line is still inside, nothing moves, so keyboard typing (already kept in
     view by the field) adds no scroll.
