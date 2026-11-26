@@ -51,7 +51,8 @@ app window's bounds, not whether the keyboard covers a node.
     `OutlinedTextFieldDefaults.DecorationBox`, exactly what `OutlinedTextField` composes with its parameters, so it looks
     and behaves as before, and adds `onTextLayout`. StepUp's single-line secret publishes nothing and is unchanged.
   - **On a height or mode change:** the scaffold records, on every layout and focus change, where the focused field and
-    its caret's line sit relative to the top of the scroller in use (window coordinates). After a height or mode change
+    its caret's line sit relative to the top of the scroller in use, in that viewport's own coordinates (not window
+    coordinates, which measured off by the inner scroller's value in this dialog; #372). After a height or mode change
     it restores the same offset in the scroller now in use, clamped so the caret's line (or a short field, whole) stays
     inside. It acts on every height change, so during the keyboard's slide the field rides the edge.
   - **On a text or selection change:** if the change put the caret's line outside the view, it's brought back, just
@@ -64,16 +65,22 @@ app window's bounds, not whether the keyboard covers a node.
   - **The label rule:** a field's top keeps its floating label plus 8 dp below the viewport's top edge, or the label is
     entirely out of view, never half. The caret's line wins when both can't fit.
   - **Asserts:** `ReportFormLayoutTest` at 200%, portrait and landscape, with long details typed through semantics (the
-    accessibility path). The caret's line is inside the field's visible part and above the keyboard after each of:
+    accessibility path). The caret's line is inside the viewport of the scroller that holds the field, which already
+    ends above the keyboard, after each of:
     - typing;
     - a keyboard hide;
-    - a first real tap after focus moved to Cancel (test-side, through its semantics; TL: not an already-focused
-      re-tap);
     - a paste;
-    - the late-keyboard order (text first, then the keyboard).
+    - the late-keyboard order (text first, then the keyboard), which is also the keyboard showing again over existing
+      text.
 
-    The label is never cut in half. A change that keeps the caret's line in view leaves every scroller where it was. A
-    rotation recreates the Activity and focus doesn't survive it, so it ends in the same first tap.
+    The label is never cut in half. A change that keeps the caret's line in view leaves every scroller where it was. In
+    portrait, a caret placed in the viewport's upper third keeps its offset within 1 px across the keyboard hide (one
+    column to pinned): the restore holds it, not the clamp.
+  - **How the asserts measure:** in the field's scroller's own layout coordinates. In this dialog the window-coordinate
+    paths (`positionInWindow`, `localToWindow`) disagreed with `boundsInWindow` by the inner scroll value (#372). There is
+    no "first tap after focus moved away" step: in touch mode nothing in this dialog can take focus from the field
+    without a tap on an already-focused field, which the strict input contract avoids. A rotation recreates the Activity
+    and focus doesn't survive it.
   - **The `report-light-font200-form-toolong` capture's reasons-list variant** was test timing, not something a user can
     reach. The keyboard arrived after the 1,012-character input, and the act's own `performScrollTo` to the counter
     moved the view to the reasons list, even when the counter was already visible (N=40 runs 45746286440 and

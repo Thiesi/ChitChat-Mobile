@@ -281,8 +281,8 @@ internal val FormDialogLabelMargin: Dp = 8.dp
  * Where the focused child is, and the two scrollers' content and viewport, for keeping it in view. Not state.
  *
  * #369: it also records, on every layout, where the focused field and its caret line sit relative to the top of the
- * scroller in use (window coordinates, so a mode switch doesn't change their meaning), tagged with the layout they were
- * measured in, so the keep-in-view step can read where they were just before a height or mode change.
+ * scroller in use (in that viewport's own coordinates, so a mode switch doesn't change their meaning), tagged with the
+ * layout they were measured in, so the keep-in-view step can read where they were just before a height or mode change.
  */
 private class FocusedChild {
     var coordinates: LayoutCoordinates? = null
@@ -316,10 +316,11 @@ private class FocusedChild {
         val child = coordinates?.takeIf { it.isAttached } ?: return
         val frame = (if (pinned) innerFrame else outerFrame)?.takeIf { it.isAttached } ?: return
         val inside = innerContent?.takeIf { it.isAttached } ?: return
-        val top = frame.localToWindow(androidx.compose.ui.geometry.Offset.Zero).y
+        // Relative to the viewport's own coordinates, never through a window conversion: in this dialog localToWindow
+        // measured off by the inner scroller's value, which changes across a mode switch (#371, #372, TL).
         val box = inside.localBoundingBoxOf(child, clipBounds = false)
-        val field = inside.localToWindow(box.topLeft).y - top
-        val caret = caretIn(inside, box)?.let { inside.localToWindow(it.topLeft).y - top }
+        val field = frame.localPositionOf(inside, box.topLeft).y
+        val caret = caretIn(inside, box)?.let { frame.localPositionOf(inside, it.topLeft).y }
         val height = frame.size.height
         val anchorTop = caret ?: field
         val anchorHeight = caret?.let { caretIn(inside, box)!!.height } ?: box.height
