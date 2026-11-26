@@ -372,10 +372,11 @@ class ReportFormLayoutTest {
             compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
             assertCaretInView("$case keyboard hidden")
             // TL: the swap back is a first tap on an unfocused field (tap away, then back in), not an already-focused
-            // re-tap. Focus moves to Send through its semantics (test-side), then one native tap with the strict IME proof.
+            // re-tap. Focus moves to Cancel through its semantics (test-side; Send is disabled until a reason is chosen, and
+            // a disabled button takes no focus), then one native tap with the strict IME proof.
             // This is scenario setup on another node, never a repair of a missed input (TL, 2026-11-25): the field under
             // test still gets focus and the keyboard only from that one native tap.
-            compose.onNodeWithTag("report_send").performSemanticsAction(SemanticsActions.RequestFocus)
+            compose.onNodeWithTag("report_cancel").performSemanticsAction(SemanticsActions.RequestFocus)
             compose.waitUntil(5_000) { runCatching { compose.onNodeWithTag("report_details").assertIsNotFocused() }.isSuccess }
             compose.tapNativeInput("report_details", imeBottom = ime)
             assertCaretInView("$case keyboard shown again")
@@ -393,16 +394,20 @@ class ReportFormLayoutTest {
         val layout = layouts.single()
         val selection = node.config[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange]
         val cursor = layout.getCursorRect(selection.end.coerceIn(0, layout.layoutInput.text.length))
-        // The outlined field's text sits 16dp inside its bottom edge (no supporting text); its top follows from the layout.
+        // The outlined field's text starts 16dp inside its top edge (no label in the slot). The field's real top comes from
+        // its layout coordinates: SemanticsNode.positionInWindow measured off by the dialog's inner scroll value in this
+        // dialog (#371's runs), while boundsInWindow (the visible part) was right.
         val density = context.resources.displayMetrics.density
-        val textTop = node.positionInWindow.y + node.size.height - 16 * density - layout.size.height
+        val coordinates = node.layoutInfo.coordinates
+        val top = coordinates.localToWindow(androidx.compose.ui.geometry.Offset.Zero).y
+        val textTop = top + 16 * density
         val caretTop = textTop + cursor.top; val caretBottom = textTop + cursor.bottom
         val visible = node.boundsInWindow
         val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
         val floor = if (window.visible) minOf(visible.bottom, window.imeTop.toFloat()) else visible.bottom
-        val cut = visible.top - node.positionInWindow.y
-        val detail = "$step: caret=[$caretTop, $caretBottom] visible=$visible imeTop=${window.imeTop} imeVisible=${window.visible} " +
-            "cut=$cut labelBand=$labelBand selection=$selection"
+        val cut = visible.top - top
+        val detail = "$step: caret=[$caretTop, $caretBottom] top=$top positionInWindow=${node.positionInWindow.y} visible=$visible " +
+            "imeTop=${window.imeTop} imeVisible=${window.visible} cut=$cut labelBand=$labelBand selection=$selection"
         assertTrue("The caret line is in view ($detail)", caretTop >= visible.top - 1f && caretBottom <= floor + 1f)
         assertTrue("The label is never cut in half ($detail)", cut <= 0.5f || cut >= labelBand - 0.5f)
         compose.onNodeWithTag("report_details").assertIsFocused()

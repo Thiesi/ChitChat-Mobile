@@ -67,16 +67,19 @@ app window's bounds, not whether the keyboard covers a node.
     accessibility path). The caret's line is inside the field's visible part and above the keyboard after each of:
     - typing;
     - a keyboard hide;
-    - a first real tap after focus moved to Send (test-side, through its semantics; TL: not an already-focused re-tap);
+    - a first real tap after focus moved to Cancel (test-side, through its semantics; TL: not an already-focused
+      re-tap);
     - a paste;
     - the late-keyboard order (text first, then the keyboard).
 
     The label is never cut in half. A change that keeps the caret's line in view leaves every scroller where it was. A
     rotation recreates the Activity and focus doesn't survive it, so it ends in the same first tap.
   - **The `report-light-font200-form-toolong` capture's reasons-list variant** was test timing, not something a user can
-    reach. The keyboard arrived after the 1,012-character input, and the act's own `performScrollTo` landed mid-swap
-    with a delta from the old layout. The act now waits for the dialog's layout to reach the keyboard's final inset (a
-    bounded positive condition) before it scrolls.
+    reach. The keyboard arrived after the 1,012-character input, and the act's own `performScrollTo` to the counter
+    moved the view to the reasons list, even when the counter was already visible (N=40 runs 45746286440 and
+    45753087572). The act now waits for the dialog's layout to reach the keyboard's final inset (a bounded positive
+    condition) and doesn't scroll on its own: the form dialog keeps the caret's line in view, with the counter just
+    below it.
 - **The 24 dp padding scrolls with the content.** In a one-column layout the viewport is then the whole surface. With
   the keyboard up at 200% landscape only about 80 dp is left, and a fixed padding would have left 34 dp, too little for
   a 48 dp button.

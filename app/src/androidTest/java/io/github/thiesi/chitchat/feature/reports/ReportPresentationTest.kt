@@ -111,11 +111,12 @@ class ReportPresentationTest {
         Shot("form-toolong", node = "report_dialog", act = {
             report(3); choose(ReportCategory.SPAM)
             compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
-            // #369: the keyboard arrives after the input and swaps the dialog to one column; a scroll issued mid-swap used
-            // a delta from the old layout (the reasons-list variant, 5 of 40). Wait for the dialog's layout to reach the
-            // keyboard's final inset (a bounded positive condition), then scroll.
+            // #369: the keyboard can arrive after the input and swap the dialog to one column. The form dialog keeps the
+            // caret's line in view through that (with the counter just below it), so the capture waits for the dialog's
+            // layout to reach the keyboard's final inset (a bounded positive condition) and doesn't scroll on its own:
+            // a performScrollTo to the already visible counter moved the view to the reasons list (N=40 runs
+            // 45746286440, 45753087572).
             awaitKeyboardLayout()
-            compose.onNodeWithTag("report_counter").performScrollTo()
         }),
         Shot("sending", node = "report_dialog", hold = true, act = { report(3); fill(); send() }),
         Shot("rate", node = "report_dialog", results = listOf(ReportResult.RateLimited(900)), act = { report(3); fill(); send()
