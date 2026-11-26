@@ -180,6 +180,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 if (box.top - margin < target) target = box.top - margin
                 else if (box.bottom > target + v) target = box.bottom - v
             }
+            if (caret != null) target = lastLineSpan(target, box, caret, focused.trailingIn(inside), v)
             if (caret != null) target = labelRule(target, box, caret, v, margin, labelBand)
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
@@ -202,8 +203,10 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val caret = focused.caretIn(inside, box) ?: return@LaunchedEffect
             val v = viewport.toFloat()
             val top = state.value.toFloat()
-            if (caret.top >= top && caret.bottom <= top + v) return@LaunchedEffect
-            var target = if (caret.top < top) caret.top else caret.bottom - v
+            val spanned = lastLineSpan(top, box, caret, focused.trailingIn(inside), v)
+            if (caret.top >= top && caret.bottom <= top + v && spanned == top) return@LaunchedEffect
+            var target = if (caret.top < top) caret.top else if (caret.bottom > top + v) caret.bottom - v else top
+            target = lastLineSpan(target, box, caret, focused.trailingIn(inside), v)
             target = labelRule(target, box, caret, v, margin, labelBand)
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
@@ -247,6 +250,26 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
 }
 
 /**
+ * A2 (PL ruling, "a disabled action must not hide its reason"): while the caret is on the field's last line, the view
+ * also keeps the field's bottom edge and the field's trailing line (the report form's counter) when they fit with the
+ * caret's line: the span from the caret line's top to the lower of the field's bottom and the trailing line's bottom
+ * moves into view by the minimum distance. When it doesn't fit, the caret's line wins (the target is unchanged).
+ * [trailing] is null unless the caret is on the last line and a trailing line is published.
+ */
+private fun lastLineSpan(target: Float, box: androidx.compose.ui.geometry.Rect, caret: androidx.compose.ui.geometry.Rect,
+    trailing: androidx.compose.ui.geometry.Rect?, v: Float): Float {
+    trailing ?: return target
+    val top = caret.top
+    val bottom = maxOf(box.bottom, trailing.bottom)
+    if (bottom - top > v) return target
+    return when {
+        top < target -> top
+        bottom > target + v -> bottom - v
+        else -> target
+    }
+}
+
+/**
  * The label rule (#369, PL): a field's top keeps its floating label plus [margin] below the viewport's top edge, or the
  * label is entirely out of view, never half; the caret's line wins when both can't fit. Returns the adjusted target.
  */
@@ -277,9 +300,26 @@ internal class FormDialogCaret {
     var version by androidx.compose.runtime.mutableIntStateOf(0)
         private set
 
-    fun publish(coordinates: LayoutCoordinates, rect: androidx.compose.ui.geometry.Rect) {
-        if (coordinates === this.coordinates && rect == this.rect) return
-        this.coordinates = coordinates; this.rect = rect
+    /** Whether the caret is on the field's last line (by line index; an empty field is on its last line). A2. */
+    var lastLine = false
+        private set
+
+    /**
+     * The field's trailing line (the report form's counter), if it publishes one: kept in view with the caret's line
+     * while the caret is on the last line (A2). Cleared when it leaves composition, so a stale one can't drive a scroll.
+     */
+    var trailing: LayoutCoordinates? = null
+        private set
+
+    fun publish(coordinates: LayoutCoordinates, rect: androidx.compose.ui.geometry.Rect, lastLine: Boolean = false) {
+        if (coordinates === this.coordinates && rect == this.rect && lastLine == this.lastLine) return
+        this.coordinates = coordinates; this.rect = rect; this.lastLine = lastLine
+        version++
+    }
+
+    fun publishTrailing(coordinates: LayoutCoordinates?) {
+        if (coordinates === trailing) return
+        trailing = coordinates
         version++
     }
 }
@@ -323,6 +363,13 @@ private class FocusedChild {
         val topLeft = inside.localPositionOf(from, rect.topLeft)
         val mapped = androidx.compose.ui.geometry.Rect(topLeft, rect.size)
         return mapped.takeIf { it.top >= box.top - 1f && it.bottom <= box.bottom + 1f }
+    }
+
+    /** The trailing line in [inside]'s coordinates, only while the caret is on the field's last line (A2). */
+    fun trailingIn(inside: LayoutCoordinates): androidx.compose.ui.geometry.Rect? {
+        if (!caret.lastLine) return null
+        val trailing = caret.trailing?.takeIf { it.isAttached } ?: return null
+        return inside.localBoundingBoxOf(trailing, clipBounds = false)
     }
 
     fun record(key: Any, pinned: Boolean) {

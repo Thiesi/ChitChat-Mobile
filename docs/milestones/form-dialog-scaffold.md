@@ -66,6 +66,16 @@ app window's bounds, not whether the keyboard covers a node.
     than the view never leaves its caret out.
   - **The label rule:** a field's top keeps its floating label plus 8 dp below the viewport's top edge, or the label is
     entirely out of view, never half. The caret's line wins when both can't fit.
+  - **A disabled action doesn't hide its reason (A2; PL ruling, 2026-11-26).** While the caret is on the field's last
+    line (by line index; an empty field counts), the view also keeps the field's bottom edge and its trailing line in
+    view when they fit with the caret's line. The trailing line is the report form's counter ("Too long: 1012 / 1000"
+    while Send report is disabled). The span runs from the caret line's top to the lower of the field's bottom and the
+    counter's bottom, and moves into view by the minimum distance, in both the height and the text steps; when it doesn't
+    fit, the caret's line wins. The counter publishes its position to `LocalFormDialogCaret` and unpublishes when it
+    leaves composition; fields that publish no trailing line behave as before.
+    - **Assert:** `ReportFormLayoutTest` at default size and 200% portrait, in the too-long state (typed through
+      semantics, the caret on the last line): the counter line is in the viewport with the caret's line, logged to the
+      metrics.
   - **Asserts:** `ReportFormLayoutTest` at 200%, portrait and landscape, with long details typed through semantics (the
     accessibility path). The caret's line is inside the viewport of the scroller that holds the field, which already
     ends above the keyboard, after each of:

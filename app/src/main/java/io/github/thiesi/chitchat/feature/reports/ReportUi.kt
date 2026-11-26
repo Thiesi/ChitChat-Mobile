@@ -431,7 +431,9 @@ private fun Form(reports: ReportViewModel, state: ReportState, sending: Boolean)
     LaunchedEffect(layout, field.selection, textArea) {
         val result = layout ?: return@LaunchedEffect
         val area = textArea ?: return@LaunchedEffect
-        caret?.publish(area, result.getCursorRect(field.selection.end.coerceIn(0, result.layoutInput.text.length)))
+        val end = field.selection.end.coerceIn(0, result.layoutInput.text.length)
+        // A2: whether the caret is on the last line, by line index (an empty field is on its last line).
+        caret?.publish(area, result.getCursorRect(end), lastLine = result.getLineForOffset(end) == result.lineCount - 1)
     }
     CompositionLocalProvider(androidx.compose.foundation.text.selection.LocalTextSelectionColors provides colors.textSelectionColors) {
         androidx.compose.foundation.text.BasicTextField(field, { field = it; reports.edit(it.text) },
@@ -471,9 +473,14 @@ private fun Counter(details: String) {
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(tooLong) { if (tooLong) requester.bringIntoView() }
     val visible = if (tooLong) stringResource(R.string.report_counter_too_long, count) else stringResource(R.string.report_counter, count)
+    // A2 (PL): the counter is the field's trailing line, kept in view with the caret's line while the caret is on the
+    // last line; it unpublishes when it leaves composition.
+    val caret = io.github.thiesi.chitchat.core.ui.LocalFormDialogCaret.current
+    DisposableEffect(caret) { onDispose { caret?.publishTrailing(null) } }
     Text(visible, style = MaterialTheme.typography.bodySmall,
         color = if (tooLong) MaterialTheme.colorScheme.error else ChitChatTheme.colors.textMuted,
-        modifier = Modifier.fillMaxWidth().bringIntoViewRequester(requester).testTag("report_counter"))
+        modifier = Modifier.fillMaxWidth().bringIntoViewRequester(requester).onGloballyPositioned { caret?.publishTrailing(it) }
+            .testTag("report_counter"))
     val crossing = remember(tooLong) { if (tooLong) visible else "" }
     if (tooLong) Text("", modifier = Modifier.semantics {
         contentDescription = crossing; liveRegion = LiveRegionMode.Polite; testTag = "report_counter_crossing"

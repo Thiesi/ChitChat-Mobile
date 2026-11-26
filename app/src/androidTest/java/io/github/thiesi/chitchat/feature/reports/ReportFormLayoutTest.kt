@@ -367,6 +367,55 @@ class ReportFormLayoutTest {
         }
     }
 
+    /**
+     * A2 (PL ruling, "a disabled action must not hide its reason"): in the too-long state, with the caret on the field's
+     * last line (by line index), the counter line ("Too long: 1012 / 1000") is in view together with the caret's line.
+     * The text is typed through semantics with the keyboard up. The same container math as the caret asserts, logged.
+     */
+    @Test fun atDefaultSizeTheTooLongCounterStaysInViewWithTheCaretOnTheLastLine() = counterInView(1f)
+
+    @Test fun at200PercentTheTooLongCounterStaysInViewWithTheCaretOnTheLastLine() = counterInView(2f)
+
+    private fun counterInView(fontScale: Float) {
+        val reports = ReportViewModel(operations)
+        launchAt(fontScale, landscape = false, reports = reports) {
+            report()
+            compose.onNodeWithTag("report_category:${ReportCategory.SPAM.wire}").performScrollTo().performClick()
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = {
+                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
+            val step = "report-${if (fontScale == 1f) "default" else "font200"} toolong counter"
+            val line = assertCaretInView(step)
+            // The caret is on the field's last line (line index, not pixels; TL).
+            val node = compose.onNodeWithTag("report_details").fetchSemanticsNode()
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            node.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+            val layout = layouts.single()
+            val end = node.config[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange].end
+            check(layout.getLineForOffset(end.coerceIn(0, layout.layoutInput.text.length)) == layout.lineCount - 1) {
+                "$step: the caret isn't on the last line (${line.detail})" }
+            val counter = rectInViewport("report_counter")
+            io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=report-counter-" +
+                (if (fontScale == 1f) "default" else "font200") + " counterTop=${"%.1f".format(java.util.Locale.ROOT, counter.first)} " +
+                "counterBottom=${"%.1f".format(java.util.Locale.ROOT, counter.second)} viewport=${"%.1f".format(java.util.Locale.ROOT, line.height)} " +
+                "caretTop=${"%.1f".format(java.util.Locale.ROOT, line.top)} caretBottom=${"%.1f".format(java.util.Locale.ROOT, line.bottom)}")
+            assertTrue("The counter line is in view with the caret's line ($step: counter=[${counter.first}, ${counter.second}] ${line.detail})",
+                counter.first >= -1f && counter.second <= line.height + 1f)
+        }
+    }
+
+    /** A tagged node's top and bottom in the viewport that clips it (the same container math as [caretLine]). */
+    private fun rectInViewport(tag: String): Pair<Float, Float> {
+        compose.waitForIdle()
+        val pinned = compose.onAllNodesWithTag("form_dialog_pinned", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val viewport = compose.onNodeWithTag(if (pinned) "form_dialog_body_viewport" else "form_dialog_viewport", useUnmergedTree = true)
+            .fetchSemanticsNode().layoutInfo.coordinates
+        val target = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().layoutInfo.coordinates
+        val top = viewport.localPositionOf(target, androidx.compose.ui.geometry.Offset.Zero).y
+        return top to top + target.size.height
+    }
+
     /** Every vertical scroller's value, to show a change that keeps the caret's line in view moves nothing. */
     private fun scrollValues(): List<Float> = compose.onAllNodes(
         SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange), useUnmergedTree = true)
