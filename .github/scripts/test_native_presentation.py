@@ -391,8 +391,32 @@ class PresentationGateTests(unittest.TestCase):
             self.assertIn(reason, errors.getvalue(), name)
             self.assertNotIn("hunter2", errors.getvalue()); self.assertNotIn("hello", errors.getvalue())
 
+    def test_missing_or_rejected_form_dialog_metrics_put_one_line_in_the_job_summary(self):
+        # TL: a gap shows in the job summary at a glance, with the limit and the count, never a line's content.
+        import os, shutil, tempfile
+        folder = Path(tempfile.mkdtemp(prefix="ccm-summary-test-"))
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        summary = folder / "summary.md"
+        with patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}):
+            self.results(0)
+            self.metrics_file("form-dialog-metrics.txt", "case=a x=1\n" * 129)
+            self.assertEqual(0, runner.main())
+            self.assertIn("Form-dialog metrics: rejected (129 lines, over the 128-line cap).", summary.read_text(encoding="utf-8"))
+            summary.write_text("", encoding="utf-8")
+            self.results(0)
+            self.metrics_file("form-dialog-metrics.txt", "case=a body=\"hello\"\n")
+            self.assertEqual(0, runner.main())
+            text = summary.read_text(encoding="utf-8")
+            self.assertIn("Form-dialog metrics: rejected (1 malformed of 1 lines, first at line 1).", text)
+            self.assertNotIn("hello", text)
+            summary.write_text("", encoding="utf-8")
+            self.results(0)
+            self.glob.side_effect = lambda pattern: (Path("capture.png") for _ in range(1)) if pattern == "ccm-completion-presentation/*.png" else iter([])
+            self.assertEqual(0, runner.main())
+            self.assertIn("Form-dialog metrics: missing (no metrics file was written).", summary.read_text(encoding="utf-8"))
+
     def test_form_dialog_metrics_up_to_the_raised_cap_are_collected(self):
-        # The shared file passed 32 lines (dropped silently since at least #367); up to 128 lines are collected.
+        # The shared file passed 32 lines (dropped silently since about #336); up to 128 lines are collected.
         self.results(0)
         path = self.metrics_file("form-dialog-metrics.txt", "case=a x=1\n" * 128)
         self.assertEqual(0, runner.main())

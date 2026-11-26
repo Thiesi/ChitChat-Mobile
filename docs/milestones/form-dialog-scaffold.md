@@ -82,8 +82,9 @@ app window's bounds, not whether the keyboard covers a node.
   - Each case writes one scalar line to `ccm-form-dialog-presentation/form-dialog-metrics.txt` for the PL's J record.
   - **Collection limits (TL, 2026-11-26):** the collector copies the file into `form-dialog-presentation/` if it has at
     most 128 lines and 32 KiB, every line matching its scalar pattern. It was 32 lines and 16 KiB until several tests
-    shared the file and passed that, which dropped it silently on every run since at least #367. A rejection now logs
-    which limit failed, with counts and the first bad line number, never a line's content.
+    shared the file and passed that, which dropped it silently on every run since about #336 (the PL's downloads). A
+    rejection or a missing file now shows in the job summary as well as the log, naming which limit failed, with counts
+    and the first bad line number, never a line's content.
 - **Captures:** `stepup-light-font200-landscape-top` and `-end`. The 20 portrait StepUp captures are the unchanged
   control.
 - **Local results** on the same emulator, all passing:

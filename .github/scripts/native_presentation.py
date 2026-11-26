@@ -3,6 +3,7 @@
 from pathlib import Path
 from itertools import islice
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -30,7 +31,8 @@ CLEANUP_MAX_FILES = 64
 FORM_DIALOG_DESTINATION = ROOT / "app/build/reports/androidTests/form-dialog-presentation"
 FORM_DIALOG_LINE = re.compile(r"case=[a-z0-9-]{1,64}(?: [A-Za-z0-9=.,;:()/ -]{1,1200})?")
 # Raised from 32 lines and 16 KiB (TL, 2026-11-26): several tests share the file, and the total had passed 32 lines, so
-# the whole file was dropped silently on every run since at least #367. A rejection now says which limit failed.
+# the whole file was dropped silently on every run since about #336. A rejection now says which limit failed, in the log
+# and the job summary.
 FORM_DIALOG_MAX_LINES = 128
 FORM_DIALOG_MAX_BYTES = 32768
 # #331a: the text-field accessibility node probe (text-field-names.md), one JSON file per API level, fixture strings only.
@@ -258,6 +260,18 @@ def collect_cleanup_samples():
     print(f"Completion cleanup samples collected: {len(files)}.")
 
 
+def job_summary(line):
+    """One line in the job's step summary (GITHUB_STEP_SUMMARY), so a gap is visible at a glance; never fails the job."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as summary:
+            summary.write(line + "\n")
+    except OSError:
+        pass
+
+
 class MetricsRejected(ValueError):
     """A form-dialog metrics rejection: its message holds limits, counts and line numbers only (never content)."""
 
@@ -268,6 +282,7 @@ def collect_form_dialog_metrics():
     # Rejection messages carry limits, counts and line numbers only, never a line's content.
     files = list(islice(SOURCE.rglob("ccm-form-dialog-presentation/*"), 2))
     if not files:
+        job_summary("Form-dialog metrics: missing (no metrics file was written).")
         return
     if len(files) != 1 or files[0].name != "form-dialog-metrics.txt":
         raise MetricsRejected("a foreign or extra file in the metrics folder")
@@ -700,8 +715,10 @@ def main() -> int:
         collect_form_dialog_metrics()
     except MetricsRejected as error:  # The collector's own rejections: limits and counts only.
         print(f"Form-dialog metrics unavailable ({error}); original native status retained.", file=sys.stderr)
+        job_summary(f"Form-dialog metrics: rejected ({error}).")
     except Exception as error:  # Anything else: its type only, never a path or text.
         print(f"Form-dialog metrics unavailable ({type(error).__name__}); original native status retained.", file=sys.stderr)
+        job_summary(f"Form-dialog metrics: unavailable ({type(error).__name__}).")
     try:
         collect_a11y_nodes()
     except Exception:
