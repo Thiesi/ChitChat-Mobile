@@ -22,6 +22,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.thiesi.chitchat.core.ui.awaitFormDialogKeyboardLayout
 import io.github.thiesi.chitchat.core.account.IgnoreOperations
 import io.github.thiesi.chitchat.core.network.ApiFailure
 import io.github.thiesi.chitchat.core.network.FailureKind
@@ -91,12 +92,7 @@ class PersonReportPresentationTest {
         Shot("form-room-landscape-end", at = FONT200, landscape = true, act = { end() }),
         // Filled with the keyboard up: a click focuses the field and brings up the IME, which the dialog window sits above.
         Shot("form-room-keyboard", at = FONT200, act = {
-            choose(ReportCategory.OFFENSIVE_USERNAME)
-            // NativeInput's contract (TL ruling, #374): the keyboard from one native tap (strict IME proof), then the input.
-            compose.onNodeWithTag("report_details").performScrollTo()
-            compose.tapNativeInput("report_details", imeBottom = {
-                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
-            compose.onNodeWithTag("report_details").performTextInput("Uses a slur as their name")
+            fill()
         }),
         Shot("form-global", at = DEFAULT, dm = true, roomId = null),
         Shot("form-global-end", at = FONT200, dm = true, roomId = null, act = { end() }),
@@ -144,9 +140,19 @@ class PersonReportPresentationTest {
     private fun await(tag: String) = compose.waitUntil(5_000) { present(tag) }
     private var scale = "default"
     private fun choose(category: ReportCategory) = compose.onNodeWithTag("report_category:${category.wire}").performScrollTo().performClick()
+    /**
+     * NativeInput's contract (TL sweep ruling, after #374): the keyboard comes from one native tap (strict IME proof),
+     * its layout settles, then the semantic input. A semantic-only focus brought it up only most of the time, so what
+     * the dialog showed after Send depended on whether it had.
+     */
     private fun fill() {
         choose(ReportCategory.OFFENSIVE_USERNAME)
-        compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Uses a slur as their name")
+        compose.onNodeWithTag("report_details").performScrollTo()
+        compose.tapNativeInput("report_details", imeBottom = {
+            io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+        compose.awaitFormDialogKeyboardLayout()
+        compose.onNodeWithTag("report_details").performTextInput("Uses a slur as their name")
+        compose.waitForIdle()
     }
     // As R2c: Send through its semantics action, no geometry (captures don't test input).
     private fun send() = compose.onNodeWithTag("report_send").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)

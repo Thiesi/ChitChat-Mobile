@@ -29,6 +29,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.R
+import io.github.thiesi.chitchat.core.ui.awaitFormDialogKeyboardLayout
 import io.github.thiesi.chitchat.core.account.IgnoreOperations
 import io.github.thiesi.chitchat.core.conversation.RoomMessage
 import io.github.thiesi.chitchat.core.direct.DirectMessage
@@ -108,17 +109,7 @@ class ReportPresentationTest {
         // PL: the attachment line ("They'll see the file's name…") at the form's end, light default.
         Shot("form-file-end", node = "report_dialog", onlyAt = "default", rooms = listOf(roomMessage(3, null, file(71, longFile))), act = {
             report(3); compose.onNodeWithTag("report_who_attachment").performScrollTo() }),
-        // NativeInput's contract (TL ruling, #374): the keyboard from one native tap before the input; the other fill()
-        // users are on the list for a later sweep.
-        Shot("form-filled", node = "report_dialog", act = {
-            report(3); choose(ReportCategory.HARASSMENT)
-            compose.onNodeWithTag("report_details").performScrollTo()
-            compose.tapNativeInput("report_details", imeBottom = {
-                io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
-            awaitKeyboardLayout()
-            compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms")
-            compose.waitForIdle()
-        }),
+        Shot("form-filled", node = "report_dialog", act = { report(3); fill() }),
         Shot("form-toolong", node = "report_dialog", act = {
             report(3); choose(ReportCategory.SPAM)
             // A2 (PL): the keyboard first, so the capture shows one of the two intended end states deterministically (the
@@ -173,15 +164,7 @@ class ReportPresentationTest {
 
     private fun present(tag: String) = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
     /** The dialog's content bottom at the window height less the keyboard's final inset: the inset has settled. */
-    private fun awaitKeyboardLayout() {
-        if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") != "true") return
-        compose.waitUntil(5_000) {
-            val window = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
-            val area = compose.onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
-            window.visible && kotlin.math.abs(area.bottom - (window.height - window.imeBottom)) <= 1f
-        }
-        compose.waitForIdle()
-    }
+    private fun awaitKeyboardLayout() = compose.awaitFormDialogKeyboardLayout()
     private fun await(tag: String) = compose.waitUntil(5_000) { present(tag) }
     private var dmScreen = false
 
@@ -200,9 +183,20 @@ class ReportPresentationTest {
         await("report_dialog")
     }
     private fun choose(category: ReportCategory) = compose.onNodeWithTag("report_category:${category.wire}").performScrollTo().performClick()
+
+    /**
+     * NativeInput's contract (TL sweep ruling, after #374): the keyboard comes from one native tap (strict IME proof),
+     * its layout settles, then the semantic input. A semantic-only focus brought it up only most of the time, so what
+     * the dialog showed after Send depended on whether it had.
+     */
     private fun fill() {
         choose(ReportCategory.HARASSMENT)
-        compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms")
+        compose.onNodeWithTag("report_details").performScrollTo()
+        compose.tapNativeInput("report_details", imeBottom = {
+            io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+        awaitKeyboardLayout()
+        compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms")
+        compose.waitForIdle()
     }
     // Captures don't test input (the layout tests keep native taps at 200% landscape): Send is scrolled to and clicked
     // through its semantics action, with no geometry. A positional click raced the IME animation at 200% landscape and

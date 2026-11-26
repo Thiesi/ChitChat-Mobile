@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -80,6 +81,20 @@ internal fun CompareDialog(form: Boolean) {
  */
 internal data class FocusedWindowIme(val height: Int, val imeBottom: Int, val visible: Boolean) {
     val imeTop: Int get() = height - imeBottom
+}
+
+/**
+ * A form dialog's keyboard layout has settled: the keyboard visible and the dialog's content bottom at the window height
+ * less the keyboard's final inset. Only where a soft keyboard is expected (`-e expectSoftKeyboard true`, as CI runs).
+ */
+internal fun androidx.compose.ui.test.junit4.ComposeTestRule.awaitFormDialogKeyboardLayout() {
+    if (InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") != "true") return
+    waitUntil(5_000) {
+        val window = focusedWindowIme()
+        val area = onNodeWithTag("form_dialog_area").fetchSemanticsNode().boundsInWindow
+        window.visible && kotlin.math.abs(area.bottom - (window.height - window.imeBottom)) <= 1f
+    }
+    waitForIdle()
 }
 
 internal fun focusedWindowIme(): FocusedWindowIme {
