@@ -631,6 +631,8 @@ class ReportFormLayoutTest {
 
     @Test fun at200PercentLandscapeTheButtonsStayReachableWithTheKeyboardUp() = buttonsAboveTheKeyboard(landscape = true)
 
+    private var labelBandPx = 0f
+
     private fun buttonsAboveTheKeyboard(landscape: Boolean) {
         FontScaleTestActivity.requestedFontScale = 2f
         val reports = ReportViewModel(operations)
@@ -646,7 +648,8 @@ class ReportFormLayoutTest {
             scenario.onActivity { activity ->
                 activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
                     val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
-                    SideEffect { imeBottom = bottom }
+                    val band = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toPx() }
+                    SideEffect { imeBottom = bottom; labelBandPx = band }
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
                 } } }
             }
@@ -669,6 +672,15 @@ class ReportFormLayoutTest {
             // whole, so a clipped-away node can't pass the edge check vacuously.
             val ime = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
             val field = compose.onNodeWithTag("report_details").fetchSemanticsNode().boundsInWindow
+            if (landscape && InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
+                // A3 (TL, #376): after the settle (waitForIdle waits Compose's animations out), the field taller than the
+                // viewport keeps A's label rule: its top the label band plus 8dp below the viewport's top. #376's first
+                // heads let Compose's bring-into-view glide it to the edge (28 px; only a metric showed it).
+                val line = caretLine("buttons landscape")
+                val expected = labelBandPx + 8 * context.resources.displayMetrics.density
+                assertTrue("The field's top keeps the label band plus 8dp below the viewport's top (expected $expected; ${line.detail})",
+                    kotlin.math.abs(line.fieldTop - expected) <= 1f)
+            }
             fun scrolledTo(tag: String): androidx.compose.ui.geometry.Rect {
                 compose.onNodeWithTag(tag).performScrollTo()
                 return compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInWindow

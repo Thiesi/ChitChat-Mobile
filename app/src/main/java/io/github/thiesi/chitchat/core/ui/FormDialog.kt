@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * The width a platform dialog window is first laid out at (AOSP's `config_prefDialogWidth`): a WRAP_CONTENT dialog keeps
@@ -144,11 +145,14 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         // after-a-frame step alone drew one frame at the swapped-in scroller's old value (often 0) first. Once per key:
         // later callbacks for the same key (a scroll fires them too) never re-apply it against the person's own scrolling.
         // A target outside 0..maxValue is left to the after-a-frame step, which keeps A's clamp. A scroll in progress
-        // isn't checked: in the same layout pass Compose's own bring-into-view starts one on the swapped-in scroller,
-        // and it moved nothing before being superseded (#376's probe: 74 of 74), so waiting for it only brought back the
-        // frame at the old value. The after-a-frame step corrects the rare real animation: it goes through the scroll
-        // mutex and compares with the value it finds. It stays as the fallback for a key no callback came for, and after
-        // a same-frame restore it finds the target reached and does nothing.
+        // isn't waited for, it's cancelled: in the same layout pass Compose's own bring-into-view starts one on the
+        // swapped-in scroller, which would align a field taller than the viewport to its top, against the label rule
+        // (#376's landscape probe: the field glided 28 px to the top edge after the restore). Waiting for it brought back
+        // the frame at the old value; letting it run moves the field off the restored place. Main cancelled it implicitly,
+        // through the after-a-frame step's scrollTo. Now both sites take the scroll mutex: right after an applied delta,
+        // in this callback, and again at the after-a-frame step, which also covers one started after this callback in the
+        // same pass (children's position callbacks run after this one) and stays the fallback for a key no callback came
+        // for.
         fun heightStep(): Pair<androidx.compose.foundation.ScrollState, Int>? {
             if (held) return null
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return null
@@ -198,16 +202,24 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             return state to target.roundToInt()
         }
         val sameFrame = remember { FormDialogSameFrameRestore() }
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
         fun restoreInLayoutPass() {
             if (!sameFrame.claim(key)) return
             val (state, target) = heightStep() ?: return
-            sameFrameDelta(target, state.value, state.maxValue)?.let(state::dispatchRawDelta)
+            // After an applied delta, a zero-distance mutation takes the scroll mutex here, undispatched, so the running
+            // bring-into-view is cancelled inside this callback and can't move the field a frame (see above).
+            applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
+                scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                    state.scroll(androidx.compose.foundation.MutatePriority.Default) { }
+                }
+            }
         }
         LaunchedEffect(maxHeight, pinned) {
             withFrameNanos { } // After the layout at the new height: the fallback.
             val (state, target) = heightStep() ?: return@LaunchedEffect
-            val next = target.coerceIn(0, state.maxValue)
-            if (next != state.value) state.scrollTo(next)
+            // Always scrolls, even when the target is already reached: taking the scroll mutex cancels a bring-into-view
+            // that would otherwise move the field off the restored place (see above), as main's scrollTo did.
+            fallbackScroll(target, state.maxValue, state::scrollTo)
         }
         // A text or selection change (any input path: the keyboard, a paste, or an accessibility service setting the text
         // through semantics, which doesn't bring the caret into view by itself) that put the caret's line outside the view
@@ -294,6 +306,18 @@ internal class FormDialogSameFrameRestore {
 internal fun sameFrameDelta(target: Int, value: Int, maxValue: Int): Float? = when {
     target !in 0..maxValue || target == value -> null
     else -> (target - value).toFloat()
+}
+
+/** A3: applies [delta] and then [cancelRunning], only when there is a delta (no move, no cancel: the fallback acts). */
+internal inline fun applySameFrame(delta: Float?, apply: (Float) -> Unit, cancelRunning: () -> Unit) {
+    if (delta == null) return
+    apply(delta)
+    cancelRunning()
+}
+
+/** A3: the after-a-frame step always scrolls (clamped as A), even at the target, so it takes the scroll mutex. */
+internal suspend fun fallbackScroll(target: Int, maxValue: Int, scrollTo: suspend (Int) -> Unit) {
+    scrollTo(target.coerceIn(0, maxValue))
 }
 
 /**

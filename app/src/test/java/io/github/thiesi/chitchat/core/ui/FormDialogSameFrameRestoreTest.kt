@@ -29,6 +29,23 @@ class FormDialogSameFrameRestoreTest {
         assertNull(sameFrameDelta(target = 1318, value = 1318, maxValue = 4019))
     }
 
+    @Test fun theSameFrameCancelRunsOnlyAfterAnAppliedDelta() {
+        val calls = mutableListOf<String>()
+        applySameFrame(1318f, apply = { calls += "apply $it" }) { calls += "cancel" }
+        assertEquals(listOf("apply 1318.0", "cancel"), calls)
+        calls.clear()
+        applySameFrame(null, apply = { calls += "apply $it" }) { calls += "cancel" }
+        assertEquals("no delta: no move and no cancel", emptyList<String>(), calls)
+    }
+
+    @Test fun theFallbackScrollsEvenAtTheTargetSoItTakesTheScrollMutex() = kotlinx.coroutines.runBlocking {
+        val scrolled = mutableListOf<Int>()
+        fallbackScroll(target = 1432, maxValue = 2052) { scrolled += it }
+        fallbackScroll(target = 2100, maxValue = 2052) { scrolled += it }
+        fallbackScroll(target = -5, maxValue = 2052) { scrolled += it }
+        assertEquals("always one scroll, clamped as A", listOf(1432, 2052, 0), scrolled)
+    }
+
     @Test fun aTargetOutsideTheRangeIsLeftToTheFallbacksClamp() {
         assertNull(sameFrameDelta(target = 4020, value = 0, maxValue = 4019))
         assertNull(sameFrameDelta(target = -1, value = 10, maxValue = 4019))
