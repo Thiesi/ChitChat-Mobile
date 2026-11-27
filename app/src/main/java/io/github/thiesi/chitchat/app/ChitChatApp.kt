@@ -1,6 +1,7 @@
 package io.github.thiesi.chitchat.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.onFocusedBoundsChanged
 
 import androidx.compose.ui.draw.drawBehind
 
@@ -72,6 +73,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -1094,6 +1096,7 @@ private const val LICENCE_ROUTE = "licences/{index}"
 private fun TabRoot(reselect: Int, content: @Composable () -> Unit) =
     androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalTabReselect provides reselect, content = content)
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class) // LocalBringIntoViewSpec (B)
 @Composable
 private fun ScreenContent(content: @Composable () -> Unit) {
     val scroll = rememberScrollState()
@@ -1102,10 +1105,34 @@ private fun ScreenContent(content: @Composable () -> Unit) {
     // 16dp around the button, and a 1dp line edge only while content is hidden beneath it.
     val slot = remember { io.github.thiesi.chitchat.core.ui.PinnedActionSlot() }
     val line = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.line
-    androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalPinnedActions provides slot) {
+    // B (#351, P-78): the focused text field keeps its label whole while the viewport's height changes (the keyboard's
+    // slide), and focus moves land by the same rule (see ScreenKeepInView).
+    val view = androidx.compose.ui.platform.LocalView.current
+    val keep = remember(view) { io.github.thiesi.chitchat.core.ui.ScreenKeepInView(textEditor = view::onCheckIsTextEditor) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    keep.margin = with(density) { io.github.thiesi.chitchat.core.ui.FormDialogLabelMargin.toPx() }
+    keep.labelBand = with(density) { MaterialTheme.typography.bodySmall.lineHeight.toPx() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val fallbackSpec = androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+    val spec = remember(keep, fallbackSpec) { keep.spec(fallbackSpec) }
+    androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalPinnedActions provides slot,
+        androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides spec) {
         Column(Modifier.fillMaxSize().onSizeChanged { slot.availableHeight = it.height }) {
             Column(
-                Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { slot.viewport = it.boundsInWindow() }
+                Modifier.weight(1f).fillMaxWidth().testTag("screen_viewport")
+                    .onFocusedBoundsChanged { keep.focused = it }
+                    .onGloballyPositioned {
+                        slot.viewport = it.boundsInWindow()
+                        keep.frame = it
+                        // After the layout pass, before the frame is drawn: a move lands in the first frame at the new
+                        // height. After the move, a zero-distance mutation takes the scroll mutex, undispatched, so a
+                        // running bring-into-view is cancelled here and can't move the field afterwards.
+                        keep.onViewportLaidOut(scroll.value, scroll.maxValue, scroll::dispatchRawDelta) {
+                            scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                                scroll.scroll(androidx.compose.foundation.MutatePriority.Default) { }
+                            }
+                        }
+                    }
                     .verticalScroll(scroll).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {

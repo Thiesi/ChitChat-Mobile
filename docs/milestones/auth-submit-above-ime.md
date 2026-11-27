@@ -14,6 +14,37 @@ the technical lead added the consent requirement.
 
 Without a host, the action renders in place.
 
+## The focused field keeps its label (B, #351, P-78)
+
+The PL ruled the clipped floating label at 200% a defect (wrap, never clip). `ScreenContent` keeps a focused text field
+in view with its label whole (`core/ui/ScreenKeepInView`). The rule (`keepInViewDistance`, PL 2026-11-25):
+- the label's top at least 8dp below the scroller's top edge, and the field's bottom above the bottom edge (the keyboard
+  or the pinned action);
+- when the field can't fit with the 8dp, it stays whole if it fits at all (the 8dp gives way first);
+- otherwise the text line wins and the label is entirely in or entirely out of view, never half (the form dialog's
+  label rule).
+
+M3's outlined field draws the floating label centred on its top border, half above the field's focus bounds, so the
+label's top is half the label's line height above them.
+
+Where it applies:
+- **Each viewport height change** (every frame of the keyboard's slide, a rotation, the pinned block arriving or
+  leaving): in the layout pass, before the frame is drawn. It moves only when the field breaks the rule, by exactly the
+  distance the edge would otherwise cover, so the field rides the keyboard; a field already clear doesn't move. A move
+  cancels Compose's running bring-into-view, so nothing moves afterwards and the end state doesn't depend on how far that
+  animation had got (#351's 409–412 variance).
+- **Focus moves in a steady view** (Next, a tap): Compose's animation stays, landing by the same rule through the
+  screen's `LocalBringIntoViewSpec`. Other requests keep the default behaviour.
+
+Only for a focused text field (the view's `onCheckIsTextEditor()`: a text input session is active). A focused button or
+accessibility focus never triggers it, and with nothing focused a height change doesn't scroll. A field the person
+scrolled out of view stays where it is (Compose's own rule). With animations off, Compose's animation is already a
+snap; nothing here changes that.
+
+**Tests:** `ScreenKeepInViewTest` (the rule); `AuthPinnedPresentationTest` asserts the rule after every keyboard capture
+(the label's top, unclipped, against the `screen_viewport` scroller) and after a focus move in a steady view (Next from
+the password to the confirmation, the viewport's height asserted unchanged).
+
 ## Sign in
 
 - **Pinned always:** the button never moves between the scroller and the bar, so it doesn't jump under a finger.
