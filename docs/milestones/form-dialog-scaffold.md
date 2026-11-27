@@ -70,7 +70,14 @@ app window's bounds, not whether the keyboard covers a node.
     the same dispatch, recorded the pre-restore placement; with a new key every frame of an animated keyboard, the next
     restore read that stale record as its baseline, and the targets alternated: the field shook 38 px every frame (#376's
     regression, diagnostic run 46031148507; 2cebb7a, before #376, didn't). The position-callback restore stays as the
-    fallback, for a change whose content was re-measured. Before A3, a mode switch drew one frame at the swapped-in
+    fallback, for a change whose content was re-measured.
+    With an animated keyboard the end can differ from the same change with animations off, because it depends on the
+    layouts the slide passes through, not on a stale record (every source fresh, targets one way; run 46037971164). An
+    intermediate layout with a smaller viewport than the final one clamps the carried offset, and keeping the previous
+    offset carries the clamp forward: text-first portrait's first frame is still pinned with a 163 px viewport, the
+    field is kept whole there, and the change ends at 1443 against 1318 off (keyboard-first 1402 against 1318, the
+    notice 1662 against 1511; landscape equal). It predates #378 (main ended that change at 1452, 2cebb7a at 1301).
+    One baseline per keyboard transition is #382. Before A3, a mode switch drew one frame at the swapped-in
     scroller's old value (often the top) first (37 of 40 text-first and 33 of 40 keyboard-first repetitions; diagnostic
     runs 45903840557 and 45903834879). A target outside the scroll range is left to the step after the frame, which stays
     as the fallback and keeps the clamp; later callbacks for the same change never re-apply it. A scroll already in progress isn't waited for, it's cancelled: Compose
