@@ -85,7 +85,9 @@ app window's bounds, not whether the keyboard covers a node.
     animations off a change is one unsettled placement at the old inset, then the settled one, so the baseline is the
     record before the change, as before. A field change or no earlier record releases; an edit during a transition
     re-baselines; with no animation reported (API < 30) it never freezes. `KeyboardTransitionBaselineTest` (JVM) replays
-    the logged sequences.
+    the logged sequences. A selection change since the field's place was recorded (a tap that moves the caret in the
+    frame the keyboard starts) restores from the live caret and moves the baseline's caret by the same distance, so the
+    step after the frame finds nothing more to move (diagnostic run 46056107630, API36 text-first: 3080, then 3004).
     **Limit: the switch between pinned and one column (#383, after the Play upload).** With an animated keyboard the
     slide's frames apply the full rule from the transition's baseline, so the field moves with the viewport, but the
     first frame after a mode switch can move against the slide: text-first's hide moves the caret line up 56 px in the

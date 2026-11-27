@@ -167,7 +167,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 // What was in view stays in view: the anchor keeps its offset from the viewport's top, clamped inside.
                 val caretBefore = before.caret
                 if (caret != null && caretBefore != null) {
-                    target = caret.top - caretBefore.coerceIn(0f, (v - caret.height).coerceAtLeast(0f))
+                    target = keepCaretOffset(caret.top, caretBefore, caret.height, v)
                 } else {
                     val lo = margin; val hi = v - box.height
                     target = box.top - (if (hi >= lo) before.field.coerceIn(lo, hi) else before.field.coerceIn(hi, lo))
@@ -244,7 +244,23 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val caret = place.caret?.translate(0f, shift)
             val trailing = place.trailing?.translate(0f, shift)
             val label = place.label?.translate(0f, shift)
-            val target = heightTarget(state, box, caret, trailing, focused.before(key, child), viewportHeight.toFloat(), label)
+            // #378 finding 2: a selection change since this place was recorded (a tap that moved the caret in the frame the
+            // keyboard started; nothing is laid out for it until the caret effect a frame later) uses the live caret, and
+            // the baseline's caret moves by the same distance (the caret moved in the field, nothing scrolled), which also
+            // re-baselines a frozen transition. Otherwise this pass restored from the stale caret and the after-a-frame step,
+            // with the live caret against the old offset, moved the field again (diag run 46056124120's v1 twin 46056107630,
+            // API36 text-first: 3080, then -76 to 3004).
+            var liveCaret = caret
+            if (place.caretVersion != focused.caret.version) {
+                val live = focused.innerContent?.takeIf { it.isAttached }?.let { focused.caretIn(it, place.box) }
+                val dy = caretShift(place.caret, live)
+                if (live != null) {
+                    liveCaret = live.translate(0f, shift)
+                    if (dy != 0f) focused.shiftBaselineCaret(key, child, dy)
+                    focused.refreshBodyCaret(live)
+                }
+            }
+            val target = heightTarget(state, box, liveCaret, trailing, focused.before(key, child), viewportHeight.toFloat(), label)
             applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
                 cancelRunning(state)
             }
@@ -379,7 +395,15 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
  */
 internal class BodyPlace(val child: Any, val box: androidx.compose.ui.geometry.Rect, val caret: androidx.compose.ui.geometry.Rect?,
     val trailing: androidx.compose.ui.geometry.Rect?, val bodyTop: Float, val bodyHeight: Int, val belowBody: Float,
-    val label: androidx.compose.ui.geometry.Rect? = null)
+    val label: androidx.compose.ui.geometry.Rect? = null, val caretVersion: Int = -1)
+
+/** A's step (A3): the caret's line keeps its offset from the viewport's top, clamped inside the viewport. */
+internal fun keepCaretOffset(caretTop: Float, caretBefore: Float, caretHeight: Float, v: Float): Float =
+    caretTop - caretBefore.coerceIn(0f, (v - caretHeight).coerceAtLeast(0f))
+
+/** #378 finding 2: how far the caret moved in the field since its place was cached (0 when either is unknown). */
+internal fun caretShift(cached: androidx.compose.ui.geometry.Rect?, live: androidx.compose.ui.geometry.Rect?): Float =
+    if (cached == null || live == null) 0f else live.top - cached.top
 
 /**
  * #378: whether [place] is this pass's place for [child] in the scroller in use, measured before it's placed: the same
@@ -679,7 +703,24 @@ private class FocusedChild {
         val box = inside.localBoundingBoxOf(child, clipBounds = false)
         val bodyTop = outerContentNow.localPositionOf(frame, androidx.compose.ui.geometry.Offset.Zero).y
         body = BodyPlace(child, box, caretIn(inside, box), trailingIn(inside), bodyTop, inside.size.height,
-            outerContentNow.size.height - (bodyTop + frame.size.height), labelIn(inside))
+            outerContentNow.size.height - (bodyTop + frame.size.height), labelIn(inside), caret.version)
+    }
+
+    /** #378 finding 2: the cached place with the live caret, at the current caret version (so it's applied once). */
+    fun refreshBodyCaret(live: androidx.compose.ui.geometry.Rect) {
+        val b = body ?: return
+        body = BodyPlace(b.child, b.box, live, b.trailing, b.bodyTop, b.bodyHeight, b.belowBody, b.label, caret.version)
+    }
+
+    /**
+     * #378 finding 2: the baseline [before] returns for [key] with its caret moved by [dy] (a selection change since it was
+     * recorded): the transition's frozen baseline when one applies, else this change's.
+     */
+    fun shiftBaselineCaret(key: Any, child: LayoutCoordinates, dy: Float) {
+        val seen = before(key, child) ?: return
+        val caretOffset = seen.caret ?: return
+        val shifted = Seen(seen.child, seen.field, caretOffset + dy, seen.visible)
+        if (keyboard.applies(key)) keyboard.replace(shifted) else baseline.set(key, shifted)
     }
 
     private val baseline = FrozenPerChange<Seen?>()
@@ -745,6 +786,9 @@ internal class KeyboardTransitionBaseline<T : Any> {
     fun release() { holding = false; held = null; finalKey = null }
 
     fun rebaseline(latest: () -> T?) { if (holding) held = latest() }
+
+    /** #378 finding 2: the baseline with a correction (the caret moved in the field since it was recorded). */
+    fun replace(value: T) { if (held != null) held = value }
 }
 
 internal class FrozenPerChange<T> {
@@ -755,6 +799,13 @@ internal class FrozenPerChange<T> {
     fun reset() {
         hasValue = false
         value = null
+    }
+
+    /** #378 finding 2: this change's baseline, corrected. */
+    fun set(key: Any, value: T) {
+        this.key = key
+        this.value = value
+        hasValue = true
     }
 
     @Suppress("UNCHECKED_CAST")

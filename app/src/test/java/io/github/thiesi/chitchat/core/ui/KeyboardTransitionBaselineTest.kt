@@ -1,5 +1,6 @@
 package io.github.thiesi.chitchat.core.ui
 
+import androidx.compose.ui.geometry.Rect
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -93,6 +94,27 @@ class KeyboardTransitionBaselineTest {
         t.observe(259, 259, 259, 358) { "r2" }
         t.rebaseline { "again" }
         assertNull(t.baseline())
+    }
+
+    @Test fun aSelectionChangeInTheShowsFirstFrameIsRestoredOnceNotTwice() {
+        // Finding 2, diag run 46056107630 (v1, API36 text-first's second arrival): the tap moved the caret one line
+        // (3126 -> 3050 in the body) in the frame the show began; the frozen baseline had the caret 182 px down the viewport.
+        // One column, the body 136 px down; the viewport 422 px; the caret line 38 px.
+        val shift = 136f; val v = 422f; val h = 38f
+        val stale = Rect(16f, 3126f, 18f, 3164f); val live = Rect(16f, 3050f, 18f, 3088f)
+        // Before: the placement restore used the stale caret (3080), the after-a-frame step the live one (3004): two moves.
+        assertEquals(3080f, keepCaretOffset(stale.top + shift, 182f, h, v))
+        assertEquals(3004f, keepCaretOffset(live.top + shift, 182f, h, v))
+        // Now: the live caret, and the baseline's caret moved by the same distance; both steps agree on 3080.
+        val dy = caretShift(stale, live)
+        assertEquals(-76f, dy)
+        val t = KeyboardTransitionBaseline<Float>()
+        t.observe(0, 0, 259, 592) { 182f }
+        t.replace(t.baseline()!! + dy)
+        assertEquals(106f, t.baseline())
+        assertEquals("the placement restore", 3080f, keepCaretOffset(live.top + shift, t.baseline()!!, h, v))
+        assertEquals("the after-a-frame step finds nothing to move", 3080f, keepCaretOffset(live.top + shift, t.baseline()!!, h, v))
+        assertEquals("no caret known: no shift", 0f, caretShift(null, live))
     }
 
     @Test fun releaseIsTodaysPath() {
