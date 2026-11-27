@@ -322,9 +322,19 @@ class ReportFormLayoutTest {
         }
     }
 
-    private fun textFirst(landscape: Boolean) {
+    /** DIAGNOSTIC (never merged), #378: the text-first portrait case recorded with animations on, the sync strip first. */
+    @Test fun diagRecordedTextFirst() {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
+        io.github.thiesi.chitchat.testing.DiagRecording.record("ccm-a3-recording", seconds = 40) {
+            textFirst(landscape = false) { io.github.thiesi.chitchat.testing.DiagRecording.flash() }
+        }
+    }
+
+    private fun textFirst(landscape: Boolean, onStart: () -> Unit = {}) {
         val reports = ReportViewModel(operations)
         launchAt200(landscape, reports) {
+            onStart()
+            io.github.thiesi.chitchat.core.ui.KeepProbe.log("TEST text-first start landscape=$landscape")
             report()
             val case = "report-font200-${if (landscape) "landscape" else "portrait"} text first"
             // NativeInput's contract (TL ruling, #374): the keyboard comes from native taps, never a semantic-only focus.
