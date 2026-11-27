@@ -228,6 +228,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val (state, target) = heightStep() ?: return@LaunchedEffect
             // Always scrolls, even when the target is already reached: taking the scroll mutex cancels a bring-into-view
             // that would otherwise move the field off the restored place (see above), as main's scrollTo did.
+            KeepProbe.log("AF key=$key pinned=$pinned value=${state.value} max=${state.maxValue} target=$target held=$held")
             fallbackScroll(target, state.maxValue, state::scrollTo)
         }
         // A text or selection change (any input path: the keyboard, a paste, or an accessibility service setting the text
