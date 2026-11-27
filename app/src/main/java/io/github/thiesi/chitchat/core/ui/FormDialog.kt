@@ -210,6 +210,10 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             focused.layoutKey = key
             focused.layoutPinned = pinned
             if (!sameFrame.claim(key)) return
+            // A new change: its baseline is read afresh, here, before heightStep()'s held check, so a held change resets
+            // it too (a notice holding the view while the keyboard hides, then the person's tap: K, J, K). Assumes every
+            // height or mode change relays out the outer scroller, so this callback comes for each one.
+            focused.newChange()
             val (state, target) = heightStep() ?: return
             // After an applied delta, a zero-distance mutation takes the scroll mutex here, undispatched, so the running
             // bring-into-view is cancelled inside this callback and can't move the field a frame (see above).
@@ -498,16 +502,19 @@ private class FocusedChild {
     }
 
     /**
-     * Where they were in the layout before [key], only if measured for the same focused [child]. Frozen per key at the
-     * first read (A3, TL): every reader for a height or mode change (the same-frame restore, its fallback, a text step)
-     * sees the same baseline. Without it, a record written between the reads (after the same-frame scroll, a child's
-     * position callback can still carry the old key) became `previous`, and the fallback restored from it (#376's
-     * portrait text-first probe: 3080 in the same frame, then 2867 from the stray record, the caret at 319 not 106).
+     * Where they were in the layout before [key], only if measured for the same focused [child]. Frozen per change at
+     * the first read (A3, TL): the readers of one height or mode change, the same-frame restore and its after-a-frame
+     * fallback, see the same baseline. Without it, a record written between the two reads (after the same-frame scroll,
+     * a child's position callback could still carry the old key) became `previous`, and the fallback restored from it
+     * (#376's portrait text-first probe: 3080 in the same frame, then 2867 from the stray record, the caret at 319 not 106).
      */
     fun before(key: Any, child: LayoutCoordinates): Seen? =
         baseline.get(key) { if (key == lastKey) previous else last }?.takeIf { it.child === child }
 
-    private val baseline = FrozenPerKey<Seen?>()
+    /** A new height or mode change was claimed: its baseline is read afresh (see [before]). */
+    fun newChange() = baseline.reset()
+
+    private val baseline = FrozenPerChange<Seen?>()
 }
 
 /** A3: a record's key and mode: the layout pass's once it has set them, else the caller's (before the first pass). */
@@ -521,11 +528,20 @@ internal fun recordAttribution(layoutKey: Any?, layoutPinned: Boolean, key: Any,
  */
 internal fun acceptsFrame(frameHeight: Int, viewport: Int): Boolean = viewport <= 0 || frameHeight <= viewport + 1
 
-/** A3: the first value computed for a key, kept for that key until the key changes (a change back is a new change). */
-internal class FrozenPerKey<T> {
+/**
+ * A3: the first value read in a change, kept for that change's later reads until [reset] marks a new one. A read for a
+ * different key also reads afresh (a key no position callback claimed). A key coming back after another change is a new
+ * change only through [reset], which the claim of each change calls.
+ */
+internal class FrozenPerChange<T> {
     private var key: Any? = null
     private var hasValue = false
     private var value: T? = null
+
+    fun reset() {
+        hasValue = false
+        value = null
+    }
 
     @Suppress("UNCHECKED_CAST")
     fun get(key: Any, compute: () -> T): T {

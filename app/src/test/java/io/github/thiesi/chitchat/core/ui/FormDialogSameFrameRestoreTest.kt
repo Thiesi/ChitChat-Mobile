@@ -46,17 +46,28 @@ class FormDialogSameFrameRestoreTest {
         assertEquals("always one scroll, clamped as A", listOf(1432, 2052, 0), scrolled)
     }
 
-    @Test fun theBaselineIsFrozenPerKeyAtTheFirstRead() {
-        val baseline = FrozenPerKey<String?>()
+    @Test fun theReadsOfOneChangeShareTheFirstValue() {
+        val baseline = FrozenPerChange<String?>()
         val portrait = 357 to false
         var records = "previous layout: caret at 106"
-        assertEquals("previous layout: caret at 106", baseline.get(portrait) { records })
-        // An old-key record lands between the same-frame read and the fallback's read.
+        baseline.reset() // the change is claimed
+        assertEquals("the same-frame read", "previous layout: caret at 106", baseline.get(portrait) { records })
         records = "stray record after the same-frame scroll"
-        assertEquals("every reader for the key sees the first read", "previous layout: caret at 106", baseline.get(portrait) { records })
-        assertEquals("a new key reads afresh", "stray record after the same-frame scroll", baseline.get(592 to true) { records })
-        records = "later"
-        assertEquals("a change back to an earlier key is a new change", "later", baseline.get(portrait) { records })
+        assertEquals("the fallback's read of the same change", "previous layout: caret at 106", baseline.get(portrait) { records })
+    }
+
+    @Test fun aKeyComingBackAfterAHeldChangeReadsAfresh() {
+        val baseline = FrozenPerChange<String?>()
+        val up = 357 to false
+        val down = 592 to true
+        var records = "first keyboard-up baseline"
+        baseline.reset(); assertEquals("first keyboard-up baseline", baseline.get(up) { records })
+        baseline.reset() // keyboard hidden while a notice holds the view: claimed, nothing reads
+        records = "keyboard-hidden layout before the tap"
+        baseline.reset() // the person's tap brings the keyboard back: K again
+        assertEquals("K, J held, K: a fresh read, not the first K's", "keyboard-hidden layout before the tap",
+            baseline.get(up) { records })
+        assertEquals("a read for another key reads afresh too", "keyboard-hidden layout before the tap", baseline.get(down) { records })
     }
 
     @Test fun aRecordFromAnOldKeyLambdaIsAttributedToTheLayoutPass() {
@@ -76,7 +87,8 @@ class FormDialogSameFrameRestoreTest {
     }
 
     @Test fun aNullFirstReadIsFrozenToo() {
-        val baseline = FrozenPerKey<String?>()
+        val baseline = FrozenPerChange<String?>()
+        baseline.reset()
         assertNull(baseline.get(1) { null })
         assertNull("a record arriving later doesn't become this key's baseline", baseline.get(1) { "late" })
     }

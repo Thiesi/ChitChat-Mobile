@@ -69,8 +69,9 @@ app window's bounds, not whether the keyboard covers a node.
     probe, run 45914151572: the guard skipped 34 of 40 and 40 of 40); letting it run moved the field off the restored
     place (the landscape 200% case: 28 px to the top edge, run 45923378397). Main cancelled it implicitly through the
     step after the frame; now the restore takes the scroll lock right after it applies, in the same frame, and the step
-    after the frame takes it again. The earlier place it restores from is read once per change and kept for every later reader of
-    that change (the step after the frame, a text step), so a record written in between can't shift the baseline
+    after the frame takes it again. The earlier place it restores from is read once per change and kept for that change's later read
+    (the step after the frame), so a record written in between can't shift the baseline; every change starts afresh,
+    including one held by a notice
     (#376's portrait text-first probe: once in 20, the step after the frame restored from a stray record). That
     stray record is also stopped where it was written: a record takes its height or mode change and its frame from the
     layout pass, which sets them first, not from the calling code, which can be a composition behind; and a record
