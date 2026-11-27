@@ -149,6 +149,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val caret = focused.caretIn(inside, box)
             val before = focused.before(key, child)
             val v = viewport.toFloat()
+            KeepProbe.log("HS key=$key pinned=$pinned before=${before?.let { "field=${it.field} caret=${it.caret} visible=${it.visible}" }} " +
+                "caretTop=${caret?.top} caretH=${caret?.height} boxTop=${box.top} boxH=${box.height} v=$v value=${state.value} max=${state.maxValue}")
             var target: Float
             if (before != null && before.visible) {
                 // What was in view stays in view: the anchor keeps its offset from the viewport's top, clamped inside.
@@ -186,6 +188,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 target = labelRule(target, box, keptRange(box, caret, trailing, v, margin), v, margin, labelBand)
             }
             val next = target.roundToInt().coerceIn(0, state.maxValue)
+            KeepProbe.log("RESTORE after-a-frame key=$key pinned=$pinned target=$target next=$next value=${state.value} max=${state.maxValue}")
             if (next != state.value) state.scrollTo(next)
         }
         // A text or selection change (any input path: the keyboard, a paste, or an accessibility service setting the text
@@ -217,9 +220,9 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         }
         Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it; focused.record(key, pinned) }
             .onSizeChanged { focused.outerViewport = it.height }
-            .onGloballyPositioned { focused.outerFrame = it }
+            .onGloballyPositioned { focused.outerFrame = it; KeepProbe.outer = outer; KeepProbe.inner = inner }
             .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline).verticalScroll(outer)
-            .onGloballyPositioned { focused.outerContent = it }
+            .onGloballyPositioned { KeepProbe.newDispatch(); focused.outerContent = it }
             .testTag(if (pinned) "form_dialog_pinned" else "form_dialog_column").padding(24.dp)) {
             Box(Modifier.padding(bottom = 16.dp).onSizeChanged { titleHeight = it.height }) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.titleContentColor,
@@ -410,6 +413,14 @@ private class FocusedChild {
         val anchorTop = caret ?: field
         val anchorHeight = caret?.let { caretIn(inside, box)!!.height } ?: box.height
         val seen = Seen(child, field, caret, anchorTop + anchorHeight > 0f && anchorTop < height)
+        // DIAGNOSTIC: the offset from the content position minus the scroll value (what the field's place is once the
+        // pending scroll is laid out), against the placement-derived one; they differ while a scroll isn't laid out yet.
+        val valueOffset = if (pinned) box.top - (KeepProbe.inner?.value ?: 0)
+            else (outerContent?.takeIf { it.isAttached }?.localPositionOf(inside, androidx.compose.ui.geometry.Offset.Zero)?.y ?: Float.NaN) +
+                box.top - (KeepProbe.outer?.value ?: 0)
+        val callers = Throwable().stackTrace.drop(1).take(4).joinToString("/") { it.lineNumber.toString() }
+        KeepProbe.log("REC key=$key pinned=$pinned field=$field valueOffset=$valueOffset stale=${kotlin.math.abs(field - valueOffset) > 0.5f} " +
+            "caret=$caret visible=${seen.visible} outer=${KeepProbe.outer?.value} inner=${KeepProbe.inner?.value} lastKey=$lastKey callers=$callers")
         if (key != lastKey) { previous = last; lastKey = key }
         last = seen
     }
