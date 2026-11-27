@@ -161,7 +161,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         // come from moved (see heightStep and restoreInPlacement).
         fun heightTarget(state: androidx.compose.foundation.ScrollState, box: androidx.compose.ui.geometry.Rect,
             caret: androidx.compose.ui.geometry.Rect?, trailing: androidx.compose.ui.geometry.Rect?, before: FocusedChild.Seen?,
-            v: Float, label: androidx.compose.ui.geometry.Rect? = null, sliding: Boolean = false): Int {
+            v: Float, label: androidx.compose.ui.geometry.Rect? = null): Int {
             var target: Float
             if (before != null && before.visible) {
                 // What was in view stays in view: the anchor keeps its offset from the viewport's top, clamped inside.
@@ -189,17 +189,13 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // A field that fits whole (with the label's margin) stays whole in view, just enough, as Compose's own
             // keep-in-view did before this step superseded it (#371's captures: a short filled field was left cut at the
             // bottom edge). Its caret is inside it, so the line stays in view; a taller field keeps the caret rule above.
-            // #378 (c), PL: while the keyboard slides, only the floors (above, and the label rule against the caret's line);
-            // keep-whole and A2's span wait for the transition's final layout, so the slide's frames hold the baseline's
-            // place instead of moving the field out and back.
-            if (!sliding && box.height + margin <= v) {
+            if (box.height + margin <= v) {
                 if (box.top - margin < target) target = box.top - margin
                 else if (box.bottom > target + v) target = box.bottom - v
             }
             if (caret != null) {
-                if (!sliding) target = lastLineSpan(target, box, caret, trailing, v, margin)
-                val kept = if (sliding) caret.top..caret.bottom else keptRange(box, caret, trailing, v, margin)
-                target = labelRule(target, labelExtent(box, label, labelBand), kept, v, margin)
+                target = lastLineSpan(target, box, caret, trailing, v, margin)
+                target = labelRule(target, labelExtent(box, label, labelBand), keptRange(box, caret, trailing, v, margin), v, margin)
             }
             return target.roundToInt()
         }
@@ -214,7 +210,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val caret = focused.caretIn(inside, box)
             val trailing = if (caret != null) focused.trailingIn(inside) else null
             return state to heightTarget(state, box, caret, trailing, focused.before(key, child), viewport.toFloat(),
-                focused.labelIn(inside), sliding = focused.keyboardSliding)
+                focused.labelIn(inside))
         }
         val sameFrame = remember { FormDialogSameFrameRestore() }
         val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -240,10 +236,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val place = focused.body ?: return
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return
             if (!bodyPlaceValid(place, child, pinned, state.maxValue, viewportHeight)) return
-            // #378 (c): a keyboard transition's final layout always gets its restore (the full rule), even when the last
-            // running frame already claimed its key (an animation whose last frame reached the target inset).
-            val final = focused.takeKeyboardFinal(key)
-            if (!sameFrame.claim(key) && !final) return
+            if (!sameFrame.claim(key)) return
             focused.newChange() // As in the callback restore: each change reads its baseline afresh.
             if (held) return
             val shift = if (pinned) 0f else place.bodyTop
@@ -251,8 +244,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val caret = place.caret?.translate(0f, shift)
             val trailing = place.trailing?.translate(0f, shift)
             val label = place.label?.translate(0f, shift)
-            val target = heightTarget(state, box, caret, trailing, focused.before(key, child), viewportHeight.toFloat(), label,
-                sliding = focused.keyboardSliding)
+            val target = heightTarget(state, box, caret, trailing, focused.before(key, child), viewportHeight.toFloat(), label)
             applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
                 cancelRunning(state)
             }
@@ -666,12 +658,6 @@ private class FocusedChild {
     /** A text or selection change during a transition: the place now is the transition's baseline. */
     fun rebaselineKeyboard() = keyboard.rebaseline { last }
 
-    /** #378 (c): a keyboard slide is running (only the floors apply). */
-    val keyboardSliding: Boolean get() = keyboard.holding
-
-    /** #378 (c): true once, for the transition's final layout (see [KeyboardTransitionBaseline.takeFinal]). */
-    fun takeKeyboardFinal(key: Any): Boolean = keyboard.takeFinal(key)
-
     /** A new height or mode change was claimed: its baseline is read afresh (see [before]). */
     fun newChange() = baseline.reset()
 
@@ -739,30 +725,16 @@ internal class KeyboardTransitionBaseline<T : Any> {
     private var held: T? = null
     private var finalKey: Any? = null
 
-    private var finalPending = false
-
     fun observe(ime: Int, source: Int, target: Int, key: Any, latest: () -> T?) {
         if (ime != target || source != target) {
             if (!holding) { holding = true; held = latest() }
             finalKey = null
-            finalPending = false
         } else if (holding) {
             holding = false
             finalKey = key
-            finalPending = true
         } else if (finalKey != null && key != finalKey) {
             release()
         }
-    }
-
-    /**
-     * (c): true once for [key] when it is the final layout of a transition just ended, so its restore runs (the full rule)
-     * even if the key was already claimed by the slide's last running frame.
-     */
-    fun takeFinal(key: Any): Boolean {
-        if (!finalPending || key != finalKey) return false
-        finalPending = false
-        return true
     }
 
     /** Whether a restore for [key] reads the transition's baseline: during the transition and at its final layout. */
@@ -770,7 +742,7 @@ internal class KeyboardTransitionBaseline<T : Any> {
 
     fun baseline(): T? = held
 
-    fun release() { holding = false; held = null; finalKey = null; finalPending = false }
+    fun release() { holding = false; held = null; finalKey = null }
 
     fun rebaseline(latest: () -> T?) { if (holding) held = latest() }
 }

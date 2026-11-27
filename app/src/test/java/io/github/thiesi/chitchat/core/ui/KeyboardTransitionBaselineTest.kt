@@ -95,32 +95,6 @@ class KeyboardTransitionBaselineTest {
         assertNull(t.baseline())
     }
 
-    @Test fun theFinalLayoutGetsItsRestoreOnceEvenWithAnAlreadyClaimedKey() {
-        // (c): an animation whose last running frame already reached the target inset (same key 357), then onEnd's
-        // settled placement: the final layout's restore (the full rule) still runs, once.
-        val t = KeyboardTransitionBaseline<String>()
-        t.observe(0, 0, 259, 592) { "pre" }
-        t.observe(259, 0, 259, 357) { "r0" }
-        assertTrue("sliding", t.holding)
-        assertFalse("not final while running", t.takeFinal(357))
-        t.observe(259, 259, 259, 357) { "r1" }
-        assertFalse(t.holding)
-        assertTrue(t.takeFinal(357))
-        assertFalse("once", t.takeFinal(357))
-        assertFalse("only for the final layout's key", t.takeFinal(358))
-    }
-
-    @Test fun aNewSlideOrAReleaseCancelsAPendingFinal() {
-        val t = KeyboardTransitionBaseline<String>()
-        t.observe(0, 0, 259, 592) { "pre" }
-        t.observe(259, 259, 259, 357) { "r0" }
-        t.observe(259, 259, 0, 357) { "r1" } // a hide starts before the final restore ran
-        assertFalse(t.takeFinal(357))
-        t.observe(0, 0, 0, 592) { "r2" }
-        t.release()
-        assertFalse(t.takeFinal(592))
-    }
-
     @Test fun releaseIsTodaysPath() {
         // The holder releases for a field change or no record before the transition.
         val t = KeyboardTransitionBaseline<String>()
