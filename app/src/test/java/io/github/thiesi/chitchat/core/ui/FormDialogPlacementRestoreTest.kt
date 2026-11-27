@@ -29,6 +29,16 @@ class FormDialogPlacementRestoreTest {
             bodyPlaceValid(place, field, pinned = false, maxValue = 3500, viewportHeight = 357))
     }
 
+    @Test fun aHeldPassConsumesNothingAndTheReleasePassClaimsAndRestores() {
+        // Finding 3 (API36 notice re-tap): the settle pass is held (the notice holds the view); it must not use up the
+        // change, so the pass where the hold releases still claims it and restores in that pass.
+        val sameFrame = FormDialogSameFrameRestore()
+        val key = Any()
+        assertEquals("held: nothing claimed", false, claimUnlessHeld(true) { sameFrame.claim(key) })
+        assertEquals("released: the change is still there to claim", true, claimUnlessHeld(false) { sameFrame.claim(key) })
+        assertEquals("claimed once", false, claimUnlessHeld(false) { sameFrame.claim(key) })
+    }
+
     @Test fun anotherFieldOrContentThatCantScroll() {
         assertEquals("another focused field", false, bodyPlaceValid(place, Any(), pinned = true, maxValue = 3252, viewportHeight = 288))
         assertEquals("no scroll range: nothing can move, any target clamps to 0", true,

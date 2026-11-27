@@ -233,12 +233,17 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             if (forPinned != pinned) return
             focused.layoutKey = key
             focused.layoutPinned = pinned
+            // #378 finding 3: read here, first, so this placement re-runs when the hold releases; a held pass consumes
+            // neither the claim nor the change, and the pass where the hold releases claims and restores in that pass.
+            // Before, a held settle pass used up the claim and the after-a-frame step restored up to ~200 ms later, with the
+            // dialog's top drawn at the swapped-in scroller's 0 meanwhile (diag runs 46056107630 and 46056124120, API36
+            // notice re-tap).
+            val holding = held
             val place = focused.body ?: return
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return
             if (!bodyPlaceValid(place, child, pinned, state.maxValue, viewportHeight)) return
-            if (!sameFrame.claim(key)) return
+            if (!claimUnlessHeld(holding) { sameFrame.claim(key) }) return
             focused.newChange() // As in the callback restore: each change reads its baseline afresh.
-            if (held) return
             val shift = if (pinned) 0f else place.bodyTop
             val box = place.box.translate(0f, shift)
             val caret = place.caret?.translate(0f, shift)
@@ -272,7 +277,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // lambda captured (#376: an old-key record after the same-frame scroll, against the inner frame's 3540 px).
             focused.layoutKey = key
             focused.layoutPinned = pinned
-            if (!sameFrame.claim(key)) return
+            if (!claimUnlessHeld(held) { sameFrame.claim(key) }) return // #378 finding 3: a held pass claims nothing.
             // A new change: its baseline is read afresh, here, before heightStep()'s held check, so a held change resets
             // it too (a notice holding the view while the keyboard hides, then the person's tap: K, J, K). Assumes every
             // height or mode change relays out the outer scroller, so this callback comes for each one.
@@ -396,6 +401,12 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
 internal class BodyPlace(val child: Any, val box: androidx.compose.ui.geometry.Rect, val caret: androidx.compose.ui.geometry.Rect?,
     val trailing: androidx.compose.ui.geometry.Rect?, val bodyTop: Float, val bodyHeight: Int, val belowBody: Float,
     val label: androidx.compose.ui.geometry.Rect? = null, val caretVersion: Int = -1)
+
+/**
+ * #378 finding 3: a restore claims its change only when the view isn't held; a held pass leaves the claim for the pass
+ * where the hold releases.
+ */
+internal inline fun claimUnlessHeld(held: Boolean, claim: () -> Boolean): Boolean = !held && claim()
 
 /** A's step (A3): the caret's line keeps its offset from the viewport's top, clamped inside the viewport. */
 internal fun keepCaretOffset(caretTop: Float, caretBefore: Float, caretHeight: Float, v: Float): Float =

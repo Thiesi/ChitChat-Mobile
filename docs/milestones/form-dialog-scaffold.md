@@ -87,7 +87,11 @@ app window's bounds, not whether the keyboard covers a node.
     re-baselines; with no animation reported (API < 30) it never freezes. `KeyboardTransitionBaselineTest` (JVM) replays
     the logged sequences. A selection change since the field's place was recorded (a tap that moves the caret in the
     frame the keyboard starts) restores from the live caret and moves the baseline's caret by the same distance, so the
-    step after the frame finds nothing more to move (diagnostic run 46056107630, API36 text-first: 3080, then 3004).
+    step after the frame finds nothing more to move (diagnostic run 46056107630, API36 text-first: 3080, then 3004). While the
+    view is held (a notice holding it), a restore claims nothing; the hold is read in the placement, so the pass where it
+    releases claims the change and restores in that pass (before, a held pass used up the change and the step after the
+    frame restored it up to ~200 ms later, with the dialog's top drawn at the swapped-in scroller's 0 meanwhile;
+    diagnostic runs 46056107630 and 46056124120, API36 notice re-tap).
     **Limit: the switch between pinned and one column (#383, after the Play upload).** With an animated keyboard the
     slide's frames apply the full rule from the transition's baseline, so the field moves with the viewport, but the
     first frame after a mode switch can move against the slide: text-first's hide moves the caret line up 56 px in the
