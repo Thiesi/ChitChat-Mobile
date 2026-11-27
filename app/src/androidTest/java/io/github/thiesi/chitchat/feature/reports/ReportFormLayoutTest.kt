@@ -48,6 +48,7 @@ import io.github.thiesi.chitchat.feature.conversation.ConversationScreen
 import io.github.thiesi.chitchat.feature.conversation.ConversationViewModel
 import io.github.thiesi.chitchat.testing.FontScaleTestActivity
 import io.github.thiesi.chitchat.testing.OnCreateContentTestActivity
+import io.github.thiesi.chitchat.testing.performNativeTap
 import io.github.thiesi.chitchat.testing.tapNativeInput
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -322,6 +323,68 @@ class ReportFormLayoutTest {
         }
     }
 
+    // DIAGNOSTIC (never merged), #378: each A3 case with animations off and on (recorded), through the keyboard's
+    // arrival and its hide; opt-in by a3Probe=run.
+    private fun diag(name: String, animations: Boolean, case: () -> Unit) {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
+        io.github.thiesi.chitchat.testing.DiagRecording.run(name, animations, hide = {
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+            compose.waitForIdle()
+        }, body = case)
+    }
+    // DIAGNOSTIC (never merged), #378 A/B, PL item 7: an interrupted, a reversed and a cancelled keyboard slide.
+    @Test fun diagInterruptedOn() = diag("ccm-a3-interrupted-on", true) { disturbed("interrupted") }
+    @Test fun diagReversedOn() = diag("ccm-a3-reversed-on", true) { disturbed("reversed") }
+    @Test fun diagCancelledOn() = diag("ccm-a3-cancelled-on", true) { disturbed("cancelled") }
+
+    private fun disturbed(kind: String) {
+        FontScaleTestActivity.requestedFontScale = 2f
+        val reports = ReportViewModel(operations)
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
+                } } }
+            }
+            report()
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.waitForIdle()
+            io.github.thiesi.chitchat.testing.DiagRecording.flash()
+            val ime = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } }
+            // PL item 7 (TL): mid-slide. The native tap without the IME wait, then the probe's latch, counted down at the
+            // first placement whose inset is strictly between the slide's source and target; the action follows at once.
+            val latch = java.util.concurrent.CountDownLatch(1)
+            io.github.thiesi.chitchat.core.ui.KeepProbe.midSlide = latch
+            compose.onNodeWithTag("report_details").performNativeTap()
+            val mid = latch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+            io.github.thiesi.chitchat.core.ui.KeepProbe.midSlide = null
+            io.github.thiesi.chitchat.core.ui.KeepProbe.log("DISTURB $kind midSlide=$mid imeBottom=${ime()}")
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            when (kind) {
+                "interrupted" -> instrumentation.sendStringSync("why")
+                "reversed" -> io.github.thiesi.chitchat.testing.DiagRecording.hideImeNow()
+                else -> instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            }
+            io.github.thiesi.chitchat.core.ui.KeepProbe.log("DISTURB $kind sent imeBottom=${ime()}")
+            io.github.thiesi.chitchat.testing.DiagRecording.hold(compose, 2_000)
+            compose.waitForIdle()
+            io.github.thiesi.chitchat.testing.DiagRecording.capture("disturbed-end")
+            if (io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible) {
+                instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+                io.github.thiesi.chitchat.testing.DiagRecording.hold(compose, 1_000)
+            }
+        }
+    }
+
+    @Test fun diagTextFirstOff() = diag("ccm-a3-textfirst-off", false) { textFirst(landscape = false) }
+    @Test fun diagTextFirstOn() = diag("ccm-a3-textfirst-on", true) { textFirst(landscape = false) }
+    @Test fun diagKeyboardFirstOff() = diag("ccm-a3-keyboardfirst-off", false) { caretStaysInView(landscape = false) }
+    @Test fun diagKeyboardFirstOn() = diag("ccm-a3-keyboardfirst-on", true) { caretStaysInView(landscape = false) }
+    @Test fun diagLandscapeOff() = diag("ccm-a3-landscape-off", false) { buttonsAboveTheKeyboard(landscape = true) }
+    @Test fun diagLandscapeOn() = diag("ccm-a3-landscape-on", true) { buttonsAboveTheKeyboard(landscape = true) }
+
     private fun textFirst(landscape: Boolean) {
         val reports = ReportViewModel(operations)
         launchAt200(landscape, reports) {
@@ -336,6 +399,7 @@ class ReportFormLayoutTest {
             compose.waitForIdle()
             val before = dialogLayout()
             check(!before.imeVisible) { "$case: the keyboard was already up before the first tap ($before)" }
+            io.github.thiesi.chitchat.testing.DiagRecording.flash() // DIAGNOSTIC: the sync strip.
             compose.tapNativeInput("report_details", imeBottom = {
                 io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
             compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms. ".repeat(24))
@@ -343,8 +407,10 @@ class ReportFormLayoutTest {
                 it[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text to
                     it[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange] }
             val beforeBack = fieldState()
+            io.github.thiesi.chitchat.testing.DiagRecording.capture("first-arrival-end") // DIAGNOSTIC
             androidx.test.espresso.Espresso.pressBack()
             awaitLayout("$case: the keyboard hidden after Back", before) { !it.imeVisible }
+            io.github.thiesi.chitchat.testing.DiagRecording.capture("first-hide-end") // DIAGNOSTIC
             // PL: the first system Back only hides the keyboard; the dialog stays open with the same text and selection.
             check(present("report_dialog")) { "$case: system Back dismissed the report dialog instead of only the keyboard" }
             assertEquals("$case: Back kept the text", beforeBack.first, fieldState().first)
@@ -365,6 +431,7 @@ class ReportFormLayoutTest {
                 }
             }
             assertCaretInView(case)
+            io.github.thiesi.chitchat.testing.DiagRecording.beforeClose?.invoke() // DIAGNOSTIC: the final hide leg.
         }
     }
 
@@ -522,6 +589,7 @@ class ReportFormLayoutTest {
             val ime = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } }
             val case = "report-font200-${if (landscape) "landscape" else "portrait"}"
             compose.onNodeWithTag("report_details").performScrollTo()
+            io.github.thiesi.chitchat.testing.DiagRecording.flash() // DIAGNOSTIC: the sync strip.
             compose.tapNativeInput("report_details", imeBottom = ime)
             // TL: a change that keeps the caret's line in view moves nothing.
             compose.onNodeWithTag("report_details").performTextInput("Posted the same link")
@@ -540,9 +608,11 @@ class ReportFormLayoutTest {
                     androidx.compose.ui.text.TextRange(offsetAt(typed.height / 3f)))
                 val placed = assertCaretInView("$case caret placed")
                 check(placed.top > 8f && placed.bottom < placed.height - 8f) { "Not clear of the edges: ${placed.detail}" }
+                io.github.thiesi.chitchat.testing.DiagRecording.capture("arrival-end") // DIAGNOSTIC
                 androidx.test.espresso.Espresso.closeSoftKeyboard()
                 compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
                 val restored = assertCaretInView("$case keyboard hidden")
+                io.github.thiesi.chitchat.testing.DiagRecording.capture("hide-end") // DIAGNOSTIC
                 assertTrue("The restore keeps the caret's offset across the swap (${placed.detail} -> ${restored.detail})",
                     kotlin.math.abs(restored.top - placed.top) <= 1f)
             } else {
@@ -674,6 +744,7 @@ class ReportFormLayoutTest {
                     "details=${bounds("report_details")}, send=${bounds("report_send")}, cancel=${bounds("report_cancel")}, " +
                     "roots=${compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes().map { it.boundsInWindow }}", timeout)
             }
+            io.github.thiesi.chitchat.testing.DiagRecording.flash() // DIAGNOSTIC: the sync strip.
             compose.tapNativeInput("report_details", imeBottom = {
                 io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
             compose.onNodeWithTag("report_details").performTextInput("why")
@@ -725,6 +796,7 @@ class ReportFormLayoutTest {
             assertTrue("Cancel above the keyboard ($detail)", cancel.bottom <= ime.imeTop + 0.5f)
             assertTrue("The field above the keyboard ($detail)", field.top < ime.imeTop && field.height > 0f)
             compose.onNodeWithTag("report_details").assertIsFocused()
+            io.github.thiesi.chitchat.testing.DiagRecording.beforeClose?.invoke() // DIAGNOSTIC: the hide leg.
         }
     }
 }
