@@ -264,6 +264,14 @@ class ReportNoticeViewportTest {
     private val notSent get() = context.getString(R.string.report_not_sent)
 
     // The network reply: the ruled sequence (no focus, no keyboard at the outcome; the person's tap brings the caret back).
+    // DIAGNOSTIC (never merged), #378: the notice re-tap case with animations off and on (recorded).
+    private fun diag(name: String, animations: Boolean) {
+        org.junit.Assume.assumeTrue(androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
+        io.github.thiesi.chitchat.testing.DiagRecording.run(name, animations, hide = {}) { personSnapshot() }
+    }
+    @Test fun diagNoticeOff() = diag("ccm-a3-notice-off", false)
+    @Test fun diagNoticeOn() = diag("ccm-a3-notice-on", true)
+
     @Test fun personSnapshot() = measure("person-snapshot", true, ReportCategory.OFFENSIVE_PROFILE_PICTURE,
         listOf(ReportResult.SnapshotUnavailable), thenTap = true, lead = snapshotLead) { compose.onNodeWithTag("report_notice") }
 

@@ -322,6 +322,23 @@ class ReportFormLayoutTest {
         }
     }
 
+    // DIAGNOSTIC (never merged), #378: each A3 case with animations off and on (recorded), through the keyboard's
+    // arrival and its hide; opt-in by a3Probe=run.
+    private fun diag(name: String, animations: Boolean, case: () -> Unit) {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
+        io.github.thiesi.chitchat.testing.DiagRecording.run(name, animations, hide = {
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+            compose.waitForIdle()
+        }, body = case)
+    }
+    @Test fun diagTextFirstOff() = diag("ccm-a3-textfirst-off", false) { textFirst(landscape = false) }
+    @Test fun diagTextFirstOn() = diag("ccm-a3-textfirst-on", true) { textFirst(landscape = false) }
+    @Test fun diagKeyboardFirstOff() = diag("ccm-a3-keyboardfirst-off", false) { caretStaysInView(landscape = false) }
+    @Test fun diagKeyboardFirstOn() = diag("ccm-a3-keyboardfirst-on", true) { caretStaysInView(landscape = false) }
+    @Test fun diagLandscapeOff() = diag("ccm-a3-landscape-off", false) { buttonsAboveTheKeyboard(landscape = true) }
+    @Test fun diagLandscapeOn() = diag("ccm-a3-landscape-on", true) { buttonsAboveTheKeyboard(landscape = true) }
+
     private fun textFirst(landscape: Boolean) {
         val reports = ReportViewModel(operations)
         launchAt200(landscape, reports) {
@@ -710,6 +727,7 @@ class ReportFormLayoutTest {
             assertTrue("Cancel above the keyboard ($detail)", cancel.bottom <= ime.imeTop + 0.5f)
             assertTrue("The field above the keyboard ($detail)", field.top < ime.imeTop && field.height > 0f)
             compose.onNodeWithTag("report_details").assertIsFocused()
+            io.github.thiesi.chitchat.testing.DiagRecording.beforeClose?.invoke() // DIAGNOSTIC: the hide leg.
         }
     }
 }

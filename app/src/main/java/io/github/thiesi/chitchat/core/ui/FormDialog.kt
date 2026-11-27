@@ -232,15 +232,25 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             focused.layoutPinned = pinned
             val place = focused.body ?: return
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return
-            if (!bodyPlaceValid(place, child, pinned, state.maxValue, viewportHeight)) return
-            if (!sameFrame.claim(key)) return
+            val expected = if (pinned) place.bodyHeight.toFloat() else place.bodyTop + place.bodyHeight + place.belowBody
+            val valid = bodyPlaceValid(place, child, pinned, state.maxValue, viewportHeight)
+            KeepProbe.log("PLACE check forPinned=$forPinned key=$key valid=$valid sameChild=${place.child === child} max=${state.maxValue} " +
+                "viewport=$viewportHeight sum=${state.maxValue + viewportHeight} expected=$expected bodyH=${place.bodyHeight} bodyTop=${place.bodyTop} below=${place.belowBody}")
+            if (!valid) return
+            val claimed = sameFrame.claim(key)
+            KeepProbe.log("PLACE claim forPinned=$forPinned key=$key ok=$claimed")
+            if (!claimed) return
             focused.newChange() // As in the callback restore: each change reads its baseline afresh.
             if (held) return
             val shift = if (pinned) 0f else place.bodyTop
             val box = place.box.translate(0f, shift)
             val caret = place.caret?.translate(0f, shift)
             val trailing = place.trailing?.translate(0f, shift)
-            val target = heightTarget(state, box, caret, trailing, focused.before(key, child), viewportHeight.toFloat())
+            val beforeSeen = focused.before(key, child)
+            val target = heightTarget(state, box, caret, trailing, beforeSeen, viewportHeight.toFloat())
+            KeepProbe.log("PLACE restore forPinned=$forPinned key=$key box=${place.box.top}..${place.box.bottom} caret=${place.caret?.top} bodyTop=${place.bodyTop} " +
+                "shift=$shift value=${state.value} max=${state.maxValue} v=$viewportHeight before=${KeepProbe.source(beforeSeen)} target=$target " +
+                "delta=${sameFrameDelta(target, state.value, state.maxValue)}")
             applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
                 cancelRunning(state)
             }
@@ -252,12 +262,15 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // lambda captured (#376: an old-key record after the same-frame scroll, against the inner frame's 3540 px).
             focused.layoutKey = key
             focused.layoutPinned = pinned
-            if (!sameFrame.claim(key)) return
+            val claimedHere = sameFrame.claim(key)
+            KeepProbe.log("CB claim key=$key pinned=$pinned ok=$claimedHere")
+            if (!claimedHere) return
             // A new change: its baseline is read afresh, here, before heightStep()'s held check, so a held change resets
             // it too (a notice holding the view while the keyboard hides, then the person's tap: K, J, K). Assumes every
             // height or mode change relays out the outer scroller, so this callback comes for each one.
             focused.newChange()
             val (state, target) = heightStep() ?: return
+            KeepProbe.log("CB restore key=$key pinned=$pinned value=${state.value} max=${state.maxValue} target=$target before=${KeepProbe.source(focused.before(key, focused.coordinates ?: return))}")
             // After an applied delta, a zero-distance mutation takes the scroll mutex here, undispatched, so the running
             // bring-into-view is cancelled inside this callback and can't move the field a frame (see above).
             applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
@@ -269,6 +282,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val (state, target) = heightStep() ?: return@LaunchedEffect
             // Always scrolls, even when the target is already reached: taking the scroll mutex cancels a bring-into-view
             // that would otherwise move the field off the restored place (see above), as main's scrollTo did.
+            KeepProbe.log("AF key=$key pinned=$pinned value=${state.value} max=${state.maxValue} target=$target")
             fallbackScroll(target, state.maxValue, state::scrollTo)
         }
         // A text or selection change (any input path: the keyboard, a paste, or an accessibility service setting the text
@@ -301,7 +315,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         }
         Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it; focused.record(key, pinned); focused.recordBody() }
             .onSizeChanged { focused.outerViewport = it.height }
-            .onGloballyPositioned { focused.outerFrame = it }
+            .onGloballyPositioned { focused.outerFrame = it; KeepProbe.outer = outer; KeepProbe.inner = inner }
             .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline)
             .layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
@@ -311,7 +325,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 }
             }
             .verticalScroll(outer)
-            .onGloballyPositioned { focused.outerContent = it; restoreInLayoutPass() }
+            .onGloballyPositioned { KeepProbe.newDispatch(); focused.outerContent = it; restoreInLayoutPass() }
             .testTag(if (pinned) "form_dialog_pinned" else "form_dialog_column").padding(24.dp)) {
             Box(Modifier.padding(bottom = 16.dp).onSizeChanged { titleHeight = it.height }) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.titleContentColor,
@@ -575,6 +589,14 @@ private class FocusedChild {
         val anchorTop = caret ?: field
         val anchorHeight = caret?.let { caretIn(inside, box)!!.height } ?: box.height
         val seen = Seen(child, field, caret, anchorTop + anchorHeight > 0f && anchorTop < height)
+        val valueOffset = if (pinned) box.top - (KeepProbe.inner?.value ?: 0)
+            else (outerContent?.takeIf { it.isAttached }?.localPositionOf(inside, androidx.compose.ui.geometry.Offset.Zero)?.y ?: Float.NaN) +
+                box.top - (KeepProbe.outer?.value ?: 0)
+        val stale = kotlin.math.abs(field - valueOffset) > 0.5f
+        val callers = Throwable().stackTrace.drop(1).take(3).joinToString("/") { it.lineNumber.toString() }
+        KeepProbe.meta[seen] = "rec(d=${KeepProbe.dispatch} pinned=$pinned outer=${KeepProbe.outer?.value} inner=${KeepProbe.inner?.value} stale=$stale field=$field caret=$caret)"
+        KeepProbe.log("REC key=$key pinned=$pinned field=$field valueOffset=$valueOffset stale=$stale caret=$caret visible=${seen.visible} " +
+            "outer=${KeepProbe.outer?.value} inner=${KeepProbe.inner?.value} callers=$callers")
         if (key != lastKey) { previous = last; lastKey = key }
         last = seen
     }
