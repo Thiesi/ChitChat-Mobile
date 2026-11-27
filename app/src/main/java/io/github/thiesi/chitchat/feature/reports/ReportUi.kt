@@ -392,8 +392,11 @@ private fun Form(reports: ReportViewModel, state: ReportState, sending: Boolean)
     // floating label, which wrapped onto the border at 200% and overlapped the helper above. TalkBack reads it once, as
     // its own text right before the field: Compose 1.11 drops a text field's contentDescription and exposes no hint or
     // labeledBy, so naming the field itself left it unnamed (TL, PL; measured on the real node).
+    // #378 (PL): the label publishes its whole node to the form dialog, so the label rule keeps it in or entirely out.
+    val caret = io.github.thiesi.chitchat.core.ui.LocalFormDialogCaret.current
+    DisposableEffect(caret) { onDispose { caret?.publishLabel(null) } }
     Text(stringResource(R.string.report_details_label), style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.testTag("report_details_label"))
+        modifier = Modifier.testTag("report_details_label").onGloballyPositioned { caret?.publishLabel(it) })
     // The field's own value, seeded from the VM per form and pushed to it on every change: a value read back through
     // the StateFlow lags a frame and reset the caret or dropped input (TL). Memory only; a reopen or recreation reseeds.
     var field by remember(state.target) { mutableStateOf(TextFieldValue(state.details, TextRange(state.details.length))) }
@@ -425,7 +428,6 @@ private fun Form(reports: ReportViewModel, state: ReportState, sending: Boolean)
     val textColor = style.color.takeOrElse {
         when { !enabled -> colors.disabledTextColor; fieldFocused -> colors.focusedTextColor; else -> colors.unfocusedTextColor }
     }
-    val caret = io.github.thiesi.chitchat.core.ui.LocalFormDialogCaret.current
     var layout by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
     var textArea by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
     LaunchedEffect(layout, field.selection, textArea) {

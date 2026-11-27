@@ -159,7 +159,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         // come from moved (see heightStep and restoreInPlacement).
         fun heightTarget(state: androidx.compose.foundation.ScrollState, box: androidx.compose.ui.geometry.Rect,
             caret: androidx.compose.ui.geometry.Rect?, trailing: androidx.compose.ui.geometry.Rect?, before: FocusedChild.Seen?,
-            v: Float): Int {
+            v: Float, label: androidx.compose.ui.geometry.Rect? = null): Int {
             var target: Float
             if (before != null && before.visible) {
                 // What was in view stays in view: the anchor keeps its offset from the viewport's top, clamped inside.
@@ -193,7 +193,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             }
             if (caret != null) {
                 target = lastLineSpan(target, box, caret, trailing, v, margin)
-                target = labelRule(target, box, keptRange(box, caret, trailing, v, margin), v, margin, labelBand)
+                target = labelRule(target, labelExtent(box, label, labelBand), keptRange(box, caret, trailing, v, margin), v, margin)
             }
             return target.roundToInt()
         }
@@ -207,7 +207,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val box = inside.localBoundingBoxOf(child, clipBounds = false)
             val caret = focused.caretIn(inside, box)
             val trailing = if (caret != null) focused.trailingIn(inside) else null
-            return state to heightTarget(state, box, caret, trailing, focused.before(key, child), viewport.toFloat())
+            return state to heightTarget(state, box, caret, trailing, focused.before(key, child), viewport.toFloat(),
+                focused.labelIn(inside))
         }
         val sameFrame = remember { FormDialogSameFrameRestore() }
         val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -240,7 +241,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val box = place.box.translate(0f, shift)
             val caret = place.caret?.translate(0f, shift)
             val trailing = place.trailing?.translate(0f, shift)
-            val target = heightTarget(state, box, caret, trailing, focused.before(key, child), viewportHeight.toFloat())
+            val label = place.label?.translate(0f, shift)
+            val target = heightTarget(state, box, caret, trailing, focused.before(key, child), viewportHeight.toFloat(), label)
             applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
                 cancelRunning(state)
             }
@@ -295,7 +297,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             var target = if (caret.top < top) caret.top else if (caret.bottom > top + v) caret.bottom - v else top
             val trailing = focused.trailingIn(inside)
             target = lastLineSpan(target, box, caret, trailing, v, margin)
-            target = labelRule(target, box, keptRange(box, caret, trailing, v, margin), v, margin, labelBand)
+            target = labelRule(target, labelExtent(box, focused.labelIn(inside), labelBand),
+                keptRange(box, caret, trailing, v, margin), v, margin)
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
         }
@@ -358,7 +361,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
  * top in the outer content, the body content's height and the outer content's height below the body, at a placement.
  */
 internal class BodyPlace(val child: Any, val box: androidx.compose.ui.geometry.Rect, val caret: androidx.compose.ui.geometry.Rect?,
-    val trailing: androidx.compose.ui.geometry.Rect?, val bodyTop: Float, val bodyHeight: Int, val belowBody: Float)
+    val trailing: androidx.compose.ui.geometry.Rect?, val bodyTop: Float, val bodyHeight: Int, val belowBody: Float,
+    val label: androidx.compose.ui.geometry.Rect? = null)
 
 /**
  * #378: whether [place] is this pass's place for [child] in the scroller in use, measured before it's placed: the same
@@ -453,18 +457,31 @@ internal fun keptRange(box: androidx.compose.ui.geometry.Rect, caret: androidx.c
  * line, or the last-line span when it fits) stays wholly in view; otherwise it takes the label out if [kept]'s top stays
  * in view; otherwise nothing moves. Returns the adjusted target.
  */
-internal fun labelRule(target: Float, box: androidx.compose.ui.geometry.Rect, kept: ClosedFloatingPointRange<Float>,
-    v: Float, margin: Float, labelBand: Float): Float {
-    val fieldRel = box.top - target
-    if (fieldRel <= -labelBand || fieldRel >= margin) return target
-    val up = margin - fieldRel
-    val down = fieldRel + labelBand
+internal fun labelRule(target: Float, label: ClosedFloatingPointRange<Float>, kept: ClosedFloatingPointRange<Float>,
+    v: Float, margin: Float): Float {
+    val topRel = label.start - target
+    val bottomRel = label.endInclusive - target
+    if (bottomRel <= 0f || topRel >= margin) return target // Entirely out, or whole with its margin.
+    val up = margin - topRel // The label's top to the margin.
+    val down = bottomRel     // The label's bottom to the viewport's top: entirely out.
     return when {
         kept.endInclusive - (target - up) <= v -> target - up
         kept.start - (target + down) >= 0f -> target + down
         else -> target
     }
 }
+
+/** The band form: a floating label in the band at the field's top edge (a field that publishes no separate label). */
+internal fun labelRule(target: Float, box: androidx.compose.ui.geometry.Rect, kept: ClosedFloatingPointRange<Float>,
+    v: Float, margin: Float, labelBand: Float): Float = labelRule(target, labelExtent(box, null, labelBand), kept, v, margin)
+
+/**
+ * The label's extent in content coordinates: a published separate label's whole node (every wrapped line), else the
+ * floating-label band at the field's top edge (#378: the report form's label is a Text above the field, which the band
+ * didn't cover; the band stays for fields with a floating label).
+ */
+internal fun labelExtent(box: androidx.compose.ui.geometry.Rect, label: androidx.compose.ui.geometry.Rect?, labelBand: Float):
+    ClosedFloatingPointRange<Float> = label?.let { it.top..it.bottom } ?: box.top..(box.top + labelBand)
 
 /**
  * Where a focused form-dialog field's caret is (#369, TL): its line in [coordinates] (the field's text area), from the
@@ -499,6 +516,19 @@ internal class FormDialogCaret {
     fun publishTrailing(coordinates: LayoutCoordinates?) {
         if (coordinates === trailing) return
         trailing = coordinates
+        version++
+    }
+
+    /**
+     * The field's separate label, if it has one (a Text above the field, not a floating label in its border): the label
+     * rule keeps that whole node in or entirely out (#378, PL). Cleared when it leaves composition.
+     */
+    var label: LayoutCoordinates? = null
+        private set
+
+    fun publishLabel(coordinates: LayoutCoordinates?) {
+        if (coordinates === label) return
+        label = coordinates
         version++
     }
 }
@@ -549,6 +579,12 @@ private class FocusedChild {
         if (!caret.lastLine) return null
         val trailing = caret.trailing?.takeIf { it.isAttached } ?: return null
         return inside.localBoundingBoxOf(trailing, clipBounds = false)
+    }
+
+    /** The field's separate label (its whole Text node) in [inside]'s coordinates, if the field publishes one (#378). */
+    fun labelIn(inside: LayoutCoordinates): androidx.compose.ui.geometry.Rect? {
+        val label = caret.label?.takeIf { it.isAttached } ?: return null
+        return inside.localBoundingBoxOf(label, clipBounds = false)
     }
 
     /** The current layout pass's key and mode, set first in the outer position callback (A3; see record()). */
@@ -610,7 +646,7 @@ private class FocusedChild {
         val box = inside.localBoundingBoxOf(child, clipBounds = false)
         val bodyTop = outerContentNow.localPositionOf(frame, androidx.compose.ui.geometry.Offset.Zero).y
         body = BodyPlace(child, box, caretIn(inside, box), trailingIn(inside), bodyTop, inside.size.height,
-            outerContentNow.size.height - (bodyTop + frame.size.height))
+            outerContentNow.size.height - (bodyTop + frame.size.height), labelIn(inside))
     }
 
     private val baseline = FrozenPerChange<Seen?>()

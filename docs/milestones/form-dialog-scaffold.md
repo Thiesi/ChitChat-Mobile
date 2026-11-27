@@ -100,8 +100,19 @@ app window's bounds, not whether the keyboard covers a node.
     focus), with the label rule's margin. A recorded position is reused only for the same focused field.
   - **The caret's line, when known, is always inside the view** afterwards, so a field entering from unfocused or taller
     than the view never leaves its caret out.
-  - **The label rule:** a field's top keeps its floating label plus 8 dp below the viewport's top edge, or the label is
-    entirely out of view, never half. The caret's line wins when both can't fit.
+  - **The label rule:** a field's label is whole with 8 dp between its top and the viewport's top edge, or entirely out
+    of view (its bottom at or above that edge), never half. The caret's line wins when both can't fit. A half label moves
+    by the minimum distance: up (the label's top to 8 dp) if the kept range below stays wholly in view, else down
+    (entirely out) if the range's top stays in view.
+    - **A separate label (#378, TL and PL, 2026-11-27).** A field whose label is a Text above it (not a floating label in
+      its border) publishes that node to `LocalFormDialogCaret`, and the rule keeps the whole node, every wrapped line,
+      in or out; it unpublishes when it leaves composition. Fields that publish no label keep the floating-label band
+      (bodySmall's line height at the field's top edge). The inventory: the report form's `report_details_label` is
+      separate and publishes; step-up's `step_up_secret` has a floating label (and publishes no caret, so the rule doesn't
+      run there). The band model missed the report form's label from #326 on, before #371 wrote the rule: at 200% the
+      label wraps to 3 lines above the field, so a field top 58 px down read as "label whole" while two of its lines were
+      cut (#378, diagnostic run 46037971164, keyboard-first with animations on). `FormDialogSeparateLabelTest` (JVM)
+      checks whole, out, up and down on those inputs.
   - **A disabled action doesn't hide its reason (A2; PL ruling, 2026-11-26).** While the caret is on the field's last
     line (by line index; an empty field counts), the view also keeps the field's bottom edge and its trailing line in
     view when they fit with the caret's line. The trailing line is the report form's counter ("Too long: 1012 / 1000"
