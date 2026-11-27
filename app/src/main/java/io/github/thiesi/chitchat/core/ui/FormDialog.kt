@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imeAnimationSource
+import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -283,6 +285,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // a later height or mode change restores from where the caret is now, not where it was (#371's restore assert).
             focused.record(key, pinned)
             focused.recordBody()
+            focused.rebaselineKeyboard() // #378 (b): an edit during a keyboard transition is the new baseline.
             if (held) return@LaunchedEffect
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return@LaunchedEffect
             val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
@@ -302,6 +305,11 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
         }
+        // #378 (b): the dialog window's IME inset and Compose's animation source and target, read in the outer placement
+        // below (before that pass's restores), so a change to any of them re-runs it and a transition's end is never skipped.
+        val imeInset = WindowInsets.ime
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class) val imeSource = WindowInsets.imeAnimationSource
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class) val imeTarget = WindowInsets.imeAnimationTarget
         Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it; focused.record(key, pinned); focused.recordBody() }
             .onSizeChanged { focused.outerViewport = it.height }
             .onGloballyPositioned { focused.outerFrame = it }
@@ -309,6 +317,9 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             .layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
                 layout(placeable.width, placeable.height) {
+                    val density = this@layout
+                    focused.observeKeyboard(imeInset.getBottom(density), imeSource.getBottom(density),
+                        imeTarget.getBottom(density), key)
                     restoreInPlacement(forPinned = false, outer, placeable.height)
                     placeable.place(0, 0)
                 }
@@ -622,8 +633,24 @@ private class FocusedChild {
      * a child's position callback could still carry the old key) became `previous`, and the fallback restored from it
      * (#376's portrait text-first probe: 3080 in the same frame, then 2867 from the stray record, the caret at 319 not 106).
      */
-    fun before(key: Any, child: LayoutCoordinates): Seen? =
-        baseline.get(key) { if (key == lastKey) previous else last }?.takeIf { it.child === child }
+    fun before(key: Any, child: LayoutCoordinates): Seen? {
+        // #378 (b): during a keyboard transition, and at its final layout, every change reads the place from before it.
+        if (keyboard.applies(key)) {
+            val held = keyboard.baseline()
+            if (held != null && held.child === child) return held
+            keyboard.release() // The field changed, or nothing was recorded before the transition: today's path.
+        }
+        return baseline.get(key) { if (key == lastKey) previous else last }?.takeIf { it.child === child }
+    }
+
+    /** #378 (b): one baseline per keyboard transition (see [KeyboardTransitionBaseline]). Released with this holder. */
+    private val keyboard = KeyboardTransitionBaseline<Seen>()
+
+    /** Each outer placement, before its restores: the dialog window's IME inset, source and target bottoms. */
+    fun observeKeyboard(ime: Int, source: Int, target: Int, key: Any) = keyboard.observe(ime, source, target, key) { last }
+
+    /** A text or selection change during a transition: the place now is the transition's baseline. */
+    fun rebaselineKeyboard() = keyboard.rebaseline { last }
 
     /** A new height or mode change was claimed: its baseline is read afresh (see [before]). */
     fun newChange() = baseline.reset()
@@ -668,6 +695,52 @@ internal fun acceptsFrame(frameHeight: Int, viewport: Int): Boolean = viewport <
  * different key also reads afresh (a key no position callback claimed). A key coming back after another change is a new
  * change only through [reset], which the claim of each change calls.
  */
+/**
+ * #378 (b), TL and PL 2026-11-27: one baseline per keyboard transition, so an animated keyboard change ends where the same
+ * change ends with animations off (each frame of the slide used to carry the previous frame's place forward: an
+ * intermediate layout with a smaller viewport clamped it, and the end depended on the frames the slide passed through).
+ *
+ * Unsettled: the dialog window's IME inset differs from Compose's animation target, or the source from the target. Compose's
+ * InsetsListener sets all three to the window's insets whenever no IME animation is prepared or running (onApplyWindowInsets
+ * without an animation, and onEnd, called for a finished or a cancelled animation), so a settled placement always comes
+ * at the end of a slide, finished, reversed or cancelled. Animations off, a change is one unsettled placement at the old
+ * inset, then a settled one: the baseline is the last record before the change, as without this.
+ *
+ * - The first unsettled placement freezes the last record before it ([observe]'s latest).
+ * - A reversal (a hide starting before a show reaches its target: source = target while the inset differs) stays unsettled:
+ *   the baseline stays the place from before any keyboard change.
+ * - The first settled placement ends the transition; its key is the final layout, whose restore still reads the baseline.
+ * - Another key after that releases; so does the caller for a field change or no record. An edit re-baselines.
+ * - No animation reported (API < 30, or inset = source = target throughout): never frozen, today's path.
+ */
+internal class KeyboardTransitionBaseline<T : Any> {
+    var holding = false
+        private set
+    private var held: T? = null
+    private var finalKey: Any? = null
+
+    fun observe(ime: Int, source: Int, target: Int, key: Any, latest: () -> T?) {
+        if (ime != target || source != target) {
+            if (!holding) { holding = true; held = latest() }
+            finalKey = null
+        } else if (holding) {
+            holding = false
+            finalKey = key
+        } else if (finalKey != null && key != finalKey) {
+            release()
+        }
+    }
+
+    /** Whether a restore for [key] reads the transition's baseline: during the transition and at its final layout. */
+    fun applies(key: Any): Boolean = holding || (finalKey != null && key == finalKey)
+
+    fun baseline(): T? = held
+
+    fun release() { holding = false; held = null; finalKey = null }
+
+    fun rebaseline(latest: () -> T?) { if (holding) held = latest() }
+}
+
 internal class FrozenPerChange<T> {
     private var key: Any? = null
     private var hasValue = false

@@ -71,13 +71,21 @@ app window's bounds, not whether the keyboard covers a node.
     restore read that stale record as its baseline, and the targets alternated: the field shook 38 px every frame (#376's
     regression, diagnostic run 46031148507; 2cebb7a, before #376, didn't). The position-callback restore stays as the
     fallback, for a change whose content was re-measured.
-    With an animated keyboard the end can differ from the same change with animations off, because it depends on the
-    layouts the slide passes through, not on a stale record (every source fresh, targets one way; run 46037971164). An
-    intermediate layout with a smaller viewport than the final one clamps the carried offset, and keeping the previous
-    offset carries the clamp forward: text-first portrait's first frame is still pinned with a 163 px viewport, the
-    field is kept whole there, and the change ends at 1443 against 1318 off (keyboard-first 1402 against 1318, the
-    notice 1662 against 1511; landscape equal). It predates #378 (main ended that change at 1452, 2cebb7a at 1301).
-    One baseline per keyboard transition is #382. Before A3, a mode switch drew one frame at the swapped-in
+    **One baseline per keyboard transition (#378 b, TL and PL, 2026-11-27).** With an animated keyboard, each frame of
+    the slide used to restore from the previous frame's place, so an intermediate layout with a smaller viewport than
+    the final one clamped the carried offset and the clamp was carried forward: the end depended on the frames the slide
+    passed through (run 46037971164: text-first ended at 1443, keyboard-first at 1402, the notice at 1662, against 1318,
+    1318 and 1511 with animations off; every source fresh). Now every restore during a keyboard transition, and at its
+    final layout, reads the place from before the transition. The boundary is the dialog window's IME inset against
+    Compose's `imeAnimationSource` and `imeAnimationTarget`: unsettled while the inset differs from the target or the
+    source from the target, read in the outer scroller's placement (before that pass's restores). Compose's
+    `InsetsListener` sets all three to the window's insets whenever no IME animation runs (`onApplyWindowInsets` without
+    one, and `onEnd`, called for a finished or a cancelled animation), so a settled placement ends every slide, finished,
+    reversed or cancelled (a reversal keeps the inset off its target: diag run 46043589704, API36 notice, 244/0/0). With
+    animations off a change is one unsettled placement at the old inset, then the settled one, so the baseline is the
+    record before the change, as before. A field change or no earlier record releases; an edit during a transition
+    re-baselines; with no animation reported (API < 30) it never freezes. `KeyboardTransitionBaselineTest` (JVM) replays
+    the logged sequences. Before A3, a mode switch drew one frame at the swapped-in
     scroller's old value (often the top) first (37 of 40 text-first and 33 of 40 keyboard-first repetitions; diagnostic
     runs 45903840557 and 45903834879). A target outside the scroll range is left to the step after the frame, which stays
     as the fallback and keeps the clamp; later callbacks for the same change never re-apply it. A scroll already in progress isn't waited for, it's cancelled: Compose
