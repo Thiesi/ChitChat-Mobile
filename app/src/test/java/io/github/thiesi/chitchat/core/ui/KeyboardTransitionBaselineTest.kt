@@ -129,7 +129,8 @@ class KeyboardTransitionBaselineTest {
         val effect = reanchoredCaret(heldField, clampedCaret - clampedField)!!
         assertEquals(106f, refreshed)
         assertEquals(106f, effect)
-        // Either order gives 106 (both set, neither shifts).
+        // The pure function only: the refresh and the caret effect agree in either order because both set the caret from
+        // the frozen baseline's field offset (neither shifts it), so whichever runs second recomputes the same 106.
         assertEquals(106f, reanchoredCaret(heldField, liveInField))
         // The ends: one column (the body 136 px down, viewport 358) 3080, then pinned (288) 2944, as with animations off.
         assertEquals(3080f, keepCaretOffset(3050f + 136f, effect, 38f, 358f))
@@ -137,6 +138,15 @@ class KeyboardTransitionBaselineTest {
         // Taking the clamped record as the baseline (the bug): 3088 and 2952.
         assertEquals(3088f, keepCaretOffset(3050f + 136f, clampedCaret, 38f, 358f))
         assertEquals(heldCaret, reanchoredCaret(heldField, 3126f - 1324f))
+    }
+
+    @Test fun anotherFieldsRecordReleasesTheFreezeInsteadOfBecomingTheBaseline() {
+        // Focus moved to another field mid-transition: its record could be a clamped place, so the freeze is released
+        // (today's path, as before() does for another field) rather than taken.
+        val t = KeyboardTransitionBaseline<String>()
+        t.observe(0, 0, 259, 592) { "fieldA" }
+        t.reanchor { null }
+        assertFalse(t.holding); assertFalse(t.applies(592)); assertNull(t.baseline())
     }
 
     @Test fun aNewLineMidSlideTakesTheNewCaretPosition() {

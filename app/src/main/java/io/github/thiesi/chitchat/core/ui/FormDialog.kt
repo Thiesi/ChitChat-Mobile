@@ -699,8 +699,10 @@ private class FocusedChild {
         // and 2944). The baseline keeps its field offset and takes the caret's current position in the field, from the
         // live record (caret - field: both measured in the same viewport frame, so the scroll cancels). Only while frozen.
         val now = last ?: return
+        // Another field's record (focus moved mid-transition): the freeze is released, as before() releases it, rather than
+        // taking that record, which could be a clamped intermediate place (only the report field publishes a caret today).
         keyboard.reanchor { held ->
-            if (held.child !== now.child) now
+            if (held.child !== now.child) null
             else Seen(held.child, held.field, reanchoredCaret(held.field, now.caret?.let { it - now.field }), held.visible)
         }
     }
@@ -809,8 +811,12 @@ internal class KeyboardTransitionBaseline<T : Any> {
 
     fun release() { holding = false; held = null; finalKey = null }
 
-    /** #378 failure 2: an edit during a transition re-anchors the frozen baseline (only while frozen). */
-    fun reanchor(transform: (T) -> T) { if (holding) held = held?.let(transform) }
+    /** #378 failure 2: an edit during a transition re-anchors the frozen baseline (only while frozen); null releases. */
+    fun reanchor(transform: (T) -> T?) {
+        if (!holding) return
+        val anchored = held?.let(transform)
+        if (anchored == null) release() else held = anchored
+    }
 
     /** #378 finding 2: the baseline with a correction (the caret moved in the field since it was recorded). */
     fun replace(value: T) { if (held != null) held = value }
