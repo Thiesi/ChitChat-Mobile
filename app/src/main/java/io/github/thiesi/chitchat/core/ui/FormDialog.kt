@@ -204,6 +204,11 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         val sameFrame = remember { FormDialogSameFrameRestore() }
         val scope = androidx.compose.runtime.rememberCoroutineScope()
         fun restoreInLayoutPass() {
+            // The layout pass's key and mode, first: this outer callback runs before the children's, so a record() later
+            // in the same pass is attributed to this layout and measured against its frame, whatever key the calling
+            // lambda captured (#376: an old-key record after the same-frame scroll, against the inner frame's 3540 px).
+            focused.layoutKey = key
+            focused.layoutPinned = pinned
             if (!sameFrame.claim(key)) return
             val (state, target) = heightStep() ?: return
             // After an applied delta, a zero-distance mutation takes the scroll mutex here, undispatched, so the running
@@ -464,9 +469,20 @@ private class FocusedChild {
         return inside.localBoundingBoxOf(trailing, clipBounds = false)
     }
 
-    fun record(key: Any, pinned: Boolean) {
+    /** The current layout pass's key and mode, set first in the outer position callback (A3; see record()). */
+    var layoutKey: Any? = null
+    var layoutPinned = false
+
+    /**
+     * Records where the focused field and its caret sit in the scroller in use. The key and mode come from the layout
+     * pass ([layoutKey], [layoutPinned]) once it has set them, not from the calling lambda, which can be a composition
+     * behind; and a frame taller than the dialog's viewport (impossible for the scroller in use) is refused (A3, TL).
+     */
+    fun record(capturedKey: Any, capturedPinned: Boolean) {
+        val (key, pinned) = recordAttribution(layoutKey, layoutPinned, capturedKey, capturedPinned)
         val child = coordinates?.takeIf { it.isAttached } ?: return
         val frame = (if (pinned) innerFrame else outerFrame)?.takeIf { it.isAttached } ?: return
+        if (!acceptsFrame(frame.size.height, outerViewport)) return
         val inside = innerContent?.takeIf { it.isAttached } ?: return
         // Relative to the viewport's own coordinates, never through a window conversion: in this dialog localToWindow
         // measured off by the inner scroller's value, which changes across a mode switch (#371, #372, TL).
@@ -481,9 +497,45 @@ private class FocusedChild {
         last = seen
     }
 
-    /** Where they were in the layout before [key], only if measured for the same focused [child]. */
+    /**
+     * Where they were in the layout before [key], only if measured for the same focused [child]. Frozen per key at the
+     * first read (A3, TL): every reader for a height or mode change (the same-frame restore, its fallback, a text step)
+     * sees the same baseline. Without it, a record written between the reads (after the same-frame scroll, a child's
+     * position callback can still carry the old key) became `previous`, and the fallback restored from it (#376's
+     * portrait text-first probe: 3080 in the same frame, then 2867 from the stray record, the caret at 319 not 106).
+     */
     fun before(key: Any, child: LayoutCoordinates): Seen? =
-        (if (key == lastKey) previous else last)?.takeIf { it.child === child }
+        baseline.get(key) { if (key == lastKey) previous else last }?.takeIf { it.child === child }
+
+    private val baseline = FrozenPerKey<Seen?>()
+}
+
+/** A3: a record's key and mode: the layout pass's once it has set them, else the caller's (before the first pass). */
+internal fun recordAttribution(layoutKey: Any?, layoutPinned: Boolean, key: Any, pinned: Boolean): Pair<Any, Boolean> =
+    if (layoutKey != null) layoutKey to layoutPinned else key to pinned
+
+/**
+ * A3: whether a record's frame can be the scroller in use: no taller than the dialog's viewport (±1 px). The outer
+ * scroller's frame is that viewport and the pinned body's is inside it; one column's inner content is far taller (#376's
+ * stray record: 3540 px against 357). An unmeasured viewport (0) accepts.
+ */
+internal fun acceptsFrame(frameHeight: Int, viewport: Int): Boolean = viewport <= 0 || frameHeight <= viewport + 1
+
+/** A3: the first value computed for a key, kept for that key until the key changes (a change back is a new change). */
+internal class FrozenPerKey<T> {
+    private var key: Any? = null
+    private var hasValue = false
+    private var value: T? = null
+
+    @Suppress("UNCHECKED_CAST")
+    fun get(key: Any, compute: () -> T): T {
+        if (!hasValue || this.key != key) {
+            this.key = key
+            value = compute()
+            hasValue = true
+        }
+        return value as T
+    }
 }
 
 /** M3's arrangement: side by side (dismiss, then the primary) when both fit, else the primary on top; end-aligned. */

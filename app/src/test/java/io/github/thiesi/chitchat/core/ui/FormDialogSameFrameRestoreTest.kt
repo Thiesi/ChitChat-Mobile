@@ -46,6 +46,41 @@ class FormDialogSameFrameRestoreTest {
         assertEquals("always one scroll, clamped as A", listOf(1432, 2052, 0), scrolled)
     }
 
+    @Test fun theBaselineIsFrozenPerKeyAtTheFirstRead() {
+        val baseline = FrozenPerKey<String?>()
+        val portrait = 357 to false
+        var records = "previous layout: caret at 106"
+        assertEquals("previous layout: caret at 106", baseline.get(portrait) { records })
+        // An old-key record lands between the same-frame read and the fallback's read.
+        records = "stray record after the same-frame scroll"
+        assertEquals("every reader for the key sees the first read", "previous layout: caret at 106", baseline.get(portrait) { records })
+        assertEquals("a new key reads afresh", "stray record after the same-frame scroll", baseline.get(592 to true) { records })
+        records = "later"
+        assertEquals("a change back to an earlier key is a new change", "later", baseline.get(portrait) { records })
+    }
+
+    @Test fun aRecordFromAnOldKeyLambdaIsAttributedToTheLayoutPass() {
+        val now = 357 to false
+        assertEquals("the layout pass's key and mode win over the lambda's", now to false,
+            recordAttribution(layoutKey = now, layoutPinned = false, key = 592 to true, pinned = true))
+        assertEquals("before the first pass the caller's are used", (592 to true) to true,
+            recordAttribution(layoutKey = null, layoutPinned = false, key = 592 to true, pinned = true))
+    }
+
+    @Test fun aFrameTallerThanTheDialogsViewportIsRefused() {
+        assertFalse("#376's stray: 3540 px against a 357 px viewport", acceptsFrame(frameHeight = 3540, viewport = 357))
+        assertTrue("the outer scroller's frame is the viewport", acceptsFrame(frameHeight = 357, viewport = 357))
+        assertTrue("within a pixel", acceptsFrame(frameHeight = 358, viewport = 357))
+        assertTrue("the pinned body sits inside it", acceptsFrame(frameHeight = 189, viewport = 357))
+        assertTrue("an unmeasured viewport accepts", acceptsFrame(frameHeight = 3540, viewport = 0))
+    }
+
+    @Test fun aNullFirstReadIsFrozenToo() {
+        val baseline = FrozenPerKey<String?>()
+        assertNull(baseline.get(1) { null })
+        assertNull("a record arriving later doesn't become this key's baseline", baseline.get(1) { "late" })
+    }
+
     @Test fun aTargetOutsideTheRangeIsLeftToTheFallbacksClamp() {
         assertNull(sameFrameDelta(target = 4020, value = 0, maxValue = 4019))
         assertNull(sameFrameDelta(target = -1, value = 10, maxValue = 4019))

@@ -69,7 +69,12 @@ app window's bounds, not whether the keyboard covers a node.
     probe, run 45914151572: the guard skipped 34 of 40 and 40 of 40); letting it run moved the field off the restored
     place (the landscape 200% case: 28 px to the top edge, run 45923378397). Main cancelled it implicitly through the
     step after the frame; now the restore takes the scroll lock right after it applies, in the same frame, and the step
-    after the frame takes it again.
+    after the frame takes it again. The earlier place it restores from is read once per change and kept for every later reader of
+    that change (the step after the frame, a text step), so a record written in between can't shift the baseline
+    (#376's portrait text-first probe: once in 20, the step after the frame restored from a stray record). That
+    stray record is also stopped where it was written: a record takes its height or mode change and its frame from the
+    layout pass, which sets them first, not from the calling code, which can be a composition behind; and a record
+    measured against a frame taller than the dialog's viewport is refused.
   - **On a text or selection change:** if the change put the caret's line outside the view, it's brought back, just
     enough, then the label rule applies. When the line is still inside, nothing moves, so keyboard typing (already kept in
     view by the field) adds no scroll.
