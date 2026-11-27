@@ -13,7 +13,7 @@ on:
       scroll_diagnostic:
         description: 'DIAGNOSTIC branch only (#351/#369): one scroll-settle form, N=40, observation only'
         type: choice
-        options: [none, auth, report]
+        options: [none, auth, report, report-both]
         default: none
         required: true
 
@@ -63,7 +63,7 @@ jobs:
             app/build/reports/nativeInputObservation/
 
   scroll-settle:
-    if: inputs.scroll_diagnostic == 'auth' || inputs.scroll_diagnostic == 'report'
+    if: contains(fromJSON('["auth","report","report-both"]'), inputs.scroll_diagnostic)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -101,7 +101,7 @@ jobs:
           script: |
             adb shell settings put secure show_ime_with_hard_keyboard 1
             python3 -B .github/scripts/native_environment.py
-            if [ "$FORM" = auth ]; then CLASS=io.github.thiesi.chitchat.feature.auth.AuthPinnedPresentationTest; else CLASS=io.github.thiesi.chitchat.feature.reports.ReportPresentationTest; fi; ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=$CLASS#scrollSettleDiagnostic -Pandroid.testInstrumentationRunnerArguments.scrollSettleDiagnostic=$FORM -Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true --max-workers=2 || echo "diagnostic exit $?"
+            if [ "$FORM" = auth ]; then CLASS=io.github.thiesi.chitchat.feature.auth.AuthPinnedPresentationTest; else CLASS=io.github.thiesi.chitchat.feature.reports.ReportPresentationTest; fi; ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=$CLASS#scrollSettleDiagnostic -Pandroid.testInstrumentationRunnerArguments.scrollSettleDiagnostic=$FORM -Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true --max-workers=2; s=$?; echo "diagnostic gradle exit $s"; mkdir -p app/build/ccm-device-output; for p in de.networkxxiii.chitchat.debug.test de.networkxxiii.chitchat.debug; do adb pull /sdcard/Android/media/$p/additional_test_output app/build/ccm-device-output/$p || true; done; exit $s
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -111,6 +111,7 @@ jobs:
           path: |
             app/build/outputs/connected_android_test_additional_output/
             app/build/reports/androidTests/
+            app/build/ccm-device-output/
 
   standalone-reproducer:
     if: contains(fromJSON('["a","b","c"]'), inputs.reproducer_arm) && inputs.scroll_diagnostic == 'none'

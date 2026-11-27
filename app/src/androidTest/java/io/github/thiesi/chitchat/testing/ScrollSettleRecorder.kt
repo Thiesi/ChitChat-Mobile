@@ -48,6 +48,7 @@ internal class ScrollSettleRecorder(private val roots: List<ViewRootForTest>, pr
     }
 
     fun elapsed(): Long = SystemClock.uptimeMillis() - start
+    val startedAt: Long get() = start
 
     companion object {
         private fun Float.r() = Math.round(this * 100) / 100.0

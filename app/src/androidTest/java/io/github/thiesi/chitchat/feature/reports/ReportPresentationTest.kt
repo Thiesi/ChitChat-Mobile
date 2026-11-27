@@ -216,16 +216,25 @@ class ReportPresentationTest {
 
     /** #369 DIAGNOSTIC (uncommitted): opt-in by `-e scrollSettleDiagnostic report`; observation only. */
     @Test fun scrollSettleDiagnostic() {
-        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("scrollSettleDiagnostic") == "report")
+        val diag = InstrumentationRegistry.getArguments().getString("scrollSettleDiagnostic")
+        org.junit.Assume.assumeTrue(diag == "report" || diag == "report-both")
         val tags = listOf("report_details", "report_counter")
         val reps = org.json.JSONArray()
-        for (rep in 0 until 40) presentation(dark = false, scales = listOf("font200" to 2f), only = setOf("form-toolong")) {
+        val orders = if (diag == "report-both") listOf("text-first", "keyboard-first") else listOf("text-first")
+        for (order in orders) for (rep in 0 until 40) presentation(dark = false, scales = listOf("font200" to 2f), only = setOf("form-toolong")) {
             report(3); choose(ReportCategory.SPAM)
             val roots = compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes()
             .mapNotNull { it.root as? androidx.compose.ui.platform.ViewRootForTest }
             val before = io.github.thiesi.chitchat.testing.ScrollSettleRecorder.snapshotNow(roots, tags)
             val recorder = io.github.thiesi.chitchat.testing.ScrollSettleRecorder(roots, tags).start()
-            compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
+            if (order == "keyboard-first") {
+                // The real user path: the keyboard from a native tap (strict IME proof), its layout, then the text.
+                compose.onNodeWithTag("report_details").performScrollTo()
+                compose.tapNativeInput("report_details", imeBottom = {
+                    io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
+                awaitKeyboardLayout()
+                compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
+            } else compose.onNodeWithTag("report_details").performScrollTo().performTextInput("Posted the same link in 3 rooms. ".repeat(31).take(1_012))
             val typed = recorder.elapsed()
             val afterTyping = io.github.thiesi.chitchat.testing.ScrollSettleRecorder.snapshotNow(roots, tags)
             compose.onNodeWithTag("report_counter").performScrollTo()
@@ -239,7 +248,7 @@ class ReportPresentationTest {
             capture("diag-report-$rep", "report_dialog")
             compose.waitUntil(5_000) { recorder.done }
             val after = io.github.thiesi.chitchat.testing.ScrollSettleRecorder.snapshotNow(rootsNow, tags)
-            reps.put(org.json.JSONObject().put("rep", rep).put("typedMs", typed).put("scrolledMs", scrolled).put("captureMs", captureAt)
+            reps.put(org.json.JSONObject().put("order", order).put("rep", rep).put("typedMs", typed).put("scrolledMs", scrolled).put("captureMs", captureAt)
                 .put("png", io.github.thiesi.chitchat.testing.ScrollSettleRecorder.pngHash("ccm-report-presentation", "diag-report-$rep"))
                 .put("roots", roots.size).put("rootsAtCapture", rootsNow.size)
                 .put("before", before).put("afterTyping", afterTyping).put("atCapture", atCapture).put("after", after)
