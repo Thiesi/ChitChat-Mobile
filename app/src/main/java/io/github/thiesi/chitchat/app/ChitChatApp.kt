@@ -1,10 +1,14 @@
 package io.github.thiesi.chitchat.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.onFocusedBoundsChanged
+import androidx.compose.foundation.layout.isImeVisible
 
 import androidx.compose.ui.draw.drawBehind
 
 import androidx.compose.ui.layout.boundsInWindow
+import io.github.thiesi.chitchat.core.ui.collapsedWhile
+import androidx.compose.ui.layout.layout
 
 import androidx.compose.ui.layout.onGloballyPositioned
 
@@ -72,6 +76,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -1094,6 +1099,8 @@ private const val LICENCE_ROUTE = "licences/{index}"
 private fun TabRoot(reselect: Int, content: @Composable () -> Unit) =
     androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalTabReselect provides reselect, content = content)
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, // LocalBringIntoViewSpec (B)
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class) // isImeVisible
 @Composable
 private fun ScreenContent(content: @Composable () -> Unit) {
     val scroll = rememberScrollState()
@@ -1102,17 +1109,77 @@ private fun ScreenContent(content: @Composable () -> Unit) {
     // 16dp around the button, and a 1dp line edge only while content is hidden beneath it.
     val slot = remember { io.github.thiesi.chitchat.core.ui.PinnedActionSlot() }
     val line = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.line
-    androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalPinnedActions provides slot) {
+    // B (#351, P-78): the focused text field keeps its label whole while the viewport's height changes (the keyboard's
+    // slide), and focus moves land by the same rule (see ScreenKeepInView).
+    val view = androidx.compose.ui.platform.LocalView.current
+    val keep = remember(view) { io.github.thiesi.chitchat.core.ui.ScreenKeepInView(textEditor = view::onCheckIsTextEditor) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    keep.margin = with(density) { io.github.thiesi.chitchat.core.ui.FormDialogLabelMargin.toPx() }
+    keep.labelBand = with(density) { MaterialTheme.typography.bodySmall.lineHeight.toPx() }
+    // The first text line from the label's top: minimizedLabelHalfHeight (the label offset's value), then M3's outlined
+    // content padding, for bodyLarge's line (see ScreenKeepInView.firstLine and its M3 bytecode note).
+    keep.firstLine = with(density) {
+        val top = MaterialTheme.typography.bodySmall.lineHeight.toPx() / 2f +
+            androidx.compose.material3.OutlinedTextFieldDefaults.contentPadding().calculateTopPadding().toPx()
+        top..(top + MaterialTheme.typography.bodyLarge.lineHeight.toPx())
+    }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // After an applied move, a zero-distance mutation takes the scroll mutex, undispatched, so a running bring-into-view
+    // is cancelled inline and can't move the field afterwards (the A3 pattern).
+    val cancelBringIntoView: () -> Unit = {
+        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            scroll.scroll(androidx.compose.foundation.MutatePriority.Default) { }
+        }
+    }
+    val fallbackSpec = androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+    val spec = remember(keep, fallbackSpec) { keep.spec(fallbackSpec) }
+    androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalPinnedActions provides slot,
+        androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides spec) {
         Column(Modifier.fillMaxSize().onSizeChanged { slot.availableHeight = it.height }) {
             Column(
-                Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { slot.viewport = it.boundsInWindow() }
-                    .verticalScroll(scroll).padding(24.dp),
+                Modifier.weight(1f).fillMaxWidth().testTag("screen_viewport")
+                    .onFocusedBoundsChanged { keep.focused = it; keep.recordContent() }
+                    .onGloballyPositioned {
+                        slot.viewport = it.boundsInWindow()
+                        keep.frame = it
+                        // The fallback, for a change the placement pass left (the content was re-measured): after the
+                        // layout pass. A move here can be drawn one frame late (see ScreenKeepInView).
+                        keep.onViewportLaidOut(scroll.value, scroll.maxValue, scroll::dispatchRawDelta, cancelBringIntoView)
+                        keep.recordContent()
+                    }
+                    // B: the height step in the placement pass. Measuring the scroll node sets this pass's maxValue; the
+                    // step's delta is applied before the node is placed, and the node reads the value in its own placement,
+                    // so the content is placed at the new offset in this pass and the frame drawn has it.
+                    .layout { measurable, constraints ->
+                        val placeable = measurable.measure(constraints)
+                        layout(placeable.width, placeable.height) {
+                            keep.onPlacement(placeable.height, placeable.width, scroll.value, scroll.maxValue,
+                                scroll::dispatchRawDelta, cancelBringIntoView)
+                            placeable.place(0, 0)
+                        }
+                    }
+                    .verticalScroll(scroll)
+                    .onGloballyPositioned { keep.content = it; keep.recordContent() }
+                    .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Column(Modifier.widthIn(max = 600.dp).fillMaxWidth()) { content() }
+                // The screen's spec is for this scroller only: its verticalScroll resolves the local at its own place,
+                // above. Inside, the incoming spec is provided again (whatever an outer host set, not a library default),
+                // so a text field's own horizontal text scroller and any dialog composed from the content never read it
+                // (#351 fix B diag run 45979027651: the text scroller's x-coordinate requests took the vertical rule).
+                Column(Modifier.widthIn(max = 600.dp).fillMaxWidth()) {
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides fallbackSpec, content = content)
+                }
             }
-            slot.content?.let { pinned ->
-                Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).drawBehind {
+            // An action absent while the keyboard shows leaves in the same frame the keyboard's inset starts.
+            val imeVisible = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+            // With animations off the inset jumps in one frame: imePadding reads it in layout, after this composition
+            // ran, so the row also collapses in layout once the inset is above 0 (the same pass), never one frame late
+            // (#351 fix B diag run 45974562935: a 27px viewport for one frame with the block still there).
+            val imeInset = WindowInsets.ime
+            slot.content?.takeUnless { slot.hideWhileImeVisible && imeVisible }?.let { pinned ->
+                Box(Modifier.collapsedWhile { slot.hideWhileImeVisible && imeInset.getBottom(this) > 0 }.fillMaxWidth().background(MaterialTheme.colorScheme.background).drawBehind {
                     if (scroll.canScrollForward) drawLine(line, androidx.compose.ui.geometry.Offset(0f, 0.5f),
                         androidx.compose.ui.geometry.Offset(size.width, 0.5f), 1.dp.toPx())
                 }.padding(16.dp).testTag("pinned_action"), contentAlignment = Alignment.Center) {

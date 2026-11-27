@@ -221,7 +221,7 @@ private fun CreateBlock(state: SessionState, onPolicy: ((io.github.thiesi.chitch
     var pinnedHeight by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val inFlow = slot != null && slot.availableHeight > 0 && pinnedHeight * 2 > slot.availableHeight
     if (slot == null || inFlow) InFlowCreateBlock(state, onPolicy, enabled, submit, slot)
-    else io.github.thiesi.chitchat.core.ui.PinnedAction {
+    else io.github.thiesi.chitchat.core.ui.PinnedAction(hideWhileImeVisible = true) {
         Column(Modifier.fillMaxWidth().onSizeChanged { pinnedHeight = it.height }.testTag("registration_create_block"),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             state.public?.policies?.rules?.let { RulesConsent(state, onPolicy) }
