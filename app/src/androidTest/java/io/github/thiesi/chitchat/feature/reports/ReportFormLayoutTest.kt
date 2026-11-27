@@ -578,6 +578,20 @@ class ReportFormLayoutTest {
     }
 
     /** The field's text layout, and where its top sits in the viewport of the scroller in use. */
+    /**
+     * #378: the report label's node (every wrapped line) in the same viewport coordinates as [caretLine]: (top, bottom) from
+     * the viewport's top, measured on the node, independent of the production rule.
+     */
+    private fun labelPlace(): Pair<Float, Float> {
+        compose.waitForIdle()
+        val pinned = compose.onAllNodesWithTag("form_dialog_pinned", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val viewport = compose.onNodeWithTag(if (pinned) "form_dialog_body_viewport" else "form_dialog_viewport", useUnmergedTree = true)
+            .fetchSemanticsNode().layoutInfo.coordinates
+        val label = compose.onNodeWithTag("report_details_label", useUnmergedTree = true).fetchSemanticsNode().layoutInfo.coordinates
+        val top = viewport.localPositionOf(label, androidx.compose.ui.geometry.Offset.Zero).y
+        return top to top + label.size.height
+    }
+
     private fun caretLine(step: String, offset: Int? = null): CaretLine {
         compose.waitForIdle()
         val node = compose.onNodeWithTag("report_details").fetchSemanticsNode()
@@ -631,9 +645,6 @@ class ReportFormLayoutTest {
 
     @Test fun at200PercentLandscapeTheButtonsStayReachableWithTheKeyboardUp() = buttonsAboveTheKeyboard(landscape = true)
 
-    private var labelBandPx = 0f
-    private var labelMarginPx = 0f
-
     private fun buttonsAboveTheKeyboard(landscape: Boolean) {
         FontScaleTestActivity.requestedFontScale = 2f
         val reports = ReportViewModel(operations)
@@ -649,10 +660,7 @@ class ReportFormLayoutTest {
             scenario.onActivity { activity ->
                 activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
                     val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
-                    // The label rule's inputs from the scaffold's own sources (FormDialog reads the same two).
-                    val band = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toPx() }
-                    val margin = with(LocalDensity.current) { io.github.thiesi.chitchat.core.ui.FormDialogLabelMargin.toPx() }
-                    SideEffect { imeBottom = bottom; labelBandPx = band; labelMarginPx = margin }
+                    SideEffect { imeBottom = bottom }
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
                 } } }
             }
@@ -676,20 +684,27 @@ class ReportFormLayoutTest {
             val ime = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
             val field = compose.onNodeWithTag("report_details").fetchSemanticsNode().boundsInWindow
             if (landscape && InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
-                // A3 (TL, #376): after the settle (waitForIdle waits Compose's animations out), the restored place stays.
-                // Here the field (146 px) is taller than the 82 px viewport and A2's span doesn't fit, so A keeps the
-                // caret's pre-keyboard offset (142) clamped into the viewport: the caret line sits at the bottom edge and
-                // the field's top lands 28 px down, where the label rule (8dp below the edge, or the label entirely out)
-                // is already satisfied. #376's first heads let Compose's bring-into-view glide the field to the edge
-                // (caret 16-54, field top 0), breaking the label rule; only a metric showed it. Both parts are checked:
-                // (1) the label rule, (2) A's clamp, which also catches a partial glide that stops below 8dp.
+                // A3 (TL, #376), after the settle (waitForIdle waits Compose's animations out): the field (146 px) is taller
+                // than the 82 px viewport and A2's span doesn't fit, so A keeps the caret's pre-keyboard offset clamped
+                // into the viewport. That used to end with the field's top 28 px down, which this test pinned; but there
+                // the report form's label (a 3-line Text above the field, #326) was at -98..16, half in, which the band
+                // model of the label rule missed (#378 a). The label rule now takes it out by the minimum move.
+                // Outcome properties from the measured nodes only (TL): no production helper computes an expected value.
                 val line = caretLine("buttons landscape")
-                val facts = "fieldTop=${line.fieldTop} caretBottom=${line.bottom} viewport=${line.height} " +
-                    "margin=$labelMarginPx band=$labelBandPx (${line.detail})"
-                assertTrue("(1) The label rule holds: the field's top at least 8dp below the viewport's top, or the label entirely out ($facts)",
-                    line.fieldTop >= labelMarginPx - 1f || line.fieldTop <= -labelBandPx + 1f)
-                assertTrue("(2) A's clamp: the caret line's bottom at the viewport's bottom ($facts)",
-                    kotlin.math.abs(line.bottom - line.height) <= 1f)
+                val label = labelPlace()
+                val margin = with(androidx.compose.ui.unit.Density(context)) { androidx.compose.ui.unit.Dp(8f).toPx() }
+                // PL: out means the label node's bottom at or above the viewport's top (<= 0), so no fractional row is drawn.
+                val out = label.second <= 0f
+                val facts = "fieldTop=${line.fieldTop} caret=[${line.top}, ${line.bottom}] viewport=${line.height} " +
+                    "label=${label.first}..${label.second} margin=$margin (${line.detail})"
+                assertTrue("(1) The label is whole (its top at least 8dp below the viewport's top) or entirely out, never half ($facts)",
+                    label.first >= margin - 1f || out)
+                assertTrue("(2) The caret's line is wholly in view, both edges ($facts)", line.top >= 0f && line.bottom <= line.height)
+                if (out) assertTrue("(3) The minimum move: the label went out only just, its bottom in -1..0 px of the viewport's top ($facts)",
+                    label.second >= -1f && label.second <= 0f)
+                // #376's first heads let Compose's bring-into-view glide the field to the edge (caret 16-54, field top 0).
+                if (out && line.bottom - line.top <= line.height)
+                    assertTrue("(4) No glide: the field's top isn't at the viewport's top edge ($facts)", line.fieldTop > 1f)
             }
             fun scrolledTo(tag: String): androidx.compose.ui.geometry.Rect {
                 compose.onNodeWithTag(tag).performScrollTo()
