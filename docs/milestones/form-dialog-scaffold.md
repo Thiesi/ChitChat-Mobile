@@ -57,13 +57,23 @@ app window's bounds, not whether the keyboard covers a node.
     whole, with the label's margin, then stays whole in view, as Compose's own keep-in-view did before this step
     superseded it (#371's captures had left a short filled field cut at the bottom edge). It acts on every height
     change, so during the keyboard's slide the field rides the edge.
-    **A3 (TL, 2026-11-26): the restore lands in the layout pass, before the frame is drawn.** It runs once per height
-    or mode change in the outer scroller content's position callback, where the new layout's scroll range is already
-    known, and moves the scroller synchronously. The first frame drawn at the new layout is then already at the restored
-    place; before, a mode switch drew one frame at the swapped-in scroller's old value (often the top) first (37 of 40
-    text-first and 33 of 40 keyboard-first repetitions, none with A3; diagnostic runs 45903840557 and 45903834879). A
-    target outside the scroll range is left to the step after the frame, which stays as the fallback and keeps the
-    clamp; later callbacks for the same change never re-apply it. A scroll already in progress isn't waited for, it's cancelled: Compose
+    **A3 (TL, 2026-11-26), corrected by #378: the restore lands in the placement pass.** It runs once per height or
+    mode change, from a layout modifier directly before the scroller in use's `verticalScroll`: after the scroll node is
+    measured (the new layout's scroll range is known) and before it's placed. The node reads the value in its own
+    placement, so the content is placed at the restored offset in the same pass. The inputs come from the focused field's
+    place in the body column's own content, recorded at the last placement, which a mode switch doesn't move (the body is
+    one node in both modes); they're used only while the content wasn't re-measured.
+    #376 first ran the restore in the outer content's position callback and claimed the first frame drawn at the new
+    layout was then already at the restored place. That was wrong (#378). A scroll made in a position callback is laid
+    out only at the next layout pass, so when that pass was the draw's own, the frame was drawn at the old placement first
+    (2 of 5 restores, the caret out of view; diagnostic run 45986560901). And the body's own position callback, later in
+    the same dispatch, recorded the pre-restore placement; with a new key every frame of an animated keyboard, the next
+    restore read that stale record as its baseline, and the targets alternated: the field shook 38 px every frame (#376's
+    regression, diagnostic run 46031148507; 2cebb7a, before #376, didn't). The position-callback restore stays as the
+    fallback, for a change whose content was re-measured. Before A3, a mode switch drew one frame at the swapped-in
+    scroller's old value (often the top) first (37 of 40 text-first and 33 of 40 keyboard-first repetitions; diagnostic
+    runs 45903840557 and 45903834879). A target outside the scroll range is left to the step after the frame, which stays
+    as the fallback and keeps the clamp; later callbacks for the same change never re-apply it. A scroll already in progress isn't waited for, it's cancelled: Compose
     starts its own bring-into-view on the swapped-in scroller in that same pass, which would align a field taller than
     the viewport to its top, against the label rule. Waiting for it brought the frame at the old value back (#376's
     probe, run 45914151572: the guard skipped 34 of 40 and 40 of 40); letting it run moved the field off the restored

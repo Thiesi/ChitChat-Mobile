@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -153,16 +154,12 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         // in this callback, and again at the after-a-frame step, which also covers one started after this callback in the
         // same pass (children's position callbacks run after this one) and stays the fallback for a key no callback came
         // for.
-        fun heightStep(): Pair<androidx.compose.foundation.ScrollState, Int>? {
-            if (held) return null
-            val child = focused.coordinates?.takeIf { it.isAttached } ?: return null
-            val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
-                else Triple(outer, focused.outerContent, focused.outerViewport)
-            val inside = content?.takeIf { it.isAttached } ?: return null
-            val box = inside.localBoundingBoxOf(child, clipBounds = false)
-            val caret = focused.caretIn(inside, box)
-            val before = focused.before(key, child)
-            val v = viewport.toFloat()
+        // The rule (A, A2, the label rule), from its inputs: the field's box, its caret line and trailing line in the
+        // scroller's content, the baseline before the change, and the viewport. Unchanged by #378; only where the inputs
+        // come from moved (see heightStep and restoreInPlacement).
+        fun heightTarget(state: androidx.compose.foundation.ScrollState, box: androidx.compose.ui.geometry.Rect,
+            caret: androidx.compose.ui.geometry.Rect?, trailing: androidx.compose.ui.geometry.Rect?, before: FocusedChild.Seen?,
+            v: Float): Int {
             var target: Float
             if (before != null && before.visible) {
                 // What was in view stays in view: the anchor keeps its offset from the viewport's top, clamped inside.
@@ -195,14 +192,60 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 else if (box.bottom > target + v) target = box.bottom - v
             }
             if (caret != null) {
-                val trailing = focused.trailingIn(inside)
                 target = lastLineSpan(target, box, caret, trailing, v, margin)
                 target = labelRule(target, box, keptRange(box, caret, trailing, v, margin), v, margin, labelBand)
             }
-            return state to target.roundToInt()
+            return target.roundToInt()
+        }
+        // The after-a-frame step and the callback fallback: the inputs from the current placement.
+        fun heightStep(): Pair<androidx.compose.foundation.ScrollState, Int>? {
+            if (held) return null
+            val child = focused.coordinates?.takeIf { it.isAttached } ?: return null
+            val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
+                else Triple(outer, focused.outerContent, focused.outerViewport)
+            val inside = content?.takeIf { it.isAttached } ?: return null
+            val box = inside.localBoundingBoxOf(child, clipBounds = false)
+            val caret = focused.caretIn(inside, box)
+            val trailing = if (caret != null) focused.trailingIn(inside) else null
+            return state to heightTarget(state, box, caret, trailing, focused.before(key, child), viewport.toFloat())
         }
         val sameFrame = remember { FormDialogSameFrameRestore() }
         val scope = androidx.compose.runtime.rememberCoroutineScope()
+        val cancelRunning: (androidx.compose.foundation.ScrollState) -> Unit = { state ->
+            scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                state.scroll(androidx.compose.foundation.MutatePriority.Default) { }
+            }
+        }
+        // #378 (TL ruling): the restore in the placement pass, from a layout modifier directly before the scroller in use's
+        // verticalScroll, after it measured the scroll node (this pass's maxValue and viewport) and before it places it
+        // (the node reads the value in its own placement, so the content is placed at the restored offset in this pass).
+        // The position callback restore below made its scroll after the layout loop: the next measureAndLayout laid it out,
+        // so a frame could be drawn at the old placement, and the body's own position callback, later in that same dispatch,
+        // recorded the pre-restore placement; with a new key every frame of an animated keyboard, the next restore read that
+        // stale record as its baseline, and the targets alternated (#376's +-38 px shake, diag run 46031148507). The inputs
+        // come from the field's place in the body column's own content, cached at the last placement ([FocusedChild.body]),
+        // which a mode switch doesn't move (the body is one node in both modes); valid only while the content wasn't
+        // re-measured (otherwise the callback restore below still runs, the fallback).
+        fun restoreInPlacement(forPinned: Boolean, state: androidx.compose.foundation.ScrollState, viewportHeight: Int) {
+            if (forPinned != pinned) return
+            focused.layoutKey = key
+            focused.layoutPinned = pinned
+            val place = focused.body ?: return
+            val child = focused.coordinates?.takeIf { it.isAttached } ?: return
+            if (!bodyPlaceValid(place, child, pinned, state.maxValue, viewportHeight)) return
+            if (!sameFrame.claim(key)) return
+            focused.newChange() // As in the callback restore: each change reads its baseline afresh.
+            if (held) return
+            val shift = if (pinned) 0f else place.bodyTop
+            val box = place.box.translate(0f, shift)
+            val caret = place.caret?.translate(0f, shift)
+            val trailing = place.trailing?.translate(0f, shift)
+            val target = heightTarget(state, box, caret, trailing, focused.before(key, child), viewportHeight.toFloat())
+            applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
+                cancelRunning(state)
+            }
+        }
+        // The fallback: a change the placement pass couldn't take (the content was re-measured), after the layout pass.
         fun restoreInLayoutPass() {
             // The layout pass's key and mode, first: this outer callback runs before the children's, so a record() later
             // in the same pass is attributed to this layout and measured against its frame, whatever key the calling
@@ -218,9 +261,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // After an applied delta, a zero-distance mutation takes the scroll mutex here, undispatched, so the running
             // bring-into-view is cancelled inside this callback and can't move the field a frame (see above).
             applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
-                scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
-                    state.scroll(androidx.compose.foundation.MutatePriority.Default) { }
-                }
+                cancelRunning(state)
             }
         }
         LaunchedEffect(maxHeight, pinned) {
@@ -239,6 +280,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // A selection-only change lays nothing out, so the body's position callback doesn't record it: record here, so
             // a later height or mode change restores from where the caret is now, not where it was (#371's restore assert).
             focused.record(key, pinned)
+            focused.recordBody()
             if (held) return@LaunchedEffect
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return@LaunchedEffect
             val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
@@ -257,10 +299,18 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
         }
-        Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it; focused.record(key, pinned) }
+        Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it; focused.record(key, pinned); focused.recordBody() }
             .onSizeChanged { focused.outerViewport = it.height }
             .onGloballyPositioned { focused.outerFrame = it }
-            .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline).verticalScroll(outer)
+            .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline)
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                layout(placeable.width, placeable.height) {
+                    restoreInPlacement(forPinned = false, outer, placeable.height)
+                    placeable.place(0, 0)
+                }
+            }
+            .verticalScroll(outer)
             .onGloballyPositioned { focused.outerContent = it; restoreInLayoutPass() }
             .testTag(if (pinned) "form_dialog_pinned" else "form_dialog_column").padding(24.dp)) {
             Box(Modifier.padding(bottom = 16.dp).onSizeChanged { titleHeight = it.height }) {
@@ -278,9 +328,17 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                     Column(Modifier.onSizeChanged { focused.innerViewport = it.height }
                         .onGloballyPositioned { focused.innerFrame = it }
                         .then(if (pinned) Modifier.scrollEdgeDividers(inner, MaterialTheme.colorScheme.outline)
-                        .verticalScroll(inner) else Modifier).onGloballyPositioned {
+                            .layout { measurable, constraints ->
+                                val placeable = measurable.measure(constraints)
+                                layout(placeable.width, placeable.height) {
+                                    restoreInPlacement(forPinned = true, inner, placeable.height)
+                                    placeable.place(0, 0)
+                                }
+                            }
+                            .verticalScroll(inner) else Modifier).onGloballyPositioned {
                             focused.innerContent = it
                             focused.record(key, pinned)
+                            focused.recordBody()
                         },
                         verticalArrangement = bodyArrangement, content = body)
                 }
@@ -293,6 +351,26 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             }
         }
     }
+}
+
+/**
+ * #378: the focused field's place in the body column's own content (its box, caret line and trailing line), the body's
+ * top in the outer content, the body content's height and the outer content's height below the body, at a placement.
+ */
+internal class BodyPlace(val child: Any, val box: androidx.compose.ui.geometry.Rect, val caret: androidx.compose.ui.geometry.Rect?,
+    val trailing: androidx.compose.ui.geometry.Rect?, val bodyTop: Float, val bodyHeight: Int, val belowBody: Float)
+
+/**
+ * #378: whether [place] is this pass's place for [child] in the scroller in use, measured before it's placed: the same
+ * field, and the content not re-measured. Pinned, the inner scroller's content is the body (`maxValue + viewport` its
+ * height); one column, the outer content is the body's top, the body and the part below it. Content no taller than the
+ * viewport (maxValue 0) can't scroll, so any target is clamped to 0 there anyway.
+ */
+internal fun bodyPlaceValid(place: BodyPlace, child: Any, pinned: Boolean, maxValue: Int, viewportHeight: Int): Boolean {
+    if (place.child !== child) return false
+    if (maxValue == 0) return true
+    val expected = if (pinned) place.bodyHeight.toFloat() else place.bodyTop + place.bodyHeight + place.belowBody
+    return kotlin.math.abs(maxValue + viewportHeight - expected) <= 1f
 }
 
 /** A3: claims each layout key once, so only the first position callback after a height or mode change restores. */
@@ -513,6 +591,27 @@ private class FocusedChild {
 
     /** A new height or mode change was claimed: its baseline is read afresh (see [before]). */
     fun newChange() = baseline.reset()
+
+    /** The focused field's place in the body column's own content, at the last placement (see [BodyPlace]). */
+    var body: BodyPlace? = null
+        private set
+
+    /**
+     * Records where the focused field, its caret line and its trailing line sit in the body column's own content, which a
+     * scroll or a mode switch doesn't move, with the body's top and the space below it in the outer content, for the next
+     * pass's placement-pass restore (#378).
+     */
+    fun recordBody() {
+        val child = coordinates?.takeIf { it.isAttached }
+        val inside = innerContent?.takeIf { it.isAttached }
+        val frame = innerFrame?.takeIf { it.isAttached }
+        val outerContentNow = outerContent?.takeIf { it.isAttached }
+        if (child == null || inside == null || frame == null || outerContentNow == null) { body = null; return }
+        val box = inside.localBoundingBoxOf(child, clipBounds = false)
+        val bodyTop = outerContentNow.localPositionOf(frame, androidx.compose.ui.geometry.Offset.Zero).y
+        body = BodyPlace(child, box, caretIn(inside, box), trailingIn(inside), bodyTop, inside.size.height,
+            outerContentNow.size.height - (bodyTop + frame.size.height))
+    }
 
     private val baseline = FrozenPerChange<Seen?>()
 }
