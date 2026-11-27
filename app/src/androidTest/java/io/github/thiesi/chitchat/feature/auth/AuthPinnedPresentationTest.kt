@@ -131,10 +131,11 @@ class AuthPinnedPresentationTest {
         compose.onNodeWithTag("screen_viewport", useUnmergedTree = true).fetchSemanticsNode().size.height
 
     /**
-     * B's end state (#351, P-78, PL): the focused field's bottom is in the viewport, and its floating label is the margin
-     * or more below the viewport's top when the field fits with it; otherwise the label is entirely in or entirely out.
-     * Measured unclipped: the field's tagged node starts at the label's top (M3 pads the field by half the label above
-     * its border), in the screen scroller's viewport.
+     * B's end state (#351, P-78, PL's four tiers): the tier that applies to the measured field and viewport, and its
+     * placement. 1: both margins (the label's top and the field's bottom each the margin or more inside); 2: the top
+     * margin, the bottom inside; 3: the field whole; 4: the label entirely in or entirely out, the bottom inside. Measured
+     * unclipped: the field's tagged node starts at the label's top (M3 pads the field by half the label above its border)
+     * and ends at its supporting line, in the screen scroller's viewport.
      */
     private fun assertLabelRule(tag: String, step: String) {
         compose.waitForIdle()
@@ -143,10 +144,20 @@ class AuthPinnedPresentationTest {
         val top = field.positionInRoot.y - viewport.positionInRoot.y
         val bottom = top + field.size.height
         val v = viewport.size.height.toFloat()
-        val facts = "$step $tag: labelTop=$top fieldBottom=$bottom viewport=$v margin=$marginPx band=$bandPx"
-        assertTrue("The field's bottom is in view ($facts)", bottom <= v + 1f)
-        if (field.size.height + marginPx <= v) assertTrue("The label plus the margin below the top edge ($facts)", top >= marginPx - 1f)
-        else assertTrue("The label entirely in or out ($facts)", top >= -1f || top <= -bandPx + 1f)
+        val height = field.size.height
+        val tier = when {
+            height + 2 * marginPx <= v + 1f -> 1
+            height + marginPx <= v + 1f -> 2
+            height <= v + 1f -> 3
+            else -> 4
+        }
+        val facts = "$step $tag: tier=$tier labelTop=$top fieldBottom=$bottom viewport=$v margin=$marginPx band=$bandPx"
+        when (tier) {
+            1 -> assertTrue("Tier 1: both margins ($facts)", top >= marginPx - 1f && bottom <= v - marginPx + 1f)
+            2 -> assertTrue("Tier 2: the top margin, the bottom inside ($facts)", top >= marginPx - 1f && bottom <= v + 1f)
+            3 -> assertTrue("Tier 3: the field whole ($facts)", top >= -1f && bottom <= v + 1f)
+            else -> assertTrue("Tier 4: the label entirely in or out ($facts)", top >= -1f || top <= -bandPx + 1f)
+        }
     }
 
     private fun capture(name: String) {

@@ -171,7 +171,7 @@ private fun ResetForm(state: SessionState, model: AuthViewModel, enabled: Boolea
         }
         TextButton(onClick = { model.selectForm(io.github.thiesi.chitchat.core.session.AuthFlow.SIGN_IN) }, enabled = !state.busy,
             modifier = Modifier.heightIn(min = 48.dp).testTag("reset_back_to_sign_in")) { Text(stringResource(R.string.back_to_sign_in)) }
-        if (!WindowInsets.isImeVisible) io.github.thiesi.chitchat.core.ui.PinnedAction {
+        if (!WindowInsets.isImeVisible) io.github.thiesi.chitchat.core.ui.PinnedAction(hideWhileImeVisible = true) {
             Column(Modifier.fillMaxWidth().testTag("reset_action_block"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 val polite = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                 // Generic for every cause; never says which field was wrong (recovery-key.md). InlineError is polite.

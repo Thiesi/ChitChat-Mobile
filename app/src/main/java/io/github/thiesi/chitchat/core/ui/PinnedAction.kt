@@ -19,6 +19,13 @@ import androidx.compose.ui.geometry.Rect
 class PinnedActionSlot {
     internal var content by mutableStateOf<(@Composable () -> Unit)?>(null)
     internal var owner: Any? = null
+    /**
+     * The action is absent while the keyboard shows (Create, #275). The host leaves its row out in the same frame the
+     * keyboard's inset starts, reading the IME itself: clearing [content] from the action's own disposal lands a frame
+     * late, and for that frame the keyboard's inset and the row both took the viewport (#351 fix B diag run 45969824617:
+     * 226px at the keyboard's first frame, about 3px with animations off), which the screen's keep-in-view acted on.
+     */
+    internal var hideWhileImeVisible by mutableStateOf(false)
     /** The host's height in px, so a tall block can fall back to the scroller on very short windows. */
     var availableHeight by mutableIntStateOf(0)
         internal set
@@ -29,9 +36,12 @@ class PinnedActionSlot {
 
 val LocalPinnedActions = staticCompositionLocalOf<PinnedActionSlot?> { null }
 
-/** Places [content] in the host's pinned area while composed, or in place when there's no host. */
+/**
+ * Places [content] in the host's pinned area while composed, or in place when there's no host. With
+ * [hideWhileImeVisible], the host leaves the row out while the keyboard shows (the caller is absent then too).
+ */
 @Composable
-fun PinnedAction(content: @Composable () -> Unit) {
+fun PinnedAction(hideWhileImeVisible: Boolean = false, content: @Composable () -> Unit) {
     val slot = LocalPinnedActions.current
     if (slot == null) { content(); return }
     val owner = remember { Any() }
@@ -39,6 +49,10 @@ fun PinnedAction(content: @Composable () -> Unit) {
     DisposableEffect(slot) {
         slot.owner = owner
         slot.content = { latest() }
-        onDispose { if (slot.owner === owner) { slot.content = null; slot.owner = null } }
+        onDispose { if (slot.owner === owner) { slot.content = null; slot.owner = null; slot.hideWhileImeVisible = false } }
+    }
+    DisposableEffect(slot, hideWhileImeVisible) {
+        if (slot.owner === owner) slot.hideWhileImeVisible = hideWhileImeVisible
+        onDispose { }
     }
 }

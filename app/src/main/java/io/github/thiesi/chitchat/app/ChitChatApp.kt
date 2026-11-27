@@ -2,6 +2,7 @@ package io.github.thiesi.chitchat.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.onFocusedBoundsChanged
+import androidx.compose.foundation.layout.isImeVisible
 
 import androidx.compose.ui.draw.drawBehind
 
@@ -1096,7 +1097,8 @@ private const val LICENCE_ROUTE = "licences/{index}"
 private fun TabRoot(reselect: Int, content: @Composable () -> Unit) =
     androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalTabReselect provides reselect, content = content)
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class) // LocalBringIntoViewSpec (B)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, // LocalBringIntoViewSpec (B)
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class) // isImeVisible
 @Composable
 private fun ScreenContent(content: @Composable () -> Unit) {
     val scroll = rememberScrollState()
@@ -1112,6 +1114,13 @@ private fun ScreenContent(content: @Composable () -> Unit) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     keep.margin = with(density) { io.github.thiesi.chitchat.core.ui.FormDialogLabelMargin.toPx() }
     keep.labelBand = with(density) { MaterialTheme.typography.bodySmall.lineHeight.toPx() }
+    // The first text line from the label's top: minimizedLabelHalfHeight (the label offset's value), then M3's outlined
+    // content padding, for bodyLarge's line (see ScreenKeepInView.firstLine and its M3 bytecode note).
+    keep.firstLine = with(density) {
+        val top = MaterialTheme.typography.bodySmall.lineHeight.toPx() / 2f +
+            androidx.compose.material3.OutlinedTextFieldDefaults.contentPadding().calculateTopPadding().toPx()
+        top..(top + MaterialTheme.typography.bodyLarge.lineHeight.toPx())
+    }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val fallbackSpec = androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
     val spec = remember(keep, fallbackSpec) { keep.spec(fallbackSpec) }
@@ -1138,7 +1147,9 @@ private fun ScreenContent(content: @Composable () -> Unit) {
             ) {
                 Column(Modifier.widthIn(max = 600.dp).fillMaxWidth()) { content() }
             }
-            slot.content?.let { pinned ->
+            // An action absent while the keyboard shows leaves in the same frame the keyboard's inset starts.
+            val imeVisible = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+            slot.content?.takeUnless { slot.hideWhileImeVisible && imeVisible }?.let { pinned ->
                 Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).drawBehind {
                     if (scroll.canScrollForward) drawLine(line, androidx.compose.ui.geometry.Offset(0f, 0.5f),
                         androidx.compose.ui.geometry.Offset(size.width, 0.5f), 1.dp.toPx())

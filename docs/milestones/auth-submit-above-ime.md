@@ -17,15 +17,24 @@ Without a host, the action renders in place.
 ## The focused field keeps its label (B, #351, P-78)
 
 The PL ruled the clipped floating label at 200% a defect (wrap, never clip). `ScreenContent` keeps a focused text field
-in view with its label whole (`core/ui/ScreenKeepInView`). The rule (`keepInViewDistance`, PL 2026-11-25):
-- the label's top at least 8dp below the scroller's top edge, and the field's bottom above the bottom edge (the keyboard
-  or the pinned action);
-- when the field can't fit with the 8dp, it stays whole if it fits at all (the 8dp gives way first);
-- otherwise the text line wins and the label is entirely in or entirely out of view, never half (the form dialog's
-  label rule).
+in view with its label whole (`core/ui/ScreenKeepInView`), by four tiers in order (`keepInViewDistance`; PL 2026-11-25,
+the bottom margin and the order 2026-11-27, A2's order). Each is the minimum move, so a field already placed doesn't move:
+1. **Both margins** when both fit: the label's top at least 8dp below the top edge, and the field's bottom (with its
+   supporting line) at least 8dp above the bottom edge;
+2. **else the top margin:** the label plus 8dp, the bottom flush or as close as the move leaves it (the bottom margin
+   gives first);
+3. **else the field whole,** both edges inside;
+4. **else the caret's line wins,** and the label is entirely in or entirely out of view, never half (the form dialog's
+   label rule).
+
+The bottom edge is the viewport's: the keyboard's top, or the pinned action's edge while the keyboard is hidden.
 
 M3's outlined field draws the floating label centred on its top border, half above the field's focus bounds, so the
-label's top is half the label's line height above them.
+label's top is half the label's line height above them (from M3 1.4.0's bytecode; see `ScreenKeepInView`). The caret's
+line is the field's own bring-into-view request; before it arrives, the field's first text line stands in for it (half
+the label's line, the outlined content padding, bodyLarge's line height), which for a single-line field is the caret's
+line. A request's extent is never what's kept, so the two requests a tap makes (the caret and the focus box) land on one
+target.
 
 Where it applies:
 - **Each viewport height change** (every frame of the keyboard's slide, a rotation, the pinned block arriving or
@@ -35,15 +44,20 @@ Where it applies:
   animation had got (#351's 409–412 variance).
 - **Focus moves in a steady view** (Next, a tap): Compose's animation stays, landing by the same rule through the
   screen's `LocalBringIntoViewSpec`. Other requests keep the default behaviour.
+- **An action absent while the keyboard shows** (the Create block and the reset action block, `hideWhileImeVisible`)
+  leaves in the same frame the keyboard's inset starts: `ScreenContent` reads `isImeVisible` itself. Clearing it from
+  the action's own disposal landed a frame late, and for that frame the inset and the block both took the viewport.
+  It returns as before. Sign in and the reset MFA button stay pinned always.
 
 Only for a focused text field (the view's `onCheckIsTextEditor()`: a text input session is active). A focused button or
 accessibility focus never triggers it, and with nothing focused a height change doesn't scroll. A field the person
 scrolled out of view stays where it is (Compose's own rule). With animations off, Compose's animation is already a
 snap; nothing here changes that.
 
-**Tests:** `ScreenKeepInViewTest` (the rule); `AuthPinnedPresentationTest` asserts the rule after every keyboard capture
-(the label's top, unclipped, against the `screen_viewport` scroller) and after a focus move in a steady view (Next from
-the password to the confirmation, the viewport's height asserted unchanged).
+**Tests:** `ScreenKeepInViewTest` (each tier at its boundary, both requests of a tap in either order); and
+`AuthPinnedPresentationTest`, which asserts the tier that applies and its placement after every keyboard capture (the
+label's top, unclipped, against the `screen_viewport` scroller) and after a focus move in a steady view (Next from the
+password to the confirmation, the viewport's height asserted unchanged).
 
 ## Sign in
 
