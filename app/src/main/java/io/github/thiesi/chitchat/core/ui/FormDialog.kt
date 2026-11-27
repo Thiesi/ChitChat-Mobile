@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imeAnimationSource
 import androidx.compose.foundation.layout.imeAnimationTarget
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -199,6 +200,30 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             }
             return target.roundToInt()
         }
+        // #378 failure 3 (TL, PL): while a keyboard transition is frozen, the slide's frames move only with the slide.
+        // Same-mode end: the end's own target with this frame's floors (no frame decides differently from the end, so there
+        // is nothing to move back from). Mode switch ahead: the per-frame rule, clamped to the slide's direction in this
+        // mode. Settled, or no animation reported: [raw], unchanged.
+        fun slideTarget(raw: Int, state: androidx.compose.foundation.ScrollState, box: androidx.compose.ui.geometry.Rect,
+            caret: androidx.compose.ui.geometry.Rect?, trailing: androidx.compose.ui.geometry.Rect?,
+            before: FocusedChild.Seen?, v: Float, label: androidx.compose.ui.geometry.Rect?): Int {
+            val slide = focused.keyboardSlide() ?: return raw.also { focused.slideClamp.reset() }
+            val place = focused.body ?: return raw
+            val extent = labelExtent(box, label, labelBand)
+            val chrome = with(density) { (48.dp + 16.dp + 24.dp).toPx() }
+            val end = endLayout(with(density) { maxHeight.toPx() }, slide.navBottom, slide.ime, slide.target, chrome,
+                (titleHeight + buttonsHeight).toFloat(), with(density) { FormDialogMinimumBody.toPx() }, place.bodyHeight.toFloat(),
+                place.bodyTop + place.bodyHeight + place.belowBody)
+            return if (end.pinned == pinned) {
+                focused.slideClamp.reset()
+                val tEnd = heightTarget(state, box, caret, trailing, before, end.viewport, label)
+                sameModeFrameTarget(tEnd.toFloat(), caret?.top, caret?.bottom, v, extent.start, extent.endInclusive, margin,
+                    state.maxValue).roundToInt()
+            } else {
+                focused.slideClamp.apply(raw.toFloat(), pinned, slide.arriving, caret?.top, caret?.bottom, v,
+                    extent.start, extent.endInclusive, margin).roundToInt()
+            }
+        }
         // The after-a-frame step and the callback fallback: the inputs from the current placement.
         fun heightStep(): Pair<androidx.compose.foundation.ScrollState, Int>? {
             if (held) return null
@@ -209,8 +234,10 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val box = inside.localBoundingBoxOf(child, clipBounds = false)
             val caret = focused.caretIn(inside, box)
             val trailing = if (caret != null) focused.trailingIn(inside) else null
-            return state to heightTarget(state, box, caret, trailing, focused.before(key, child), viewport.toFloat(),
-                focused.labelIn(inside))
+            val label = focused.labelIn(inside)
+            val before = focused.before(key, child)
+            val raw = heightTarget(state, box, caret, trailing, before, viewport.toFloat(), label)
+            return state to slideTarget(raw, state, box, caret, trailing, before, viewport.toFloat(), label)
         }
         val sameFrame = remember { FormDialogSameFrameRestore() }
         val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -264,7 +291,9 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                     focused.refreshBodyCaret(live)
                 }
             }
-            val target = heightTarget(state, box, liveCaret, trailing, focused.before(key, child), viewportHeight.toFloat(), label)
+            val before = focused.before(key, child)
+            val raw = heightTarget(state, box, liveCaret, trailing, before, viewportHeight.toFloat(), label)
+            val target = slideTarget(raw, state, box, liveCaret, trailing, before, viewportHeight.toFloat(), label)
             applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
                 cancelRunning(state)
             }
@@ -333,6 +362,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         val imeInset = WindowInsets.ime
         @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class) val imeSource = WindowInsets.imeAnimationSource
         @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class) val imeTarget = WindowInsets.imeAnimationTarget
+        val navInset = WindowInsets.navigationBars
         Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it; focused.record(key, pinned); focused.recordBody() }
             .onSizeChanged { focused.outerViewport = it.height }
             .onGloballyPositioned { focused.outerFrame = it }
@@ -342,7 +372,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 layout(placeable.width, placeable.height) {
                     val density = this@layout
                     focused.observeKeyboard(imeInset.getBottom(density), imeSource.getBottom(density),
-                        imeTarget.getBottom(density), key)
+                        imeTarget.getBottom(density), key, navInset.getBottom(density))
                     restoreInPlacement(forPinned = false, outer, placeable.height)
                     placeable.place(0, 0)
                 }
@@ -409,6 +439,77 @@ internal class BodyPlace(val child: Any, val box: androidx.compose.ui.geometry.R
  * where the hold releases.
  */
 internal inline fun claimUnlessHeld(held: Boolean, claim: () -> Boolean): Boolean = !held && claim()
+
+/** #378 failure 3: a running keyboard slide: the inset now, its target, the navigation bar inset (px), and its direction. */
+internal class KeyboardSlide(val ime: Float, val target: Float, val navBottom: Float, val arriving: Boolean)
+
+/** #378 failure 3: the transition's end layout: whether it is pinned, and its viewport height (px). */
+internal class EndLayout(val pinned: Boolean, val viewport: Float)
+
+/**
+ * #378 failure 3: the end layout from the IME target. The dialog area's bottom inset is max(navigation bar, IME), so the end
+ * maxHeight is today's less the inset's change; the pinned rule is FormDialog's own (available >= the minimum body).
+ */
+internal fun endLayout(maxHeight: Float, navBottom: Float, ime: Float, target: Float, chrome: Float, titleAndButtons: Float,
+    minimumBody: Float, bodyHeight: Float, outerContent: Float): EndLayout {
+    val endMaxHeight = maxHeight - (maxOf(navBottom, target) - maxOf(navBottom, ime))
+    val available = endMaxHeight - chrome - titleAndButtons
+    return if (available >= minimumBody) EndLayout(true, minOf(available, bodyHeight))
+        else EndLayout(false, minOf(endMaxHeight, outerContent))
+}
+
+/**
+ * #378 failure 3: a same-mode slide frame's target: the end's target [tEnd] with only this frame's floors, in order: the
+ * caret line wholly in view; a half label goes out (it is above the caret, so the line stays in view); then the scroll
+ * range, lowered to the label whole if the range's end lands it half and the caret line stays in view (otherwise the
+ * range's end, as the end frame itself settles there: the pre-existing label/maxValue gap, its own PR).
+ */
+internal fun sameModeFrameTarget(tEnd: Float, caretTop: Float?, caretBottom: Float?, v: Float, labelTop: Float,
+    labelBottom: Float, margin: Float, maxValue: Int): Float {
+    var t = tEnd
+    if (caretBottom != null && caretBottom - t > v) t = caretBottom - v
+    if (caretTop != null && caretTop < t) t = caretTop
+    if (labelHalf(t, labelTop, labelBottom, margin)) t = labelBottom
+    if (t > maxValue) {
+        t = maxValue.toFloat()
+        val whole = labelTop - margin
+        if (labelHalf(t, labelTop, labelBottom, margin) && (caretBottom == null || caretBottom - whole <= v)) t = whole
+    }
+    return t.coerceAtLeast(0f)
+}
+
+internal fun labelHalf(t: Float, labelTop: Float, labelBottom: Float, margin: Float): Boolean =
+    labelBottom - t > 0f && labelTop - t < margin
+
+/**
+ * #378 failure 3: the frames before a mode switch: the per-frame target, moving only with the slide within one mode
+ * (arrival: never lower than this mode's last target; hide: never higher). The caret line wins (the raw target when the
+ * clamp would leave it out of view); a half label moves with the slide (arrival: out; hide: whole), else the raw target.
+ * Reset at a mode switch, at settle, on a direction flip and on a re-anchor; a held pass doesn't reach it.
+ */
+internal class SlideClamp {
+    private var last: Float? = null
+    private var lastPinned = false
+    private var lastArriving = false
+
+    fun reset() { last = null }
+
+    fun apply(raw: Float, pinned: Boolean, arriving: Boolean, caretTop: Float?, caretBottom: Float?, v: Float,
+        labelTop: Float, labelBottom: Float, margin: Float): Float {
+        if (last != null && (pinned != lastPinned || arriving != lastArriving)) last = null
+        val previous = last
+        var t = if (previous == null) raw else if (arriving) maxOf(raw, previous) else minOf(raw, previous)
+        val caretOut = (caretTop != null && caretTop < t) || (caretBottom != null && caretBottom - t > v)
+        if (caretOut) t = raw
+        else if (labelHalf(t, labelTop, labelBottom, margin)) {
+            val withSlide = if (arriving) labelBottom else labelTop - margin
+            val ok = (caretTop == null || caretTop >= withSlide) && (caretBottom == null || caretBottom - withSlide <= v)
+            t = if (ok) withSlide else raw
+        }
+        last = t; lastPinned = pinned; lastArriving = arriving
+        return t
+    }
+}
 
 /** #378: whether a deferred step launched for ([key], [pinned]) is still for the layout pass's current layout. */
 internal fun deferredStepCurrent(layoutKey: Any?, layoutPinned: Boolean, key: Any, pinned: Boolean): Boolean =
@@ -697,10 +798,28 @@ private class FocusedChild {
     private val keyboard = KeyboardTransitionBaseline<Seen>()
 
     /** Each outer placement, before its restores: the dialog window's IME inset, source and target bottoms. */
-    fun observeKeyboard(ime: Int, source: Int, target: Int, key: Any) = keyboard.observe(ime, source, target, key) { last }
+    fun observeKeyboard(ime: Int, source: Int, target: Int, key: Any, navBottom: Int = 0) {
+        keyboard.observe(ime, source, target, key) { last }
+        slideIme = ime; slideSource = source; slideTarget = target; slideNav = navBottom
+        if (!keyboard.holding) slideClamp.reset()
+    }
+
+    private var slideIme = 0
+    private var slideSource = 0
+    private var slideTarget = 0
+    private var slideNav = 0
+
+    /** #378 failure 3: the slide's direction clamp for the frames before a mode switch. */
+    val slideClamp = SlideClamp()
+
+    /** #378 failure 3: the running keyboard slide (frozen transition), or null when settled or none is reported. */
+    fun keyboardSlide(): KeyboardSlide? = if (!keyboard.holding) null else
+        KeyboardSlide(slideIme.toFloat(), slideTarget.toFloat(), slideNav.toFloat(),
+            arriving = if (slideSource != slideTarget) slideTarget > slideSource else slideTarget > slideIme)
 
     /** A text or selection change during a transition: the place now is the transition's baseline. */
     fun rebaselineKeyboard() {
+        slideClamp.reset() // #378 failure 3: a caret moved by an edit isn't slide motion; the clamp starts again.
         // #378 failure 2: re-anchored, not replaced. Taking the latest record made a clamped intermediate place the new
         // baseline (diag run 46066588478, API36 text-first: caret offset 98 instead of 106, then 3088 and 2952 for 3080
         // and 2944). The baseline keeps its field offset and takes the caret's current position in the field, from the
@@ -750,6 +869,7 @@ private class FocusedChild {
      * shifting, so it agrees with the caret effect's re-anchor in either order.
      */
     fun reanchorBaselineCaret(key: Any, child: LayoutCoordinates, caretInField: Float) {
+        slideClamp.reset() // #378 failure 3: as an edit, not slide motion.
         val seen = before(key, child) ?: return
         if (seen.caret == null) return
         val anchored = Seen(seen.child, seen.field, reanchoredCaret(seen.field, caretInField), seen.visible)
