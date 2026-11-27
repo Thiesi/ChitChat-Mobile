@@ -38,7 +38,13 @@ target.
 
 Where it applies:
 - **Each viewport height change** (every frame of the keyboard's slide, a rotation, the pinned block arriving or
-  leaving): in the layout pass, before the frame is drawn. It moves only when the field breaks the rule, by exactly the
+  leaving): in the placement pass, before the scroller places its content, so the frame drawn at the new height has the
+  move. It uses the focused field's place in the content from the last placement, valid while the content isn't
+  re-measured (the content takes an unbounded height in the scroller and reads no viewport size in layout). After a
+  rotation, a width change, text re-wrapping or content arriving, it falls back to the scroller's position callback,
+  which can draw one frame at the old placement (diag run 45986560901: such a move is laid out only at the next layout
+  pass, and when that pass is the draw's own, the frame is drawn first). One claimed height per change, so a change
+  applies once. It moves only when the field breaks the rule, by exactly the
   distance the edge would otherwise cover, so the field rides the keyboard; a field already clear doesn't move. A move
   cancels Compose's running bring-into-view, so nothing moves afterwards and the end state doesn't depend on how far that
   animation had got (#351's 409–412 variance).

@@ -8,6 +8,7 @@ import androidx.compose.ui.draw.drawBehind
 
 import androidx.compose.ui.layout.boundsInWindow
 import io.github.thiesi.chitchat.core.ui.collapsedWhile
+import androidx.compose.ui.layout.layout
 
 import androidx.compose.ui.layout.onGloballyPositioned
 
@@ -1123,6 +1124,13 @@ private fun ScreenContent(content: @Composable () -> Unit) {
         top..(top + MaterialTheme.typography.bodyLarge.lineHeight.toPx())
     }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    // After an applied move, a zero-distance mutation takes the scroll mutex, undispatched, so a running bring-into-view
+    // is cancelled inline and can't move the field afterwards (the A3 pattern).
+    val cancelBringIntoView: () -> Unit = {
+        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            scroll.scroll(androidx.compose.foundation.MutatePriority.Default) { }
+        }
+    }
     val fallbackSpec = androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
     val spec = remember(keep, fallbackSpec) { keep.spec(fallbackSpec) }
     androidx.compose.runtime.CompositionLocalProvider(io.github.thiesi.chitchat.core.ui.LocalPinnedActions provides slot,
@@ -1130,20 +1138,29 @@ private fun ScreenContent(content: @Composable () -> Unit) {
         Column(Modifier.fillMaxSize().onSizeChanged { slot.availableHeight = it.height }) {
             Column(
                 Modifier.weight(1f).fillMaxWidth().testTag("screen_viewport")
-                    .onFocusedBoundsChanged { keep.focused = it }
+                    .onFocusedBoundsChanged { keep.focused = it; keep.recordContent() }
                     .onGloballyPositioned {
                         slot.viewport = it.boundsInWindow()
                         keep.frame = it
-                        // After the layout pass, before the frame is drawn: a move lands in the first frame at the new
-                        // height. After the move, a zero-distance mutation takes the scroll mutex, undispatched, so a
-                        // running bring-into-view is cancelled here and can't move the field afterwards.
-                        keep.onViewportLaidOut(scroll.value, scroll.maxValue, scroll::dispatchRawDelta) {
-                            scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
-                                scroll.scroll(androidx.compose.foundation.MutatePriority.Default) { }
-                            }
+                        // The fallback, for a change the placement pass left (the content was re-measured): after the
+                        // layout pass. A move here can be drawn one frame late (see ScreenKeepInView).
+                        keep.onViewportLaidOut(scroll.value, scroll.maxValue, scroll::dispatchRawDelta, cancelBringIntoView)
+                        keep.recordContent()
+                    }
+                    // B: the height step in the placement pass. Measuring the scroll node sets this pass's maxValue; the
+                    // step's delta is applied before the node is placed, and the node reads the value in its own placement,
+                    // so the content is placed at the new offset in this pass and the frame drawn has it.
+                    .layout { measurable, constraints ->
+                        val placeable = measurable.measure(constraints)
+                        layout(placeable.width, placeable.height) {
+                            keep.onPlacement(placeable.height, placeable.width, scroll.value, scroll.maxValue,
+                                scroll::dispatchRawDelta, cancelBringIntoView)
+                            placeable.place(0, 0)
                         }
                     }
-                    .verticalScroll(scroll).padding(24.dp),
+                    .verticalScroll(scroll)
+                    .onGloballyPositioned { keep.content = it; keep.recordContent() }
+                    .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 // The screen's spec is for this scroller only: its verticalScroll resolves the local at its own place,

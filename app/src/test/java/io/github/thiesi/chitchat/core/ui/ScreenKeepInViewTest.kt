@@ -102,4 +102,23 @@ class ScreenKeepInViewTest {
         assertEquals(-20f, distance(top = -4f, bottom = 156f, v = 600f, kept = 40f..80f))
         assertEquals(72f, distance(top = 500f, bottom = 656f, v = 600f, kept = 540f..580f))
     }
+
+    @Test fun aHeightChangeIsTakenOnceByWhicheverPathComesFirst() {
+        val claim = HeightClaim()
+        assertEquals("the first layout", -1, claim.take(262))
+        assertEquals("the placement pass takes the change", 262, claim.take(293))
+        assertEquals("the fallback after it doesn't apply again", null, claim.take(293))
+        assertEquals("a later change is new", 293, claim.take(262))
+    }
+
+    @Test fun theCachedPlaceIsUsedOnlyWhenTheContentWasntRemeasured() {
+        val field = Any()
+        val cached = FieldInContent(field, androidx.compose.ui.geometry.Rect(24f, 400f, 296f, 684f), contentHeight = 1460, width = 320)
+        assertEquals("a viewport-only change: valid", true, cachedFieldValid(cached, field, contentHeight = 1460, width = 320))
+        assertEquals("the content re-measured taller (text re-wrapped, content arrived): defer", false,
+            cachedFieldValid(cached, field, contentHeight = 1500, width = 320))
+        assertEquals("a width change (rotation): defer", false, cachedFieldValid(cached, field, contentHeight = 1460, width = 640))
+        assertEquals("another focused field: defer", false, cachedFieldValid(cached, Any(), contentHeight = 1460, width = 320))
+        assertEquals("nothing cached yet: defer", false, cachedFieldValid(null, field, contentHeight = 1460, width = 320))
+    }
 }

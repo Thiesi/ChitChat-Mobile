@@ -14,11 +14,15 @@ import kotlin.math.roundToInt
  * viewport's: the keyboard's top, or the pinned action's edge while the keyboard is hidden.
  *
  * Two places apply the rule:
- * - [onViewportLaidOut], on every height change of the viewport (each frame of the keyboard's slide, a rotation, a window
- *   resize), in the layout pass, before the frame is drawn. It moves only when the field breaks the rule, by exactly the
- *   distance the moving edge would otherwise cover, so the field rides the keyboard and a field already clear doesn't
- *   move. A move supersedes Compose's own bring-into-view animation (it's cancelled), so nothing moves afterwards and the
- *   end state doesn't depend on how far that animation had got.
+ * - On every height change of the viewport (each frame of the keyboard's slide, the pinned block leaving or returning, a
+ *   rotation), the height step: it moves only when the field breaks the rule, by exactly the distance the moving edge
+ *   would otherwise cover, so the field rides the keyboard and a field already clear doesn't move. A move supersedes
+ *   Compose's own bring-into-view animation (it's cancelled), so nothing moves afterwards. It runs in the placement pass
+ *   ([onPlacement]), before the scroller places its content, so the frame drawn at the new height has the move. When the
+ *   content was re-measured in that pass (a rotation, a width change, text re-wrapping, content arriving or leaving), the
+ *   field's position isn't known before placement, so the step falls back to the scroller's position callback
+ *   ([onViewportLaidOut]), which can draw one frame at the old placement (#351 fix B diag run 45986560901: a step from
+ *   that callback is laid out only at the next layout pass; when that pass is the draw's own, the frame is drawn first).
  * - [spec], the screen's [BringIntoViewSpec]: a focus move in a steady view (Next, a tap) keeps Compose's animation, landing
  *   by the same rule.
  *
@@ -60,7 +64,22 @@ internal class ScreenKeepInView(
      */
     var firstLine: ClosedFloatingPointRange<Float> = 0f..0f
 
-    private var lastHeight = -1
+    /** One claimed height per change, shared by [onPlacement] and [onViewportLaidOut], so a change applies once. */
+    private val claim = HeightClaim()
+
+    /** The focused field's place in the scroll content, cached at each placement (see [recordContent]). */
+    private var cached: FieldInContent? = null
+
+    /** The scroller's content coordinates (inside verticalScroll), which a scroll doesn't move the field within. */
+    var content: LayoutCoordinates? = null
+
+    /** Records where the focused field sits in the scroll [content], with the content's size, for the next [onPlacement]. */
+    fun recordContent() {
+        val child = focused?.takeIf { it.isAttached }
+        val inside = content?.takeIf { it.isAttached }
+        cached = if (child == null || inside == null) null
+            else FieldInContent(child, inside.localBoundingBoxOf(child, clipBounds = false), inside.size.height, inside.size.width)
+    }
 
     /**
      * The focused text field in the viewport's coordinates, from its label's top to its bottom. Null unless a text field
@@ -90,10 +109,36 @@ internal class ScreenKeepInView(
      */
     fun onViewportLaidOut(value: Int, maxValue: Int, dispatchRawDelta: (Float) -> Float, cancelRunning: () -> Unit): Int {
         val height = frame?.takeIf { it.isAttached }?.size?.height ?: return 0
-        val previous = lastHeight
-        lastHeight = height
-        if (previous < 0 || previous == height) return 0
+        val previous = claim.take(height) ?: return 0 // The placement pass already took this change, or nothing changed.
         val field = fieldInViewport() ?: return 0
+        return step(field, previous, height, value, maxValue, dispatchRawDelta, cancelRunning)
+    }
+
+    /**
+     * The height step in the placement pass: from a layout modifier directly before the screen's verticalScroll, after it
+     * measured the scroll node (so [maxValue] and [viewportHeight] are this pass's) and before it places it (the scroll node
+     * reads the value in its own placement, so the content is placed at the new offset in this pass). Applies only when the
+     * field's cached place is this pass's: the content wasn't re-measured ([cachedFieldValid]). Otherwise it leaves the
+     * change unclaimed for [onViewportLaidOut]. Returns the applied delta, or 0.
+     */
+    fun onPlacement(viewportHeight: Int, width: Int, value: Int, maxValue: Int, dispatchRawDelta: (Float) -> Float,
+        cancelRunning: () -> Unit): Int {
+        if (claim.peek() == viewportHeight) return 0
+        val child = focused?.takeIf { it.isAttached }
+        if (child == null || !textEditor()) { claim.take(viewportHeight); return 0 } // Nothing focused: nothing to keep.
+        // Content shorter than the viewport can't scroll: its height isn't maxValue + viewport, and nothing can move.
+        if (maxValue == 0 && value == 0) { claim.take(viewportHeight); return 0 }
+        val known = cached
+        if (!cachedFieldValid(known, child, contentHeight = maxValue + viewportHeight, width = width)) return 0
+        val previous = claim.take(viewportHeight) ?: return 0
+        val box = known!!.box
+        val field = Rect(box.left, box.top - labelBand / 2f - value, box.right, box.bottom - value)
+        return step(field, previous, viewportHeight, value, maxValue, dispatchRawDelta, cancelRunning)
+    }
+
+    private fun step(field: Rect, previous: Int, height: Int, value: Int, maxValue: Int, dispatchRawDelta: (Float) -> Float,
+        cancelRunning: () -> Unit): Int {
+        if (previous < 0) return 0
         // In view before the change: only the height changed since the last layout, so its place in the viewport did not.
         if (field.bottom <= 0f || field.top >= previous) return 0
         val kept = keptLine(field, caret.line, firstLine)
@@ -120,6 +165,32 @@ internal class ScreenKeepInView(
         }
     }
 }
+
+/** The viewport height last taken by a height step; a change is taken once, by whichever path comes first. */
+internal class HeightClaim {
+    private var height = -1
+
+    fun peek(): Int = height
+
+    /** The previous height when [now] is a change (-1 for the first layout), or null when it was already taken. */
+    fun take(now: Int): Int? {
+        if (now == height) return null
+        val previous = height
+        height = now
+        return previous
+    }
+}
+
+/** The focused field's place in the scroll content at the last placement, with the content's size then. */
+internal class FieldInContent(val child: Any, val box: Rect, val contentHeight: Int, val width: Int)
+
+/**
+ * Whether [cached] is this pass's place for [child]: the same field, and the content not re-measured (its height, from
+ * this pass's maxValue + viewport, and its width unchanged). A viewport-only change (the keyboard's slide, the pinned block)
+ * doesn't re-measure the content, which takes an unbounded height in the scroller and reads no viewport size in layout.
+ */
+internal fun cachedFieldValid(cached: FieldInContent?, child: Any, contentHeight: Int, width: Int): Boolean =
+    cached != null && cached.child === child && cached.contentHeight == contentHeight && cached.width == width
 
 /** The focused field's caret line, relative to the field's top; null until the field asks for it. */
 internal class CaretMemory {
