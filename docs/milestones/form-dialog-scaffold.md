@@ -93,7 +93,9 @@ app window's bounds, not whether the keyboard covers a node.
     view is held (a notice holding it), a restore claims nothing; the hold is read in the placement, so the pass where it
     releases claims the change and restores in that pass (before, a held pass used up the change and the step after the
     frame restored it up to ~200 ms later, with the dialog's top drawn at the swapped-in scroller's 0 meanwhile;
-    diagnostic runs 46056107630 and 46056124120, API36 notice re-tap).
+    diagnostic runs 46056107630 and 46056124120, API36 notice re-tap). The step after the frame does nothing
+    when the layout it was launched for has been replaced (a slide's last pinned frame's step otherwise ran after the switch
+    to one column and scrolled the scroller no longer in use; diagnostic run 46066588478).
     **Limit: the switch between pinned and one column (#383, after the Play upload).** With an animated keyboard the
     slide's frames apply the full rule from the transition's baseline, so the field moves with the viewport, but the
     first frame after a mode switch can move against the slide: text-first's hide moves the caret line up 56 px in the

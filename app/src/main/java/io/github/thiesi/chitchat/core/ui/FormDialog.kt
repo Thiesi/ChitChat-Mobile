@@ -290,6 +290,9 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         }
         LaunchedEffect(maxHeight, pinned) {
             withFrameNanos { } // After the layout at the new height: the fallback.
+            // #378: a step launched for a layout the layout pass has since replaced does nothing (diag run 46066588478,
+            // API35: the pinned key's step resumed after the swap to one column and scrolled the detached inner state).
+            if (!deferredStepCurrent(focused.layoutKey, focused.layoutPinned, key, pinned)) return@LaunchedEffect
             val (state, target) = heightStep() ?: return@LaunchedEffect
             // Always scrolls, even when the target is already reached: taking the scroll mutex cancels a bring-into-view
             // that would otherwise move the field off the restored place (see above), as main's scrollTo did.
@@ -406,6 +409,10 @@ internal class BodyPlace(val child: Any, val box: androidx.compose.ui.geometry.R
  * where the hold releases.
  */
 internal inline fun claimUnlessHeld(held: Boolean, claim: () -> Boolean): Boolean = !held && claim()
+
+/** #378: whether a deferred step launched for ([key], [pinned]) is still for the layout pass's current layout. */
+internal fun deferredStepCurrent(layoutKey: Any?, layoutPinned: Boolean, key: Any, pinned: Boolean): Boolean =
+    layoutKey == key && layoutPinned == pinned
 
 /** A's step (A3): the caret's line keeps its offset from the viewport's top, clamped inside the viewport. */
 internal fun keepCaretOffset(caretTop: Float, caretBefore: Float, caretHeight: Float, v: Float): Float =

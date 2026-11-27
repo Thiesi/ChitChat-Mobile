@@ -39,6 +39,16 @@ class FormDialogPlacementRestoreTest {
         assertEquals("claimed once", false, claimUnlessHeld(false) { sameFrame.claim(key) })
     }
 
+    @Test fun aDeferredStepForASupersededLayoutDoesNothing() {
+        // API35 reversed (diag run 46066588478): the step launched at the pinned key 440 resumed after the layout pass had
+        // moved on to one column (357): not current, dropped.
+        val pinnedKey = Any(); val columnKey = Any()
+        assertEquals(false, deferredStepCurrent(columnKey, false, pinnedKey, true))
+        assertEquals("the same key, the other mode", false, deferredStepCurrent(pinnedKey, false, pinnedKey, true))
+        assertEquals("before the first layout pass", false, deferredStepCurrent(null, false, pinnedKey, true))
+        assertEquals(true, deferredStepCurrent(pinnedKey, true, pinnedKey, true))
+    }
+
     @Test fun anotherFieldOrContentThatCantScroll() {
         assertEquals("another focused field", false, bodyPlaceValid(place, Any(), pinned = true, maxValue = 3252, viewportHeight = 288))
         assertEquals("no scroll range: nothing can move, any target clamps to 0", true,
