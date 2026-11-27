@@ -1146,7 +1146,14 @@ private fun ScreenContent(content: @Composable () -> Unit) {
                     .verticalScroll(scroll).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Column(Modifier.widthIn(max = 600.dp).fillMaxWidth()) { content() }
+                // The screen's spec is for this scroller only: its verticalScroll resolves the local at its own place,
+                // above. Inside, the incoming spec is provided again (whatever an outer host set, not a library default),
+                // so a text field's own horizontal text scroller and any dialog composed from the content never read it
+                // (#351 fix B diag run 45979027651: the text scroller's x-coordinate requests took the vertical rule).
+                Column(Modifier.widthIn(max = 600.dp).fillMaxWidth()) {
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides fallbackSpec, content = content)
+                }
             }
             // An action absent while the keyboard shows leaves in the same frame the keyboard's inset starts.
             val imeVisible = androidx.compose.foundation.layout.WindowInsets.isImeVisible
