@@ -42,9 +42,16 @@ internal class ScreenKeepInView(
     private var lastHeight = -1
 
     /**
-     * The focused text field in the viewport's coordinates, from its label's top (half the label's line above the focus
-     * bounds: M3's outlined field centres the floating label on its top border, outside the focus bounds) to its bottom.
-     * Null unless a text field is focused.
+     * The focused text field in the viewport's coordinates, from its label's top to its bottom. Null unless a text field
+     * is focused.
+     *
+     * The label's top is half the label's line height above the focus bounds. Derived from M3 1.4.0's bytecode
+     * (`OutlinedTextFieldKt$OutlinedTextField$3`): the String overload passes BasicTextField the caller's modifier, then
+     * `semantics(mergeDescendants = true).padding(top = minimizedLabelHalfHeight())`, and BasicTextField's focus target
+     * comes after that. So onFocusedBoundsChanged reports bounds that start at the outlined border, below the padding.
+     * The floating label (bodySmall) is centred on that border, half of it inside the padding. minimizedLabelHalfHeight
+     * is half of bodySmall's line height, which [labelBand] holds. The caller's tagged semantics node, measured by the
+     * tests, starts above the padding, at the label's top.
      */
     fun fieldInViewport(): Rect? {
         if (!textEditor()) return null
