@@ -257,6 +257,14 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
     // the Unknown summary (whose Close also dismisses its notice). Cancel, Close and Back still close it; while sending,
     // close is refused.
     // A shown notice holds the view until the person's next interaction (PL, TL): FormDialog's hook, scroll only.
+    // DIAGNOSTIC (never merged), #378 failure 1 (a): when the composed hold changes.
+    val diagHeld = state.noticeHeld && notice != null
+    androidx.compose.runtime.SideEffect {
+        if (io.github.thiesi.chitchat.core.ui.KeepProbe.lastHeldUi != diagHeld) {
+            io.github.thiesi.chitchat.core.ui.KeepProbe.lastHeldUi = diagHeld
+            io.github.thiesi.chitchat.core.ui.KeepProbe.log("HOLDUI held=$diagHeld noticeHeld=${state.noticeHeld} notice=${notice != null}")
+        }
+    }
     FormDialog(onDismissRequest = { if (!sending) reports.close() }, dismissOnOutsideTap = false,
         holdFocusedInView = state.noticeHeld && notice != null,
         modifier = Modifier.lanternDialogEdge().semantics { paneTitle = title }.testTag("report_dialog"),
@@ -438,7 +446,9 @@ private fun Form(reports: ReportViewModel, state: ReportState, sending: Boolean)
         caret?.publish(area, result.getCursorRect(end), lastLine = result.getLineForOffset(end) == result.lineCount - 1)
     }
     CompositionLocalProvider(androidx.compose.foundation.text.selection.LocalTextSelectionColors provides colors.textSelectionColors) {
-        androidx.compose.foundation.text.BasicTextField(field, { field = it; reports.edit(it.text) },
+        androidx.compose.foundation.text.BasicTextField(field, {
+                if (it.text != field.text) io.github.thiesi.chitchat.core.ui.KeepProbe.log("TEXT commit len=${it.text.length} ime=${io.github.thiesi.chitchat.core.ui.KeepProbe.lastIme}")
+                field = it; reports.edit(it.text) },
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).bringIntoViewRequester(fieldInView).onFocusChanged { focus ->
                 if (focus.isFocused && !hadFocus) reports.fieldFocused()
                 hadFocus = focus.isFocused
