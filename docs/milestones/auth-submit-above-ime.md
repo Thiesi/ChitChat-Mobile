@@ -45,9 +45,11 @@ Where it applies:
 - **Focus moves in a steady view** (Next, a tap): Compose's animation stays, landing by the same rule through the
   screen's `LocalBringIntoViewSpec`. Other requests keep the default behaviour.
 - **An action absent while the keyboard shows** (the Create block and the reset action block, `hideWhileImeVisible`)
-  leaves in the same frame the keyboard's inset starts: `ScreenContent` reads `isImeVisible` itself. Clearing it from
-  the action's own disposal landed a frame late, and for that frame the inset and the block both took the viewport.
-  It returns as before. Sign in and the reset MFA button stay pinned always.
+  leaves in the same frame the keyboard's inset starts: `ScreenContent` reads `isImeVisible` itself, and the row also
+  collapses in layout (`collapsedWhile`: neither measured nor placed, so no semantics) once the inset is above 0, the
+  pass `imePadding` reads it in. With animations off the inset jumps in one frame, after composition ran. Clearing it
+  from the action's own disposal landed a frame late, and for that frame the inset and the block both took the
+  viewport. It returns as before. Sign in and the reset MFA button stay pinned always.
 
 Only for a focused text field (the view's `onCheckIsTextEditor()`: a text input session is active). A focused button or
 accessibility focus never triggers it, and with nothing focused a height change doesn't scroll. A field the person

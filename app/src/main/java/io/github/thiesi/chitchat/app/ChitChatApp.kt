@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.ui.draw.drawBehind
 
 import androidx.compose.ui.layout.boundsInWindow
+import io.github.thiesi.chitchat.core.ui.collapsedWhile
 
 import androidx.compose.ui.layout.onGloballyPositioned
 
@@ -1149,8 +1150,12 @@ private fun ScreenContent(content: @Composable () -> Unit) {
             }
             // An action absent while the keyboard shows leaves in the same frame the keyboard's inset starts.
             val imeVisible = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+            // With animations off the inset jumps in one frame: imePadding reads it in layout, after this composition
+            // ran, so the row also collapses in layout once the inset is above 0 (the same pass), never one frame late
+            // (#351 fix B diag run 45974562935: a 27px viewport for one frame with the block still there).
+            val imeInset = WindowInsets.ime
             slot.content?.takeUnless { slot.hideWhileImeVisible && imeVisible }?.let { pinned ->
-                Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).drawBehind {
+                Box(Modifier.collapsedWhile { slot.hideWhileImeVisible && imeInset.getBottom(this) > 0 }.fillMaxWidth().background(MaterialTheme.colorScheme.background).drawBehind {
                     if (scroll.canScrollForward) drawLine(line, androidx.compose.ui.geometry.Offset(0f, 0.5f),
                         androidx.compose.ui.geometry.Offset(size.width, 0.5f), 1.dp.toPx())
                 }.padding(16.dp).testTag("pinned_action"), contentAlignment = Alignment.Center) {

@@ -9,7 +9,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Density
 
 /**
  * A screen's pinned bottom action (#275): a form's primary action that stays visible above the keyboard, outside the
@@ -35,6 +38,18 @@ class PinnedActionSlot {
 }
 
 val LocalPinnedActions = staticCompositionLocalOf<PinnedActionSlot?> { null }
+
+/**
+ * Takes no space while [collapsed] (read in layout, so state it reads relayouts the same pass) is true, and the content is
+ * neither measured nor placed: it draws nothing, takes no input and leaves the semantics tree (TL, #351 fix B: a placed
+ * 0x0 node could leave a zero-size Create button for accessibility). Used by the screen host for an action absent while
+ * the keyboard shows (see [PinnedActionSlot.hideWhileImeVisible]).
+ */
+fun Modifier.collapsedWhile(collapsed: Density.() -> Boolean): Modifier = layout { measurable, constraints ->
+    if (collapsed()) return@layout layout(0, 0) { }
+    val placeable = measurable.measure(constraints)
+    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+}
 
 /**
  * Places [content] in the host's pinned area while composed, or in place when there's no host. With
