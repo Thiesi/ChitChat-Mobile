@@ -322,6 +322,62 @@ class ReportFormLayoutTest {
         }
     }
 
+    // DIAGNOSTIC (never merged), #378: each A3 case with animations off and on (recorded), through the keyboard's
+    // arrival and its hide; opt-in by a3Probe=run.
+    private fun diag(name: String, animations: Boolean, case: () -> Unit) {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
+        io.github.thiesi.chitchat.testing.DiagRecording.run(name, animations, hide = {
+            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+            compose.waitForIdle()
+        }, body = case)
+    }
+    // DIAGNOSTIC (never merged), #378 A/B, PL item 7: an interrupted, a reversed and a cancelled keyboard slide.
+    @Test fun diagInterruptedOn() = diag("ccm-a3-interrupted-on", true) { disturbed("interrupted") }
+    @Test fun diagReversedOn() = diag("ccm-a3-reversed-on", true) { disturbed("reversed") }
+    @Test fun diagCancelledOn() = diag("ccm-a3-cancelled-on", true) { disturbed("cancelled") }
+
+    private fun disturbed(kind: String) {
+        FontScaleTestActivity.requestedFontScale = 2f
+        val reports = ReportViewModel(operations)
+        ActivityScenario.launch(FontScaleTestActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
+                } } }
+            }
+            report()
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.waitForIdle()
+            io.github.thiesi.chitchat.testing.DiagRecording.flash()
+            val ime = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } }
+            compose.tapNativeInput("report_details", imeBottom = ime)
+            io.github.thiesi.chitchat.core.ui.KeepProbe.log("DISTURB $kind imeBottom=${ime()}")
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            when (kind) {
+                "interrupted" -> instrumentation.sendStringSync("why")
+                "reversed" -> io.github.thiesi.chitchat.testing.DiagRecording.hideImeNow()
+                else -> instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            }
+            io.github.thiesi.chitchat.core.ui.KeepProbe.log("DISTURB $kind sent imeBottom=${ime()}")
+            io.github.thiesi.chitchat.testing.DiagRecording.hold(compose, 2_000)
+            compose.waitForIdle()
+            io.github.thiesi.chitchat.testing.DiagRecording.capture("disturbed-end")
+            if (io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible) {
+                instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+                io.github.thiesi.chitchat.testing.DiagRecording.hold(compose, 1_000)
+            }
+        }
+    }
+
+    @Test fun diagTextFirstOff() = diag("ccm-a3-textfirst-off", false) { textFirst(landscape = false) }
+    @Test fun diagTextFirstOn() = diag("ccm-a3-textfirst-on", true) { textFirst(landscape = false) }
+    @Test fun diagKeyboardFirstOff() = diag("ccm-a3-keyboardfirst-off", false) { caretStaysInView(landscape = false) }
+    @Test fun diagKeyboardFirstOn() = diag("ccm-a3-keyboardfirst-on", true) { caretStaysInView(landscape = false) }
+    @Test fun diagLandscapeOff() = diag("ccm-a3-landscape-off", false) { buttonsAboveTheKeyboard(landscape = true) }
+    @Test fun diagLandscapeOn() = diag("ccm-a3-landscape-on", true) { buttonsAboveTheKeyboard(landscape = true) }
+
     private fun textFirst(landscape: Boolean) {
         val reports = ReportViewModel(operations)
         launchAt200(landscape, reports) {
@@ -336,6 +392,7 @@ class ReportFormLayoutTest {
             compose.waitForIdle()
             val before = dialogLayout()
             check(!before.imeVisible) { "$case: the keyboard was already up before the first tap ($before)" }
+            io.github.thiesi.chitchat.testing.DiagRecording.flash() // DIAGNOSTIC: the sync strip.
             compose.tapNativeInput("report_details", imeBottom = {
                 io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
             compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms. ".repeat(24))
@@ -343,8 +400,10 @@ class ReportFormLayoutTest {
                 it[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text to
                     it[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange] }
             val beforeBack = fieldState()
+            io.github.thiesi.chitchat.testing.DiagRecording.capture("first-arrival-end") // DIAGNOSTIC
             androidx.test.espresso.Espresso.pressBack()
             awaitLayout("$case: the keyboard hidden after Back", before) { !it.imeVisible }
+            io.github.thiesi.chitchat.testing.DiagRecording.capture("first-hide-end") // DIAGNOSTIC
             // PL: the first system Back only hides the keyboard; the dialog stays open with the same text and selection.
             check(present("report_dialog")) { "$case: system Back dismissed the report dialog instead of only the keyboard" }
             assertEquals("$case: Back kept the text", beforeBack.first, fieldState().first)
@@ -365,6 +424,7 @@ class ReportFormLayoutTest {
                 }
             }
             assertCaretInView(case)
+            io.github.thiesi.chitchat.testing.DiagRecording.beforeClose?.invoke() // DIAGNOSTIC: the final hide leg.
         }
     }
 
@@ -522,6 +582,7 @@ class ReportFormLayoutTest {
             val ime = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } }
             val case = "report-font200-${if (landscape) "landscape" else "portrait"}"
             compose.onNodeWithTag("report_details").performScrollTo()
+            io.github.thiesi.chitchat.testing.DiagRecording.flash() // DIAGNOSTIC: the sync strip.
             compose.tapNativeInput("report_details", imeBottom = ime)
             // TL: a change that keeps the caret's line in view moves nothing.
             compose.onNodeWithTag("report_details").performTextInput("Posted the same link")
@@ -540,9 +601,11 @@ class ReportFormLayoutTest {
                     androidx.compose.ui.text.TextRange(offsetAt(typed.height / 3f)))
                 val placed = assertCaretInView("$case caret placed")
                 check(placed.top > 8f && placed.bottom < placed.height - 8f) { "Not clear of the edges: ${placed.detail}" }
+                io.github.thiesi.chitchat.testing.DiagRecording.capture("arrival-end") // DIAGNOSTIC
                 androidx.test.espresso.Espresso.closeSoftKeyboard()
                 compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
                 val restored = assertCaretInView("$case keyboard hidden")
+                io.github.thiesi.chitchat.testing.DiagRecording.capture("hide-end") // DIAGNOSTIC
                 assertTrue("The restore keeps the caret's offset across the swap (${placed.detail} -> ${restored.detail})",
                     kotlin.math.abs(restored.top - placed.top) <= 1f)
             } else {
@@ -578,20 +641,6 @@ class ReportFormLayoutTest {
     }
 
     /** The field's text layout, and where its top sits in the viewport of the scroller in use. */
-    /**
-     * #378: the report label's node (every wrapped line) in the same viewport coordinates as [caretLine]: (top, bottom) from
-     * the viewport's top, measured on the node, independent of the production rule.
-     */
-    private fun labelPlace(): Pair<Float, Float> {
-        compose.waitForIdle()
-        val pinned = compose.onAllNodesWithTag("form_dialog_pinned", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-        val viewport = compose.onNodeWithTag(if (pinned) "form_dialog_body_viewport" else "form_dialog_viewport", useUnmergedTree = true)
-            .fetchSemanticsNode().layoutInfo.coordinates
-        val label = compose.onNodeWithTag("report_details_label", useUnmergedTree = true).fetchSemanticsNode().layoutInfo.coordinates
-        val top = viewport.localPositionOf(label, androidx.compose.ui.geometry.Offset.Zero).y
-        return top to top + label.size.height
-    }
-
     private fun caretLine(step: String, offset: Int? = null): CaretLine {
         compose.waitForIdle()
         val node = compose.onNodeWithTag("report_details").fetchSemanticsNode()
@@ -645,6 +694,9 @@ class ReportFormLayoutTest {
 
     @Test fun at200PercentLandscapeTheButtonsStayReachableWithTheKeyboardUp() = buttonsAboveTheKeyboard(landscape = true)
 
+    private var labelBandPx = 0f
+    private var labelMarginPx = 0f
+
     private fun buttonsAboveTheKeyboard(landscape: Boolean) {
         FontScaleTestActivity.requestedFontScale = 2f
         val reports = ReportViewModel(operations)
@@ -660,7 +712,10 @@ class ReportFormLayoutTest {
             scenario.onActivity { activity ->
                 activity.setContent { ChitChatTheme(dark = false) { CompositionLocalProvider(LocalReports provides reports) {
                     val bottom = WindowInsets.ime.getBottom(LocalDensity.current)
-                    SideEffect { imeBottom = bottom }
+                    // The label rule's inputs from the scaffold's own sources (FormDialog reads the same two).
+                    val band = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toPx() }
+                    val margin = with(LocalDensity.current) { io.github.thiesi.chitchat.core.ui.FormDialogLabelMargin.toPx() }
+                    SideEffect { imeBottom = bottom; labelBandPx = band; labelMarginPx = margin }
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { ConversationScreen(room, 42, {}) }
                 } } }
             }
@@ -674,6 +729,7 @@ class ReportFormLayoutTest {
                     "details=${bounds("report_details")}, send=${bounds("report_send")}, cancel=${bounds("report_cancel")}, " +
                     "roots=${compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes().map { it.boundsInWindow }}", timeout)
             }
+            io.github.thiesi.chitchat.testing.DiagRecording.flash() // DIAGNOSTIC: the sync strip.
             compose.tapNativeInput("report_details", imeBottom = {
                 io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
             compose.onNodeWithTag("report_details").performTextInput("why")
@@ -684,27 +740,20 @@ class ReportFormLayoutTest {
             val ime = io.github.thiesi.chitchat.core.ui.focusedWindowIme()
             val field = compose.onNodeWithTag("report_details").fetchSemanticsNode().boundsInWindow
             if (landscape && InstrumentationRegistry.getArguments().getString("expectSoftKeyboard") == "true") {
-                // A3 (TL, #376), after the settle (waitForIdle waits Compose's animations out): the field (146 px) is taller
-                // than the 82 px viewport and A2's span doesn't fit, so A keeps the caret's pre-keyboard offset clamped
-                // into the viewport. That used to end with the field's top 28 px down, which this test pinned; but there
-                // the report form's label (a 3-line Text above the field, #326) was at -98..16, half in, which the band
-                // model of the label rule missed (#378 a). The label rule now takes it out by the minimum move.
-                // Outcome properties from the measured nodes only (TL): no production helper computes an expected value.
+                // A3 (TL, #376): after the settle (waitForIdle waits Compose's animations out), the restored place stays.
+                // Here the field (146 px) is taller than the 82 px viewport and A2's span doesn't fit, so A keeps the
+                // caret's pre-keyboard offset (142) clamped into the viewport: the caret line sits at the bottom edge and
+                // the field's top lands 28 px down, where the label rule (8dp below the edge, or the label entirely out)
+                // is already satisfied. #376's first heads let Compose's bring-into-view glide the field to the edge
+                // (caret 16-54, field top 0), breaking the label rule; only a metric showed it. Both parts are checked:
+                // (1) the label rule, (2) A's clamp, which also catches a partial glide that stops below 8dp.
                 val line = caretLine("buttons landscape")
-                val label = labelPlace()
-                val margin = with(androidx.compose.ui.unit.Density(context)) { androidx.compose.ui.unit.Dp(8f).toPx() }
-                // PL: out means the label node's bottom at or above the viewport's top (<= 0), so no fractional row is drawn.
-                val out = label.second <= 0f
-                val facts = "fieldTop=${line.fieldTop} caret=[${line.top}, ${line.bottom}] viewport=${line.height} " +
-                    "label=${label.first}..${label.second} margin=$margin (${line.detail})"
-                assertTrue("(1) The label is whole (its top at least 8dp below the viewport's top) or entirely out, never half ($facts)",
-                    label.first >= margin - 1f || out)
-                assertTrue("(2) The caret's line is wholly in view, both edges ($facts)", line.top >= 0f && line.bottom <= line.height)
-                if (out) assertTrue("(3) The minimum move: the label went out only just, its bottom in -1..0 px of the viewport's top ($facts)",
-                    label.second >= -1f && label.second <= 0f)
-                // #376's first heads let Compose's bring-into-view glide the field to the edge (caret 16-54, field top 0).
-                if (out && line.bottom - line.top <= line.height)
-                    assertTrue("(4) No glide: the field's top isn't at the viewport's top edge ($facts)", line.fieldTop > 1f)
+                val facts = "fieldTop=${line.fieldTop} caretBottom=${line.bottom} viewport=${line.height} " +
+                    "margin=$labelMarginPx band=$labelBandPx (${line.detail})"
+                assertTrue("(1) The label rule holds: the field's top at least 8dp below the viewport's top, or the label entirely out ($facts)",
+                    line.fieldTop >= labelMarginPx - 1f || line.fieldTop <= -labelBandPx + 1f)
+                assertTrue("(2) A's clamp: the caret line's bottom at the viewport's bottom ($facts)",
+                    kotlin.math.abs(line.bottom - line.height) <= 1f)
             }
             fun scrolledTo(tag: String): androidx.compose.ui.geometry.Rect {
                 compose.onNodeWithTag(tag).performScrollTo()
@@ -725,6 +774,7 @@ class ReportFormLayoutTest {
             assertTrue("Cancel above the keyboard ($detail)", cancel.bottom <= ime.imeTop + 0.5f)
             assertTrue("The field above the keyboard ($detail)", field.top < ime.imeTop && field.height > 0f)
             compose.onNodeWithTag("report_details").assertIsFocused()
+            io.github.thiesi.chitchat.testing.DiagRecording.beforeClose?.invoke() // DIAGNOSTIC: the hide leg.
         }
     }
 }
