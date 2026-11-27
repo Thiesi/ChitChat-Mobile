@@ -85,7 +85,13 @@ app window's bounds, not whether the keyboard covers a node.
     animations off a change is one unsettled placement at the old inset, then the settled one, so the baseline is the
     record before the change, as before. A field change or no earlier record releases; an edit during a transition
     re-baselines; with no animation reported (API < 30) it never freezes. `KeyboardTransitionBaselineTest` (JVM) replays
-    the logged sequences. Before A3, a mode switch drew one frame at the swapped-in
+    the logged sequences.
+    **While the slide runs, only the floors (#378 c, PL, 2026-11-27):** the caret's line in view, and the label rule
+    against the caret's line (never half). Keeping the field whole and A2's span apply at the transition's final layout,
+    which always gets its restore, even when the slide's last running frame already had the same height. So the slide's
+    frames hold the place from before it, and the final move goes one way, in the slide's direction, rather than the
+    field moving out during the slide and back at its end; a reversed or cancelled slide also ends on the full rule.
+    With animations off, the single change is the final layout. Before A3, a mode switch drew one frame at the swapped-in
     scroller's old value (often the top) first (37 of 40 text-first and 33 of 40 keyboard-first repetitions; diagnostic
     runs 45903840557 and 45903834879). A target outside the scroll range is left to the step after the frame, which stays
     as the fallback and keeps the clamp; later callbacks for the same change never re-apply it. A scroll already in progress isn't waited for, it's cancelled: Compose
