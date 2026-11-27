@@ -86,8 +86,10 @@ app window's bounds, not whether the keyboard covers a node.
     record before the change, as before. A field change or no earlier record releases; an edit during a transition
     re-baselines; with no animation reported (API < 30) it never freezes. `KeyboardTransitionBaselineTest` (JVM) replays
     the logged sequences. A selection change since the field's place was recorded (a tap that moves the caret in the
-    frame the keyboard starts) restores from the live caret and moves the baseline's caret by the same distance, so the
-    step after the frame finds nothing more to move (diagnostic run 46056107630, API36 text-first: 3080, then 3004). While the
+    frame the keyboard starts) restores from the live caret, re-anchoring the baseline's caret at the caret's new place in the
+    field, so the step after the frame finds nothing more to move; an edit during a transition re-anchors the frozen
+    baseline the same way (its field offset kept), rather than taking the latest record, which could be a clamped
+    intermediate place (diagnostic run 46066588478: 3088 for 3080) (diagnostic run 46056107630, API36 text-first: 3080, then 3004). While the
     view is held (a notice holding it), a restore claims nothing; the hold is read in the placement, so the pass where it
     releases claims the change and restores in that pass (before, a held pass used up the change and the step after the
     frame restored it up to ~200 ms later, with the dialog's top drawn at the swapped-in scroller's 0 meanwhile;

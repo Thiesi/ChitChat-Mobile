@@ -258,10 +258,9 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             var liveCaret = caret
             if (place.caretVersion != focused.caret.version) {
                 val live = focused.innerContent?.takeIf { it.isAttached }?.let { focused.caretIn(it, place.box) }
-                val dy = caretShift(place.caret, live)
                 if (live != null) {
                     liveCaret = live.translate(0f, shift)
-                    if (dy != 0f) focused.shiftBaselineCaret(key, child, dy)
+                    if (caretShift(place.caret, live) != 0f) focused.reanchorBaselineCaret(key, child, live.top - place.box.top)
                     focused.refreshBodyCaret(live)
                 }
             }
@@ -411,6 +410,9 @@ internal inline fun claimUnlessHeld(held: Boolean, claim: () -> Boolean): Boolea
 /** A's step (A3): the caret's line keeps its offset from the viewport's top, clamped inside the viewport. */
 internal fun keepCaretOffset(caretTop: Float, caretBefore: Float, caretHeight: Float, v: Float): Float =
     caretTop - caretBefore.coerceIn(0f, (v - caretHeight).coerceAtLeast(0f))
+
+/** #378 failure 2: a baseline's caret offset re-anchored: its field offset plus the caret's current position in the field. */
+internal fun reanchoredCaret(field: Float, caretInField: Float?): Float? = caretInField?.let { field + it }
 
 /** #378 finding 2: how far the caret moved in the field since its place was cached (0 when either is unknown). */
 internal fun caretShift(cached: androidx.compose.ui.geometry.Rect?, live: androidx.compose.ui.geometry.Rect?): Float =
@@ -691,7 +693,17 @@ private class FocusedChild {
     fun observeKeyboard(ime: Int, source: Int, target: Int, key: Any) = keyboard.observe(ime, source, target, key) { last }
 
     /** A text or selection change during a transition: the place now is the transition's baseline. */
-    fun rebaselineKeyboard() = keyboard.rebaseline { last }
+    fun rebaselineKeyboard() {
+        // #378 failure 2: re-anchored, not replaced. Taking the latest record made a clamped intermediate place the new
+        // baseline (diag run 46066588478, API36 text-first: caret offset 98 instead of 106, then 3088 and 2952 for 3080
+        // and 2944). The baseline keeps its field offset and takes the caret's current position in the field, from the
+        // live record (caret - field: both measured in the same viewport frame, so the scroll cancels). Only while frozen.
+        val now = last ?: return
+        keyboard.reanchor { held ->
+            if (held.child !== now.child) now
+            else Seen(held.child, held.field, reanchoredCaret(held.field, now.caret?.let { it - now.field }), held.visible)
+        }
+    }
 
     /** A new height or mode change was claimed: its baseline is read afresh (see [before]). */
     fun newChange() = baseline.reset()
@@ -724,14 +736,15 @@ private class FocusedChild {
     }
 
     /**
-     * #378 finding 2: the baseline [before] returns for [key] with its caret moved by [dy] (a selection change since it was
-     * recorded): the transition's frozen baseline when one applies, else this change's.
+     * #378 finding 2: the baseline [before] returns for [key] with its caret re-anchored at [caretInField] (a selection
+     * change since it was recorded): the transition's frozen baseline when one applies, else this change's. Setting, not
+     * shifting, so it agrees with the caret effect's re-anchor in either order.
      */
-    fun shiftBaselineCaret(key: Any, child: LayoutCoordinates, dy: Float) {
+    fun reanchorBaselineCaret(key: Any, child: LayoutCoordinates, caretInField: Float) {
         val seen = before(key, child) ?: return
-        val caretOffset = seen.caret ?: return
-        val shifted = Seen(seen.child, seen.field, caretOffset + dy, seen.visible)
-        if (keyboard.applies(key)) keyboard.replace(shifted) else baseline.set(key, shifted)
+        if (seen.caret == null) return
+        val anchored = Seen(seen.child, seen.field, reanchoredCaret(seen.field, caretInField), seen.visible)
+        if (keyboard.applies(key)) keyboard.replace(anchored) else baseline.set(key, anchored)
     }
 
     private val baseline = FrozenPerChange<Seen?>()
@@ -796,7 +809,8 @@ internal class KeyboardTransitionBaseline<T : Any> {
 
     fun release() { holding = false; held = null; finalKey = null }
 
-    fun rebaseline(latest: () -> T?) { if (holding) held = latest() }
+    /** #378 failure 2: an edit during a transition re-anchors the frozen baseline (only while frozen). */
+    fun reanchor(transform: (T) -> T) { if (holding) held = held?.let(transform) }
 
     /** #378 finding 2: the baseline with a correction (the caret moved in the field since it was recorded). */
     fun replace(value: T) { if (held != null) held = value }

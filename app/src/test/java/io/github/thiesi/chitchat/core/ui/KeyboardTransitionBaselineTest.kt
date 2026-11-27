@@ -82,17 +82,17 @@ class KeyboardTransitionBaselineTest {
         }
     }
 
-    @Test fun anEditDuringATransitionReBaselines() {
-        val t = KeyboardTransitionBaseline<String>()
-        t.observe(0, 0, 259, 592) { "pre" }
-        t.observe(100, 0, 259, 500) { "r0" }
-        t.rebaseline { "edited" }
-        assertEquals("edited", t.baseline())
-        t.observe(259, 259, 259, 357) { "r1" }
-        assertEquals("edited", t.baseline())
-        // Outside a transition an edit changes nothing here (today's path reads its own records).
-        t.observe(259, 259, 259, 358) { "r2" }
-        t.rebaseline { "again" }
+    @Test fun anEditDuringATransitionReAnchorsOnlyWhileFrozen() {
+        // The edit re-anchors the frozen baseline (not replaced by the latest record); outside a freeze nothing changes.
+        val t = KeyboardTransitionBaseline<Float>()
+        t.observe(0, 0, 259, 592) { 182f }
+        t.reanchor { 106f }
+        assertEquals(106f, t.baseline())
+        t.observe(259, 259, 259, 357) { 0f }
+        t.reanchor { -1f }
+        assertEquals("settled: not frozen, unchanged", 106f, t.baseline())
+        t.observe(259, 259, 259, 358) { 0f }
+        t.reanchor { -1f }
         assertNull(t.baseline())
     }
 
@@ -115,6 +115,34 @@ class KeyboardTransitionBaselineTest {
         assertEquals("the placement restore", 3080f, keepCaretOffset(live.top + shift, t.baseline()!!, h, v))
         assertEquals("the after-a-frame step finds nothing to move", 3080f, keepCaretOffset(live.top + shift, t.baseline()!!, h, v))
         assertEquals("no caret known: no shift", 0f, caretShift(null, live))
+    }
+
+    @Test fun theCaretEffectReAnchorsInsteadOfTakingTheClampedRecord() {
+        // Failure 2, diag run 46066588478 (API36 text-first's second arrival): the frozen baseline had the field at -1620 and
+        // the caret 182 px down the viewport (3126 in the body); the tap moved the caret to 3050; the show's first frame
+        // (136 px) clamped the place, and the record then had the field at -1628 and the caret at 98.
+        val heldField = -1620f; val heldCaret = 182f
+        val liveInField = 3050f - 1324f                  // the caret's position in the field, from the live caret
+        val clampedField = -1628f; val clampedCaret = 98f // the record after the clamped frame
+        // The refresh re-anchors: 106. The caret effect re-anchors from the clamped record: still 106 (the scroll cancels).
+        val refreshed = reanchoredCaret(heldField, liveInField)!!
+        val effect = reanchoredCaret(heldField, clampedCaret - clampedField)!!
+        assertEquals(106f, refreshed)
+        assertEquals(106f, effect)
+        // Either order gives 106 (both set, neither shifts).
+        assertEquals(106f, reanchoredCaret(heldField, liveInField))
+        // The ends: one column (the body 136 px down, viewport 358) 3080, then pinned (288) 2944, as with animations off.
+        assertEquals(3080f, keepCaretOffset(3050f + 136f, effect, 38f, 358f))
+        assertEquals(2944f, keepCaretOffset(3050f, effect, 38f, 288f))
+        // Taking the clamped record as the baseline (the bug): 3088 and 2952.
+        assertEquals(3088f, keepCaretOffset(3050f + 136f, clampedCaret, 38f, 358f))
+        assertEquals(heldCaret, reanchoredCaret(heldField, 3126f - 1324f))
+    }
+
+    @Test fun aNewLineMidSlideTakesTheNewCaretPosition() {
+        // Enter mid-slide: the caret moves one line (38 px) down in the field; the re-anchor takes the new position.
+        assertEquals(144f, reanchoredCaret(-1620f, 3050f - 1324f + 38f))
+        assertNull("no caret known", reanchoredCaret(-1620f, null))
     }
 
     @Test fun releaseIsTodaysPath() {
