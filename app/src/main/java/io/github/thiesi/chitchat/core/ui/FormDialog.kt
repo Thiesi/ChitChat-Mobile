@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * The width a platform dialog window is first laid out at (AOSP's `config_prefDialogWidth`): a WRAP_CONTENT dialog keeps
@@ -138,13 +139,26 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         // The hook (PL and TL, 2026-11-22): while the caller holds an in-form notice, a layout change doesn't scroll back to
         // the focused field; the notice keeps the view until the person's next interaction. Off by default: unchanged.
         val held by androidx.compose.runtime.rememberUpdatedState(holdFocusedInView)
-        LaunchedEffect(maxHeight, pinned) {
-            withFrameNanos { } // After the layout at the new height.
-            if (held) return@LaunchedEffect
-            val child = focused.coordinates?.takeIf { it.isAttached } ?: return@LaunchedEffect
+        // A3 (TL, 2026-11-26): the height step runs where the new layout is first known, in the outer scroller content's
+        // position callback, after the layout pass and before the frame is drawn: each scroller's new maxValue is already
+        // measured there, so a synchronous delta lands the restore in the first frame drawn at the new layout, where the
+        // after-a-frame step alone drew one frame at the swapped-in scroller's old value (often 0) first. Once per key:
+        // later callbacks for the same key (a scroll fires them too) never re-apply it against the person's own scrolling.
+        // A target outside 0..maxValue is left to the after-a-frame step, which keeps A's clamp. A scroll in progress
+        // isn't waited for, it's cancelled: in the same layout pass Compose's own bring-into-view starts one on the
+        // swapped-in scroller, which would align a field taller than the viewport to its top, against the label rule
+        // (#376's landscape probe: the field glided 28 px to the top edge after the restore). Waiting for it brought back
+        // the frame at the old value; letting it run moves the field off the restored place. Main cancelled it implicitly,
+        // through the after-a-frame step's scrollTo. Now both sites take the scroll mutex: right after an applied delta,
+        // in this callback, and again at the after-a-frame step, which also covers one started after this callback in the
+        // same pass (children's position callbacks run after this one) and stays the fallback for a key no callback came
+        // for.
+        fun heightStep(): Pair<androidx.compose.foundation.ScrollState, Int>? {
+            if (held) return null
+            val child = focused.coordinates?.takeIf { it.isAttached } ?: return null
             val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
                 else Triple(outer, focused.outerContent, focused.outerViewport)
-            val inside = content?.takeIf { it.isAttached } ?: return@LaunchedEffect
+            val inside = content?.takeIf { it.isAttached } ?: return null
             val box = inside.localBoundingBoxOf(child, clipBounds = false)
             val caret = focused.caretIn(inside, box)
             val before = focused.before(key, child)
@@ -185,8 +199,36 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 target = lastLineSpan(target, box, caret, trailing, v, margin)
                 target = labelRule(target, box, keptRange(box, caret, trailing, v, margin), v, margin, labelBand)
             }
-            val next = target.roundToInt().coerceIn(0, state.maxValue)
-            if (next != state.value) state.scrollTo(next)
+            return state to target.roundToInt()
+        }
+        val sameFrame = remember { FormDialogSameFrameRestore() }
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        fun restoreInLayoutPass() {
+            // The layout pass's key and mode, first: this outer callback runs before the children's, so a record() later
+            // in the same pass is attributed to this layout and measured against its frame, whatever key the calling
+            // lambda captured (#376: an old-key record after the same-frame scroll, against the inner frame's 3540 px).
+            focused.layoutKey = key
+            focused.layoutPinned = pinned
+            if (!sameFrame.claim(key)) return
+            // A new change: its baseline is read afresh, here, before heightStep()'s held check, so a held change resets
+            // it too (a notice holding the view while the keyboard hides, then the person's tap: K, J, K). Assumes every
+            // height or mode change relays out the outer scroller, so this callback comes for each one.
+            focused.newChange()
+            val (state, target) = heightStep() ?: return
+            // After an applied delta, a zero-distance mutation takes the scroll mutex here, undispatched, so the running
+            // bring-into-view is cancelled inside this callback and can't move the field a frame (see above).
+            applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
+                scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                    state.scroll(androidx.compose.foundation.MutatePriority.Default) { }
+                }
+            }
+        }
+        LaunchedEffect(maxHeight, pinned) {
+            withFrameNanos { } // After the layout at the new height: the fallback.
+            val (state, target) = heightStep() ?: return@LaunchedEffect
+            // Always scrolls, even when the target is already reached: taking the scroll mutex cancels a bring-into-view
+            // that would otherwise move the field off the restored place (see above), as main's scrollTo did.
+            fallbackScroll(target, state.maxValue, state::scrollTo)
         }
         // A text or selection change (any input path: the keyboard, a paste, or an accessibility service setting the text
         // through semantics, which doesn't bring the caret into view by itself) that put the caret's line outside the view
@@ -219,7 +261,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             .onSizeChanged { focused.outerViewport = it.height }
             .onGloballyPositioned { focused.outerFrame = it }
             .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline).verticalScroll(outer)
-            .onGloballyPositioned { focused.outerContent = it }
+            .onGloballyPositioned { focused.outerContent = it; restoreInLayoutPass() }
             .testTag(if (pinned) "form_dialog_pinned" else "form_dialog_column").padding(24.dp)) {
             Box(Modifier.padding(bottom = 16.dp).onSizeChanged { titleHeight = it.height }) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.titleContentColor,
@@ -251,6 +293,40 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             }
         }
     }
+}
+
+/** A3: claims each layout key once, so only the first position callback after a height or mode change restores. */
+internal class FormDialogSameFrameRestore {
+    private var claimed: Any? = null
+
+    /** True the first time for [key] (a change back to an earlier key is a new change); false for later callbacks. */
+    fun claim(key: Any): Boolean {
+        if (claimed == key) return false
+        claimed = key
+        return true
+    }
+}
+
+/**
+ * A3: the synchronous delta for the same-frame restore, or null: no move needed, or a target outside 0..[maxValue], left
+ * to the after-a-frame step (A's clamp applies there, never a clipped value here). A scroll in progress isn't a reason
+ * to wait (see the call site).
+ */
+internal fun sameFrameDelta(target: Int, value: Int, maxValue: Int): Float? = when {
+    target !in 0..maxValue || target == value -> null
+    else -> (target - value).toFloat()
+}
+
+/** A3: applies [delta] and then [cancelRunning], only when there is a delta (no move, no cancel: the fallback acts). */
+internal inline fun applySameFrame(delta: Float?, apply: (Float) -> Unit, cancelRunning: () -> Unit) {
+    if (delta == null) return
+    apply(delta)
+    cancelRunning()
+}
+
+/** A3: the after-a-frame step always scrolls (clamped as A), even at the target, so it takes the scroll mutex. */
+internal suspend fun fallbackScroll(target: Int, maxValue: Int, scrollTo: suspend (Int) -> Unit) {
+    scrollTo(target.coerceIn(0, maxValue))
 }
 
 /**
@@ -397,9 +473,20 @@ private class FocusedChild {
         return inside.localBoundingBoxOf(trailing, clipBounds = false)
     }
 
-    fun record(key: Any, pinned: Boolean) {
+    /** The current layout pass's key and mode, set first in the outer position callback (A3; see record()). */
+    var layoutKey: Any? = null
+    var layoutPinned = false
+
+    /**
+     * Records where the focused field and its caret sit in the scroller in use. The key and mode come from the layout
+     * pass ([layoutKey], [layoutPinned]) once it has set them, not from the calling lambda, which can be a composition
+     * behind; and a frame taller than the dialog's viewport (impossible for the scroller in use) is refused (A3, TL).
+     */
+    fun record(capturedKey: Any, capturedPinned: Boolean) {
+        val (key, pinned) = recordAttribution(layoutKey, layoutPinned, capturedKey, capturedPinned)
         val child = coordinates?.takeIf { it.isAttached } ?: return
         val frame = (if (pinned) innerFrame else outerFrame)?.takeIf { it.isAttached } ?: return
+        if (!acceptsFrame(frame.size.height, outerViewport)) return
         val inside = innerContent?.takeIf { it.isAttached } ?: return
         // Relative to the viewport's own coordinates, never through a window conversion: in this dialog localToWindow
         // measured off by the inner scroller's value, which changes across a mode switch (#371, #372, TL).
@@ -414,9 +501,57 @@ private class FocusedChild {
         last = seen
     }
 
-    /** Where they were in the layout before [key], only if measured for the same focused [child]. */
+    /**
+     * Where they were in the layout before [key], only if measured for the same focused [child]. Frozen per change at
+     * the first read (A3, TL): the readers of one height or mode change, the same-frame restore and its after-a-frame
+     * fallback, see the same baseline. Without it, a record written between the two reads (after the same-frame scroll,
+     * a child's position callback could still carry the old key) became `previous`, and the fallback restored from it
+     * (#376's portrait text-first probe: 3080 in the same frame, then 2867 from the stray record, the caret at 319 not 106).
+     */
     fun before(key: Any, child: LayoutCoordinates): Seen? =
-        (if (key == lastKey) previous else last)?.takeIf { it.child === child }
+        baseline.get(key) { if (key == lastKey) previous else last }?.takeIf { it.child === child }
+
+    /** A new height or mode change was claimed: its baseline is read afresh (see [before]). */
+    fun newChange() = baseline.reset()
+
+    private val baseline = FrozenPerChange<Seen?>()
+}
+
+/** A3: a record's key and mode: the layout pass's once it has set them, else the caller's (before the first pass). */
+internal fun recordAttribution(layoutKey: Any?, layoutPinned: Boolean, key: Any, pinned: Boolean): Pair<Any, Boolean> =
+    if (layoutKey != null) layoutKey to layoutPinned else key to pinned
+
+/**
+ * A3: whether a record's frame can be the scroller in use: no taller than the dialog's viewport (±1 px). The outer
+ * scroller's frame is that viewport and the pinned body's is inside it; one column's inner content is far taller (#376's
+ * stray record: 3540 px against 357). An unmeasured viewport (0) accepts.
+ */
+internal fun acceptsFrame(frameHeight: Int, viewport: Int): Boolean = viewport <= 0 || frameHeight <= viewport + 1
+
+/**
+ * A3: the first value read in a change, kept for that change's later reads until [reset] marks a new one. A read for a
+ * different key also reads afresh (a key no position callback claimed). A key coming back after another change is a new
+ * change only through [reset], which the claim of each change calls.
+ */
+internal class FrozenPerChange<T> {
+    private var key: Any? = null
+    private var hasValue = false
+    private var value: T? = null
+
+    fun reset() {
+        hasValue = false
+        value = null
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    fun get(key: Any, compute: () -> T): T {
+        if (!hasValue || this.key != key) {
+            this.key = key
+            value = compute()
+            hasValue = true
+        }
+        return value as T
+    }
 }
 
 /** M3's arrangement: side by side (dismiss, then the primary) when both fit, else the primary on top; end-aligned. */

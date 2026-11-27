@@ -57,6 +57,25 @@ app window's bounds, not whether the keyboard covers a node.
     whole, with the label's margin, then stays whole in view, as Compose's own keep-in-view did before this step
     superseded it (#371's captures had left a short filled field cut at the bottom edge). It acts on every height
     change, so during the keyboard's slide the field rides the edge.
+    **A3 (TL, 2026-11-26): the restore lands in the layout pass, before the frame is drawn.** It runs once per height
+    or mode change in the outer scroller content's position callback, where the new layout's scroll range is already
+    known, and moves the scroller synchronously. The first frame drawn at the new layout is then already at the restored
+    place; before, a mode switch drew one frame at the swapped-in scroller's old value (often the top) first (37 of 40
+    text-first and 33 of 40 keyboard-first repetitions, none with A3; diagnostic runs 45903840557 and 45903834879). A
+    target outside the scroll range is left to the step after the frame, which stays as the fallback and keeps the
+    clamp; later callbacks for the same change never re-apply it. A scroll already in progress isn't waited for, it's cancelled: Compose
+    starts its own bring-into-view on the swapped-in scroller in that same pass, which would align a field taller than
+    the viewport to its top, against the label rule. Waiting for it brought the frame at the old value back (#376's
+    probe, run 45914151572: the guard skipped 34 of 40 and 40 of 40); letting it run moved the field off the restored
+    place (the landscape 200% case: 28 px to the top edge, run 45923378397). Main cancelled it implicitly through the
+    step after the frame; now the restore takes the scroll lock right after it applies, in the same frame, and the step
+    after the frame takes it again. The earlier place it restores from is read once per change and kept for that change's later read
+    (the step after the frame), so a record written in between can't shift the baseline; every change starts afresh,
+    including one held by a notice
+    (#376's portrait text-first probe: once in 20, the step after the frame restored from a stray record). That
+    stray record is also stopped where it was written: a record takes its height or mode change and its frame from the
+    layout pass, which sets them first, not from the calling code, which can be a composition behind; and a record
+    measured against a frame taller than the dialog's viewport is refused.
   - **On a text or selection change:** if the change put the caret's line outside the view, it's brought back, just
     enough, then the label rule applies. When the line is still inside, nothing moves, so keyboard typing (already kept in
     view by the field) adds no scroll.
