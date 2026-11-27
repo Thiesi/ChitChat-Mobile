@@ -360,8 +360,10 @@ class ReportFormLayoutTest {
                 it[androidx.compose.ui.semantics.SemanticsProperties.EditableText].text to
                     it[androidx.compose.ui.semantics.SemanticsProperties.TextSelectionRange] }
             val beforeBack = fieldState()
+            io.github.thiesi.chitchat.testing.DiagRecording.capture("first-arrival-end") // DIAGNOSTIC
             androidx.test.espresso.Espresso.pressBack()
             awaitLayout("$case: the keyboard hidden after Back", before) { !it.imeVisible }
+            io.github.thiesi.chitchat.testing.DiagRecording.capture("first-hide-end") // DIAGNOSTIC
             // PL: the first system Back only hides the keyboard; the dialog stays open with the same text and selection.
             check(present("report_dialog")) { "$case: system Back dismissed the report dialog instead of only the keyboard" }
             assertEquals("$case: Back kept the text", beforeBack.first, fieldState().first)
@@ -382,6 +384,7 @@ class ReportFormLayoutTest {
                 }
             }
             assertCaretInView(case)
+            io.github.thiesi.chitchat.testing.DiagRecording.beforeClose?.invoke() // DIAGNOSTIC: the final hide leg.
         }
     }
 
@@ -557,9 +560,11 @@ class ReportFormLayoutTest {
                     androidx.compose.ui.text.TextRange(offsetAt(typed.height / 3f)))
                 val placed = assertCaretInView("$case caret placed")
                 check(placed.top > 8f && placed.bottom < placed.height - 8f) { "Not clear of the edges: ${placed.detail}" }
+                io.github.thiesi.chitchat.testing.DiagRecording.capture("arrival-end") // DIAGNOSTIC
                 androidx.test.espresso.Espresso.closeSoftKeyboard()
                 compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
                 val restored = assertCaretInView("$case keyboard hidden")
+                io.github.thiesi.chitchat.testing.DiagRecording.capture("hide-end") // DIAGNOSTIC
                 assertTrue("The restore keeps the caret's offset across the swap (${placed.detail} -> ${restored.detail})",
                     kotlin.math.abs(restored.top - placed.top) <= 1f)
             } else {

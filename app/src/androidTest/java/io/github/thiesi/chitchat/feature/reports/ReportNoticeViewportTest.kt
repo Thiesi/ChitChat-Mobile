@@ -256,6 +256,7 @@ class ReportNoticeViewportTest {
                     assertTrue("$case: the same line is in view again after a second refusal ($againDetail)", again)
                 }
                 if (thenTap) caretBack(case)
+                io.github.thiesi.chitchat.testing.DiagRecording.beforeClose?.invoke() // DIAGNOSTIC: the hide leg.
             }
         } finally { gate.complete(Unit); compose.runOnIdle { room.cancel(); reports.close() } }
     }
@@ -267,7 +268,11 @@ class ReportNoticeViewportTest {
     // DIAGNOSTIC (never merged), #378: the notice re-tap case with animations off and on (recorded).
     private fun diag(name: String, animations: Boolean) {
         org.junit.Assume.assumeTrue(androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
-        io.github.thiesi.chitchat.testing.DiagRecording.run(name, animations, hide = {}) { personSnapshot() }
+        io.github.thiesi.chitchat.testing.DiagRecording.run(name, animations, hide = {
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+            compose.waitForIdle()
+        }) { personSnapshot() }
     }
     @Test fun diagNoticeOff() = diag("ccm-a3-notice-off", false)
     @Test fun diagNoticeOn() = diag("ccm-a3-notice-on", true)

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imeAnimationSource
+import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -313,13 +315,26 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
         }
+        // DIAGNOSTIC (never merged), #378 condition 1: the insets objects (composable getters), read in placement below.
+        val diagIme = WindowInsets.ime
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class) val diagSrc = WindowInsets.imeAnimationSource
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class) val diagTgt = WindowInsets.imeAnimationTarget
         Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it; focused.record(key, pinned); focused.recordBody() }
             .onSizeChanged { focused.outerViewport = it.height }
             .onGloballyPositioned { focused.outerFrame = it; KeepProbe.outer = outer; KeepProbe.inner = inner }
             .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline)
             .layout { measurable, constraints ->
+                // DIAGNOSTIC (never merged), #378 condition 1: the dialog window's IME animation source and target.
                 val placeable = measurable.measure(constraints)
                 layout(placeable.width, placeable.height) {
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    run {
+                        val d = this@layout
+                        val ime = diagIme.getBottom(d)
+                        val src = diagSrc.getBottom(d)
+                        val tgt = diagTgt.getBottom(d)
+                        KeepProbe.log("IMEA ime=$ime src=$src tgt=$tgt running=${src != tgt} key=$key pinned=$pinned h=${placeable.height}")
+                    }
                     restoreInPlacement(forPinned = false, outer, placeable.height)
                     placeable.place(0, 0)
                 }

@@ -17,9 +17,18 @@ object DiagRecording {
     fun shell(command: String): String = android.os.ParcelFileDescriptor.AutoCloseInputStream(ui.executeShellCommand(command))
         .use { it.readBytes().toString(Charsets.UTF_8).trim() }
 
+    private var current: String? = null
+    /** A capture point inside a case (no-op outside a recorded case). */
+    fun capture(point: String) { current?.let { capture(it, point) } }
+
     fun run(name: String, animations: Boolean, hide: () -> Unit, body: () -> Unit) {
+        current = name
         KeepProbe.log("CASE start $name animations=$animations")
-        beforeClose = hide
+        beforeClose = {
+            capture(name, "arrival-end")
+            hide()
+            capture(name, "hide-end")
+        }
         try {
             val before = scales.associateWith { shell("settings get global $it") }
             android.util.Log.i("CCMDiagScales", "before $name: $before")
@@ -31,6 +40,7 @@ object DiagRecording {
                 Thread { android.os.ParcelFileDescriptor.AutoCloseInputStream(video).use { it.readBytes() }; done.countDown() }.start()
                 armFlash(name)
                 body()
+                capture(name, "case-end")
                 KeepProbe.log("CASE body done $name")
                 // screenrecord stops at its limit; end it now so the next case can record (SIGINT finalises the file).
                 shell("pkill -INT screenrecord")
@@ -41,8 +51,16 @@ object DiagRecording {
             }
         } finally {
             beforeClose = null
+            current = null
             KeepProbe.log("CASE end $name")
         }
+    }
+
+    /** A screencap for the PL's end captures; the settled state, after Compose is idle. */
+    private fun capture(name: String, point: String) {
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        KeepProbe.log("CAPTURE $name $point")
+        shell("screencap -p /data/local/tmp/ccm-cap-$name-$point.png")
     }
 
     /** The sync strip (x 0..12, y 300..340) for one drawn frame on the next activity resumed; that frame's uptime is logged. */
@@ -53,15 +71,33 @@ object DiagRecording {
                 app.unregisterActivityLifecycleCallbacks(this)
                 val decor = activity.window.decorView
                 val strip = android.graphics.drawable.ColorDrawable(android.graphics.Color.MAGENTA).apply { setBounds(0, 300, 12, 340) }
-                decor.post {
+                // TL (2026-11-27): only once the window has focus and has drawn a second frame, so the frame carrying
+                // the strip reaches the screen (proof 1's strip, on the first drawn frame, never did).
+                fun show() {
                     decor.overlay.add(strip)
                     decor.invalidate()
                     decor.viewTreeObserver.registerFrameCommitCallback {
                         KeepProbe.log("SYNC shown $name")
                         decor.overlay.remove(strip)
                         decor.invalidate()
+                        decor.viewTreeObserver.registerFrameCommitCallback { KeepProbe.log("SYNC removed $name") }
                     }
                 }
+                fun afterTwoFrames() {
+                    decor.invalidate()
+                    decor.viewTreeObserver.registerFrameCommitCallback {
+                        decor.invalidate()
+                        decor.viewTreeObserver.registerFrameCommitCallback { decor.post { show() } }
+                    }
+                }
+                if (decor.hasWindowFocus()) afterTwoFrames()
+                else decor.viewTreeObserver.addOnWindowFocusChangeListener(object : android.view.ViewTreeObserver.OnWindowFocusChangeListener {
+                    override fun onWindowFocusChanged(hasFocus: Boolean) {
+                        if (!hasFocus) return
+                        decor.viewTreeObserver.removeOnWindowFocusChangeListener(this)
+                        afterTwoFrames()
+                    }
+                })
             }
             override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) = Unit
             override fun onActivityStarted(activity: android.app.Activity) = Unit
