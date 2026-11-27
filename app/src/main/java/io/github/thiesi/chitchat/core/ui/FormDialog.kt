@@ -353,6 +353,12 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                             .layout { measurable, constraints ->
                                 val placeable = measurable.measure(constraints)
                                 layout(placeable.width, placeable.height) {
+                                    // #378: read here too, so the pass that settles a keyboard transition re-places the
+                                    // inner scroller and a pinned final restore runs in that frame, not a frame or more
+                                    // later from the after-a-frame step (the outer placement alone re-ran: diag run
+                                    // 46049891318). The outer placement, earlier in the pass, already observed them.
+                                    val density = this@layout
+                                    imeInset.getBottom(density); imeSource.getBottom(density); imeTarget.getBottom(density)
                                     restoreInPlacement(forPinned = true, inner, placeable.height)
                                     placeable.place(0, 0)
                                 }
