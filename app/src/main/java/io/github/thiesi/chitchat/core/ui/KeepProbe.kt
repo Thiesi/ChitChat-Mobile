@@ -5,6 +5,9 @@ object KeepProbe {
     var outer: androidx.compose.foundation.ScrollState? = null
     var inner: androidx.compose.foundation.ScrollState? = null
     var dispatch = 0
+    @Volatile var lastIme = -1
+    var lastHeldUi: Boolean? = null
+    var lastHeldFd: Boolean? = null
     var margin = 0f
     /** Each record's dispatch, mode and scroller values, keyed by the Seen it produced (before()'s source). */
     val meta = java.util.WeakHashMap<Any, String>()

@@ -139,6 +139,10 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         // The hook (PL and TL, 2026-11-22): while the caller holds an in-form notice, a layout change doesn't scroll back to
         // the focused field; the notice keeps the view until the person's next interaction. Off by default: unchanged.
         val held by androidx.compose.runtime.rememberUpdatedState(holdFocusedInView)
+        // DIAGNOSTIC (never merged), #378 failure 1 (b): when FormDialog's parameter changes.
+        androidx.compose.runtime.SideEffect {
+            if (KeepProbe.lastHeldFd != holdFocusedInView) { KeepProbe.lastHeldFd = holdFocusedInView; KeepProbe.log("HOLDFD held=$holdFocusedInView") }
+        }
         // A3 (TL, 2026-11-26): the height step runs where the new layout is first known, in the outer scroller content's
         // position callback, after the layout pass and before the frame is drawn: each scroller's new maxValue is already
         // measured there, so a synchronous delta lands the restore in the first frame drawn at the new layout, where the
@@ -262,7 +266,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             .onSizeChanged { focused.outerViewport = it.height }
             .onGloballyPositioned { focused.outerFrame = it }
             .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline).verticalScroll(outer)
-            .onGloballyPositioned { focused.outerContent = it; restoreInLayoutPass() }
+            .onGloballyPositioned { focused.outerContent = it; androidx.compose.runtime.snapshots.Snapshot.withoutReadObservation { KeepProbe.log("SCROLL pass=outerCallback key=$key pinned=$pinned outer=${outer.value}/${outer.maxValue} inner=${inner.value}/${inner.maxValue}") }; restoreInLayoutPass() }
             .testTag(if (pinned) "form_dialog_pinned" else "form_dialog_column").padding(24.dp)) {
             Box(Modifier.padding(bottom = 16.dp).onSizeChanged { titleHeight = it.height }) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.titleContentColor,
