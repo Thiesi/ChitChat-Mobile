@@ -62,8 +62,11 @@ app window's bounds, not whether the keyboard covers a node.
     known, and moves the scroller synchronously. The first frame drawn at the new layout is then already at the restored
     place; before, a mode switch drew one frame at the swapped-in scroller's old value (often the top) first (37 of 40
     text-first and 33 of 40 keyboard-first repetitions, none with A3; diagnostic runs 45903840557 and 45903834879). A
-    scroll already in progress, or a target outside the scroll range, is left to the step after the frame, which stays as
-    the fallback and keeps the clamp; later callbacks for the same change never re-apply it.
+    target outside the scroll range is left to the step after the frame, which stays as the fallback and keeps the
+    clamp; later callbacks for the same change never re-apply it. A scroll already in progress isn't waited for: Compose
+    starts its own bring-into-view on the swapped-in scroller in that same pass, and waiting for it brought the frame at
+    the old value back (#376's probe, run 45914151572: the guard skipped 34 of 40 and 40 of 40, and that scroll moved
+    nothing in 74 of 74); the step after the frame corrects a real one.
   - **On a text or selection change:** if the change put the caret's line outside the view, it's brought back, just
     enough, then the label rule applies. When the line is still inside, nothing moves, so keyboard typing (already kept in
     view by the field) adds no scroll.

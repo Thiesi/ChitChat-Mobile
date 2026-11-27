@@ -143,9 +143,12 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         // measured there, so a synchronous delta lands the restore in the first frame drawn at the new layout, where the
         // after-a-frame step alone drew one frame at the swapped-in scroller's old value (often 0) first. Once per key:
         // later callbacks for the same key (a scroll fires them too) never re-apply it against the person's own scrolling.
-        // A scroll in progress (a fling, a bring-into-view) or a target outside 0..maxValue is left to the after-a-frame
-        // step, which goes through the scroll mutex and keeps A's clamp. That step stays as the fallback for a key no
-        // callback came for; after a same-frame restore it finds the target already reached and does nothing.
+        // A target outside 0..maxValue is left to the after-a-frame step, which keeps A's clamp. A scroll in progress
+        // isn't checked: in the same layout pass Compose's own bring-into-view starts one on the swapped-in scroller,
+        // and it moved nothing before being superseded (#376's probe: 74 of 74), so waiting for it only brought back the
+        // frame at the old value. The after-a-frame step corrects the rare real animation: it goes through the scroll
+        // mutex and compares with the value it finds. It stays as the fallback for a key no callback came for, and after
+        // a same-frame restore it finds the target reached and does nothing.
         fun heightStep(): Pair<androidx.compose.foundation.ScrollState, Int>? {
             if (held) return null
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return null
@@ -198,7 +201,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         fun restoreInLayoutPass() {
             if (!sameFrame.claim(key)) return
             val (state, target) = heightStep() ?: return
-            sameFrameDelta(target, state.value, state.maxValue, state.isScrollInProgress)?.let(state::dispatchRawDelta)
+            sameFrameDelta(target, state.value, state.maxValue)?.let(state::dispatchRawDelta)
         }
         LaunchedEffect(maxHeight, pinned) {
             withFrameNanos { } // After the layout at the new height: the fallback.
@@ -284,12 +287,12 @@ internal class FormDialogSameFrameRestore {
 }
 
 /**
- * A3: the synchronous delta for the same-frame restore, or null to leave it to the after-a-frame step: no move needed,
- * a scroll in progress (it goes through the scroll mutex there), or a target outside 0..[maxValue] (A's clamp applies
- * there, never a clipped value here).
+ * A3: the synchronous delta for the same-frame restore, or null: no move needed, or a target outside 0..[maxValue], left
+ * to the after-a-frame step (A's clamp applies there, never a clipped value here). A scroll in progress isn't a reason
+ * to wait (see the call site).
  */
-internal fun sameFrameDelta(target: Int, value: Int, maxValue: Int, inProgress: Boolean): Float? = when {
-    inProgress || target !in 0..maxValue || target == value -> null
+internal fun sameFrameDelta(target: Int, value: Int, maxValue: Int): Float? = when {
+    target !in 0..maxValue || target == value -> null
     else -> (target - value).toFloat()
 }
 

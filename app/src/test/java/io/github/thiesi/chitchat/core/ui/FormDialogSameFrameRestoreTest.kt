@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** A3 (TL): the same-frame restore runs once per layout key and hands busy or out-of-range cases to the fallback. */
+/** A3 (TL): the same-frame restore runs once per layout key and hands out-of-range targets to the fallback. */
 class FormDialogSameFrameRestoreTest {
     @Test fun eachKeyIsClaimedOnceAndLaterCallbacksForItDoNothing() {
         val restore = FormDialogSameFrameRestore()
@@ -20,21 +20,17 @@ class FormDialogSameFrameRestoreTest {
     }
 
     @Test fun aTargetInsideTheRangeMovesByTheDelta() {
-        assertEquals(1318f, sameFrameDelta(target = 1318, value = 0, maxValue = 4019, inProgress = false))
-        assertEquals(-200f, sameFrameDelta(target = 100, value = 300, maxValue = 4019, inProgress = false))
-        assertEquals(4019f, sameFrameDelta(target = 4019, value = 0, maxValue = 4019, inProgress = false))
+        assertEquals(1318f, sameFrameDelta(target = 1318, value = 0, maxValue = 4019))
+        assertEquals(-200f, sameFrameDelta(target = 100, value = 300, maxValue = 4019))
+        assertEquals(4019f, sameFrameDelta(target = 4019, value = 0, maxValue = 4019))
     }
 
     @Test fun nothingToMoveIsNoDelta() {
-        assertNull(sameFrameDelta(target = 1318, value = 1318, maxValue = 4019, inProgress = false))
-    }
-
-    @Test fun aScrollInProgressIsLeftToTheFallback() {
-        assertNull(sameFrameDelta(target = 1318, value = 0, maxValue = 4019, inProgress = true))
+        assertNull(sameFrameDelta(target = 1318, value = 1318, maxValue = 4019))
     }
 
     @Test fun aTargetOutsideTheRangeIsLeftToTheFallbacksClamp() {
-        assertNull(sameFrameDelta(target = 4020, value = 0, maxValue = 4019, inProgress = false))
-        assertNull(sameFrameDelta(target = -1, value = 10, maxValue = 4019, inProgress = false))
+        assertNull(sameFrameDelta(target = 4020, value = 0, maxValue = 4019))
+        assertNull(sameFrameDelta(target = -1, value = 10, maxValue = 4019))
     }
 }
