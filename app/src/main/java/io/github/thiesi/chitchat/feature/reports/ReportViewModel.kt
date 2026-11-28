@@ -16,6 +16,7 @@ import io.github.thiesi.chitchat.core.session.SessionState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -129,6 +130,23 @@ class ReportState internal constructor(
 }
 
 /**
+ * #378 F1 (TL): the report state's one writer. Each write sets the StateFlow and mirrors [ReportState.noticeHeld] into
+ * Compose snapshot state, in the same call; the flow itself is private here, so no other write compiles.
+ */
+internal class ReportStateHolder {
+    private val flow = MutableStateFlow<ReportState?>(null)
+    private val held = androidx.compose.runtime.mutableStateOf(false)
+    val state: StateFlow<ReportState?> = flow.asStateFlow()
+    var value: ReportState?
+        get() = flow.value
+        set(next) {
+            flow.value = next
+            held.value = next?.noticeHeld == true
+        }
+    val noticeHeldNow: Boolean get() = held.value
+}
+
+/**
  * Reporting a message or a person (reporting.md, P-160–P-167; TL conditions of 2026-11-20). App-scoped, memory only.
  * One report at a time. Each POST is one explicit request: Send again (message) and a send after Check (person) are new
  * choices, never automatic, never on foreground or reconnect. It survives configuration change. A report in flight is
@@ -137,8 +155,15 @@ class ReportState internal constructor(
  * session change drops an attempt in flight (the identity fence).
  */
 class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
-    private val mutable = MutableStateFlow<ReportState?>(null)
-    val state = mutable.asStateFlow()
+    private val mutable = ReportStateHolder()
+    val state = mutable.state
+
+    /**
+     * #378 F1 (TL): whether the phase's notice holds the form's view now, as snapshot state written with every state
+     * change: FormDialog's placement reads it directly, so a release (the field gaining focus, typing, a category, the
+     * keyboard shown) reaches the next placement with no collector or recomposition in between.
+     */
+    val noticeHeldNow: Boolean get() = mutable.noticeHeldNow
     private var identity = operations.session.value.identity()
     private var attempt = 0L
     private var job: Job? = null

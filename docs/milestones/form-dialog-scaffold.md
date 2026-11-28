@@ -57,13 +57,80 @@ app window's bounds, not whether the keyboard covers a node.
     whole, with the label's margin, then stays whole in view, as Compose's own keep-in-view did before this step
     superseded it (#371's captures had left a short filled field cut at the bottom edge). It acts on every height
     change, so during the keyboard's slide the field rides the edge.
-    **A3 (TL, 2026-11-26): the restore lands in the layout pass, before the frame is drawn.** It runs once per height
-    or mode change in the outer scroller content's position callback, where the new layout's scroll range is already
-    known, and moves the scroller synchronously. The first frame drawn at the new layout is then already at the restored
-    place; before, a mode switch drew one frame at the swapped-in scroller's old value (often the top) first (37 of 40
-    text-first and 33 of 40 keyboard-first repetitions, none with A3; diagnostic runs 45903840557 and 45903834879). A
-    target outside the scroll range is left to the step after the frame, which stays as the fallback and keeps the
-    clamp; later callbacks for the same change never re-apply it. A scroll already in progress isn't waited for, it's cancelled: Compose
+    **A3 (TL, 2026-11-26), corrected by #378: the restore lands in the placement pass.** It runs once per height or
+    mode change, from a layout modifier directly before the scroller in use's `verticalScroll`: after the scroll node is
+    measured (the new layout's scroll range is known) and before it's placed. The node reads the value in its own
+    placement, so the content is placed at the restored offset in the same pass. The inputs come from the focused field's
+    place in the body column's own content, recorded at the last placement, which a mode switch doesn't move (the body is
+    one node in both modes); they're used only while the content wasn't re-measured.
+    #376 first ran the restore in the outer content's position callback and claimed the first frame drawn at the new
+    layout was then already at the restored place. That was wrong (#378). A scroll made in a position callback is laid
+    out only at the next layout pass, so when that pass was the draw's own, the frame was drawn at the old placement first
+    (2 of 5 restores, the caret out of view; diagnostic run 45986560901). And the body's own position callback, later in
+    the same dispatch, recorded the pre-restore placement; with a new key every frame of an animated keyboard, the next
+    restore read that stale record as its baseline, and the targets alternated: the field shook 38 px every frame (#376's
+    regression, diagnostic run 46031148507; 2cebb7a, before #376, didn't). The position-callback restore stays as the
+    fallback, for a change whose content was re-measured.
+    **One baseline per keyboard transition (#378 b, TL and PL, 2026-11-27).** With an animated keyboard, each frame of
+    the slide used to restore from the previous frame's place, so an intermediate layout with a smaller viewport than
+    the final one clamped the carried offset and the clamp was carried forward: the end depended on the frames the slide
+    passed through (run 46037971164: text-first ended at 1443, keyboard-first at 1402, the notice at 1662, against 1318,
+    1318 and 1511 with animations off; every source fresh). Now every restore during a keyboard transition, and at its
+    final layout, reads the place from before the transition. The boundary is the dialog window's IME inset against
+    Compose's `imeAnimationSource` and `imeAnimationTarget`: unsettled while the inset differs from the target or the
+    source from the target, read in the outer scroller's placement (before that pass's restores). Compose's
+    `InsetsListener` sets all three to the window's insets whenever no IME animation runs (`onApplyWindowInsets` without
+    one, and `onEnd`, called for a finished or a cancelled animation), so a settled placement ends every slide, finished,
+    reversed or cancelled (a reversal keeps the inset off its target: diag run 46043589704, API36 notice, 244/0/0). With
+    animations off a change is one unsettled placement at the old inset, then the settled one, so the baseline is the
+    record before the change, as before. A field change or no earlier record releases; an edit during a transition
+    re-baselines; with no animation reported (API < 30) it never freezes. `KeyboardTransitionBaselineTest` (JVM) replays
+    the logged sequences. A selection change since the field's place was recorded (a tap that moves the caret in the
+    frame the keyboard starts) restores from the live caret, re-anchoring the baseline's caret at the caret's new place in the
+    field, so the step after the frame finds nothing more to move; an edit during a transition re-anchors the frozen
+    baseline the same way (its field offset kept), rather than taking the latest record, which could be a clamped
+    intermediate place (diagnostic run 46066588478: 3088 for 3080) (diagnostic run 46056107630, API36 text-first: 3080, then 3004). While the
+    view is held (a notice holding it), a restore claims nothing; the hold is read in the placement, so the pass where it
+    releases claims the change and restores in that pass (before, a held pass used up the change and the step after the
+    frame restored it up to ~200 ms later, with the dialog's top drawn at the swapped-in scroller's 0 meanwhile;
+    diagnostic runs 46056107630 and 46056124120, API36 notice re-tap). The hold read there is the caller's live state
+    (#378 F1, TL): the report form's ViewModel mirrors its notice hold into snapshot state in the same call as each state
+    change, and FormDialog's effective hold is the composed notice's hold and that live state (`holdLive`), so a release
+    (the field gaining focus, typing, a category, the keyboard shown) reaches the next placement with no recomposition in
+    between. The recomposed parameter alone lagged the release by 21 to 308 ms, and a mode switch in between drew the
+    swapped-in scroller at its old value (diagnostic run 46066588478). The step after the frame does nothing
+    when the layout it was launched for has been replaced (a slide's last pinned frame's step otherwise ran after the switch
+    to one column and scrolled the scroller no longer in use; diagnostic run 46066588478).
+    **A slide's frames move only with the slide (#378 failure 3, TL and PL, 2026-11-28).** While a keyboard transition
+    is frozen, each frame used to take the full rule for its own viewport, so a frame could decide differently from the
+    end and the field moved back when the end came (the caret line against the slide, a label out and then back). Now
+    the transition's end layout is computed from Compose's `imeAnimationTarget`: the dialog area's bottom inset is
+    max(navigation bar, IME), so the end maxHeight is today's less the inset's change, with FormDialog's own pinned rule
+    (available >= the minimum body). If the end is in the frame's own mode, the frame takes the end's target with only
+    its own floors: the caret line wholly in view; a half label goes out; then the scroll range, lowered to the label
+    whole when the range's end lands it half and the caret line stays in view (otherwise the range's end, where the end
+    frame itself settles: the label/maxValue gap, its own PR). With a mode switch ahead, the frames before it take the
+    per-frame rule clamped to the slide's direction in their mode (an arrival never lower than that mode's last target,
+    a hide never higher); the caret line wins over the clamp, and a half label moves with the slide (out on an arrival,
+    whole on a hide). The clamp resets at a mode switch, at settle, on a direction flip and on a re-anchor; a held pass
+    records nothing. Both the placement restore and the step after the frame apply it. Settled, or with no animation
+    reported, the target is the rule's, unchanged. `FormDialogSlideTest` (JVM) replays the logged frames of diagnostic
+    run 46066588478 (200%).
+    **Limit: the switch between pinned and one column (#383, after the Play upload).** The frame right after a mode
+    switch isn't covered by the rule above, which resets there. As measured before that rule, the first frame after a
+    mode switch could move against the slide: text-first's hide moved the caret line up 56 px in the first pinned frame
+    (201 px viewport, the counter kept), and the label went out in the first pinned frame of an arrival and came back in
+    the first one-column frame. Main has the hide's move
+    too (diagnostic run 45992933725, where the label was half; the separate-label rule makes it out). Diagnostic runs
+    46056107630 and 46056124120 hold the frames. With that rule, an arrival's switch from pinned to one column steps the
+    field 2 px against the slide, on API35 and API36: the pinned frames before the switch hold the clamp's last target,
+    and the one-column restore lands about 2 px lower (diagnostic run 46096097459: API35 text-first, keyboard-first,
+    cancelled and interrupted, API36 text-first). Before A3, a mode switch drew one frame at the swapped-in
+    scroller's old value (often the top) first (37 of 40 text-first and 33 of 40 keyboard-first repetitions; diagnostic
+    runs 45903840557 and 45903834879). A placement target outside the scroll range is clamped to it in that pass, where
+    the scroll node's measure has just set the range (kb100's hide aimed at 947 with the range ending at 796, diagnostic
+    run 46081190151); the callback restore still leaves one to the step after the frame, which stays as the fallback and
+    keeps the clamp; later callbacks for the same change never re-apply it. A scroll already in progress isn't waited for, it's cancelled: Compose
     starts its own bring-into-view on the swapped-in scroller in that same pass, which would align a field taller than
     the viewport to its top, against the label rule. Waiting for it brought the frame at the old value back (#376's
     probe, run 45914151572: the guard skipped 34 of 40 and 40 of 40); letting it run moved the field off the restored
@@ -83,8 +150,19 @@ app window's bounds, not whether the keyboard covers a node.
     focus), with the label rule's margin. A recorded position is reused only for the same focused field.
   - **The caret's line, when known, is always inside the view** afterwards, so a field entering from unfocused or taller
     than the view never leaves its caret out.
-  - **The label rule:** a field's top keeps its floating label plus 8 dp below the viewport's top edge, or the label is
-    entirely out of view, never half. The caret's line wins when both can't fit.
+  - **The label rule:** a field's label is whole with 8 dp between its top and the viewport's top edge, or entirely out
+    of view (its bottom at or above that edge), never half. The caret's line wins when both can't fit. A half label moves
+    by the minimum distance: up (the label's top to 8 dp) if the kept range below stays wholly in view, else down
+    (entirely out) if the range's top stays in view.
+    - **A separate label (#378, TL and PL, 2026-11-27).** A field whose label is a Text above it (not a floating label in
+      its border) publishes that node to `LocalFormDialogCaret`, and the rule keeps the whole node, every wrapped line,
+      in or out; it unpublishes when it leaves composition. Fields that publish no label keep the floating-label band
+      (bodySmall's line height at the field's top edge). The inventory: the report form's `report_details_label` is
+      separate and publishes; step-up's `step_up_secret` has a floating label (and publishes no caret, so the rule doesn't
+      run there). The band model missed the report form's label from #326 on, before #371 wrote the rule: at 200% the
+      label wraps to 3 lines above the field, so a field top 58 px down read as "label whole" while two of its lines were
+      cut (#378, diagnostic run 46037971164, keyboard-first with animations on). `FormDialogSeparateLabelTest` (JVM)
+      checks whole, out, up and down on those inputs.
   - **A disabled action doesn't hide its reason (A2; PL ruling, 2026-11-26).** While the caret is on the field's last
     line (by line index; an empty field counts), the view also keeps the field's bottom edge and its trailing line in
     view when they fit with the caret's line. The trailing line is the report form's counter ("Too long: 1012 / 1000"
@@ -101,7 +179,10 @@ app window's bounds, not whether the keyboard covers a node.
       The bottom margin keeps the scroll-edge divider from reading as an underline under the counter (in Lantern, an
       underline means a link). The label rule moves the label in only if the kept range (the span with its margin, else
       the span, else the caret's line) stays wholly in view; otherwise it takes the label entirely out if the range's top
-      stays in view; never half. `FormDialogKeepInViewTest` (JVM) checks these on the pure geometry.
+      stays in view; never half. Once the kept range is cut to the caret's line (the span doesn't fit), the 8 dp bottom
+      margin yields too: the caret's line can sit flush with the bottom edge. Both landscape cases at 200% end that way
+      (the long text, and the short one with the keyboard up: the caret's line at 44..82 of an 82 px viewport, the field's
+      top at -10, the label out). `FormDialogKeepInViewTest` (JVM) checks these on the pure geometry.
     - **Two end states, both intended (PL, 2026-11-26).** Keyboard first, typing brings the span in from below, so it ends
       8 dp above the bottom edge. Text first, A's restore keeps the person's place across the keyboard's swap, and a span
       already clear of the margin doesn't move. In both, the caret's line, the field's bottom and the counter are in view
@@ -119,7 +200,8 @@ app window's bounds, not whether the keyboard covers a node.
     - the late-keyboard order (text first, then the keyboard), which is also the keyboard showing again over existing
       text.
 
-    The label is never cut in half. A change that keeps the caret's line in view leaves every scroller where it was. In
+    The label is never cut in half, checked on the report label's own node (whole, or entirely out), which each
+    report-caret metric line records. A change that keeps the caret's line in view leaves every scroller where it was. In
     portrait, a caret placed in the viewport's upper third keeps its offset within 1 px across the keyboard hide (one
     column to pinned): the restore holds it, not the clamp.
   - **How the asserts measure:** against the container that clips the field: the pinned body's viewport

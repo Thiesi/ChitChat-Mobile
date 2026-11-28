@@ -192,6 +192,32 @@ class PersonReportTest {
         assertFalse("The hold never reaches a string", state().toString().contains("Held"))
     }
 
+    /**
+     * #378 F1 (TL): the snapshot hold FormDialog's placement reads changes in the same call as the state, for each release
+     * path, with no dispatcher advance (no collector, no recomposition): run 46066588478's recomposed hold lagged the
+     * release by 308 ms, and a mode switch in between drew the swapped-in scroller at its old value.
+     */
+    @Test fun theLiveHoldReleasesInTheSameCall() = runTest(dispatcher) {
+        advanceUntilIdle()
+        repeat(4) { fake.results += ReportResult.SnapshotUnavailable }
+        model.requestPerson(bob, room, true, "Bob", model.settled); model.choose(ReportCategory.OFFENSIVE_PROFILE_PICTURE)
+        assertFalse("No notice, no hold", model.noticeHeldNow)
+        val releases = listOf<Pair<String, () -> Unit>>(
+            "(a) keyboard shown" to { model.keyboardShown() },
+            "(b) field focused" to { model.fieldFocused() },
+            "(c) typing" to { model.edit("more") },
+            "(d) a category" to { model.choose(ReportCategory.OFFENSIVE_USERNAME) })
+        for ((name, release) in releases) {
+            model.choose(ReportCategory.OFFENSIVE_PROFILE_PICTURE)
+            model.send(); advanceUntilIdle()
+            assertTrue("$name: a new notice holds, live too", model.noticeHeldNow)
+            release()
+            // No advance: the read follows the call directly.
+            assertFalse("$name: released in the same call", model.noticeHeldNow)
+            assertEquals("$name: the live hold is the state's", state().noticeHeld, model.noticeHeldNow)
+        }
+    }
+
     @Test fun aMessageReportCarriesNoName() {
         model.open(ReportTarget.RoomMessage(148), room, name = "Bob")
         assertNull(state().name)

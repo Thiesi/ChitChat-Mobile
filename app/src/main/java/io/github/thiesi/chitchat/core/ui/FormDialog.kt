@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imeAnimationSource
+import androidx.compose.foundation.layout.imeAnimationTarget
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -36,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -84,7 +88,7 @@ internal val LocalFormDialogLayout = androidx.compose.runtime.staticCompositionL
 internal fun FormDialog(onDismissRequest: () -> Unit, title: @Composable () -> Unit, confirmButton: @Composable () -> Unit,
     modifier: Modifier = Modifier, dismissButton: (@Composable () -> Unit)? = null,
     bodyArrangement: Arrangement.Vertical = Arrangement.Top, dismissOnOutsideTap: Boolean = true,
-    holdFocusedInView: Boolean = false,
+    holdFocusedInView: Boolean = false, holdLive: () -> Boolean = { true },
     body: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         // The usable area is the window minus the system bars and the keyboard; a tap on it outside the surface dismisses,
@@ -100,7 +104,7 @@ internal fun FormDialog(onDismissRequest: () -> Unit, title: @Composable () -> U
             Surface(modifier.then(sized).pointerInput(Unit) { detectTapGestures { } },
                 shape = AlertDialogDefaults.shape, color = AlertDialogDefaults.containerColor,
                 tonalElevation = AlertDialogDefaults.TonalElevation) {
-                FormDialogContent(title, confirmButton, dismissButton, bodyArrangement, holdFocusedInView, body)
+                FormDialogContent(title, confirmButton, dismissButton, bodyArrangement, holdFocusedInView, holdLive, body)
             }
         }
     }
@@ -110,7 +114,7 @@ internal fun FormDialog(onDismissRequest: () -> Unit, title: @Composable () -> U
 @Composable
 private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Composable () -> Unit,
     dismissButton: (@Composable () -> Unit)?, bodyArrangement: Arrangement.Vertical, holdFocusedInView: Boolean,
-    body: @Composable ColumnScope.() -> Unit) {
+    holdLive: () -> Boolean, body: @Composable ColumnScope.() -> Unit) {
     val density = LocalDensity.current
     // The 24dp padding scrolls with the content, so a short window's viewport is the whole surface: with the keyboard
     // up in landscape at 200% only about 80dp may be left, and a fixed padding would leave no room for a 48dp button.
@@ -138,7 +142,12 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         val key = maxHeight to pinned
         // The hook (PL and TL, 2026-11-22): while the caller holds an in-form notice, a layout change doesn't scroll back to
         // the focused field; the notice keeps the view until the person's next interaction. Off by default: unchanged.
-        val held by androidx.compose.runtime.rememberUpdatedState(holdFocusedInView)
+        val heldComposed by androidx.compose.runtime.rememberUpdatedState(holdFocusedInView)
+        val heldLive by androidx.compose.runtime.rememberUpdatedState(holdLive)
+        // #378 F1 (TL): the hold starts with the composed notice and ends at the caller's live state (snapshot state the
+        // caller writes synchronously at the release), read here directly: the recomposed parameter lagged the release
+        // by 21-308 ms, so a mode switch in between drew the swapped-in scroller at its old value (diag run 46066588478).
+        fun heldNow() = holdNow(heldComposed, heldLive)
         // A3 (TL, 2026-11-26): the height step runs where the new layout is first known, in the outer scroller content's
         // position callback, after the layout pass and before the frame is drawn: each scroller's new maxValue is already
         // measured there, so a synchronous delta lands the restore in the first frame drawn at the new layout, where the
@@ -153,22 +162,18 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         // in this callback, and again at the after-a-frame step, which also covers one started after this callback in the
         // same pass (children's position callbacks run after this one) and stays the fallback for a key no callback came
         // for.
-        fun heightStep(): Pair<androidx.compose.foundation.ScrollState, Int>? {
-            if (held) return null
-            val child = focused.coordinates?.takeIf { it.isAttached } ?: return null
-            val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
-                else Triple(outer, focused.outerContent, focused.outerViewport)
-            val inside = content?.takeIf { it.isAttached } ?: return null
-            val box = inside.localBoundingBoxOf(child, clipBounds = false)
-            val caret = focused.caretIn(inside, box)
-            val before = focused.before(key, child)
-            val v = viewport.toFloat()
+        // The rule (A, A2, the label rule), from its inputs: the field's box, its caret line and trailing line in the
+        // scroller's content, the baseline before the change, and the viewport. Unchanged by #378; only where the inputs
+        // come from moved (see heightStep and restoreInPlacement).
+        fun heightTarget(state: androidx.compose.foundation.ScrollState, box: androidx.compose.ui.geometry.Rect,
+            caret: androidx.compose.ui.geometry.Rect?, trailing: androidx.compose.ui.geometry.Rect?, before: FocusedChild.Seen?,
+            v: Float, label: androidx.compose.ui.geometry.Rect? = null): Int {
             var target: Float
             if (before != null && before.visible) {
                 // What was in view stays in view: the anchor keeps its offset from the viewport's top, clamped inside.
                 val caretBefore = before.caret
                 if (caret != null && caretBefore != null) {
-                    target = caret.top - caretBefore.coerceIn(0f, (v - caret.height).coerceAtLeast(0f))
+                    target = keepCaretOffset(caret.top, caretBefore, caret.height, v)
                 } else {
                     val lo = margin; val hi = v - box.height
                     target = box.top - (if (hi >= lo) before.field.coerceIn(lo, hi) else before.field.coerceIn(hi, lo))
@@ -195,21 +200,117 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 else if (box.bottom > target + v) target = box.bottom - v
             }
             if (caret != null) {
-                val trailing = focused.trailingIn(inside)
                 target = lastLineSpan(target, box, caret, trailing, v, margin)
-                target = labelRule(target, box, keptRange(box, caret, trailing, v, margin), v, margin, labelBand)
+                target = labelRule(target, labelExtent(box, label, labelBand), keptRange(box, caret, trailing, v, margin), v, margin)
             }
-            return state to target.roundToInt()
+            return target.roundToInt()
+        }
+        // #378 failure 3 (TL, PL): while a keyboard transition is frozen, the slide's frames move only with the slide.
+        // Same-mode end: the end's own target with this frame's floors (no frame decides differently from the end, so there
+        // is nothing to move back from). Mode switch ahead: the per-frame rule, clamped to the slide's direction in this
+        // mode. Settled, or no animation reported: [raw], unchanged.
+        fun slideTarget(raw: Int, state: androidx.compose.foundation.ScrollState, box: androidx.compose.ui.geometry.Rect,
+            caret: androidx.compose.ui.geometry.Rect?, trailing: androidx.compose.ui.geometry.Rect?,
+            before: FocusedChild.Seen?, v: Float, label: androidx.compose.ui.geometry.Rect?): Int {
+            val slide = focused.keyboardSlide() ?: return raw.also { focused.slideClamp.reset() }
+            val place = focused.body ?: return raw
+            val extent = labelExtent(box, label, labelBand)
+            val chrome = with(density) { (48.dp + 16.dp + 24.dp).toPx() }
+            val end = endLayout(with(density) { maxHeight.toPx() }, slide.navBottom, slide.ime, slide.target, chrome,
+                (titleHeight + buttonsHeight).toFloat(), with(density) { FormDialogMinimumBody.toPx() }, place.bodyHeight.toFloat(),
+                place.bodyTop + place.bodyHeight + place.belowBody)
+            return if (end.pinned == pinned) {
+                focused.slideClamp.reset()
+                val tEnd = heightTarget(state, box, caret, trailing, before, end.viewport, label)
+                sameModeFrameTarget(tEnd.toFloat(), caret?.top, caret?.bottom, v, extent.start, extent.endInclusive, margin,
+                    state.maxValue).roundToInt()
+            } else {
+                focused.slideClamp.apply(raw.toFloat(), pinned, slide.arriving, caret?.top, caret?.bottom, v,
+                    extent.start, extent.endInclusive, margin).roundToInt()
+            }
+        }
+        // The after-a-frame step and the callback fallback: the inputs from the current placement.
+        fun heightStep(): Pair<androidx.compose.foundation.ScrollState, Int>? {
+            if (heldNow()) return null
+            val child = focused.coordinates?.takeIf { it.isAttached } ?: return null
+            val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
+                else Triple(outer, focused.outerContent, focused.outerViewport)
+            val inside = content?.takeIf { it.isAttached } ?: return null
+            val box = inside.localBoundingBoxOf(child, clipBounds = false)
+            val caret = focused.caretIn(inside, box)
+            val trailing = if (caret != null) focused.trailingIn(inside) else null
+            val label = focused.labelIn(inside)
+            val before = focused.before(key, child)
+            val raw = heightTarget(state, box, caret, trailing, before, viewport.toFloat(), label)
+            return state to slideTarget(raw, state, box, caret, trailing, before, viewport.toFloat(), label)
         }
         val sameFrame = remember { FormDialogSameFrameRestore() }
         val scope = androidx.compose.runtime.rememberCoroutineScope()
+        val cancelRunning: (androidx.compose.foundation.ScrollState) -> Unit = { state ->
+            scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                state.scroll(androidx.compose.foundation.MutatePriority.Default) { }
+            }
+        }
+        // #378 (TL ruling): the restore in the placement pass, from a layout modifier directly before the scroller in use's
+        // verticalScroll, after it measured the scroll node (this pass's maxValue and viewport) and before it places it
+        // (the node reads the value in its own placement, so the content is placed at the restored offset in this pass).
+        // The position callback restore below made its scroll after the layout loop: the next measureAndLayout laid it out,
+        // so a frame could be drawn at the old placement, and the body's own position callback, later in that same dispatch,
+        // recorded the pre-restore placement; with a new key every frame of an animated keyboard, the next restore read that
+        // stale record as its baseline, and the targets alternated (#376's +-38 px shake, diag run 46031148507). The inputs
+        // come from the field's place in the body column's own content, cached at the last placement ([FocusedChild.body]),
+        // which a mode switch doesn't move (the body is one node in both modes); valid only while the content wasn't
+        // re-measured (otherwise the callback restore below still runs, the fallback).
+        fun restoreInPlacement(forPinned: Boolean, state: androidx.compose.foundation.ScrollState, viewportHeight: Int) {
+            if (forPinned != pinned) return
+            focused.layoutKey = key
+            focused.layoutPinned = pinned
+            // #378 finding 3: read here, first, so this placement re-runs when the hold releases; a held pass consumes
+            // neither the claim nor the change, and the pass where the hold releases claims and restores in that pass.
+            // Before, a held settle pass used up the claim and the after-a-frame step restored up to ~200 ms later, with the
+            // dialog's top drawn at the swapped-in scroller's 0 meanwhile (diag runs 46056107630 and 46056124120, API36
+            // notice re-tap).
+            val holding = heldNow()
+            val place = focused.body ?: return
+            val child = focused.coordinates?.takeIf { it.isAttached } ?: return
+            if (!bodyPlaceValid(place, child, pinned, state.maxValue, viewportHeight)) return
+            if (!claimUnlessHeld(holding) { sameFrame.claim(key) }) return
+            focused.newChange() // As in the callback restore: each change reads its baseline afresh.
+            val shift = if (pinned) 0f else place.bodyTop
+            val box = place.box.translate(0f, shift)
+            val caret = place.caret?.translate(0f, shift)
+            val trailing = place.trailing?.translate(0f, shift)
+            val label = place.label?.translate(0f, shift)
+            // #378 finding 2: a selection change since this place was recorded (a tap that moved the caret in the frame the
+            // keyboard started; nothing is laid out for it until the caret effect a frame later) uses the live caret, and
+            // the baseline's caret moves by the same distance (the caret moved in the field, nothing scrolled), which also
+            // re-baselines a frozen transition. Otherwise this pass restored from the stale caret and the after-a-frame step,
+            // with the live caret against the old offset, moved the field again (diag run 46056124120's v1 twin 46056107630,
+            // API36 text-first: 3080, then -76 to 3004).
+            var liveCaret = caret
+            if (place.caretVersion != focused.caret.version) {
+                val live = focused.innerContent?.takeIf { it.isAttached }?.let { focused.caretIn(it, place.box) }
+                if (live != null) {
+                    liveCaret = live.translate(0f, shift)
+                    if (caretShift(place.caret, live) != 0f) focused.reanchorBaselineCaret(key, child, live.top - place.box.top)
+                    focused.refreshBodyCaret(live)
+                }
+            }
+            val before = focused.before(key, child)
+            val raw = heightTarget(state, box, liveCaret, trailing, before, viewportHeight.toFloat(), label)
+            val target = slideTarget(raw, state, box, liveCaret, trailing, before, viewportHeight.toFloat(), label)
+            applySameFrame(placementDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
+                cancelRunning(state)
+            }
+        }
+        // The fallback: a change the placement pass couldn't take (the content was re-measured), after the layout pass.
         fun restoreInLayoutPass() {
             // The layout pass's key and mode, first: this outer callback runs before the children's, so a record() later
             // in the same pass is attributed to this layout and measured against its frame, whatever key the calling
             // lambda captured (#376: an old-key record after the same-frame scroll, against the inner frame's 3540 px).
             focused.layoutKey = key
             focused.layoutPinned = pinned
-            if (!sameFrame.claim(key)) return
+            if (!claimUnlessHeld(heldNow()) { sameFrame.claim(key) }) return // #378 finding 3: a held pass claims nothing.
             // A new change: its baseline is read afresh, here, before heightStep()'s held check, so a held change resets
             // it too (a notice holding the view while the keyboard hides, then the person's tap: K, J, K). Assumes every
             // height or mode change relays out the outer scroller, so this callback comes for each one.
@@ -218,13 +319,14 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // After an applied delta, a zero-distance mutation takes the scroll mutex here, undispatched, so the running
             // bring-into-view is cancelled inside this callback and can't move the field a frame (see above).
             applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
-                scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
-                    state.scroll(androidx.compose.foundation.MutatePriority.Default) { }
-                }
+                cancelRunning(state)
             }
         }
         LaunchedEffect(maxHeight, pinned) {
             withFrameNanos { } // After the layout at the new height: the fallback.
+            // #378: a step launched for a layout the layout pass has since replaced does nothing (diag run 46066588478,
+            // API35: the pinned key's step resumed after the swap to one column and scrolled the detached inner state).
+            if (!deferredStepCurrent(focused.layoutKey, focused.layoutPinned, key, pinned)) return@LaunchedEffect
             val (state, target) = heightStep() ?: return@LaunchedEffect
             // Always scrolls, even when the target is already reached: taking the scroll mutex cancels a bring-into-view
             // that would otherwise move the field off the restored place (see above), as main's scrollTo did.
@@ -239,7 +341,9 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // A selection-only change lays nothing out, so the body's position callback doesn't record it: record here, so
             // a later height or mode change restores from where the caret is now, not where it was (#371's restore assert).
             focused.record(key, pinned)
-            if (held) return@LaunchedEffect
+            focused.recordBody()
+            focused.rebaselineKeyboard() // #378 (b): an edit during a keyboard transition is the new baseline.
+            if (heldNow()) return@LaunchedEffect
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return@LaunchedEffect
             val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
                 else Triple(outer, focused.outerContent, focused.outerViewport)
@@ -253,14 +357,32 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             var target = if (caret.top < top) caret.top else if (caret.bottom > top + v) caret.bottom - v else top
             val trailing = focused.trailingIn(inside)
             target = lastLineSpan(target, box, caret, trailing, v, margin)
-            target = labelRule(target, box, keptRange(box, caret, trailing, v, margin), v, margin, labelBand)
+            target = labelRule(target, labelExtent(box, focused.labelIn(inside), labelBand),
+                keptRange(box, caret, trailing, v, margin), v, margin)
             val next = target.roundToInt().coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
         }
-        Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it; focused.record(key, pinned) }
+        // #378 (b): the dialog window's IME inset and Compose's animation source and target, read in the outer placement
+        // below (before that pass's restores), so a change to any of them re-runs it and a transition's end is never skipped.
+        val imeInset = WindowInsets.ime
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class) val imeSource = WindowInsets.imeAnimationSource
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class) val imeTarget = WindowInsets.imeAnimationTarget
+        val navInset = WindowInsets.navigationBars
+        Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it; focused.record(key, pinned); focused.recordBody() }
             .onSizeChanged { focused.outerViewport = it.height }
             .onGloballyPositioned { focused.outerFrame = it }
-            .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline).verticalScroll(outer)
+            .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline)
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                layout(placeable.width, placeable.height) {
+                    val density = this@layout
+                    focused.observeKeyboard(imeInset.getBottom(density), imeSource.getBottom(density),
+                        imeTarget.getBottom(density), key, navInset.getBottom(density))
+                    restoreInPlacement(forPinned = false, outer, placeable.height)
+                    placeable.place(0, 0)
+                }
+            }
+            .verticalScroll(outer)
             .onGloballyPositioned { focused.outerContent = it; restoreInLayoutPass() }
             .testTag(if (pinned) "form_dialog_pinned" else "form_dialog_column").padding(24.dp)) {
             Box(Modifier.padding(bottom = 16.dp).onSizeChanged { titleHeight = it.height }) {
@@ -278,9 +400,23 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                     Column(Modifier.onSizeChanged { focused.innerViewport = it.height }
                         .onGloballyPositioned { focused.innerFrame = it }
                         .then(if (pinned) Modifier.scrollEdgeDividers(inner, MaterialTheme.colorScheme.outline)
-                        .verticalScroll(inner) else Modifier).onGloballyPositioned {
+                            .layout { measurable, constraints ->
+                                val placeable = measurable.measure(constraints)
+                                layout(placeable.width, placeable.height) {
+                                    // #378: read here too, so the pass that settles a keyboard transition re-places the
+                                    // inner scroller and a pinned final restore runs in that frame, not a frame or more
+                                    // later from the after-a-frame step (the outer placement alone re-ran: diag run
+                                    // 46049891318). The outer placement, earlier in the pass, already observed them.
+                                    val density = this@layout
+                                    imeInset.getBottom(density); imeSource.getBottom(density); imeTarget.getBottom(density)
+                                    restoreInPlacement(forPinned = true, inner, placeable.height)
+                                    placeable.place(0, 0)
+                                }
+                            }
+                            .verticalScroll(inner) else Modifier).onGloballyPositioned {
                             focused.innerContent = it
                             focused.record(key, pinned)
+                            focused.recordBody()
                         },
                         verticalArrangement = bodyArrangement, content = body)
                 }
@@ -293,6 +429,129 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             }
         }
     }
+}
+
+/**
+ * #378: the focused field's place in the body column's own content (its box, caret line and trailing line), the body's
+ * top in the outer content, the body content's height and the outer content's height below the body, at a placement.
+ */
+internal class BodyPlace(val child: Any, val box: androidx.compose.ui.geometry.Rect, val caret: androidx.compose.ui.geometry.Rect?,
+    val trailing: androidx.compose.ui.geometry.Rect?, val bodyTop: Float, val bodyHeight: Int, val belowBody: Float,
+    val label: androidx.compose.ui.geometry.Rect? = null, val caretVersion: Int = -1)
+
+/**
+ * #378 finding 3: a restore claims its change only when the view isn't held; a held pass leaves the claim for the pass
+ * where the hold releases.
+ */
+internal inline fun claimUnlessHeld(held: Boolean, claim: () -> Boolean): Boolean = !held && claim()
+
+/**
+ * #378 F1 (TL): the effective hold: the composed notice's hold ([composed], which starts it with the notice) and the
+ * caller's live state ([live], snapshot state the release writes synchronously). The live read comes second, so a form
+ * with no composed hold doesn't observe it.
+ */
+internal inline fun holdNow(composed: Boolean, live: () -> Boolean): Boolean = composed && live()
+
+/** #378 failure 3: a running keyboard slide: the inset now, its target, the navigation bar inset (px), and its direction. */
+internal class KeyboardSlide(val ime: Float, val target: Float, val navBottom: Float, val arriving: Boolean)
+
+/** #378 failure 3: the transition's end layout: whether it is pinned, and its viewport height (px). */
+internal class EndLayout(val pinned: Boolean, val viewport: Float)
+
+/**
+ * #378 failure 3: the end layout from the IME target. The dialog area's bottom inset is max(navigation bar, IME), so the end
+ * maxHeight is today's less the inset's change; the pinned rule is FormDialog's own (available >= the minimum body).
+ */
+internal fun endLayout(maxHeight: Float, navBottom: Float, ime: Float, target: Float, chrome: Float, titleAndButtons: Float,
+    minimumBody: Float, bodyHeight: Float, outerContent: Float): EndLayout {
+    val endMaxHeight = maxHeight - (maxOf(navBottom, target) - maxOf(navBottom, ime))
+    val available = endMaxHeight - chrome - titleAndButtons
+    // The decision as FormDialog's own (a Dp comparison, the same at any scale); the viewport in whole px, as Compose
+    // rounds the body's heightIn(max = available) (roundToPx), so the end viewport is the one the settled layout
+    // measures, not a fraction off it (TL: a same-mode slide's last frame and the settle must agree).
+    return if (available >= minimumBody) EndLayout(true, minOf(kotlin.math.round(available), bodyHeight))
+        else EndLayout(false, minOf(kotlin.math.round(endMaxHeight), outerContent))
+}
+
+/**
+ * #378 failure 3: a same-mode slide frame's target: the end's target [tEnd] with only this frame's floors, in order: the
+ * caret line wholly in view; a half label goes out (it is above the caret, so the line stays in view); then the scroll
+ * range, lowered to the label whole if the range's end lands it half and the caret line stays in view (otherwise the
+ * range's end, as the end frame itself settles there: the pre-existing label/maxValue gap, its own PR).
+ */
+internal fun sameModeFrameTarget(tEnd: Float, caretTop: Float?, caretBottom: Float?, v: Float, labelTop: Float,
+    labelBottom: Float, margin: Float, maxValue: Int): Float {
+    var t = tEnd
+    if (caretBottom != null && caretBottom - t > v) t = caretBottom - v
+    if (caretTop != null && caretTop < t) t = caretTop
+    if (labelHalf(t, labelTop, labelBottom, margin)) t = labelBottom
+    if (t > maxValue) {
+        t = maxValue.toFloat()
+        val whole = labelTop - margin
+        if (labelHalf(t, labelTop, labelBottom, margin) && (caretBottom == null || caretBottom - whole <= v)) t = whole
+    }
+    return t.coerceAtLeast(0f)
+}
+
+internal fun labelHalf(t: Float, labelTop: Float, labelBottom: Float, margin: Float): Boolean =
+    labelBottom - t > 0f && labelTop - t < margin
+
+/**
+ * #378 failure 3: the frames before a mode switch: the per-frame target, moving only with the slide within one mode
+ * (arrival: never lower than this mode's last target; hide: never higher). The caret line wins (the raw target when the
+ * clamp would leave it out of view); a half label moves with the slide (arrival: out; hide: whole), else the raw target.
+ * Reset at a mode switch, at settle, on a direction flip and on a re-anchor; a held pass doesn't reach it.
+ */
+internal class SlideClamp {
+    private var last: Float? = null
+    private var lastPinned = false
+    private var lastArriving = false
+
+    fun reset() { last = null }
+
+    fun apply(raw: Float, pinned: Boolean, arriving: Boolean, caretTop: Float?, caretBottom: Float?, v: Float,
+        labelTop: Float, labelBottom: Float, margin: Float): Float {
+        if (last != null && (pinned != lastPinned || arriving != lastArriving)) last = null
+        val previous = last
+        var t = if (previous == null) raw else if (arriving) maxOf(raw, previous) else minOf(raw, previous)
+        val caretOut = (caretTop != null && caretTop < t) || (caretBottom != null && caretBottom - t > v)
+        if (caretOut) t = raw
+        else if (labelHalf(t, labelTop, labelBottom, margin)) {
+            val withSlide = if (arriving) labelBottom else labelTop - margin
+            val ok = (caretTop == null || caretTop >= withSlide) && (caretBottom == null || caretBottom - withSlide <= v)
+            t = if (ok) withSlide else raw
+        }
+        last = t; lastPinned = pinned; lastArriving = arriving
+        return t
+    }
+}
+
+/** #378: whether a deferred step launched for ([key], [pinned]) is still for the layout pass's current layout. */
+internal fun deferredStepCurrent(layoutKey: Any?, layoutPinned: Boolean, key: Any, pinned: Boolean): Boolean =
+    layoutKey == key && layoutPinned == pinned
+
+/** A's step (A3): the caret's line keeps its offset from the viewport's top, clamped inside the viewport. */
+internal fun keepCaretOffset(caretTop: Float, caretBefore: Float, caretHeight: Float, v: Float): Float =
+    caretTop - caretBefore.coerceIn(0f, (v - caretHeight).coerceAtLeast(0f))
+
+/** #378 failure 2: a baseline's caret offset re-anchored: its field offset plus the caret's current position in the field. */
+internal fun reanchoredCaret(field: Float, caretInField: Float?): Float? = caretInField?.let { field + it }
+
+/** #378 finding 2: how far the caret moved in the field since its place was cached (0 when either is unknown). */
+internal fun caretShift(cached: androidx.compose.ui.geometry.Rect?, live: androidx.compose.ui.geometry.Rect?): Float =
+    if (cached == null || live == null) 0f else live.top - cached.top
+
+/**
+ * #378: whether [place] is this pass's place for [child] in the scroller in use, measured before it's placed: the same
+ * field, and the content not re-measured. Pinned, the inner scroller's content is the body (`maxValue + viewport` its
+ * height); one column, the outer content is the body's top, the body and the part below it. Content no taller than the
+ * viewport (maxValue 0) can't scroll, so any target is clamped to 0 there anyway.
+ */
+internal fun bodyPlaceValid(place: BodyPlace, child: Any, pinned: Boolean, maxValue: Int, viewportHeight: Int): Boolean {
+    if (place.child !== child) return false
+    if (maxValue == 0) return true
+    val expected = if (pinned) place.bodyHeight.toFloat() else place.bodyTop + place.bodyHeight + place.belowBody
+    return kotlin.math.abs(maxValue + viewportHeight - expected) <= 1f
 }
 
 /** A3: claims each layout key once, so only the first position callback after a height or mode change restores. */
@@ -315,6 +574,17 @@ internal class FormDialogSameFrameRestore {
 internal fun sameFrameDelta(target: Int, value: Int, maxValue: Int): Float? = when {
     target !in 0..maxValue || target == value -> null
     else -> (target - value).toFloat()
+}
+
+/**
+ * #378 (TL): the placement restore's delta: the target clamped to the scroll range, as the after-a-frame step clamps it,
+ * applied in this pass. The placement runs after the scroll node's measure and [bodyPlaceValid] has just checked that
+ * maxValue + viewport is this pass's content, so the range is current (kb100's hide, diag run 46081190151: target 947
+ * against max 796 was left to the step a frame later). Null when the clamped target is where the scroller is.
+ */
+internal fun placementDelta(target: Int, value: Int, maxValue: Int): Float? {
+    val clamped = target.coerceIn(0, maxOf(0, maxValue))
+    return if (clamped == value) null else (clamped - value).toFloat()
 }
 
 /** A3: applies [delta] and then [cancelRunning], only when there is a delta (no move, no cancel: the fallback acts). */
@@ -375,18 +645,31 @@ internal fun keptRange(box: androidx.compose.ui.geometry.Rect, caret: androidx.c
  * line, or the last-line span when it fits) stays wholly in view; otherwise it takes the label out if [kept]'s top stays
  * in view; otherwise nothing moves. Returns the adjusted target.
  */
-internal fun labelRule(target: Float, box: androidx.compose.ui.geometry.Rect, kept: ClosedFloatingPointRange<Float>,
-    v: Float, margin: Float, labelBand: Float): Float {
-    val fieldRel = box.top - target
-    if (fieldRel <= -labelBand || fieldRel >= margin) return target
-    val up = margin - fieldRel
-    val down = fieldRel + labelBand
+internal fun labelRule(target: Float, label: ClosedFloatingPointRange<Float>, kept: ClosedFloatingPointRange<Float>,
+    v: Float, margin: Float): Float {
+    val topRel = label.start - target
+    val bottomRel = label.endInclusive - target
+    if (bottomRel <= 0f || topRel >= margin) return target // Entirely out, or whole with its margin.
+    val up = margin - topRel // The label's top to the margin.
+    val down = bottomRel     // The label's bottom to the viewport's top: entirely out.
     return when {
         kept.endInclusive - (target - up) <= v -> target - up
         kept.start - (target + down) >= 0f -> target + down
         else -> target
     }
 }
+
+/** The band form: a floating label in the band at the field's top edge (a field that publishes no separate label). */
+internal fun labelRule(target: Float, box: androidx.compose.ui.geometry.Rect, kept: ClosedFloatingPointRange<Float>,
+    v: Float, margin: Float, labelBand: Float): Float = labelRule(target, labelExtent(box, null, labelBand), kept, v, margin)
+
+/**
+ * The label's extent in content coordinates: a published separate label's whole node (every wrapped line), else the
+ * floating-label band at the field's top edge (#378: the report form's label is a Text above the field, which the band
+ * didn't cover; the band stays for fields with a floating label).
+ */
+internal fun labelExtent(box: androidx.compose.ui.geometry.Rect, label: androidx.compose.ui.geometry.Rect?, labelBand: Float):
+    ClosedFloatingPointRange<Float> = label?.let { it.top..it.bottom } ?: box.top..(box.top + labelBand)
 
 /**
  * Where a focused form-dialog field's caret is (#369, TL): its line in [coordinates] (the field's text area), from the
@@ -421,6 +704,19 @@ internal class FormDialogCaret {
     fun publishTrailing(coordinates: LayoutCoordinates?) {
         if (coordinates === trailing) return
         trailing = coordinates
+        version++
+    }
+
+    /**
+     * The field's separate label, if it has one (a Text above the field, not a floating label in its border): the label
+     * rule keeps that whole node in or entirely out (#378, PL). Cleared when it leaves composition.
+     */
+    var label: LayoutCoordinates? = null
+        private set
+
+    fun publishLabel(coordinates: LayoutCoordinates?) {
+        if (coordinates === label) return
+        label = coordinates
         version++
     }
 }
@@ -473,6 +769,12 @@ private class FocusedChild {
         return inside.localBoundingBoxOf(trailing, clipBounds = false)
     }
 
+    /** The field's separate label (its whole Text node) in [inside]'s coordinates, if the field publishes one (#378). */
+    fun labelIn(inside: LayoutCoordinates): androidx.compose.ui.geometry.Rect? {
+        val label = caret.label?.takeIf { it.isAttached } ?: return null
+        return inside.localBoundingBoxOf(label, clipBounds = false)
+    }
+
     /** The current layout pass's key and mode, set first in the outer position callback (A3; see record()). */
     var layoutKey: Any? = null
     var layoutPinned = false
@@ -508,11 +810,97 @@ private class FocusedChild {
      * a child's position callback could still carry the old key) became `previous`, and the fallback restored from it
      * (#376's portrait text-first probe: 3080 in the same frame, then 2867 from the stray record, the caret at 319 not 106).
      */
-    fun before(key: Any, child: LayoutCoordinates): Seen? =
-        baseline.get(key) { if (key == lastKey) previous else last }?.takeIf { it.child === child }
+    fun before(key: Any, child: LayoutCoordinates): Seen? {
+        // #378 (b): during a keyboard transition, and at its final layout, every change reads the place from before it.
+        if (keyboard.applies(key)) {
+            val held = keyboard.baseline()
+            if (held != null && held.child === child) return held
+            keyboard.release() // The field changed, or nothing was recorded before the transition: today's path.
+        }
+        return baseline.get(key) { if (key == lastKey) previous else last }?.takeIf { it.child === child }
+    }
+
+    /** #378 (b): one baseline per keyboard transition (see [KeyboardTransitionBaseline]). Released with this holder. */
+    private val keyboard = KeyboardTransitionBaseline<Seen>()
+
+    /** Each outer placement, before its restores: the dialog window's IME inset, source and target bottoms. */
+    fun observeKeyboard(ime: Int, source: Int, target: Int, key: Any, navBottom: Int = 0) {
+        keyboard.observe(ime, source, target, key) { last }
+        slideIme = ime; slideSource = source; slideTarget = target; slideNav = navBottom
+        if (!keyboard.holding) slideClamp.reset()
+    }
+
+    private var slideIme = 0
+    private var slideSource = 0
+    private var slideTarget = 0
+    private var slideNav = 0
+
+    /** #378 failure 3: the slide's direction clamp for the frames before a mode switch. */
+    val slideClamp = SlideClamp()
+
+    /** #378 failure 3: the running keyboard slide (frozen transition), or null when settled or none is reported. */
+    fun keyboardSlide(): KeyboardSlide? = if (!keyboard.holding) null else
+        KeyboardSlide(slideIme.toFloat(), slideTarget.toFloat(), slideNav.toFloat(),
+            arriving = if (slideSource != slideTarget) slideTarget > slideSource else slideTarget > slideIme)
+
+    /** A text or selection change during a transition: the place now is the transition's baseline. */
+    fun rebaselineKeyboard() {
+        slideClamp.reset() // #378 failure 3: a caret moved by an edit isn't slide motion; the clamp starts again.
+        // #378 failure 2: re-anchored, not replaced. Taking the latest record made a clamped intermediate place the new
+        // baseline (diag run 46066588478, API36 text-first: caret offset 98 instead of 106, then 3088 and 2952 for 3080
+        // and 2944). The baseline keeps its field offset and takes the caret's current position in the field, from the
+        // live record (caret - field: both measured in the same viewport frame, so the scroll cancels). Only while frozen.
+        val now = last ?: return
+        // Another field's record (focus moved mid-transition): the freeze is released, as before() releases it, rather than
+        // taking that record, which could be a clamped intermediate place (only the report field publishes a caret today).
+        keyboard.reanchor { held ->
+            if (held.child !== now.child) null
+            else Seen(held.child, held.field, reanchoredCaret(held.field, now.caret?.let { it - now.field }), held.visible)
+        }
+    }
 
     /** A new height or mode change was claimed: its baseline is read afresh (see [before]). */
     fun newChange() = baseline.reset()
+
+    /** The focused field's place in the body column's own content, at the last placement (see [BodyPlace]). */
+    var body: BodyPlace? = null
+        private set
+
+    /**
+     * Records where the focused field, its caret line and its trailing line sit in the body column's own content, which a
+     * scroll or a mode switch doesn't move, with the body's top and the space below it in the outer content, for the next
+     * pass's placement-pass restore (#378).
+     */
+    fun recordBody() {
+        val child = coordinates?.takeIf { it.isAttached }
+        val inside = innerContent?.takeIf { it.isAttached }
+        val frame = innerFrame?.takeIf { it.isAttached }
+        val outerContentNow = outerContent?.takeIf { it.isAttached }
+        if (child == null || inside == null || frame == null || outerContentNow == null) { body = null; return }
+        val box = inside.localBoundingBoxOf(child, clipBounds = false)
+        val bodyTop = outerContentNow.localPositionOf(frame, androidx.compose.ui.geometry.Offset.Zero).y
+        body = BodyPlace(child, box, caretIn(inside, box), trailingIn(inside), bodyTop, inside.size.height,
+            outerContentNow.size.height - (bodyTop + frame.size.height), labelIn(inside), caret.version)
+    }
+
+    /** #378 finding 2: the cached place with the live caret, at the current caret version (so it's applied once). */
+    fun refreshBodyCaret(live: androidx.compose.ui.geometry.Rect) {
+        val b = body ?: return
+        body = BodyPlace(b.child, b.box, live, b.trailing, b.bodyTop, b.bodyHeight, b.belowBody, b.label, caret.version)
+    }
+
+    /**
+     * #378 finding 2: the baseline [before] returns for [key] with its caret re-anchored at [caretInField] (a selection
+     * change since it was recorded): the transition's frozen baseline when one applies, else this change's. Setting, not
+     * shifting, so it agrees with the caret effect's re-anchor in either order.
+     */
+    fun reanchorBaselineCaret(key: Any, child: LayoutCoordinates, caretInField: Float) {
+        slideClamp.reset() // #378 failure 3: as an edit, not slide motion.
+        val seen = before(key, child) ?: return
+        if (seen.caret == null) return
+        val anchored = Seen(seen.child, seen.field, reanchoredCaret(seen.field, caretInField), seen.visible)
+        if (keyboard.applies(key)) keyboard.replace(anchored) else baseline.set(key, anchored)
+    }
 
     private val baseline = FrozenPerChange<Seen?>()
 }
@@ -533,6 +921,60 @@ internal fun acceptsFrame(frameHeight: Int, viewport: Int): Boolean = viewport <
  * different key also reads afresh (a key no position callback claimed). A key coming back after another change is a new
  * change only through [reset], which the claim of each change calls.
  */
+/**
+ * #378 (b), TL and PL 2026-11-27: one baseline per keyboard transition, so an animated keyboard change ends where the same
+ * change ends with animations off (each frame of the slide used to carry the previous frame's place forward: an
+ * intermediate layout with a smaller viewport clamped it, and the end depended on the frames the slide passed through).
+ *
+ * Unsettled: the dialog window's IME inset differs from Compose's animation target, or the source from the target. Compose's
+ * InsetsListener sets all three to the window's insets whenever no IME animation is prepared or running (onApplyWindowInsets
+ * without an animation, and onEnd, called for a finished or a cancelled animation), so a settled placement always comes
+ * at the end of a slide, finished, reversed or cancelled. Animations off, a change is one unsettled placement at the old
+ * inset, then a settled one: the baseline is the last record before the change, as without this.
+ *
+ * - The first unsettled placement freezes the last record before it ([observe]'s latest).
+ * - A reversal (a hide starting before a show reaches its target: source = target while the inset differs) stays unsettled:
+ *   the baseline stays the place from before any keyboard change.
+ * - The first settled placement ends the transition; its key is the final layout, whose restore still reads the baseline.
+ * - Another key after that releases; so does the caller for a field change or no record. An edit re-baselines.
+ * - No animation reported (API < 30, or inset = source = target throughout): never frozen, today's path.
+ */
+internal class KeyboardTransitionBaseline<T : Any> {
+    var holding = false
+        private set
+    private var held: T? = null
+    private var finalKey: Any? = null
+
+    fun observe(ime: Int, source: Int, target: Int, key: Any, latest: () -> T?) {
+        if (ime != target || source != target) {
+            if (!holding) { holding = true; held = latest() }
+            finalKey = null
+        } else if (holding) {
+            holding = false
+            finalKey = key
+        } else if (finalKey != null && key != finalKey) {
+            release()
+        }
+    }
+
+    /** Whether a restore for [key] reads the transition's baseline: during the transition and at its final layout. */
+    fun applies(key: Any): Boolean = holding || (finalKey != null && key == finalKey)
+
+    fun baseline(): T? = held
+
+    fun release() { holding = false; held = null; finalKey = null }
+
+    /** #378 failure 2: an edit during a transition re-anchors the frozen baseline (only while frozen); null releases. */
+    fun reanchor(transform: (T) -> T?) {
+        if (!holding) return
+        val anchored = held?.let(transform)
+        if (anchored == null) release() else held = anchored
+    }
+
+    /** #378 finding 2: the baseline with a correction (the caret moved in the field since it was recorded). */
+    fun replace(value: T) { if (held != null) held = value }
+}
+
 internal class FrozenPerChange<T> {
     private var key: Any? = null
     private var hasValue = false
@@ -541,6 +983,13 @@ internal class FrozenPerChange<T> {
     fun reset() {
         hasValue = false
         value = null
+    }
+
+    /** #378 finding 2: this change's baseline, corrected. */
+    fun set(key: Any, value: T) {
+        this.key = key
+        this.value = value
+        hasValue = true
     }
 
     @Suppress("UNCHECKED_CAST")
