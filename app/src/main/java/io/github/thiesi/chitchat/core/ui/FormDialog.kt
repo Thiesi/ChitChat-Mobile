@@ -400,6 +400,15 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                     val density = this@layout
                     focused.observeKeyboard(imeInset.getBottom(density), imeSource.getBottom(density),
                         imeTarget.getBottom(density), key, navInset.getBottom(density))
+                    // #372: in one column the body has no inner scroll node, yet the root and window position path
+                    // (positionInRoot, positionInWindow, and so accessibility's SHOW_ON_SCREEN) still applies the inner
+                    // state's current value at the body's children; measured skew = inner.value (runs 46156251647 and
+                    // 46159151874, both levels), which scrolled a visible field ~1,000 px away. The Compose internal isn't
+                    // named; the relation is, and FormDialogA11yTest guards it. Zeroed here, in a pass laid out in one
+                    // column, before the body is placed: one write per stay (a no-op once 0), nothing drawn moves (no inner
+                    // scroll node in this mode), and dispatchRawDelta skips nested scroll. The pinned restore sets the
+                    // inner value again on the return, from the recorded places, never from its old value.
+                    if (!pinned && inner.value != 0) inner.dispatchRawDelta(-inner.value.toFloat())
                     restoreInPlacement(forPinned = false, outer, placeable.height)
                     placeable.place(0, 0)
                 }

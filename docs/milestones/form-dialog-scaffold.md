@@ -38,6 +38,31 @@ app window's bounds, not whether the keyboard covers a node.
   field keeps its node and the keyboard stays up. When the space changes, an `onFocusedBoundsChanged` observer scrolls
   the active scroller to the focused field. That's a scroll, never a focus request. Typing then keeps the caret in view
   as usual.
+- **The inner value is 0 in one column (#372, TL and PL, 2026-11-28).**
+  - **The defect:** one column drops the body's `verticalScroll(inner)`. Yet the root and window position path
+    (`positionInRoot`, `positionInWindow`) still applied the inner state's current value at the body's children, while
+    `localPositionOf` and `boundsInWindow` didn't. Compose's accessibility SHOW_ON_SCREEN builds its target from
+    `positionInRoot`, so a TalkBack user focusing an already visible field was scrolled away by the skew: about 1,040 px
+    on the report form at 200%, 46 to 134 px on step-up (diag runs 46156251647 and 46159151874).
+  - **What's measured, and what isn't:** in every one-column state, skew = `inner.value`. The Compose internal that
+    still reads it isn't named.
+  - **The fix depends on that measured relation:** the outer scroller's placement step zeroes the inner value
+    (`dispatchRawDelta`, which skips nested scroll) in a pass laid out in one column. It's one write per stay, a no-op once
+    0, and nothing drawn moves, because there's no inner scroll node in this mode. The modifier chain and the semantics
+    are unchanged. A first attempt kept a disabled inner `verticalScroll`, but its scroll semantics would have added an
+    accessibility node in one column.
+  - **Who reads the inner state:** `heightStep`, the caret effect and the deferred step take `inner` only while pinned.
+    So does the #384 held spec (`inUse` = pinned), and so do the dividers, the pinned placement restore and the scroll
+    node. On the return to pinned, the restore sets the inner value from the recorded field and caret places in
+    viewport coordinates, never from its old value.
+  - **No recorded place:** the return to pinned without a focused field is the only case where the old value would have
+    shown. The one-column mode needs the keyboard, which needs the focused field (or a short window). A window that
+    grows in this app comes from a rotation or a resize, and MainActivity declares no `configChanges`, so both recreate
+    the activity and the dialog's inner state starts at 0 on main too (diag: innerValue 0 after the rotation).
+  - **Guarded by** `FormDialogA11yTest`: in one column after a pinned inner scroll, the window position equals the drawn
+    top, and SHOW_ON_SCREEN on the visible field and counter moves nothing, for the report form and step-up.
+  - **SHOW on a partly visible node** is Compose's own minimum scroll, not this dialog's label rule (PL, #372). The label
+    rule for it is #391, after Play.
 - **What was in view stays in view (#369; TL and PL, 2026-11-25 and 2026-11-26).**
   - **The defects:**
     - A switch swaps scrollers, which lost the scroll position. The old rule then sent a field taller than the view to
