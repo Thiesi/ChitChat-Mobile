@@ -291,9 +291,8 @@ class ReportNoticeViewportTest {
 
     /**
      * DIAGNOSTIC (never merged), the PL's lead check (2026-11-28): the WarningNotice text layout's first line bottom from
-     * the notice's top (the text node's offset in the notice, both window positions in the same scroller, so a scroll
-     * offset cancels, plus getLineBottom(0)), next to the lead's last line bottom; the production proxy is the KEEP line's
-     * leadProxy (CCMKeepProbe). Logged, never asserted.
+     * the notice's top (the text node's offset in the notice from layout coordinates, plus getLineBottom(0)), next to the
+     * lead's last line bottom; the production proxy is the KEEP line's leadProxy (CCMKeepProbe). Logged, never asserted.
      */
     private fun diagLead(case: String, line: SemanticsNodeInteraction, lead: String) {
         val notice = line.fetchSemanticsNode()
@@ -302,10 +301,19 @@ class ReportNoticeViewportTest {
         val layouts = mutableListOf<TextLayoutResult>()
         compose.runOnIdle { text.config[SemanticsActions.GetTextLayoutResult].action!!(layouts) }
         val l = layouts.single()
-        val offset = text.positionInWindow.y - notice.positionInWindow.y
+        // TL: the offset from layout coordinates, not window positions. A node's layoutInfo.coordinates are inside its own
+        // modifiers, so the notice's are inside its padding(vertical = 8.dp): its top padding is half the difference
+        // between its outer height (the semantics node's, the testTag being first in the chain, where the keep is
+        // published) and that inner height. The window difference is logged beside it as a cross-check only.
+        val inner = notice.layoutInfo.coordinates
+        val innerOffset = inner.localPositionOf(text.layoutInfo.coordinates, androidx.compose.ui.geometry.Offset.Zero).y
+        val paddingTop = (notice.size.height - inner.size.height) / 2f
+        val offset = paddingTop + innerOffset
+        val windowDiff = text.positionInWindow.y - notice.positionInWindow.y
         val first = l.getLineBottom(0)
         val leadLast = l.getLineBottom(l.getLineForOffset(lead.length - 1))
-        val msg = "LEAD case=$case density=$density textOffsetInNotice=$offset firstLineTop=${l.getLineTop(0)} " +
+        val msg = "LEAD case=$case density=$density textOffsetInNotice=$offset innerOffset=$innerOffset " +
+            "noticePaddingTop=$paddingTop crossCheckWindowDiff=$windowDiff firstLineTop=${l.getLineTop(0)} " +
             "firstLineBottom=$first layoutLead=${offset + first} leadLastLineBottom=${offset + leadLast} lines=${l.lineCount} " +
             "noticeHeight=${notice.size.height}"
         android.util.Log.i("CCMNotice", msg)
