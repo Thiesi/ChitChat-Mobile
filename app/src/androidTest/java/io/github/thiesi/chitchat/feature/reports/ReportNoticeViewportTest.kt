@@ -157,6 +157,7 @@ class ReportNoticeViewportTest {
     /** After the person's native tap (strict focus and IME proof): the field whole above the keyboard, its caret inside it. */
     private fun caretBack(case: String) {
         compose.onNodeWithTag("report_details").performScrollTo()
+        io.github.thiesi.chitchat.testing.DiagRecording.flash() // DIAGNOSTIC: the sync strip (no-op outside a recorded case).
         compose.tapNativeInput("report_details", imeBottom = ::imeBottom)
         compose.waitForIdle()
         val field = compose.onNodeWithTag("report_details").fetchSemanticsNode()
@@ -170,6 +171,7 @@ class ReportNoticeViewportTest {
         val (labelTop, labelBottom) = labelInViewport()
         facts(case, "tapped", "fieldWhole=$whole caretBottomInField=${caret.bottom} fieldHeight=${field.size.height} " +
             "label=$labelTop..$labelBottom")
+        io.github.thiesi.chitchat.testing.DiagRecording.capture("tapped") // DIAGNOSTIC (no-op outside a recorded case).
         assertTrue("$case: after the tap the field is whole above the keyboard with the caret inside it (field $box, " +
             "size ${field.size}, caret $caret, imeTop ${ime.imeTop})",
             ime.visible && whole && box.bottom <= ime.imeTop + 0.5f && caret.bottom <= field.size.height + 0.5f)
@@ -240,6 +242,8 @@ class ReportNoticeViewportTest {
                 val (labelTop, labelBottom) = labelInViewport()
                 val detail = "$inViewDetail label=$labelTop..$labelBottom"
                 val (focused, imeUp, focusedNodes) = facts(case, "shown", detail)
+                if (lead != null) diagLead(case, line(), lead) // DIAGNOSTIC: the PL's lead check.
+                io.github.thiesi.chitchat.testing.DiagRecording.capture("shown") // DIAGNOSTIC (no-op outside a recorded case).
                 assertTrue("$case: the label is whole or entirely out in the held stage ($detail)",
                     labelTop >= 8f * density - 1f || labelBottom <= 0.5f)
                 if (instant) {
@@ -284,6 +288,53 @@ class ReportNoticeViewportTest {
             }
         } finally { gate.complete(Unit); compose.runOnIdle { room.cancel(); reports.close() } }
     }
+
+    /**
+     * DIAGNOSTIC (never merged), the PL's lead check (2026-11-28): the WarningNotice text layout's first line bottom from
+     * the notice's top (the text node's offset in the notice, both window positions in the same scroller, so a scroll
+     * offset cancels, plus getLineBottom(0)), next to the lead's last line bottom; the production proxy is the KEEP line's
+     * leadProxy (CCMKeepProbe). Logged, never asserted.
+     */
+    private fun diagLead(case: String, line: SemanticsNodeInteraction, lead: String) {
+        val notice = line.fetchSemanticsNode()
+        val text = compose.onNode(hasText(lead, substring = true) and hasAnyAncestor(hasTestTag("report_notice")),
+            useUnmergedTree = true).fetchSemanticsNode()
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.runOnIdle { text.config[SemanticsActions.GetTextLayoutResult].action!!(layouts) }
+        val l = layouts.single()
+        val offset = text.positionInWindow.y - notice.positionInWindow.y
+        val first = l.getLineBottom(0)
+        val leadLast = l.getLineBottom(l.getLineForOffset(lead.length - 1))
+        val msg = "LEAD case=$case density=$density textOffsetInNotice=$offset firstLineTop=${l.getLineTop(0)} " +
+            "firstLineBottom=$first layoutLead=${offset + first} leadLastLineBottom=${offset + leadLast} lines=${l.lineCount} " +
+            "noticeHeight=${notice.size.height}"
+        android.util.Log.i("CCMNotice", msg)
+        io.github.thiesi.chitchat.core.ui.KeepProbe.log(msg)
+    }
+
+    // DIAGNOSTIC (never merged), #384's proof: the held stage and the re-tap, recorded, animations on and off, at 100% and
+    // 200%, for the snapshot and did-not-arrive notices (the network reply, as personSnapshot and personDidNotArrive).
+    private fun diagHeld(kind: String, percent: Int, animations: Boolean) {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
+        val name = "ccm-held-$kind-$percent-${if (animations) "on" else "off"}"
+        io.github.thiesi.chitchat.testing.DiagRecording.run(name, animations, hide = {}) {
+            if (kind == "snapshot") measure("diag-$name", true, ReportCategory.OFFENSIVE_PROFILE_PICTURE,
+                listOf(ReportResult.SnapshotUnavailable), thenTap = true, lead = snapshotLead, scale = percent / 100f) {
+                compose.onNodeWithTag("report_notice") }
+            else measure("diag-$name", true, ReportCategory.OFFENSIVE_USERNAME, listOf(ReportResult.Unknown(ApiFailure(FailureKind.TIMEOUT))),
+                facts = ReportFacts(canReport = true, reportedByMe = false), thenTap = true,
+                lead = context.getString(R.string.report_person_did_not_arrive), scale = percent / 100f) {
+                compose.onNodeWithTag("report_notice") }
+        }
+    }
+    @Test fun diagHeldSnapshot100On() = diagHeld("snapshot", 100, true)
+    @Test fun diagHeldSnapshot100Off() = diagHeld("snapshot", 100, false)
+    @Test fun diagHeldSnapshot200On() = diagHeld("snapshot", 200, true)
+    @Test fun diagHeldSnapshot200Off() = diagHeld("snapshot", 200, false)
+    @Test fun diagHeldDidNotArrive100On() = diagHeld("didnotarrive", 100, true)
+    @Test fun diagHeldDidNotArrive100Off() = diagHeld("didnotarrive", 100, false)
+    @Test fun diagHeldDidNotArrive200On() = diagHeld("didnotarrive", 200, true)
+    @Test fun diagHeldDidNotArrive200Off() = diagHeld("didnotarrive", 200, false)
 
     private val snapshotLead get() = context.getString(R.string.report_person_snapshot_lead)
     private val notSent get() = context.getString(R.string.report_not_sent)

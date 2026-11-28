@@ -565,7 +565,14 @@ private fun InViewNotice(occurrence: Long, held: Boolean, lead: androidx.compose
         val keyboardShowing = before?.ime == false && layout?.ime == true
         if (holding && !keyboardShowing) { androidx.compose.runtime.withFrameNanos { }; bring() }
     }
-    content(Modifier.bringIntoViewRequester(requester).onGloballyPositioned { caret?.publishHeldKeep(it, leadPx) })
+    val diagLast = remember { floatArrayOf(-1f, -1f) } // DIAGNOSTIC: the KEEP line on a change only.
+    content(Modifier.bringIntoViewRequester(requester).onGloballyPositioned {
+        caret?.publishHeldKeep(it, leadPx)
+        if (diagLast[0] != it.size.height.toFloat() || diagLast[1] != leadPx) {
+            diagLast[0] = it.size.height.toFloat(); diagLast[1] = leadPx
+            io.github.thiesi.chitchat.core.ui.KeepProbe.log("KEEP height=${it.size.height} leadProxy=$leadPx held=$held")
+        }
+    })
 }
 
 /**

@@ -10,17 +10,84 @@ on:
         options: [none, a, b, c]
         default: none
         required: true
+      a3_probe:
+        description: 'DIAGNOSTIC branch only: the held-notice proof for 384 on the fix head, observation only'
+        type: choice
+        options: [none, run]
+        default: none
+        required: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ inputs.reproducer_arm != 'none' && inputs.reproducer_arm != '' && format('ime-reproducer-{0}-{1}', github.ref, inputs.reproducer_arm) || format('native-input-observation-{0}', github.ref) }}
+  group: ${{ inputs.a3_probe == 'run' && format('a3-probe-{0}', github.ref) || inputs.reproducer_arm != 'none' && inputs.reproducer_arm != '' && format('ime-reproducer-{0}-{1}', github.ref, inputs.reproducer_arm) || format('native-input-observation-{0}', github.ref) }}
   cancel-in-progress: false
 
 jobs:
+  a3-probe:
+    if: inputs.a3_probe == 'run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 35
+            image: r9
+          - api: 36
+            image: r7
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: State the diagnostic boundary
+        run: |
+          echo "Diagnostic only (384): the held-notice proof, observation only. No retries. Not a merge gate."
+          echo "Observed source commit: $GITHUB_SHA"
+      - name: Install ffmpeg (the recordings' frames; diagnostic only)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg || echo "ffmpeg unavailable"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Restore the pinned system image
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-${{ matrix.api }}/google_apis/x86_64
+          key: emu-img-${{ runner.os }}-${{ runner.arch }}-api${{ matrix.api }}-google_apis-${{ matrix.image }}-emu16740729
+      - uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        env:
+          NATIVE_API: ${{ matrix.api }}
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          emulator-build: '16740729'
+          disable-animations: true
+          pre-emulator-launch-script: python3 -B .github/scripts/pin_journey_image.py
+          script: |
+            adb shell settings put secure show_ime_with_hard_keyboard 1
+            python3 -B .github/scripts/native_environment.py
+            adb logcat -G 16M || true; ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.thiesi.chitchat.feature.reports.ReportNoticeViewportTest#diagHeldSnapshot100On,io.github.thiesi.chitchat.feature.reports.ReportNoticeViewportTest#diagHeldSnapshot100Off,io.github.thiesi.chitchat.feature.reports.ReportNoticeViewportTest#diagHeldSnapshot200On,io.github.thiesi.chitchat.feature.reports.ReportNoticeViewportTest#diagHeldSnapshot200Off,io.github.thiesi.chitchat.feature.reports.ReportNoticeViewportTest#diagHeldDidNotArrive100On,io.github.thiesi.chitchat.feature.reports.ReportNoticeViewportTest#diagHeldDidNotArrive100Off,io.github.thiesi.chitchat.feature.reports.ReportNoticeViewportTest#diagHeldDidNotArrive200On,io.github.thiesi.chitchat.feature.reports.ReportNoticeViewportTest#diagHeldDidNotArrive200Off,io.github.thiesi.chitchat.feature.reports.ReportFormLayoutTest#diag387On,io.github.thiesi.chitchat.feature.reports.ReportFormLayoutTest#diag387Off -Pandroid.testInstrumentationRunnerArguments.a3Probe=run -Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true --max-workers=2; s=$?; echo "diagnostic gradle exit $s"; for k in window_animation_scale transition_animation_scale animator_duration_scale; do echo "after the run: $k=$(adb shell settings get global $k)"; done; mkdir -p app/build/ccm-recording app/build/ccm-device-output; for n in ccm-held-snapshot-100-on ccm-held-snapshot-100-off ccm-held-snapshot-200-on ccm-held-snapshot-200-off ccm-held-didnotarrive-100-on ccm-held-didnotarrive-100-off ccm-held-didnotarrive-200-on ccm-held-didnotarrive-200-off ccm-387-land200-on ccm-387-land200-off; do adb pull /data/local/tmp/$n.mp4 app/build/ccm-recording/ || true; for p in shown tapped scrollto case-end; do adb pull /data/local/tmp/ccm-cap-$n-$p.png app/build/ccm-recording/ 2>/dev/null || true; done; done; adb logcat -d -s CCMKeepProbe > app/build/ccm-device-output/held-probe.txt || true; adb logcat -d -s CCMNotice > app/build/ccm-device-output/notice-facts.txt || true; adb logcat -d -s CCMDiagScales > app/build/ccm-device-output/scales-logcat.txt || true; for n in ccm-held-snapshot-100-on ccm-held-snapshot-100-off ccm-held-snapshot-200-on ccm-held-snapshot-200-off ccm-held-didnotarrive-100-on ccm-held-didnotarrive-100-off ccm-held-didnotarrive-200-on ccm-held-didnotarrive-200-off ccm-387-land200-on ccm-387-land200-off; do v=app/build/ccm-recording/$n.mp4; if [ -f "$v" ]; then mkdir -p app/build/ccm-recording/$n-frames; ffmpeg -loglevel error -i "$v" -vsync 0 app/build/ccm-recording/$n-frames/f%05d.png || true; ffprobe -loglevel error -select_streams v -show_entries frame=pts_time -of csv=p=0 "$v" > app/build/ccm-recording/$n-frame-times.csv || true; fi; done; exit $s
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: held-proof-api${{ matrix.api }}
+          retention-days: 7
+          path: |
+            app/build/outputs/connected_android_test_additional_output/
+            app/build/outputs/androidTest-results/
+            app/build/reports/androidTests/
+            app/build/ccm-recording/
+            app/build/ccm-device-output/
+
   traced-control:
-    if: inputs.reproducer_arm == 'none' || inputs.reproducer_arm == ''
+    if: (inputs.reproducer_arm == 'none' || inputs.reproducer_arm == '') && inputs.a3_probe != 'run'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

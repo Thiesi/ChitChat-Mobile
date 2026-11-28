@@ -837,12 +837,19 @@ internal fun heldBringSpec(fallback: androidx.compose.foundation.gestures.BringI
             val labelAt = caret.label?.takeIf { it.isAttached } ?: return d0
             val inside = content()?.takeIf { it.isAttached } ?: return d0
             val keep = viewport.localBoundingBoxOf(keepAt, clipBounds = false)
-            if (!insideHeldKeep(offset, size, keep.top, keep.bottom)) return d0
+            if (!insideHeldKeep(offset, size, keep.top, keep.bottom)) {
+                KeepProbe.log("HELDOUT off=$offset size=$size cont=$containerSize d0=$d0 keep=${keep.top}..${keep.bottom} value=${state.value}")
+                return d0
+            }
             val label = viewport.localBoundingBoxOf(labelAt, clipBounds = false)
             val placed = -viewport.localPositionOf(inside, androidx.compose.ui.geometry.Offset.Zero).y
             val lead = if (caret.heldLead > 0f) keep.top + caret.heldLead else keep.bottom
-            return heldBringDistance(d0, containerSize, label.top, label.bottom, keep.top, keep.bottom, lead,
-                (state.maxValue - placed).coerceAtLeast(0f), placed.coerceAtLeast(0f), margin).distance
+            val r = heldBringDistance(d0, containerSize, label.top, label.bottom, keep.top, keep.bottom, lead,
+                (state.maxValue - placed).coerceAtLeast(0f), placed.coerceAtLeast(0f), margin)
+            KeepProbe.log("HELD step=${r.step} d0=$d0 d=${r.distance} off=$offset size=$size cont=$containerSize " +
+                "label=${label.top}..${label.bottom} keep=${keep.top}..${keep.bottom} lead=$lead placed=$placed " +
+                "value=${state.value} max=${state.maxValue}")
+            return r.distance
         }
     }
 

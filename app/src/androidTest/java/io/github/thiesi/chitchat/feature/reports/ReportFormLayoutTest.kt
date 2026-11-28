@@ -326,6 +326,46 @@ class ReportFormLayoutTest {
         }
     }
 
+    // DIAGNOSTIC (never merged), #384's proof, #387's case (PL): landscape, font scale 2.00, keyboard down, the semantic
+    // scroll-to on the details field before the tap, recorded; a screencap after the scroll-to (the PL's pixel check: no
+    // glyph cut, none within 2 px of the title divider) and after the tap; the label node logged at each step.
+    private fun diag387(animations: Boolean) {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
+        val name = "ccm-387-land200-${if (animations) "on" else "off"}"
+        val ime = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } }
+        fun state(step: String) {
+            val pinned = compose.onAllNodesWithTag("form_dialog_pinned", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+            val container = compose.onNodeWithTag(if (pinned) "form_dialog_body_viewport" else "form_dialog_viewport", useUnmergedTree = true)
+                .fetchSemanticsNode()
+            val label = compose.onNodeWithTag("report_details_label", useUnmergedTree = true).fetchSemanticsNode()
+            io.github.thiesi.chitchat.core.ui.KeepProbe.log("STATE387 $step $name label=${labelPlace()} pinned=$pinned " +
+                "viewportInWindow=${container.boundsInWindow} labelClippedInWindow=${label.boundsInWindow} ime=${ime()} " +
+                "density=${context.resources.displayMetrics.density}")
+        }
+        io.github.thiesi.chitchat.testing.DiagRecording.run(name, animations, hide = {}) {
+            launchAt(2f, landscape = true, ReportViewModel(operations)) {
+                report()
+                compose.waitForIdle()
+                state("opened")
+                compose.onNodeWithTag("report_details").performScrollTo()
+                compose.waitForIdle()
+                state("scrollto")
+                io.github.thiesi.chitchat.testing.DiagRecording.capture("scrollto")
+                io.github.thiesi.chitchat.testing.DiagRecording.flash()
+                compose.tapNativeInput("report_details", imeBottom = ime)
+                compose.waitForIdle()
+                state("tapped")
+                io.github.thiesi.chitchat.testing.DiagRecording.capture("tapped")
+                androidx.test.espresso.Espresso.closeSoftKeyboard()
+                compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+                compose.waitForIdle()
+                state("hidden")
+            }
+        }
+    }
+    @Test fun diag387On() = diag387(true)
+    @Test fun diag387Off() = diag387(false)
+
     private fun launchAt200(landscape: Boolean, reports: ReportViewModel, body: () -> Unit) =
         launchAt(2f, landscape, reports, body)
 
