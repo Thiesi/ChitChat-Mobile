@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.autofill.ContentType
@@ -73,7 +74,10 @@ internal fun StepUpDialog(title: String, methods: VerificationMethods, busy: Boo
                         Text(stringResource(R.string.choose_emergency_recovery))
                     }
                     if (recovery) Text(stringResource(R.string.step_up_recovery_warning))
-                } else if (methods.hasPassword) Text(stringResource(R.string.step_up_password_explanation))
+                } else if (methods.hasPassword) Text(stringResource(R.string.step_up_password_explanation),
+                    // DIAGNOSTIC (372) D1: the one-frame nudge on the body's first child.
+                    Modifier.then(if (io.github.thiesi.chitchat.core.ui.KeepProbe.variant == "D1") Modifier.offset {
+                        androidx.compose.ui.unit.IntOffset(0, io.github.thiesi.chitchat.core.ui.KeepProbe.nudge.intValue) } else Modifier))
                 else Text(stringResource(R.string.step_up_provider_unavailable))
                 errorMessage?.let { InlineError(it) }
                 if (canEnter) OutlinedTextField(secret, { secret = it }, Modifier.fillMaxWidth().testTag("step_up_secret").semantics {

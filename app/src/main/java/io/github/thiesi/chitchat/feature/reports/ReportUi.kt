@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -262,7 +263,11 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
         modifier = Modifier.lanternDialogEdge().semantics { paneTitle = title }.testTag("report_dialog"),
         title = { Text(title, modifier = Modifier.semantics { heading() }) },
         body = {
-            Column(Modifier.fillMaxWidth().testTag("report_body"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.fillMaxWidth()
+                // DIAGNOSTIC (372) D1: the one-frame nudge on the body's first child.
+                .then(if (io.github.thiesi.chitchat.core.ui.KeepProbe.variant == "D1") Modifier.offset {
+                    androidx.compose.ui.unit.IntOffset(0, io.github.thiesi.chitchat.core.ui.KeepProbe.nudge.intValue) } else Modifier)
+                .testTag("report_body"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (person != null) PersonContext(name, person.userId) else subject?.let { ContextCard(it) }
                 if (unknown) Summary(state) else Form(reports, state, sending)
                 notice?.let { NoticeText(it, waitSeconds, waiting, name, state.noticeSeq, state.noticeHeld) }

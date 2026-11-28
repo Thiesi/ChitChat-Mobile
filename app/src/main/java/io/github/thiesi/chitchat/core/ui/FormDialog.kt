@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -415,7 +416,10 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // The modes differ only in modifiers, never in the tree, so a focused field keeps its node across a switch:
             // pinned, the body gets the leftover height and scrolls inside it; one column, it takes its own height and the
             // whole dialog scrolls.
+            androidx.compose.runtime.SideEffect { KeepProbe.outer = outer; KeepProbe.inner = inner } // DIAGNOSTIC (372)
             Box(Modifier.padding(bottom = 24.dp).then(if (pinned) Modifier.heightIn(max = available) else Modifier)
+                // DIAGNOSTIC (372) D2: an invisible positional layer above the body Column (localToRoot's slow walk).
+                .then(if (KeepProbe.variant == "D2") Modifier.graphicsLayer { translationY = 0.01f } else Modifier)
                 .testTag("form_dialog_body_viewport")) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.textContentColor,
                     LocalTextStyle provides MaterialTheme.typography.bodyMedium,
@@ -423,6 +427,13 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                     androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides innerSpec) {
                     Column(Modifier.onSizeChanged { focused.innerViewport = it.height }
                         .onGloballyPositioned { focused.innerFrame = it }
+                        // DIAGNOSTIC (372) D5: one empty layout modifier ahead of the pinned-only chain, in both modes.
+                        .then(if (KeepProbe.variant == "D5") Modifier.layout { m, c -> val p = m.measure(c)
+                            layout(p.width, p.height) { p.place(0, 0) } } else Modifier)
+                        // DIAGNOSTIC (372) D4: a finite bound so verticalScroll(inner) can stay in one column.
+                        .then(if (KeepProbe.variant == "D4") Modifier.layout { m, c ->
+                            val p = m.measure(if (c.hasBoundedHeight) c else c.copy(maxHeight = 60_000))
+                            layout(p.width, p.height) { p.place(0, 0) } } else Modifier)
                         .then(if (pinned) Modifier.scrollEdgeDividers(inner, MaterialTheme.colorScheme.outline)
                             .layout { measurable, constraints ->
                                 val placeable = measurable.measure(constraints)
@@ -437,7 +448,10 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                                     placeable.place(0, 0)
                                 }
                             }
-                            .verticalScroll(inner) else Modifier).onGloballyPositioned {
+                            .verticalScroll(inner)
+                            // DIAGNOSTIC (372) D4: the same scroll node stays in one column, disabled.
+                            else if (KeepProbe.variant == "D4") Modifier.verticalScroll(inner, enabled = false)
+                            else Modifier).onGloballyPositioned {
                             focused.innerContent = it
                             focused.record(key, pinned)
                             focused.recordBody()
