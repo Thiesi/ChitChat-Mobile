@@ -167,6 +167,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val caret = focused.caretIn(inside, box)
             val before = focused.before(key, child)
             val v = viewport.toFloat()
+            KeepProbe.log("HS key=$key pinned=$pinned box=${box.top}..${box.bottom} caret=${caret?.top}..${caret?.bottom} " +
+                "before=${KeepProbe.source(before)} v=$v value=${state.value} max=${state.maxValue}")
             var target: Float
             if (before != null && before.visible) {
                 // What was in view stays in view: the anchor keeps its offset from the viewport's top, clamped inside.
@@ -219,6 +221,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // height or mode change relays out the outer scroller, so this callback comes for each one.
             focused.newChange()
             val (state, target) = heightStep() ?: return
+            KeepProbe.log("CB restore key=$key pinned=$pinned value=${state.value} max=${state.maxValue} target=$target delta=${sameFrameDelta(target, state.value, state.maxValue)}")
             // After an applied delta, a zero-distance mutation takes the scroll mutex here, undispatched, so the running
             // bring-into-view is cancelled inside this callback and can't move the field a frame (see above).
             applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
@@ -266,7 +269,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             .onSizeChanged { focused.outerViewport = it.height }
             .onGloballyPositioned { focused.outerFrame = it }
             .scrollEdgeDividers(outer, MaterialTheme.colorScheme.outline).verticalScroll(outer)
-            .onGloballyPositioned { focused.outerContent = it; androidx.compose.runtime.snapshots.Snapshot.withoutReadObservation { KeepProbe.log("SCROLL pass=outerCallback key=$key pinned=$pinned outer=${outer.value}/${outer.maxValue} inner=${inner.value}/${inner.maxValue}") }; restoreInLayoutPass() }
+            .onGloballyPositioned { KeepProbe.newDispatch(); focused.outerContent = it; androidx.compose.runtime.snapshots.Snapshot.withoutReadObservation { KeepProbe.log("SCROLL pass=outerCallback key=$key pinned=$pinned outer=${outer.value}/${outer.maxValue} inner=${inner.value}/${inner.maxValue}") }; restoreInLayoutPass() }
             .testTag(if (pinned) "form_dialog_pinned" else "form_dialog_column").padding(24.dp)) {
             Box(Modifier.padding(bottom = 16.dp).onSizeChanged { titleHeight = it.height }) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.titleContentColor,
@@ -502,6 +505,8 @@ private class FocusedChild {
         val anchorTop = caret ?: field
         val anchorHeight = caret?.let { caretIn(inside, box)!!.height } ?: box.height
         val seen = Seen(child, field, caret, anchorTop + anchorHeight > 0f && anchorTop < height)
+        KeepProbe.meta[seen] = "rec(d=${KeepProbe.dispatch} pinned=$pinned field=$field caret=$caret)"
+        KeepProbe.log("REC key=$key pinned=$pinned field=$field caret=$caret visible=${seen.visible} height=$height")
         if (key != lastKey) { previous = last; lastKey = key }
         last = seen
     }
