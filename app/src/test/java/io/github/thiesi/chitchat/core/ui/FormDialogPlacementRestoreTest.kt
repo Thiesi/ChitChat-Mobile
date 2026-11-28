@@ -63,6 +63,18 @@ class FormDialogPlacementRestoreTest {
         assertEquals(1662f, sameFrameDelta(1662, 0, 2359))
     }
 
+    @Test fun aTargetBeyondTheScrollRangeAppliesClampedInThePlacementPass() {
+        // #378 (TL): kb100's hide (diag run 46081190151) aimed at 947 with max 796; the placement left it to the step a
+        // frame later. Now it applies clamped in the pass: from 600 the delta to 796.
+        assertEquals(196f, placementDelta(947, 600, 796))
+        assertEquals("already at the range's end (the logged case: value 796): nothing to move", null, placementDelta(947, 796, 796))
+        assertEquals("below 0: to 0", -40f, placementDelta(-12, 40, 796))
+        assertEquals("in range: unchanged", 271f, placementDelta(507, 236, 591))
+        assertEquals("no range", null, placementDelta(300, 0, 0))
+        // The callback restore keeps leaving an out-of-range target to the step.
+        assertEquals(null, sameFrameDelta(947, 600, 796))
+    }
+
     @Test fun aDeferredStepForASupersededLayoutDoesNothing() {
         // API35 reversed (diag run 46066588478): the step launched at the pinned key 440 resumed after the layout pass had
         // moved on to one column (357): not current, dropped.

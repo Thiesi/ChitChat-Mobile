@@ -299,7 +299,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val before = focused.before(key, child)
             val raw = heightTarget(state, box, liveCaret, trailing, before, viewportHeight.toFloat(), label)
             val target = slideTarget(raw, state, box, liveCaret, trailing, before, viewportHeight.toFloat(), label)
-            applySameFrame(sameFrameDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
+            applySameFrame(placementDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
                 cancelRunning(state)
             }
         }
@@ -574,6 +574,17 @@ internal class FormDialogSameFrameRestore {
 internal fun sameFrameDelta(target: Int, value: Int, maxValue: Int): Float? = when {
     target !in 0..maxValue || target == value -> null
     else -> (target - value).toFloat()
+}
+
+/**
+ * #378 (TL): the placement restore's delta: the target clamped to the scroll range, as the after-a-frame step clamps it,
+ * applied in this pass. The placement runs after the scroll node's measure and [bodyPlaceValid] has just checked that
+ * maxValue + viewport is this pass's content, so the range is current (kb100's hide, diag run 46081190151: target 947
+ * against max 796 was left to the step a frame later). Null when the clamped target is where the scroller is.
+ */
+internal fun placementDelta(target: Int, value: Int, maxValue: Int): Float? {
+    val clamped = target.coerceIn(0, maxOf(0, maxValue))
+    return if (clamped == value) null else (clamped - value).toFloat()
 }
 
 /** A3: applies [delta] and then [cancelRunning], only when there is a delta (no move, no cancel: the fallback acts). */
