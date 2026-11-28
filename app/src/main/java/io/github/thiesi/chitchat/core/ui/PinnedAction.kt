@@ -10,7 +10,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Density
 
@@ -32,8 +31,14 @@ class PinnedActionSlot {
     /** The host's height in px, so a tall block can fall back to the scroller on very short windows. */
     var availableHeight by mutableIntStateOf(0)
         internal set
-    /** The scroller's viewport in window coordinates, to tell whether in-flow content is fully on screen. */
-    var viewport by mutableStateOf(Rect.Zero)
+    /**
+     * The scroller's viewport frame (the screen's scroll container, outside its scroll), to place in-flow content in its
+     * own layout coordinates (#390; never window positions, which can skew, #372). Not state; read at a tap.
+     */
+    var frame: androidx.compose.ui.layout.LayoutCoordinates? = null
+        internal set
+    /** Scrolls the screen's content by a distance in px (animated as the system's animation scale allows), #390. */
+    var scrollBy: (suspend (Float) -> Float)? = null
         internal set
 }
 

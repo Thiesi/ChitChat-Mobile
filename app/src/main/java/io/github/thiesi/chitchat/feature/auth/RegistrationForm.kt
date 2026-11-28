@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Box
 
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 
-import androidx.compose.ui.layout.positionInWindow
 
 import androidx.compose.ui.layout.onGloballyPositioned
 
@@ -178,13 +177,10 @@ internal fun RegistrationForm(state: SessionState, model: AuthViewModel, enabled
  * the document screen; registration then sends the rendered version (O3b1).
  */
 @Composable
-private fun RulesConsent(state: SessionState,
-    onPolicy: ((io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit)?) {
-    val installation = installationOf(state)
-    val rules = stringResource(R.string.registration_rules_link, installation)
-    val privacy = stringResource(R.string.registration_privacy_link).takeIf { state.public?.policies?.privacy != null }
-    val sentence = if (privacy != null) stringResource(R.string.registration_rules_privacy_consent, rules, privacy)
-        else stringResource(R.string.registration_rules_consent, rules)
+private fun RulesConsent(consent: ConsentText,
+    onPolicy: ((io.github.thiesi.chitchat.core.policies.PolicyDocumentName) -> Unit)?,
+    onTextLayout: (androidx.compose.ui.text.TextLayoutResult) -> Unit = {}) {
+    val (sentence, rules, privacy) = Triple(consent.sentence, consent.rules, consent.privacy)
     val linkStyle = androidx.compose.ui.text.TextLinkStyles(androidx.compose.ui.text.SpanStyle(
         color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.steward,
         textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline))
@@ -199,7 +195,32 @@ private fun RulesConsent(state: SessionState,
         privacy?.let { link(it, "registration_privacy_link", io.github.thiesi.chitchat.core.policies.PolicyDocumentName.PRIVACY) }
     }
     Text(text, androidx.compose.ui.Modifier.testTag("registration_rules_consent"),
-        color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.textMuted)
+        color = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.textMuted, onTextLayout = onTextLayout)
+}
+
+/** The consent line's composed sentence and its linked words, from one place (RulesConsent and #390's review key). */
+private class ConsentText(val sentence: String, val rules: String, val privacy: String?)
+
+@Composable
+private fun consentText(state: SessionState): ConsentText {
+    val installation = installationOf(state)
+    val rules = stringResource(R.string.registration_rules_link, installation)
+    val privacy = stringResource(R.string.registration_privacy_link).takeIf { state.public?.policies?.privacy != null }
+    val sentence = if (privacy != null) stringResource(R.string.registration_rules_privacy_consent, rules, privacy)
+        else stringResource(R.string.registration_rules_consent, rules)
+    return ConsentText(sentence, rules, privacy)
+}
+
+/**
+ * #390 (TL and PL ruling): what "the agreement" is for the review mark: the composed sentence, the published rules
+ * document's identity and version, and whether a privacy link is shown. Any change resets the mark.
+ */
+private data class ConsentReviewKey(val sentence: String, val rulesUrl: String?, val rulesVersion: Int?, val privacyShown: Boolean)
+
+/** #390: where the consent line is laid out (its coordinates and its first text line's bottom), read at a tap. Not state. */
+private class ConsentPlace {
+    var line: androidx.compose.ui.layout.LayoutCoordinates? = null
+    var firstLineBottom = 0f
 }
 
 /**
@@ -211,6 +232,8 @@ private fun RulesConsent(state: SessionState,
  * - **Very short windows:** when the block would take more than half the height, it sits in flow at the end of the
  *   scroller. A tap on Create while any part of the line is off screen only brings the block into view and announces
  *   why (announced only, no visible text); it doesn't submit.
+ * - **The line taller than it can be shown with Create (#390, owner's rule):** see [consentTap]. The first tap brings the
+ *   line's top into view, announces and marks it reviewed for this visit; a later tap submits.
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
@@ -224,7 +247,7 @@ private fun CreateBlock(state: SessionState, onPolicy: ((io.github.thiesi.chitch
     else io.github.thiesi.chitchat.core.ui.PinnedAction(hideWhileImeVisible = true) {
         Column(Modifier.fillMaxWidth().onSizeChanged { pinnedHeight = it.height }.testTag("registration_create_block"),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            state.public?.policies?.rules?.let { RulesConsent(state, onPolicy) }
+            state.public?.policies?.rules?.let { RulesConsent(consentText(state), onPolicy) }
             PrimaryButton(onClick = submit, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("registration_submit")) {
                 Text(stringResource(R.string.onboarding_create_account))
             }
@@ -237,22 +260,42 @@ private fun InFlowCreateBlock(state: SessionState, onPolicy: ((io.github.thiesi.
     enabled: Boolean, submit: () -> Unit, slot: io.github.thiesi.chitchat.core.ui.PinnedActionSlot?) {
     val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    var line by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    val placed = remember { ConsentPlace() }
     var announcement by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    val hasLine = state.public?.policies?.rules != null
+    val policies = state.public?.policies
+    val hasLine = policies?.rules != null
+    val consent = if (hasLine) consentText(state) else null
+    // #390: reviewed in this visit (memory only, never saved): reset by a change of the agreement or when the block leaves
+    // composition (leaving the screen, a configuration change).
+    val reviewKey = consent?.let { ConsentReviewKey(it.sentence, policies?.rules?.url, policies?.rules?.version, it.privacy != null) }
+    var reviewed by remember(reviewKey) { mutableStateOf(false) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
     Column(Modifier.fillMaxWidth().bringIntoViewRequester(requester).testTag("registration_create_block"),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Unclipped (position plus size): a clipped rect of an off-screen line could look "inside" the viewport.
-        if (hasLine) Box(Modifier.onGloballyPositioned {
-            line = androidx.compose.ui.geometry.Rect(it.positionInWindow(), androidx.compose.ui.geometry.Size(it.size.width.toFloat(), it.size.height.toFloat()))
-        }) { RulesConsent(state, onPolicy) }
+        // The line's own coordinates, placed in the viewport frame at the tap (unclipped: a clipped rect of an off-screen
+        // line could look "inside" the viewport), and its first text line's bottom (#390's placement).
+        if (consent != null) Box(Modifier.onGloballyPositioned { placed.line = it }) {
+            RulesConsent(consent, onPolicy) { placed.firstLineBottom = it.getLineBottom(0) }
+        }
         PrimaryButton(onClick = {
-            val viewport = slot?.viewport
-            val shown = line
-            val lineVisible = !hasLine || viewport == null || shown == null ||
-                (shown.top >= viewport.top && shown.bottom <= viewport.bottom)
-            if (lineVisible) submit()
-            else { scope.launch { requester.bringIntoView() }; announcement++ }
+            val frame = slot?.frame?.takeIf { it.isAttached }
+            val line = placed.line?.takeIf { it.isAttached }
+            val tap = if (!hasLine || frame == null || line == null) ConsentTap.Submit else {
+                val rect = frame.localBoundingBoxOf(line, clipBounds = false)
+                with(density) {
+                    consentTap(rect.top, rect.height, placed.firstLineBottom, frame.size.height.toFloat(), reviewed,
+                        gap = 12.dp.toPx(), button = 48.dp.toPx(), margin = 8.dp.toPx())
+                }
+            }
+            when (tap) {
+                ConsentTap.Submit -> submit()
+                ConsentTap.BringFits -> { scope.launch { requester.bringIntoView() }; announcement++ }
+                is ConsentTap.BringTop -> {
+                    reviewed = true
+                    announcement++
+                    scope.launch { slot?.scrollBy?.invoke(tap.distance) }
+                }
+            }
         }, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("registration_submit")) {
             Text(stringResource(R.string.onboarding_create_account))
         }

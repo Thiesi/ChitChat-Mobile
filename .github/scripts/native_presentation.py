@@ -101,7 +101,7 @@ AUTHOR_NAME = re.compile(r"author-edit-(?:room-(?:light|dark)-(?:default|font200
     r"room-light-font200-editing-landscape|dm-light-default-reviewed)[.]png")
 RESET_NAME = re.compile(r"reset-(light|dark)-(default|font200)-(signin-forgot|form|mfa|stop|cancelled|passkey|failed|unknown|cancel-unknown)[.]png")
 AUTH_DESTINATION = ROOT / "app/build/reports/androidTests/auth-presentation"
-AUTH_NAME = re.compile(r"auth-(light|dark)-((default|font200)-(signin|create)-keyboard|font200-create-block)[.]png")
+AUTH_NAME = re.compile(r"auth-(light|dark)-((default|font200)-(signin|create)-keyboard|font200-create-block|font200-consent-(before-first-tap|after-first-tap|scrolled-to-create|submitted-before-you-chat))[.]png")
 RULES_DESTINATION = ROOT / "app/build/reports/androidTests/rules-presentation"
 RULES_NAME = re.compile(r"rules-(light|dark)-((default|font200)-dialog(-expanded)?|font200-banner(-offline)?)[.]png")
 GUIDELINES_DESTINATION = ROOT / "app/build/reports/androidTests/guidelines-presentation"
@@ -400,14 +400,15 @@ def collect_rules():
 
 def collect_auth():
     # #275: Sign in and Create with the keyboard up (default and 2.0) and Create's pinned block at 2.0; light and dark.
-    files = list(islice(SOURCE.rglob("ccm-auth-presentation/*"), 11))
-    if (not files or len(files) > 10 or len({p.name for p in files}) != len(files)
+    # #390: the consent line taller than its viewport at 2.0 in a short window (4, light).
+    files = list(islice(SOURCE.rglob("ccm-auth-presentation/*"), 15))
+    if (not files or len(files) > 14 or len({p.name for p in files}) != len(files)
         or any(AUTH_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous auth presentation output")
     AUTH_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, AUTH_DESTINATION / path.name)
-    print(f"Auth presentation captures collected: {len(files)} of 10.")
+    print(f"Auth presentation captures collected: {len(files)} of 14.")
 
 
 def collect_recovery():
