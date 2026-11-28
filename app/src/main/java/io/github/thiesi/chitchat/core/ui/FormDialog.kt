@@ -130,6 +130,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         val layoutKey = FormDialogLayout(maxHeight, pinned, WindowInsets.ime.getBottom(density) > 0)
         val outer = rememberScrollState()
         val inner = rememberScrollState()
+        androidx.compose.runtime.SideEffect { KeepProbe.outer = outer; KeepProbe.inner = inner } // DIAGNOSTIC: read by #372's probe logs only.
         // Keep the focused field in view when the space changes (the keyboard shows or hides, or the mode switches): the
         // scroller in use scrolls to it. A scroll, never a focus request; typing then keeps the caret in view as usual.
         // #369 (TL, PL, 2026-11-25): a mode switch swaps scrollers, which lost the position, and a field taller than the
@@ -408,7 +409,10 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                     // column, before the body is placed: one write per stay (a no-op once 0), nothing drawn moves (no inner
                     // scroll node in this mode), and dispatchRawDelta skips nested scroll. The pinned restore sets the
                     // inner value again on the return, from the recorded places, never from its old value.
-                    if (!pinned && inner.value != 0) inner.dispatchRawDelta(-inner.value.toFloat())
+                    if (!pinned && inner.value != 0) {
+                        KeepProbe.log("ZERO inner=${inner.value} key=$key") // DIAGNOSTIC: one per stay in one column (TL).
+                        inner.dispatchRawDelta(-inner.value.toFloat())
+                    }
                     restoreInPlacement(forPinned = false, outer, placeable.height)
                     placeable.place(0, 0)
                 }
