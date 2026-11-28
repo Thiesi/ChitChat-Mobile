@@ -130,6 +130,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         val layoutKey = FormDialogLayout(maxHeight, pinned, WindowInsets.ime.getBottom(density) > 0)
         val outer = rememberScrollState()
         val inner = rememberScrollState()
+        androidx.compose.runtime.SideEffect { KeepProbe.outer = outer; KeepProbe.inner = inner } // DIAGNOSTIC: read by #372's probe logs only.
         // Keep the focused field in view when the space changes (the keyboard shows or hides, or the mode switches): the
         // scroller in use scrolls to it. A scroll, never a focus request; typing then keeps the caret in view as usual.
         // #369 (TL, PL, 2026-11-25): a mode switch swaps scrollers, which lost the position, and a field taller than the
