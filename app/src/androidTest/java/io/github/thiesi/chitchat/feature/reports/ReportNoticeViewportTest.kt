@@ -268,14 +268,16 @@ class ReportNoticeViewportTest {
 
     // The network reply: the ruled sequence (no focus, no keyboard at the outcome; the person's tap brings the caret back).
     // DIAGNOSTIC (never merged), #378: the notice re-tap case with animations off and on (recorded).
-    private fun diag(name: String, animations: Boolean) {
+    private fun diag(name: String, animations: Boolean, case: () -> Unit = { personSnapshot() }) {
         org.junit.Assume.assumeTrue(androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
         io.github.thiesi.chitchat.testing.DiagRecording.run(name, animations, hide = {
             androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
             compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
             compose.waitForIdle()
-        }) { personSnapshot() }
+        }) { case() }
     }
+    // DIAGNOSTIC (never merged), #378 metric diag: the didnotarrive re-tap (tapped-stage fieldTop 50 on main, 158 on #381).
+    @Test fun diagDidNotArriveOff() = diag("ccm-a3-didnotarrive-off", false) { personDidNotArrive() }
     @Test fun diagNoticeOff() = diag("ccm-a3-notice-off", false)
     @Test fun diagNoticeOn() = diag("ccm-a3-notice-on", true)
     // DIAGNOSTIC (never merged), #378 F1 (TL): 20 reps per mode, each its own recording. A failed rep is logged and kept as

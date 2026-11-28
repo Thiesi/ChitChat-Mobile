@@ -107,6 +107,7 @@ class FormDialogGeometryTest {
         cancel: SemanticsNodeInteraction, typed: String, fieldTopOnly: Boolean = false) {
         val before = mode()
         field.scrollIfScrollable()
+        io.github.thiesi.chitchat.testing.DiagRecording.flash() // DIAGNOSTIC: the sync strip (no-op outside a recorded case).
         compose.tapNativeInput(fieldTag, imeBottom = { focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } })
         field.performTextInput(typed)
         compose.waitForIdle()
@@ -239,6 +240,13 @@ class FormDialogGeometryTest {
     }
 
     @Test fun stepUpAtDefaultSize() = stepUp(1f, landscape = false, "stepup-default-portrait")
+    // DIAGNOSTIC (never merged), #378 metric diag: recorded, probe-on runs of the two cases whose fieldTop moved against main.
+    private fun diag(name: String, case: () -> Unit) {
+        org.junit.Assume.assumeTrue(androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
+        io.github.thiesi.chitchat.testing.DiagRecording.run(name, false, hide = {}) { case() }
+    }
+    @Test fun diagStepUp200Off() = diag("ccm-a3-stepup200-off") { stepUpAt200PercentPortrait() }
+    @Test fun diagFixtureDefaultOff() = diag("ccm-a3-fixturedef-off") { reportShapedFormAtDefaultSize() }
     @Test fun stepUpAt200PercentPortrait() = stepUp(2f, landscape = false, "stepup-font200-portrait")
     @Test fun stepUpAt200PercentLandscape() = stepUp(2f, landscape = true, "stepup-font200-landscape")
 
