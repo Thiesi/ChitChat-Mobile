@@ -119,10 +119,13 @@ app window's bounds, not whether the keyboard covers a node.
     **Limit: the switch between pinned and one column (#383, after the Play upload).** The frame right after a mode
     switch isn't covered by the rule above, which resets there. As measured before that rule, the first frame after a
     mode switch could move against the slide: text-first's hide moved the caret line up 56 px in the first pinned frame
-    (201 px viewport, the counter kept), the label went out in the first pinned frame of an arrival and came back in the
-    first one-column frame, and API36 showed a 2 px step at an arrival's switch. Main has the hide's move
+    (201 px viewport, the counter kept), and the label went out in the first pinned frame of an arrival and came back in
+    the first one-column frame. Main has the hide's move
     too (diagnostic run 45992933725, where the label was half; the separate-label rule makes it out). Diagnostic runs
-    46056107630 and 46056124120 hold the frames. Before A3, a mode switch drew one frame at the swapped-in
+    46056107630 and 46056124120 hold the frames. With that rule, an arrival's switch from pinned to one column steps the
+    field 2 px against the slide, on API35 and API36: the pinned frames before the switch hold the clamp's last target,
+    and the one-column restore lands about 2 px lower (diagnostic run 46096097459: API35 text-first, keyboard-first,
+    cancelled and interrupted, API36 text-first). Before A3, a mode switch drew one frame at the swapped-in
     scroller's old value (often the top) first (37 of 40 text-first and 33 of 40 keyboard-first repetitions; diagnostic
     runs 45903840557 and 45903834879). A placement target outside the scroll range is clamped to it in that pass, where
     the scroll node's measure has just set the range (kb100's hide aimed at 947 with the range ending at 796, diagnostic
