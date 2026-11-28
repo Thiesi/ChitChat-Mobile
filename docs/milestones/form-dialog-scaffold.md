@@ -93,19 +93,41 @@ app window's bounds, not whether the keyboard covers a node.
     view is held (a notice holding it), a restore claims nothing; the hold is read in the placement, so the pass where it
     releases claims the change and restores in that pass (before, a held pass used up the change and the step after the
     frame restored it up to ~200 ms later, with the dialog's top drawn at the swapped-in scroller's 0 meanwhile;
-    diagnostic runs 46056107630 and 46056124120, API36 notice re-tap). The step after the frame does nothing
+    diagnostic runs 46056107630 and 46056124120, API36 notice re-tap). The hold read there is the caller's live state
+    (#378 F1, TL): the report form's ViewModel mirrors its notice hold into snapshot state in the same call as each state
+    change, and FormDialog's effective hold is the composed notice's hold and that live state (`holdLive`), so a release
+    (the field gaining focus, typing, a category, the keyboard shown) reaches the next placement with no recomposition in
+    between. The recomposed parameter alone lagged the release by 21 to 308 ms, and a mode switch in between drew the
+    swapped-in scroller at its old value (diagnostic run 46066588478). The step after the frame does nothing
     when the layout it was launched for has been replaced (a slide's last pinned frame's step otherwise ran after the switch
     to one column and scrolled the scroller no longer in use; diagnostic run 46066588478).
-    **Limit: the switch between pinned and one column (#383, after the Play upload).** With an animated keyboard the
-    slide's frames apply the full rule from the transition's baseline, so the field moves with the viewport, but the
-    first frame after a mode switch can move against the slide: text-first's hide moves the caret line up 56 px in the
-    first pinned frame (201 px viewport, the counter kept), the label goes out in the first pinned frame of an arrival and
-    comes back in the first one-column frame, and API36 shows a 2 px step at an arrival's switch. Main has the hide's move
+    **A slide's frames move only with the slide (#378 failure 3, TL and PL, 2026-11-28).** While a keyboard transition
+    is frozen, each frame used to take the full rule for its own viewport, so a frame could decide differently from the
+    end and the field moved back when the end came (the caret line against the slide, a label out and then back). Now
+    the transition's end layout is computed from Compose's `imeAnimationTarget`: the dialog area's bottom inset is
+    max(navigation bar, IME), so the end maxHeight is today's less the inset's change, with FormDialog's own pinned rule
+    (available >= the minimum body). If the end is in the frame's own mode, the frame takes the end's target with only
+    its own floors: the caret line wholly in view; a half label goes out; then the scroll range, lowered to the label
+    whole when the range's end lands it half and the caret line stays in view (otherwise the range's end, where the end
+    frame itself settles: the label/maxValue gap, its own PR). With a mode switch ahead, the frames before it take the
+    per-frame rule clamped to the slide's direction in their mode (an arrival never lower than that mode's last target,
+    a hide never higher); the caret line wins over the clamp, and a half label moves with the slide (out on an arrival,
+    whole on a hide). The clamp resets at a mode switch, at settle, on a direction flip and on a re-anchor; a held pass
+    records nothing. Both the placement restore and the step after the frame apply it. Settled, or with no animation
+    reported, the target is the rule's, unchanged. `FormDialogSlideTest` (JVM) replays the logged frames of diagnostic
+    run 46066588478 (200%).
+    **Limit: the switch between pinned and one column (#383, after the Play upload).** The frame right after a mode
+    switch isn't covered by the rule above, which resets there. As measured before that rule, the first frame after a
+    mode switch could move against the slide: text-first's hide moved the caret line up 56 px in the first pinned frame
+    (201 px viewport, the counter kept), the label went out in the first pinned frame of an arrival and came back in the
+    first one-column frame, and API36 showed a 2 px step at an arrival's switch. Main has the hide's move
     too (diagnostic run 45992933725, where the label was half; the separate-label rule makes it out). Diagnostic runs
     46056107630 and 46056124120 hold the frames. Before A3, a mode switch drew one frame at the swapped-in
     scroller's old value (often the top) first (37 of 40 text-first and 33 of 40 keyboard-first repetitions; diagnostic
-    runs 45903840557 and 45903834879). A target outside the scroll range is left to the step after the frame, which stays
-    as the fallback and keeps the clamp; later callbacks for the same change never re-apply it. A scroll already in progress isn't waited for, it's cancelled: Compose
+    runs 45903840557 and 45903834879). A placement target outside the scroll range is clamped to it in that pass, where
+    the scroll node's measure has just set the range (kb100's hide aimed at 947 with the range ending at 796, diagnostic
+    run 46081190151); the callback restore still leaves one to the step after the frame, which stays as the fallback and
+    keeps the clamp; later callbacks for the same change never re-apply it. A scroll already in progress isn't waited for, it's cancelled: Compose
     starts its own bring-into-view on the swapped-in scroller in that same pass, which would align a field taller than
     the viewport to its top, against the label rule. Waiting for it brought the frame at the old value back (#376's
     probe, run 45914151572: the guard skipped 34 of 40 and 40 of 40); letting it run moved the field off the restored
