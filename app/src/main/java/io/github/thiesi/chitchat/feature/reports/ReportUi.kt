@@ -522,12 +522,12 @@ private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolea
             Box(modifier) { InlineError(stringResource(R.string.report_not_sent)) } }
         // Person outcomes (reporting.md): a level-2 notice that nothing was sent; the picture gone, with its category
         // removed; and the Check that found nothing, after which Send report is an explicit choice again.
-        ReportNotice.SnapshotUnavailable -> InViewNotice(occurrence, held) { modifier ->
+        ReportNotice.SnapshotUnavailable -> InViewNotice(occurrence, held, warningLead()) { modifier ->
             WarningNotice(stringResource(R.string.report_person_snapshot_lead), stringResource(R.string.report_person_snapshot_body, name),
                 modifier.testTag("report_notice")) }
         ReportNotice.PictureGone -> InViewNotice(occurrence, held) { modifier ->
             Box(modifier) { InlineError(stringResource(R.string.report_person_picture_gone, name)) } }
-        ReportNotice.DidNotArrive -> InViewNotice(occurrence, held) { modifier ->
+        ReportNotice.DidNotArrive -> InViewNotice(occurrence, held, warningLead()) { modifier ->
             WarningNotice(stringResource(R.string.report_person_did_not_arrive), "", modifier.testTag("report_notice")) }
     }
 }
@@ -540,8 +540,13 @@ private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolea
  * line first, then its top edge, which is a no-op for a line that fits.
  */
 @Composable
-private fun InViewNotice(occurrence: Long, held: Boolean, content: @Composable (Modifier) -> Unit) {
+private fun InViewNotice(occurrence: Long, held: Boolean, lead: androidx.compose.ui.unit.Dp? = null, content: @Composable (Modifier) -> Unit) {
     val requester = remember { BringIntoViewRequester() }
+    // #384 (PL, TL): the notice is the held keep while it exists: FormDialog's spec lands its bring-into-view so the
+    // field's separate label is whole or out, the notice (else its lead) whole and in view. Cleared when it leaves.
+    val caret = io.github.thiesi.chitchat.core.ui.LocalFormDialogCaret.current
+    val leadPx = with(androidx.compose.ui.platform.LocalDensity.current) { lead?.toPx() ?: 0f }
+    androidx.compose.runtime.DisposableEffect(caret) { onDispose { caret?.publishHeldKeep(null) } }
     val holding by androidx.compose.runtime.rememberUpdatedState(held)
     val layout = io.github.thiesi.chitchat.core.ui.LocalFormDialogLayout.current
     suspend fun bring() {
@@ -560,8 +565,16 @@ private fun InViewNotice(occurrence: Long, held: Boolean, content: @Composable (
         val keyboardShowing = before?.ime == false && layout?.ime == true
         if (holding && !keyboardShowing) { androidx.compose.runtime.withFrameNanos { }; bring() }
     }
-    content(Modifier.bringIntoViewRequester(requester))
+    content(Modifier.bringIntoViewRequester(requester).onGloballyPositioned { caret?.publishHeldKeep(it, leadPx) })
 }
+
+/**
+ * #384: a WarningNotice's lead, from its top: the column's 8dp and the line's 4dp padding, then the glyph line's first
+ * line (bodyLarge's line height).
+ */
+@Composable
+private fun warningLead(): androidx.compose.ui.unit.Dp =
+    12.dp + with(androidx.compose.ui.platform.LocalDensity.current) { MaterialTheme.typography.bodyLarge.lineHeight.toDp() }
 
 /** The follow-up sheet (PL): a heading and pane title, the lead, the outlined action and Done. Back or scrim is Done. */
 @Composable

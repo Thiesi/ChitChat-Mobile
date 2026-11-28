@@ -265,6 +265,24 @@ app window's bounds, not whether the keyboard covers a node.
   focused-field effect behaves as before. It's a scroll only: no focus, caret or accessibility-focus change, and no
   announcement. Off by default, so StepUp and other form dialogs are unchanged. The report form uses it for every in-form
   line after Send.
+  - **The label in a held view (#384, PL and TL, 2026-11-28).** The notice's own bring-into-view (when it appears, and
+    again on each layout change while held) used to stop at Compose's minimum. That could leave the field's separate
+    label half under the divider (the person report's held stage at 200%: the label at -100..14 in the viewport). The
+    notice now publishes itself as the held keep (`FormDialogCaret.publishHeldKeep`, with its lead's height, cleared when
+    it leaves), and each of FormDialog's two scrollers has its own `BringIntoViewSpec`. A request inside the held keep,
+    on the scroller in use, lands by `heldBringDistance`, in the PL's order:
+    1. Compose's own distance, when the label is whole or out there;
+    2. with the whole notice (when it fits) whole and in view: the label out by the minimum, else whole by the minimum;
+    3. the same with the notice's lead (the glyph line's first line) as the keep;
+    4. otherwise Compose's distance: the lead wins, the only place a half label can remain.
+
+    The label's floor and the lead in view are floors; the whole notice is a preference. The distance stays within what
+    the scroller can scroll, so no clamp at the range's end lands the label half. Each step's target is a fixed place in
+    the content, so Compose's repeated calls during the scroll animation keep the same target. Every other request (the
+    field's focus, the caret, the re-tap's restore, a semantic scroll-to) keeps Compose's rule, so the re-tap's result
+    and #387's case are unchanged; the body gets the incoming spec again, so a nested scroller never reads FormDialog's.
+    `FormDialogHeldBringTest` (JVM) sweeps the held placement 1 px at a time and counts each step per geometry (step 4:
+    never, for the current forms).
 - **By design (PL's rule):** in one-column mode the buttons are reached by scrolling while the field keeps focus. They
   aren't pinned on screen with the keyboard up; every one is reachable above the IME by scroll. This isn't a regression.
 - **StepUpDialog and the report form (#326, R2)** use it. Tags, callbacks and copy are unchanged.
