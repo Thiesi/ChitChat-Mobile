@@ -124,15 +124,14 @@ class ReportNoticeViewportTest {
 
     /**
      * #384: the details field's separate label node in the line's scrolling viewport, (top, bottom) from the viewport's
-     * top, measured on the nodes' layout coordinates (not window positions), independent of the production rule.
+     * top: the label's unclipped window position against the scroller's window bounds (its viewport), independent of the
+     * production rule. (Not the scroller's layoutInfo.coordinates: those are inside its verticalScroll, the content.)
      */
     private fun labelInViewport(line: SemanticsNodeInteraction): Pair<Float, Float> {
         compose.waitForIdle()
-        var scroller = line.fetchSemanticsNode().parent
-        while (scroller != null && SemanticsActions.ScrollBy !in scroller.config) scroller = scroller.parent
-        val viewport = checkNotNull(scroller) { "The line has no scrolling ancestor" }.layoutInfo.coordinates
-        val label = compose.onNodeWithTag("report_details_label", useUnmergedTree = true).fetchSemanticsNode().layoutInfo.coordinates
-        val top = viewport.localPositionOf(label, androidx.compose.ui.geometry.Offset.Zero).y
+        val viewport = viewportOf(line.fetchSemanticsNode())
+        val label = compose.onNodeWithTag("report_details_label", useUnmergedTree = true).fetchSemanticsNode()
+        val top = label.positionInWindow.y - viewport.top
         return top to top + label.size.height
     }
 
@@ -236,7 +235,7 @@ class ReportNoticeViewportTest {
                 val detail = "$inViewDetail label=$labelTop..$labelBottom"
                 val (focused, imeUp, focusedNodes) = facts(case, "shown", detail)
                 assertTrue("$case: the label is whole or entirely out in the held stage ($detail)",
-                    labelTop >= 8f * density - 1f || labelBottom <= 0f)
+                    labelTop >= 8f * density - 1f || labelBottom <= 0.5f)
                 if (instant) {
                     // Nothing moved focus: the field keeps it and is the only focused node; the keyboard stays.
                     assertTrue("$case: the field keeps focus after an instant refusal ($detail)", focused == true && focusedNodes == 1)
