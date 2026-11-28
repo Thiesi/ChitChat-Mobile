@@ -122,6 +122,22 @@ class ReportNoticeViewportTest {
         return ok to "$detail inView=$ok"
     }
 
+    /**
+     * #384: the details field's separate label node in the viewport of the scroller in use, (top, bottom) from the
+     * viewport's top, independent of the production rule. As ReportFormLayoutTest's labelPlace (#378): measured in the
+     * tagged viewport container's own layout coordinates (the pinned body's, or the whole dialog's in one column). Not
+     * window positions: in this dialog positionInWindow disagrees with boundsInWindow by the inner scroll value (#371,
+     * #372); and not a scroller's layoutInfo.coordinates, which are inside its verticalScroll (the content).
+     */
+    private fun labelInViewport(): Pair<Float, Float> {
+        compose.waitForIdle()
+        val viewport = compose.onNodeWithTag(if (present("form_dialog_pinned")) "form_dialog_body_viewport" else "form_dialog_viewport",
+            useUnmergedTree = true).fetchSemanticsNode().layoutInfo.coordinates
+        val label = compose.onNodeWithTag("report_details_label", useUnmergedTree = true).fetchSemanticsNode().layoutInfo.coordinates
+        val top = viewport.localPositionOf(label, androidx.compose.ui.geometry.Offset.Zero).y
+        return top to top + label.size.height
+    }
+
     /** One line of facts: focus (the field's, and how many nodes are focused), keyboard, mode, plus [extra]. */
     private fun facts(case: String, stage: String, extra: String = ""): Triple<Boolean?, Boolean, Int> {
         val ime = focusedWindowIme()
@@ -150,7 +166,10 @@ class ReportNoticeViewportTest {
         val caret = layouts.single().getCursorRect(field.config[SemanticsProperties.TextSelectionRange].end)
         val box = field.boundsInWindow
         val whole = box.height >= field.size.height - 1f
-        facts(case, "tapped", "fieldWhole=$whole caretBottomInField=${caret.bottom} fieldHeight=${field.size.height}")
+        // #384 (PL): the label after the re-tap, measured (out sits on the 0 boundary), recorded at the end of the line.
+        val (labelTop, labelBottom) = labelInViewport()
+        facts(case, "tapped", "fieldWhole=$whole caretBottomInField=${caret.bottom} fieldHeight=${field.size.height} " +
+            "label=$labelTop..$labelBottom")
         assertTrue("$case: after the tap the field is whole above the keyboard with the caret inside it (field $box, " +
             "size ${field.size}, caret $caret, imeTop ${ime.imeTop})",
             ime.visible && whole && box.bottom <= ime.imeTop + 0.5f && caret.bottom <= field.size.height + 0.5f)
@@ -158,8 +177,8 @@ class ReportNoticeViewportTest {
 
     private fun measure(case: String, person: Boolean, category: ReportCategory, results: List<ReportResult>,
         instant: Boolean = false, facts: ReportFacts? = null, thenTap: Boolean = false, repeat: Boolean = false,
-        lead: String? = null, notTopAligned: Boolean = false, line: () -> SemanticsNodeInteraction) {
-        FontScaleTestActivity.requestedFontScale = 2f
+        lead: String? = null, notTopAligned: Boolean = false, scale: Float = 2f, line: () -> SemanticsNodeInteraction) {
+        FontScaleTestActivity.requestedFontScale = scale
         val session = ReceivedFiles.session()
         val rooms = ReceivedRooms(session).apply { messages = listOf(roomMessage(3, "hello")) }
         val room = ConversationViewModel(rooms)
@@ -215,8 +234,15 @@ class ReportNoticeViewportTest {
                 }
                 compose.waitUntil(5_000) { runCatching { line().fetchSemanticsNode() }.isSuccess }
                 compose.waitForIdle()
-                val (shown, detail) = inView(line(), lead)
+                val (shown, inViewDetail) = inView(line(), lead)
+                // #384 (PL): in the held stage the separate label is whole (its top at least 8dp below the viewport's top)
+                // or entirely out (its bottom at or above it), never half; recorded at the end of the stage's line.
+                val (labelTop, labelBottom) = labelInViewport()
+                // DIAGNOSTIC (main-tree proof): the heldLead guard is removed here; main has no HeldLead key.
+                val detail = "$inViewDetail label=$labelTop..$labelBottom"
                 val (focused, imeUp, focusedNodes) = facts(case, "shown", detail)
+                assertTrue("$case: the label is whole or entirely out in the held stage ($detail)",
+                    labelTop >= 8f * density - 1f || labelBottom <= 0.5f)
                 if (instant) {
                     // Nothing moved focus: the field keeps it and is the only focused node; the keyboard stays.
                     assertTrue("$case: the field keeps focus after an instant refusal ($detail)", focused == true && focusedNodes == 1)
@@ -285,6 +311,18 @@ class ReportNoticeViewportTest {
 
     @Test fun messageNotSent() = measure("message-notsent", false, ReportCategory.SPAM,
         listOf(ReportResult.Invalid)) { compose.onNode(hasText(notSent)) }
+
+    // #384 (PL): the whole-line kinds at 100%, where main left the label half under the divider (the failed and rate
+    // captures); the held label assert covers them. Instant, as the captures' flow: the field keeps focus and the keyboard
+    // stays, so the held bring runs above the keyboard (the network reply closes it first and doesn't reach the break).
+    @Test fun personNotSentAt100() = measure("person-notsent-100", true, ReportCategory.OFFENSIVE_USERNAME,
+        listOf(ReportResult.Invalid), instant = true, scale = 1f) { compose.onNode(hasText(notSent)) }
+
+    @Test fun personRateAt100() = measure("person-rate-100", true, ReportCategory.OFFENSIVE_USERNAME,
+        listOf(ReportResult.RateLimited(900)), instant = true, scale = 1f) { compose.onNodeWithTag("report_wait") }
+
+    @Test fun messageRateAt100() = measure("message-rate-100", false, ReportCategory.SPAM,
+        listOf(ReportResult.RateLimited(900)), instant = true, scale = 1f) { compose.onNodeWithTag("report_wait") }
 
     // The instant reply: focus and the keyboard stay; the line in view, still in view when the keyboard closes.
     @Test fun personSnapshotInstant() = measure("person-snapshot-instant", true, ReportCategory.OFFENSIVE_PROFILE_PICTURE,
