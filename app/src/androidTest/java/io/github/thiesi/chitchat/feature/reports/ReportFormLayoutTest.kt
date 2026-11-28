@@ -299,6 +299,41 @@ class ReportFormLayoutTest {
 
     @Test fun at200PercentLandscapeTextFirstThenTheKeyboardKeepsTheCaretLineInView() = textFirst(landscape = true)
 
+    // DIAGNOSTIC (never merged), label-gap PR step 1 (TL): every end state of the report form across font scales 1.00 to
+    // 2.00 in 0.05 steps, portrait and landscape, keyboard up (a short text typed) and down. Log-only: a failed scale is
+    // logged and the next runs; nothing is asserted or repeated.
+    @Test fun diagGapScaleSweep() {
+        org.junit.Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
+        val ime = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } }
+        fun scrollers() = compose.onAllNodes(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange),
+            useUnmergedTree = true).fetchSemanticsNodes().joinToString(",") {
+                val r = it.config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange]; "${r.value()}/${r.maxValue()}" }
+        for (landscape in listOf(false, true)) for (i in 0..20) {
+            val scale = 1f + i * 0.05f
+            val name = "gap-%s-%.2f".format(java.util.Locale.ROOT, if (landscape) "land" else "port", scale)
+            io.github.thiesi.chitchat.core.ui.KeepProbe.log("CASE start ccm-$name animations=false")
+            try {
+                launchAt(scale, landscape, ReportViewModel(operations)) {
+                    report()
+                    compose.onNodeWithTag("report_details").performScrollTo()
+                    compose.tapNativeInput("report_details", imeBottom = ime)
+                    compose.onNodeWithTag("report_details").performTextInput("Posted the same link")
+                    compose.waitForIdle()
+                    io.github.thiesi.chitchat.core.ui.KeepProbe.log("STATE up $name ${caretLine("up").metrics} scrollers=${scrollers()} ime=${ime()}")
+                    androidx.test.espresso.Espresso.closeSoftKeyboard()
+                    compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+                    compose.waitForIdle()
+                    io.github.thiesi.chitchat.core.ui.KeepProbe.log("STATE down $name ${caretLine("down").metrics} scrollers=${scrollers()} ime=${ime()}")
+                }
+            } catch (t: Throwable) {
+                io.github.thiesi.chitchat.core.ui.KeepProbe.log("CASE failed ccm-$name ${t.javaClass.simpleName}: ${t.message?.take(200)}")
+                if (io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible) androidx.test.espresso.Espresso.closeSoftKeyboard()
+            } finally {
+                io.github.thiesi.chitchat.core.ui.KeepProbe.log("CASE end ccm-$name")
+            }
+        }
+    }
+
     private fun launchAt200(landscape: Boolean, reports: ReportViewModel, body: () -> Unit) =
         launchAt(2f, landscape, reports, body)
 
