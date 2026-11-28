@@ -129,9 +129,10 @@ class ConsentLineReviewJourneyTest {
         tapCreate()
         compose.waitUntil(5_000) { sessions.registrations == 1 }
         assertEquals("A later tap submits, once", 1, sessions.registrations)
-        // What the person sees next: the server publishes rules and nothing is accepted locally, so "Before you chat".
-        compose.waitUntil(5_000) { exists("guidelines_screen") }
-        capture("auth-light-font200-consent-submitted-before-you-chat")
+        // What the person sees next in this fixture: a new account with no recovery key to show, so "Find your people"
+        // (O2b). The guidelines gate isn't wired into TestChitChatApp (its guidelines model is null).
+        compose.waitUntil(5_000) { exists("find_people") }
+        capture("auth-light-font200-consent-submitted-find-your-people")
     }
 
     @Test fun aChangedInstallationNameResetsTheReview() = launch { scenario ->

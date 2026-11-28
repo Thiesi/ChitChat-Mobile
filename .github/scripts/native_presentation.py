@@ -101,7 +101,7 @@ AUTHOR_NAME = re.compile(r"author-edit-(?:room-(?:light|dark)-(?:default|font200
     r"room-light-font200-editing-landscape|dm-light-default-reviewed)[.]png")
 RESET_NAME = re.compile(r"reset-(light|dark)-(default|font200)-(signin-forgot|form|mfa|stop|cancelled|passkey|failed|unknown|cancel-unknown)[.]png")
 AUTH_DESTINATION = ROOT / "app/build/reports/androidTests/auth-presentation"
-AUTH_NAME = re.compile(r"auth-(light|dark)-((default|font200)-(signin|create)-keyboard|font200-create-block|font200-consent-(before-first-tap|after-first-tap|scrolled-to-create|submitted-before-you-chat))[.]png")
+AUTH_NAME = re.compile(r"auth-(light|dark)-((default|font200)-(signin|create)-keyboard|font200-create-block|font200-consent-(before-first-tap|after-first-tap|scrolled-to-create|submitted-find-your-people))[.]png")
 RULES_DESTINATION = ROOT / "app/build/reports/androidTests/rules-presentation"
 RULES_NAME = re.compile(r"rules-(light|dark)-((default|font200)-dialog(-expanded)?|font200-banner(-offline)?)[.]png")
 GUIDELINES_DESTINATION = ROOT / "app/build/reports/androidTests/guidelines-presentation"
