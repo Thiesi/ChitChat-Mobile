@@ -39,6 +39,30 @@ class FormDialogPlacementRestoreTest {
         assertEquals("claimed once", false, claimUnlessHeld(false) { sameFrame.claim(key) })
     }
 
+    @Test fun theHoldIsTheComposedNoticeAndTheLiveState() {
+        // #378 F1 (TL): the composed notice starts the hold; the live state ends it at once.
+        var liveReads = 0
+        assertEquals(true, holdNow(true) { liveReads++; true })
+        assertEquals("released live, the recomposed parameter still true", false, holdNow(true) { liveReads++; false })
+        assertEquals("no composed hold: no hold", false, holdNow(false) { liveReads++; true })
+        assertEquals("no composed hold: the live state isn't read (nor observed)", 2, liveReads)
+    }
+
+    @Test fun theSwapAfterTheReleaseClaimsAndRestoresInItsOwnPass() {
+        // #378 F1: diag run 46066588478's order on API36's notice re-tap: the VM released at fieldFocused, the swap to one
+        // column came before the recomposed hold flipped (308 ms). The swap's placement reads the live hold, released:
+        // it claims and restores in that pass, while the composed parameter is still true.
+        val sameFrame = FormDialogSameFrameRestore()
+        val pinnedKey = Any(); val columnKey = Any()
+        var vmHeld = true
+        val composed = true
+        assertEquals("before the tap: held", false, claimUnlessHeld(holdNow(composed) { vmHeld }) { sameFrame.claim(pinnedKey) })
+        vmHeld = false // fieldFocused, synchronously in the tap's focus dispatch
+        assertEquals("the swap's placement claims", true, claimUnlessHeld(holdNow(composed) { vmHeld }) { sameFrame.claim(columnKey) })
+        // The restore of that pass: the one-column outer at 0 goes to the target in this pass (logged 0 -> 1662).
+        assertEquals(1662f, sameFrameDelta(1662, 0, 2359))
+    }
+
     @Test fun aDeferredStepForASupersededLayoutDoesNothing() {
         // API35 reversed (diag run 46066588478): the step launched at the pinned key 440 resumed after the layout pass had
         // moved on to one column (357): not current, dropped.

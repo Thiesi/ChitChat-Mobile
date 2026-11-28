@@ -88,7 +88,7 @@ internal val LocalFormDialogLayout = androidx.compose.runtime.staticCompositionL
 internal fun FormDialog(onDismissRequest: () -> Unit, title: @Composable () -> Unit, confirmButton: @Composable () -> Unit,
     modifier: Modifier = Modifier, dismissButton: (@Composable () -> Unit)? = null,
     bodyArrangement: Arrangement.Vertical = Arrangement.Top, dismissOnOutsideTap: Boolean = true,
-    holdFocusedInView: Boolean = false,
+    holdFocusedInView: Boolean = false, holdLive: () -> Boolean = { true },
     body: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         // The usable area is the window minus the system bars and the keyboard; a tap on it outside the surface dismisses,
@@ -104,7 +104,7 @@ internal fun FormDialog(onDismissRequest: () -> Unit, title: @Composable () -> U
             Surface(modifier.then(sized).pointerInput(Unit) { detectTapGestures { } },
                 shape = AlertDialogDefaults.shape, color = AlertDialogDefaults.containerColor,
                 tonalElevation = AlertDialogDefaults.TonalElevation) {
-                FormDialogContent(title, confirmButton, dismissButton, bodyArrangement, holdFocusedInView, body)
+                FormDialogContent(title, confirmButton, dismissButton, bodyArrangement, holdFocusedInView, holdLive, body)
             }
         }
     }
@@ -114,7 +114,7 @@ internal fun FormDialog(onDismissRequest: () -> Unit, title: @Composable () -> U
 @Composable
 private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Composable () -> Unit,
     dismissButton: (@Composable () -> Unit)?, bodyArrangement: Arrangement.Vertical, holdFocusedInView: Boolean,
-    body: @Composable ColumnScope.() -> Unit) {
+    holdLive: () -> Boolean, body: @Composable ColumnScope.() -> Unit) {
     val density = LocalDensity.current
     // The 24dp padding scrolls with the content, so a short window's viewport is the whole surface: with the keyboard
     // up in landscape at 200% only about 80dp may be left, and a fixed padding would leave no room for a 48dp button.
@@ -142,7 +142,12 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         val key = maxHeight to pinned
         // The hook (PL and TL, 2026-11-22): while the caller holds an in-form notice, a layout change doesn't scroll back to
         // the focused field; the notice keeps the view until the person's next interaction. Off by default: unchanged.
-        val held by androidx.compose.runtime.rememberUpdatedState(holdFocusedInView)
+        val heldComposed by androidx.compose.runtime.rememberUpdatedState(holdFocusedInView)
+        val heldLive by androidx.compose.runtime.rememberUpdatedState(holdLive)
+        // #378 F1 (TL): the hold starts with the composed notice and ends at the caller's live state (snapshot state the
+        // caller writes synchronously at the release), read here directly: the recomposed parameter lagged the release
+        // by 21-308 ms, so a mode switch in between drew the swapped-in scroller at its old value (diag run 46066588478).
+        fun heldNow() = holdNow(heldComposed, heldLive)
         // A3 (TL, 2026-11-26): the height step runs where the new layout is first known, in the outer scroller content's
         // position callback, after the layout pass and before the frame is drawn: each scroller's new maxValue is already
         // measured there, so a synchronous delta lands the restore in the first frame drawn at the new layout, where the
@@ -226,7 +231,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         }
         // The after-a-frame step and the callback fallback: the inputs from the current placement.
         fun heightStep(): Pair<androidx.compose.foundation.ScrollState, Int>? {
-            if (held) return null
+            if (heldNow()) return null
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return null
             val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
                 else Triple(outer, focused.outerContent, focused.outerViewport)
@@ -265,7 +270,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // Before, a held settle pass used up the claim and the after-a-frame step restored up to ~200 ms later, with the
             // dialog's top drawn at the swapped-in scroller's 0 meanwhile (diag runs 46056107630 and 46056124120, API36
             // notice re-tap).
-            val holding = held
+            val holding = heldNow()
             val place = focused.body ?: return
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return
             if (!bodyPlaceValid(place, child, pinned, state.maxValue, viewportHeight)) return
@@ -305,7 +310,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             // lambda captured (#376: an old-key record after the same-frame scroll, against the inner frame's 3540 px).
             focused.layoutKey = key
             focused.layoutPinned = pinned
-            if (!claimUnlessHeld(held) { sameFrame.claim(key) }) return // #378 finding 3: a held pass claims nothing.
+            if (!claimUnlessHeld(heldNow()) { sameFrame.claim(key) }) return // #378 finding 3: a held pass claims nothing.
             // A new change: its baseline is read afresh, here, before heightStep()'s held check, so a held change resets
             // it too (a notice holding the view while the keyboard hides, then the person's tap: K, J, K). Assumes every
             // height or mode change relays out the outer scroller, so this callback comes for each one.
@@ -338,7 +343,7 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             focused.record(key, pinned)
             focused.recordBody()
             focused.rebaselineKeyboard() // #378 (b): an edit during a keyboard transition is the new baseline.
-            if (held) return@LaunchedEffect
+            if (heldNow()) return@LaunchedEffect
             val child = focused.coordinates?.takeIf { it.isAttached } ?: return@LaunchedEffect
             val (state, content, viewport) = if (pinned) Triple(inner, focused.innerContent, focused.innerViewport)
                 else Triple(outer, focused.outerContent, focused.outerViewport)
@@ -440,6 +445,13 @@ internal class BodyPlace(val child: Any, val box: androidx.compose.ui.geometry.R
  */
 internal inline fun claimUnlessHeld(held: Boolean, claim: () -> Boolean): Boolean = !held && claim()
 
+/**
+ * #378 F1 (TL): the effective hold: the composed notice's hold ([composed], which starts it with the notice) and the
+ * caller's live state ([live], snapshot state the release writes synchronously). The live read comes second, so a form
+ * with no composed hold doesn't observe it.
+ */
+internal inline fun holdNow(composed: Boolean, live: () -> Boolean): Boolean = composed && live()
+
 /** #378 failure 3: a running keyboard slide: the inset now, its target, the navigation bar inset (px), and its direction. */
 internal class KeyboardSlide(val ime: Float, val target: Float, val navBottom: Float, val arriving: Boolean)
 
@@ -454,8 +466,11 @@ internal fun endLayout(maxHeight: Float, navBottom: Float, ime: Float, target: F
     minimumBody: Float, bodyHeight: Float, outerContent: Float): EndLayout {
     val endMaxHeight = maxHeight - (maxOf(navBottom, target) - maxOf(navBottom, ime))
     val available = endMaxHeight - chrome - titleAndButtons
-    return if (available >= minimumBody) EndLayout(true, minOf(available, bodyHeight))
-        else EndLayout(false, minOf(endMaxHeight, outerContent))
+    // The decision as FormDialog's own (a Dp comparison, the same at any scale); the viewport in whole px, as Compose
+    // rounds the body's heightIn(max = available) (roundToPx), so the end viewport is the one the settled layout
+    // measures, not a fraction off it (TL: a same-mode slide's last frame and the settle must agree).
+    return if (available >= minimumBody) EndLayout(true, minOf(kotlin.math.round(available), bodyHeight))
+        else EndLayout(false, minOf(kotlin.math.round(endMaxHeight), outerContent))
 }
 
 /**

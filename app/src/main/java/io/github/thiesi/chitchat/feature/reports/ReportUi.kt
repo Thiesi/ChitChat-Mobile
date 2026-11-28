@@ -258,7 +258,7 @@ private fun ReportDialog(reports: ReportViewModel, state: ReportState, place: Re
     // close is refused.
     // A shown notice holds the view until the person's next interaction (PL, TL): FormDialog's hook, scroll only.
     FormDialog(onDismissRequest = { if (!sending) reports.close() }, dismissOnOutsideTap = false,
-        holdFocusedInView = state.noticeHeld && notice != null,
+        holdFocusedInView = state.noticeHeld && notice != null, holdLive = { reports.noticeHeldNow },
         modifier = Modifier.lanternDialogEdge().semantics { paneTitle = title }.testTag("report_dialog"),
         title = { Text(title, modifier = Modifier.semantics { heading() }) },
         body = {
