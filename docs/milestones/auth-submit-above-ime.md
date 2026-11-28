@@ -83,6 +83,21 @@ The consent line plus Create form **one block**, so the line is visible whenever
   scroller. A tap on Create while any part of the line is off screen brings the block into view and doesn't submit. A
   polite announcement says "Review the agreement, then tap Create my account." It's announced only, with no visible
   text.
+- **The line taller than it can be shown with Create (#390, owner's decision 2026-11-28, issue comment 7241285655; PL
+  placement 7241297887; the TL and PL review-key ruling on #390).** The line can't fit when its height + 12dp + 48dp is
+  more than the viewport's height (200% in a 320×260 dp window: 168 px against 148 px). Then:
+  - the first tap on Create, while the line isn't reviewed in this visit, scrolls its top to 8dp below the viewport's top
+    (flush when its first text line wouldn't then be whole), announces the same line once and doesn't submit. That tap
+    marks the line reviewed;
+  - any later tap submits;
+  - "reviewed" is memory only and resets when the agreement changes (the composed sentence, the published rules
+    document's address or version, or a privacy link appearing or going) or when the block leaves composition (leaving
+    the screen, a configuration change).
+  When the line fits, the rule above is unchanged. The decision is `consentTap` (ConsentTap.kt, JVM-tested).
+- **Measuring:** the line and the viewport are measured in the screen viewport's own layout coordinates
+  (`PinnedActionSlot.frame`, `localBoundingBoxOf`), never window positions (#372). The fits branch's decision is
+  unchanged: the #372 probe (run 46156251647) showed the old window path and this geometry agree in all 12 placed
+  positions per level. `PinnedActionSlot.viewport` (window bounds, read only by this check) is gone.
 
 ## Tests
 

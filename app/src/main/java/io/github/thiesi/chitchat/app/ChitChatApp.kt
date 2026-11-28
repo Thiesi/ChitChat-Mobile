@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.isImeVisible
 
 import androidx.compose.ui.draw.drawBehind
 
-import androidx.compose.ui.layout.boundsInWindow
 import io.github.thiesi.chitchat.core.ui.collapsedWhile
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.ui.layout.layout
 
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -1108,6 +1108,7 @@ private fun ScreenContent(content: @Composable () -> Unit) {
     // A form's primary action can pin below the scroller, above the keyboard (#275, PL): the screen's own background,
     // 16dp around the button, and a 1dp line edge only while content is hidden beneath it.
     val slot = remember { io.github.thiesi.chitchat.core.ui.PinnedActionSlot() }
+    androidx.compose.runtime.SideEffect { slot.scrollBy = { distance -> scroll.animateScrollBy(distance) } }
     val line = io.github.thiesi.chitchat.core.theme.ChitChatTheme.colors.line
     // B (#351, P-78): the focused text field keeps its label whole while the viewport's height changes (the keyboard's
     // slide), and focus moves land by the same rule (see ScreenKeepInView).
@@ -1140,7 +1141,7 @@ private fun ScreenContent(content: @Composable () -> Unit) {
                 Modifier.weight(1f).fillMaxWidth().testTag("screen_viewport")
                     .onFocusedBoundsChanged { keep.focused = it; keep.recordContent() }
                     .onGloballyPositioned {
-                        slot.viewport = it.boundsInWindow()
+                        slot.frame = it
                         keep.frame = it
                         // The fallback, for a change the placement pass left (the content was re-measured): after the
                         // layout pass. A move here can be drawn one frame late (see ScreenKeepInView).
