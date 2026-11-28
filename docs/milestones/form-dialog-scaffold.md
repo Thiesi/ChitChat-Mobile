@@ -273,7 +273,13 @@ app window's bounds, not whether the keyboard covers a node.
     on the scroller in use, lands by `heldBringDistance`, in the PL's order:
     1. Compose's own distance, when the label is whole or out there;
     2. with the whole notice (when it fits) whole and in view: the label out by the minimum, else whole by the minimum;
-    3. the same with the notice's lead (the glyph line's first line) as the keep;
+    3. the same with the notice's lead (the glyph line's first line) as the keep: its bottom from the text's own layout
+       (WarningNoticeTextTop, the column's 8dp and the line's 4dp, plus getLineBottom(0)), published from the text's
+       onTextLayout. A line-height proxy (12dp + bodyLarge's line height) measured 6 px short at 200% (48 against 54: under
+       nonlinear font scaling the layout applies the line height as a ratio of the scaled font size; that cause isn't
+       verified against Compose's source). No lead until the text has laid out (the keep is then the whole notice); a new
+       layout republishes it. The internal HeldLead semantics key exposes the published value to the held-lead test only
+       (not mapped to AccessibilityNodeInfo); ReportNoticeViewportTest asserts it covers the text's first line.
     4. otherwise Compose's distance: the lead wins, the only place a half label can remain.
 
     Out is preferred over whole within each tier (the PL's order), not the smaller move. The keep per kind (PL): a

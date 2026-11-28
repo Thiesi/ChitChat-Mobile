@@ -42,14 +42,28 @@ internal fun WarningGlyph(style: TextStyle) {
         Modifier.padding(top = ((firstLine - size) / 2).coerceAtLeast(0.dp)).size(size), tint = ChitChatTheme.colors.warning)
 }
 
+/**
+ * #384: where a [WarningNotice]'s text starts below the notice's top: the column's vertical padding (8dp) and the line's
+ * (4dp). Measured by the proof diagnostic (textOffsetInNotice 12 px at density 1, equal to the window cross-check).
+ */
+internal val WarningNoticeTextTop: Dp = 12.dp
+
+/**
+ * #384 (TL, PL): the lead an in-form notice published as its held keep, in px (the same value the FormDialog spec reads).
+ * Test-observable only, for the held-lead guard: a custom key, not mapped to AccessibilityNodeInfo, so accessibility
+ * services never see it; nothing in production reads it. Set only while a lead is published (never a placeholder).
+ */
+internal val HeldLead = androidx.compose.ui.semantics.SemanticsPropertyKey<Float>("HeldLead")
+
 /** The glyph and a bold lead followed by its body, merged for TalkBack. */
 @Composable
 internal fun WarningLine(lead: String, body: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodyLarge,
-    color: androidx.compose.ui.graphics.Color = ChitChatTheme.colors.text, gap: Dp = 8.dp) {
+    color: androidx.compose.ui.graphics.Color = ChitChatTheme.colors.text, gap: Dp = 8.dp,
+    onTextLayout: (androidx.compose.ui.text.TextLayoutResult) -> Unit = {}) {
     Row(modifier.semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.Top) {
         WarningGlyph(style)
         Text(buildAnnotatedString { withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(lead) }; if (body.isNotEmpty()) { append(" "); append(body) } },
-            style = style, color = color)
+            style = style, color = color, onTextLayout = onTextLayout)
     }
 }
 
@@ -59,9 +73,12 @@ internal fun WarningLine(lead: String, body: String, modifier: Modifier = Modifi
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-internal fun WarningNotice(lead: String, body: String, modifier: Modifier = Modifier, actions: @Composable () -> Unit = {}) {
+internal fun WarningNotice(lead: String, body: String, modifier: Modifier = Modifier,
+    onTextLayout: (androidx.compose.ui.text.TextLayoutResult) -> Unit = {}, actions: @Composable () -> Unit = {}) {
+    // #384: the line's text sits WarningNoticeTextTop below the notice's top (the column's 8dp and the line's 4dp below).
     Column(modifier.fillMaxWidth().background(ChitChatTheme.colors.presenceWash).padding(horizontal = 16.dp, vertical = 8.dp)) {
-        WarningLine(lead, body, Modifier.padding(vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite })
+        WarningLine(lead, body, Modifier.padding(vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
+            onTextLayout = onTextLayout)
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { actions() }
     }
 }

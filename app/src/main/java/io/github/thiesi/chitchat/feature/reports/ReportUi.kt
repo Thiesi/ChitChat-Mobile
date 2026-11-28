@@ -512,23 +512,23 @@ private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolea
         // Status ladder row 7: a wait is level 1, a muted line, never the person's error (PL). A known wait's line goes
         // when it ends, as Send re-enables; "Try again later." only when the delay was unknown from the start (PL).
         is ReportNotice.RateLimited -> when {
-            waitSeconds != null && waiting -> InViewNotice(occurrence, held) { modifier ->
+            waitSeconds != null && waiting -> InViewNotice(occurrence, held) { modifier, _ ->
                 WaitLine(stringResource(R.string.report_rate_limited, waitText(Wait.of(waitSeconds * 1000))), modifier) }
-            waitSeconds == null -> InViewNotice(occurrence, held) { modifier ->
+            waitSeconds == null -> InViewNotice(occurrence, held) { modifier, _ ->
                 WaitLine(stringResource(R.string.report_rate_limited_unknown), modifier) }
             else -> Unit
         }
-        ReportNotice.NotSent -> InViewNotice(occurrence, held) { modifier ->
+        ReportNotice.NotSent -> InViewNotice(occurrence, held) { modifier, _ ->
             Box(modifier) { InlineError(stringResource(R.string.report_not_sent)) } }
         // Person outcomes (reporting.md): a level-2 notice that nothing was sent; the picture gone, with its category
         // removed; and the Check that found nothing, after which Send report is an explicit choice again.
-        ReportNotice.SnapshotUnavailable -> InViewNotice(occurrence, held, warningLead()) { modifier ->
+        ReportNotice.SnapshotUnavailable -> InViewNotice(occurrence, held) { modifier, onLead ->
             WarningNotice(stringResource(R.string.report_person_snapshot_lead), stringResource(R.string.report_person_snapshot_body, name),
-                modifier.testTag("report_notice")) }
-        ReportNotice.PictureGone -> InViewNotice(occurrence, held) { modifier ->
+                modifier.testTag("report_notice"), onTextLayout = onLead) }
+        ReportNotice.PictureGone -> InViewNotice(occurrence, held) { modifier, _ ->
             Box(modifier) { InlineError(stringResource(R.string.report_person_picture_gone, name)) } }
-        ReportNotice.DidNotArrive -> InViewNotice(occurrence, held, warningLead()) { modifier ->
-            WarningNotice(stringResource(R.string.report_person_did_not_arrive), "", modifier.testTag("report_notice")) }
+        ReportNotice.DidNotArrive -> InViewNotice(occurrence, held) { modifier, onLead ->
+            WarningNotice(stringResource(R.string.report_person_did_not_arrive), "", modifier.testTag("report_notice"), onTextLayout = onLead) }
     }
 }
 
@@ -540,12 +540,23 @@ private fun NoticeText(notice: ReportNotice, waitSeconds: Long?, waiting: Boolea
  * line first, then its top edge, which is a no-op for a line that fits.
  */
 @Composable
-private fun InViewNotice(occurrence: Long, held: Boolean, lead: androidx.compose.ui.unit.Dp? = null, content: @Composable (Modifier) -> Unit) {
+private fun InViewNotice(occurrence: Long, held: Boolean,
+    content: @Composable (Modifier, (androidx.compose.ui.text.TextLayoutResult) -> Unit) -> Unit) {
     val requester = remember { BringIntoViewRequester() }
     // #384 (PL, TL): the notice is the held keep while it exists: FormDialog's spec lands its bring-into-view so the
     // field's separate label is whole or out, the notice (else its lead) whole and in view. Cleared when it leaves.
     val caret = io.github.thiesi.chitchat.core.ui.LocalFormDialogCaret.current
-    val leadPx = with(androidx.compose.ui.platform.LocalDensity.current) { lead?.toPx() ?: 0f }
+    // The lead (a WarningNotice's glyph line's first line) from its own text layout (TL, PL: the line-height proxy measured
+    // 6 px short at 200%): the text's top in the notice plus the first line's bottom. None (0, the whole notice) until the
+    // text has laid out; a new layout (font scale, width, text) republishes it. The text lays out in its measure, before
+    // the layout pass's position callbacks, so the keep published there already carries it: no frame later.
+    val published = remember { NoticeKeep() }
+    val textTop = with(androidx.compose.ui.platform.LocalDensity.current) { io.github.thiesi.chitchat.core.ui.WarningNoticeTextTop.toPx() }
+    val onLead: (androidx.compose.ui.text.TextLayoutResult) -> Unit = { layout ->
+        published.lead = textTop + layout.getLineBottom(0)
+        published.coordinates?.takeIf { it.isAttached }?.let { caret?.publishHeldKeep(it, published.lead) }
+    }
+    val leadNow = published.lead
     androidx.compose.runtime.DisposableEffect(caret) { onDispose { caret?.publishHeldKeep(null) } }
     val holding by androidx.compose.runtime.rememberUpdatedState(held)
     val layout = io.github.thiesi.chitchat.core.ui.LocalFormDialogLayout.current
@@ -565,16 +576,17 @@ private fun InViewNotice(occurrence: Long, held: Boolean, lead: androidx.compose
         val keyboardShowing = before?.ime == false && layout?.ime == true
         if (holding && !keyboardShowing) { androidx.compose.runtime.withFrameNanos { }; bring() }
     }
-    content(Modifier.bringIntoViewRequester(requester).onGloballyPositioned { caret?.publishHeldKeep(it, leadPx) })
+    content(Modifier.bringIntoViewRequester(requester)
+        .onGloballyPositioned { published.coordinates = it; caret?.publishHeldKeep(it, published.lead) }
+        // The held-lead guard's test-observable key (HeldLead): the same value, set only while a lead is published.
+        .semantics { if (leadNow > 0f) this[io.github.thiesi.chitchat.core.ui.HeldLead] = leadNow }, onLead)
 }
 
-/**
- * #384: a WarningNotice's lead, from its top: the column's 8dp and the line's 4dp padding, then the glyph line's first
- * line (bodyLarge's line height).
- */
-@Composable
-private fun warningLead(): androidx.compose.ui.unit.Dp =
-    12.dp + with(androidx.compose.ui.platform.LocalDensity.current) { MaterialTheme.typography.bodyLarge.lineHeight.toDp() }
+/** #384: the notice's published keep: its coordinates and its lead (0 until its text has laid out). */
+private class NoticeKeep {
+    var coordinates: androidx.compose.ui.layout.LayoutCoordinates? = null
+    var lead by androidx.compose.runtime.mutableFloatStateOf(0f)
+}
 
 /** The follow-up sheet (PL): a heading and pane title, the lead, the outlined action and Done. Back or scrim is Done. */
 @Composable

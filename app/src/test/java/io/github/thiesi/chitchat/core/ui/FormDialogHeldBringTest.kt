@@ -10,10 +10,10 @@ import org.junit.Test
  * (else its lead) whole and in view, by the minimum move, out preferred. Geometries in viewport px (margin 8 px):
  * - 200%, measured (CI form-dialog metrics, the person report's held stage; pinned body viewport 336): the label node 114
  *   tall and 12 above the field (#378's measurement), the field 146, the notice 56 below the field; did-not-arrive's notice
- *   108 tall, the picture-gone line 114, the snapshot notice 360 (taller than the viewport); a WarningNotice's lead 12 + its
- *   first line (bodyLarge 24sp: 48 px).
- * - 100%, derived from the same layout at scale 1 (label 40, field 92, the gaps 12 and 44, the notice 52, lead 36, the
- *   pinned body viewport 424); the proof diagnostic measures them.
+ *   108 tall, the picture-gone line 114, the snapshot notice 360 (taller than the viewport); a WarningNotice's lead 54
+ *   (the proof diagnostic's text layout: 12 + the first line's 42).
+ * - 100%, derived from the same layout at scale 1 (label 40, field 92, the gaps 12 and 44, the notice 52, the pinned body
+ *   viewport 424; the lead 36, measured: 12 + 24).
  * - The whole-line kinds (PL, 2026-11-28: the not-sent and rate lines keep the whole line, so their lead is the line):
  *   200% measured (the person rate line 152 below a 128 field; the message not-sent line 114 below a 118 field), 100%
  *   derived (the not-sent line 20, the rate line 40, below the 92 field).
@@ -25,9 +25,9 @@ class FormDialogHeldBringTest {
         val notice: Float, val lead: Float, val container: Float)
 
     private val forms = listOf(
-        Form("200% did not arrive", 114f, 12f, 146f, 56f, 108f, 60f, 336f),
+        Form("200% did not arrive", 114f, 12f, 146f, 56f, 108f, 54f, 336f),
         Form("200% picture gone", 114f, 12f, 146f, 56f, 114f, 114f, 336f),
-        Form("200% snapshot", 114f, 12f, 146f, 56f, 360f, 60f, 336f),
+        Form("200% snapshot", 114f, 12f, 146f, 56f, 360f, 54f, 336f),
         Form("100% did not arrive", 40f, 12f, 92f, 44f, 52f, 36f, 424f),
         Form("100% snapshot", 40f, 12f, 92f, 44f, 160f, 36f, 424f),
         Form("200% rate", 114f, 12f, 128f, 56f, 152f, 152f, 336f),
@@ -92,7 +92,7 @@ class FormDialogHeldBringTest {
         // CI's held stage (200% did not arrive, pinned 336): field 26..172, so the label -100..14 (half), the notice
         // 228..336. Compose's distance 0 (the notice already in view); the label goes out by its 14 px, the notice 214..322.
         val f = forms[0]
-        val r = heldBringDistance(0f, 336f, -100f, 14f, 228f, 336f, 288f, 2000f, 1556f, margin)
+        val r = heldBringDistance(0f, 336f, -100f, 14f, 228f, 336f, 282f, 2000f, 1556f, margin)
         assertEquals(2, r.step); assertEquals(14f, r.distance)
         // Picture gone (field 20..166, label -106..8, the line 222..336): out by 8.
         val g = heldBringDistance(0f, 336f, -106f, 8f, 222f, 336f, 336f, 2000f, 1556f, margin)

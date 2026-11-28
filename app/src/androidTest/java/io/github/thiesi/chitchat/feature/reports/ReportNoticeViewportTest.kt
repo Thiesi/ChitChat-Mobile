@@ -138,6 +138,26 @@ class ReportNoticeViewportTest {
         return top to top + label.size.height
     }
 
+    /**
+     * #384 (TL, PL): the held lead the notice published (its HeldLead key, null when unset: not yet published, never a
+     * pass) and the text layout's first line bottom from the notice's top, measured from layout coordinates: the notice's
+     * top padding (half its outer minus inner height; its layoutInfo coordinates are inside its padding) plus the text's
+     * offset inside it, plus getLineBottom(0).
+     */
+    private fun heldLead(line: SemanticsNodeInteraction, lead: String): Pair<Float?, Float> {
+        compose.waitForIdle()
+        val notice = line.fetchSemanticsNode()
+        val published = notice.config.getOrNull(io.github.thiesi.chitchat.core.ui.HeldLead)
+        val text = compose.onNode(hasText(lead, substring = true) and hasAnyAncestor(hasTestTag("report_notice")),
+            useUnmergedTree = true).fetchSemanticsNode()
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.runOnIdle { text.config[SemanticsActions.GetTextLayoutResult].action!!(layouts) }
+        val inner = notice.layoutInfo.coordinates
+        val offset = (notice.size.height - inner.size.height) / 2f +
+            inner.localPositionOf(text.layoutInfo.coordinates, androidx.compose.ui.geometry.Offset.Zero).y
+        return published to offset + layouts.single().getLineBottom(0)
+    }
+
     /** One line of facts: focus (the field's, and how many nodes are focused), keyboard, mode, plus [extra]. */
     private fun facts(case: String, stage: String, extra: String = ""): Triple<Boolean?, Boolean, Int> {
         val ime = focusedWindowIme()
@@ -238,8 +258,16 @@ class ReportNoticeViewportTest {
                 // #384 (PL): in the held stage the separate label is whole (its top at least 8dp below the viewport's top)
                 // or entirely out (its bottom at or above it), never half; recorded at the end of the stage's line.
                 val (labelTop, labelBottom) = labelInViewport()
-                val detail = "$inViewDetail label=$labelTop..$labelBottom"
+                // #384 (TL, PL): the published lead (HeldLead) is at least the text layout's first line from the notice's top.
+                val leadCheck = if (lead != null) heldLead(line(), lead) else null
+                val detail = "$inViewDetail label=$labelTop..$labelBottom" +
+                    (leadCheck?.let { " heldLead=${it.first} layoutLead=${it.second}" } ?: "")
                 val (focused, imeUp, focusedNodes) = facts(case, "shown", detail)
+                if (leadCheck != null) {
+                    val published = leadCheck.first
+                    assertTrue("$case: the published lead covers the text's first line ($detail)",
+                        published != null && published >= leadCheck.second - 0.5f)
+                }
                 assertTrue("$case: the label is whole or entirely out in the held stage ($detail)",
                     labelTop >= 8f * density - 1f || labelBottom <= 0.5f)
                 if (instant) {
@@ -312,15 +340,16 @@ class ReportNoticeViewportTest {
         listOf(ReportResult.Invalid)) { compose.onNode(hasText(notSent)) }
 
     // #384 (PL): the whole-line kinds at 100%, where main left the label half under the divider (the failed and rate
-    // captures); the held label assert covers them.
+    // captures); the held label assert covers them. Instant, as the captures' flow: the field keeps focus and the keyboard
+    // stays, so the held bring runs above the keyboard (the network reply closes it first and doesn't reach the break).
     @Test fun personNotSentAt100() = measure("person-notsent-100", true, ReportCategory.OFFENSIVE_USERNAME,
-        listOf(ReportResult.Invalid), scale = 1f) { compose.onNode(hasText(notSent)) }
+        listOf(ReportResult.Invalid), instant = true, scale = 1f) { compose.onNode(hasText(notSent)) }
 
     @Test fun personRateAt100() = measure("person-rate-100", true, ReportCategory.OFFENSIVE_USERNAME,
-        listOf(ReportResult.RateLimited(900)), scale = 1f) { compose.onNodeWithTag("report_wait") }
+        listOf(ReportResult.RateLimited(900)), instant = true, scale = 1f) { compose.onNodeWithTag("report_wait") }
 
     @Test fun messageRateAt100() = measure("message-rate-100", false, ReportCategory.SPAM,
-        listOf(ReportResult.RateLimited(900)), scale = 1f) { compose.onNodeWithTag("report_wait") }
+        listOf(ReportResult.RateLimited(900)), instant = true, scale = 1f) { compose.onNodeWithTag("report_wait") }
 
     // The instant reply: focus and the keyboard stay; the line in view, still in view when the keyboard closes.
     @Test fun personSnapshotInstant() = measure("person-snapshot-instant", true, ReportCategory.OFFENSIVE_PROFILE_PICTURE,
