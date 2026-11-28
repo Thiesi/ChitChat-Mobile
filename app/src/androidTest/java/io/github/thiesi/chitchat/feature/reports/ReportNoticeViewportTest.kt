@@ -203,9 +203,11 @@ class ReportNoticeViewportTest {
                 compose.waitUntil(5_000) { present("report_dialog") }
                 compose.onNodeWithTag("report_category:${category.wire}").performScrollTo().performClick()
                 compose.onNodeWithTag("report_details").performScrollTo()
+                io.github.thiesi.chitchat.testing.DiagRecording.flash() // DIAGNOSTIC: the sync strip.
                 compose.tapNativeInput("report_details", imeBottom = ::imeBottom)
                 compose.onNodeWithTag("report_details").performTextInput("Posted the same link in 3 rooms")
                 compose.waitForIdle()
+                io.github.thiesi.chitchat.testing.DiagRecording.capture("first-arrival-end") // DIAGNOSTIC
                 facts(case, "beforeSend")
                 send()
                 if (facts != null) {
@@ -256,6 +258,7 @@ class ReportNoticeViewportTest {
                     assertTrue("$case: the same line is in view again after a second refusal ($againDetail)", again)
                 }
                 if (thenTap) caretBack(case)
+                io.github.thiesi.chitchat.testing.DiagRecording.beforeClose?.invoke() // DIAGNOSTIC: the hide leg.
             }
         } finally { gate.complete(Unit); compose.runOnIdle { room.cancel(); reports.close() } }
     }
@@ -264,6 +267,34 @@ class ReportNoticeViewportTest {
     private val notSent get() = context.getString(R.string.report_not_sent)
 
     // The network reply: the ruled sequence (no focus, no keyboard at the outcome; the person's tap brings the caret back).
+    // DIAGNOSTIC (never merged), #378: the notice re-tap case with animations off and on (recorded).
+    private fun diag(name: String, animations: Boolean) {
+        org.junit.Assume.assumeTrue(androidx.test.platform.app.InstrumentationRegistry.getArguments().getString("a3Probe") == "run")
+        io.github.thiesi.chitchat.testing.DiagRecording.run(name, animations, hide = {
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+            compose.waitForIdle()
+        }) { personSnapshot() }
+    }
+    @Test fun diagNoticeOff() = diag("ccm-a3-notice-off", false)
+    @Test fun diagNoticeOn() = diag("ccm-a3-notice-on", true)
+    // DIAGNOSTIC (never merged), #378 F1 (TL): 20 reps per mode, each its own recording. A failed rep is logged and kept as
+    // a failure; the next rep runs (none is repeated); the test fails at the end if any rep did.
+    private fun reps(mode: String, animations: Boolean) {
+        val failed = mutableListOf<String>()
+        for (r in 1..20) {
+            val name = "ccm-a3-noticeN-$mode-r%02d".format(r)
+            try { diag(name, animations) } catch (t: org.junit.AssumptionViolatedException) { throw t } catch (t: Throwable) {
+                failed += "$name: ${t.javaClass.simpleName}: ${t.message?.take(200)}"
+                io.github.thiesi.chitchat.core.ui.KeepProbe.log("REP failed $name ${t.javaClass.simpleName}")
+                if (focusedWindowIme().visible) androidx.test.espresso.Espresso.closeSoftKeyboard()
+            }
+        }
+        if (failed.isNotEmpty()) throw AssertionError("${failed.size} of 20 reps failed:\n" + failed.joinToString("\n"))
+    }
+    @Test fun diagNoticeOffN20() = reps("off", false)
+    @Test fun diagNoticeOnN20() = reps("on", true)
+
     @Test fun personSnapshot() = measure("person-snapshot", true, ReportCategory.OFFENSIVE_PROFILE_PICTURE,
         listOf(ReportResult.SnapshotUnavailable), thenTap = true, lead = snapshotLead) { compose.onNodeWithTag("report_notice") }
 
