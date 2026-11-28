@@ -107,7 +107,7 @@ class FormDialogMechanismProbe {
         val nodes = dialogNodes()
         val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) } ?: return
         val folder = java.io.File(output, "ccm-372-mech").apply { mkdirs() }
-        java.io.File(folder, "$case-$state.txt").writeText(nodes.withIndex().joinToString("\n") { (order, pair) ->
+        java.io.File(folder, "$case-$state.txt").writeText("variant=${KeepProbe.variant}\n" + nodes.withIndex().joinToString("\n") { (order, pair) ->
             val (depth, n) = pair
             val actions = n.actionList.joinToString(",") { a -> a.label?.let { "${a.id}:$it" } ?: "${a.id}" }
             "#$order d=$depth ${n.className?.toString()?.substringAfterLast('.')} text=${n.text?.toString()?.take(60)} " +
@@ -118,7 +118,7 @@ class FormDialogMechanismProbe {
                 "scrollable=${n.isScrollable} collection=${n.collectionInfo?.let { "${it.rowCount}x${it.columnCount}" }} " +
                 "travBefore=${n.traversalBefore != null} travAfter=${n.traversalAfter != null} children=${n.childCount} actions=[$actions]"
         })
-        log("DUMP $case $state nodes=${nodes.size} file=ccm-372-mech/$case-$state.txt")
+        log("DUMP $case v=${KeepProbe.variant} $state nodes=${nodes.size} file=ccm-372-mech/$case-$state.txt")
     }
 
     private fun place(node: SemanticsNodeInteraction): String = runCatching {
@@ -131,7 +131,7 @@ class FormDialogMechanismProbe {
 
     private fun state(case: String, label: String, field: () -> SemanticsNodeInteraction, first: () -> SemanticsNodeInteraction) {
         compose.waitForIdle()
-        log("STATE $case $label mode=${mode()} ime=${focusedWindowIme().visible} field[${place(field())}] first[${place(first())}] " +
+        log("STATE $case v=${KeepProbe.variant} $label mode=${mode()} ime=${focusedWindowIme().visible} field[${place(field())}] first[${place(first())}] " +
             "inner=${KeepProbe.inner?.value} innerMax=${KeepProbe.inner?.maxValue} outer=${KeepProbe.outer?.value} outerAxis=${outerNow()}")
     }
 
@@ -144,7 +144,7 @@ class FormDialogMechanismProbe {
         val done = target?.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id)
         compose.waitForIdle()
         val drawnAfter = runCatching { field().fetchSemanticsNode().boundsInWindow.top }.getOrNull()
-        log("SHOW $case node=${if (target == null) "absent" else "present"} visible=${target?.isVisibleToUser} a11yRect=$rect done=$done " +
+        log("SHOW $case v=${KeepProbe.variant} node=${if (target == null) "absent" else "present"} visible=${target?.isVisibleToUser} a11yRect=$rect done=$done " +
             "outer=$before->${KeepProbe.outer?.value} drawn=$drawnBefore->$drawnAfter")
     }
 
