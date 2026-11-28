@@ -108,8 +108,8 @@ app window's bounds, not whether the keyboard covers a node.
     max(navigation bar, IME), so the end maxHeight is today's less the inset's change, with FormDialog's own pinned rule
     (available >= the minimum body). If the end is in the frame's own mode, the frame takes the end's target with only
     its own floors: the caret line wholly in view; a half label goes out; then the scroll range, lowered to the label
-    whole when the range's end lands it half and the caret line stays in view (otherwise the range's end, where the end
-    frame itself settles: the label/maxValue gap, its own PR). With a mode switch ahead, the frames before it take the
+    whole when the range's end lands it half and the caret line stays in view (the fallback order at the range's end,
+    below). With a mode switch ahead, the frames before it take the
     per-frame rule clamped to the slide's direction in their mode (an arrival never lower than that mode's last target,
     a hide never higher); the caret line wins over the clamp, and a half label moves with the slide (out on an arrival,
     whole on a hide). The clamp resets at a mode switch, at settle, on a direction flip and on a re-anchor; a held pass
@@ -183,6 +183,24 @@ app window's bounds, not whether the keyboard covers a node.
       margin yields too: the caret's line can sit flush with the bottom edge. Both landscape cases at 200% end that way
       (the long text, and the short one with the keyboard up: the caret's line at 44..82 of an 82 px viewport, the field's
       top at -10, the label out). `FormDialogKeepInViewTest` (JVM) checks these on the pure geometry.
+    - **At the scroll range's end (label-gap PR, PL's fallback order, 2026-11-28).** Every target that meets the range (the
+      placement restore, the step after the frame, the callback restore, the caret effect, and a slide frame, the clamp
+      before a mode switch included) goes through one rule (`rangeEndTarget`), for a field that publishes its separate
+      label:
+      1. A target in range is the rule's own.
+      2. Beyond the range, its end; if that leaves the label half in view, the label whole (its top 8 dp below the
+         viewport's top) with the kept range cut to the caret's line, when that line stays wholly in view. Out isn't
+         reachable past the range's end.
+      3. Otherwise the range's end, as before: the scroll-range extension (space below the content) isn't built. No
+         current form reaches it: the viewport sweep over the report form's measured geometries at 100%, 200% and the
+         font scales 1.40 to 1.55 always fits fallback 2 (`FormDialogRangeEndTest` prints the spare per geometry). A new
+         FormDialog field is checked against it in the PL's inventory, and fallback 3 becomes that form's requirement if
+         it can reach it.
+
+      A hide whose target lies beyond the range now lands on fallback 2. The report form at font scales 1.40 to 1.55,
+      portrait, after the keyboard hides, used to end with the label half in view (2 to 60 px cut; diagnostic run
+      46112715890, the same on API35 and API36). Fields without a published label (the step-up's floating label) keep
+      the clamp unchanged.
     - **Two end states, both intended (PL, 2026-11-26).** Keyboard first, typing brings the span in from below, so it ends
       8 dp above the bottom edge. Text first, A's restore keeps the person's place across the keyboard's swap, and a span
       already clear of the margin doesn't move. In both, the caret's line, the field's bottom and the counter are in view
