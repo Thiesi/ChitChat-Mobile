@@ -122,6 +122,20 @@ class ReportNoticeViewportTest {
         return ok to "$detail inView=$ok"
     }
 
+    /**
+     * #384: the details field's separate label node in the line's scrolling viewport, (top, bottom) from the viewport's
+     * top, measured on the nodes' layout coordinates (not window positions), independent of the production rule.
+     */
+    private fun labelInViewport(line: SemanticsNodeInteraction): Pair<Float, Float> {
+        compose.waitForIdle()
+        var scroller = line.fetchSemanticsNode().parent
+        while (scroller != null && SemanticsActions.ScrollBy !in scroller.config) scroller = scroller.parent
+        val viewport = checkNotNull(scroller) { "The line has no scrolling ancestor" }.layoutInfo.coordinates
+        val label = compose.onNodeWithTag("report_details_label", useUnmergedTree = true).fetchSemanticsNode().layoutInfo.coordinates
+        val top = viewport.localPositionOf(label, androidx.compose.ui.geometry.Offset.Zero).y
+        return top to top + label.size.height
+    }
+
     /** One line of facts: focus (the field's, and how many nodes are focused), keyboard, mode, plus [extra]. */
     private fun facts(case: String, stage: String, extra: String = ""): Triple<Boolean?, Boolean, Int> {
         val ime = focusedWindowIme()
@@ -215,8 +229,14 @@ class ReportNoticeViewportTest {
                 }
                 compose.waitUntil(5_000) { runCatching { line().fetchSemanticsNode() }.isSuccess }
                 compose.waitForIdle()
-                val (shown, detail) = inView(line(), lead)
+                val (shown, inViewDetail) = inView(line(), lead)
+                // #384 (PL): in the held stage the separate label is whole (its top at least 8dp below the viewport's top)
+                // or entirely out (its bottom at or above it), never half; recorded at the end of the stage's line.
+                val (labelTop, labelBottom) = labelInViewport(line())
+                val detail = "$inViewDetail label=$labelTop..$labelBottom"
                 val (focused, imeUp, focusedNodes) = facts(case, "shown", detail)
+                assertTrue("$case: the label is whole or entirely out in the held stage ($detail)",
+                    labelTop >= 8f * density - 1f || labelBottom <= 0f)
                 if (instant) {
                     // Nothing moved focus: the field keeps it and is the only focused node; the keyboard stays.
                     assertTrue("$case: the field keeps focus after an instant refusal ($detail)", focused == true && focusedNodes == 1)
