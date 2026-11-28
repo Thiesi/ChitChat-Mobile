@@ -134,7 +134,7 @@ jobs:
           script: |
             adb shell settings put secure show_ime_with_hard_keyboard 1
             python3 -B .github/scripts/native_environment.py
-            ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.thiesi.chitchat.feature.reports.FormDialogA11yTest -Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true --max-workers=2; s=$?; echo "control gradle exit $s"; exit 0
+            ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.thiesi.chitchat.feature.reports.FormDialogA11yTest,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372Report200Off -Pandroid.testInstrumentationRunnerArguments.a3Probe=run -Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true --max-workers=2; s=$?; echo "control gradle exit $s"; mkdir -p app/build/ccm-device-output; adb logcat -d -s CCMBounds > app/build/ccm-device-output/bounds.txt || true; exit 0
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

@@ -25,6 +25,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.R
@@ -424,6 +425,17 @@ class FormDialogBoundsProbe {
                 showOnScreen(case, "counter-bottom-cut", reportMarker) { it.text?.toString()?.contains("/ 1000") == true }
             } else log("PARTLY $case skipped mode=${mode()} (no one-column state at this scale with the keyboard up)")
             a11yScroll(case, mode(), reportMarker)
+            // Re-run (TL condition 2): a fixed drag on the one-column scroller from the same start, the outer before and
+            // after (main's numbers come from the control job running this case on main's production code).
+            if (mode() == "column") {
+                start?.let { outerTo(it) }
+                val before = outerNow()
+                compose.onNodeWithTag("form_dialog_column", useUnmergedTree = true).performTouchInput {
+                    swipe(androidx.compose.ui.geometry.Offset(centerX, centerY + 100f), androidx.compose.ui.geometry.Offset(centerX, centerY - 100f), 300)
+                }
+                compose.waitForIdle()
+                log("DRAG $case before=$before after=${outerNow()} inner=${KeepProbe.inner?.value} ranges=${ranges()}")
+            } else log("DRAG $case skipped mode=${mode()}")
             DiagRecording.flash() // Re-run: the sync strip right before the column -> pinned return (PL item 1).
             androidx.test.espresso.Espresso.closeSoftKeyboard()
             compose.waitUntil(5_000) { !focusedWindowIme().visible }
