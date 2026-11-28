@@ -11,7 +11,7 @@ on:
         default: none
         required: true
       a3_probe:
-        description: 'DIAGNOSTIC branch only: the label-gap proof on #386's head a1ffd54, observation only'
+        description: 'DIAGNOSTIC branch only: the label-gap proof on the head of PR 386 (a1ffd54), observation only'
         type: choice
         options: [none, run]
         default: none
