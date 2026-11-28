@@ -578,8 +578,11 @@ private fun InViewNotice(occurrence: Long, held: Boolean,
     }
     content(Modifier.bringIntoViewRequester(requester)
         .onGloballyPositioned { published.coordinates = it; caret?.publishHeldKeep(it, published.lead) }
-        // The held-lead guard's test-observable key (HeldLead): the same value, set only while a lead is published.
-        .semantics { if (leadNow > 0f) this[io.github.thiesi.chitchat.core.ui.HeldLead] = leadNow }, onLead)
+        // The held-lead guard's test-observable key (HeldLead): the same value, only while a lead is published. The
+        // modifier itself is attached only then, so a line that never publishes one (the not-sent, picture-gone and rate
+        // lines' Box) gets no semantics node, and a WarningNotice's goes on its existing report_notice node.
+        .then(if (leadNow > 0f) Modifier.semantics { this[io.github.thiesi.chitchat.core.ui.HeldLead] = leadNow } else Modifier),
+        onLead)
 }
 
 /** #384: the notice's published keep: its coordinates and its lead (0 until its text has laid out). */
