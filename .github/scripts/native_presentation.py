@@ -65,7 +65,7 @@ RESET_DESTINATION = ROOT / "app/build/reports/androidTests/reset-presentation"
 REPORT_DESTINATION = ROOT / "app/build/reports/androidTests/report-presentation"
 REPORT_NAME = re.compile(r"report-(?:light-(?:default|font200)-(?:actions-room|actions-dm|actions-own|form-room|form-dm|form-photo|"
     r"form-file|form-filled|form-toolong|sending|rate|unknown|unknown-nodetails|sent-sheet-room|sent-sheet-dm|already|refused|"
-    r"notreportable|sending-line|review|busy)|light-font200-form-room-end|"
+    r"notreportable|sending-line|review|busy)|light-font200-form-room-end|light-font200-landscape-short-ime|"
     r"light-font200-diag-landscape-(?:form|form-field|form-end|unknown|stepup)|light-default-form-file-end|"
     r"dark-default-(?:form-room|sent-sheet-room))[.]png")
 PERSON_REPORT_DESTINATION = ROOT / "app/build/reports/androidTests/person-report-presentation"
@@ -484,14 +484,14 @@ def collect_report():
     # at default and 200% (42), the 200% form scrolled to its end (1), dark at default for the form and the sheet (2), and
     # the TL's 200% landscape geometry evidence: the form, the form at its field and the StepUpDialog (3), and the PL's
     # file form scrolled to its attachment line, light default (1).
-    files = list(islice(SOURCE.rglob("ccm-report-presentation/*"), 52))
-    if (not files or len(files) > 51 or len({p.name for p in files}) != len(files)
+    files = list(islice(SOURCE.rglob("ccm-report-presentation/*"), 53))
+    if (not files or len(files) > 52 or len({p.name for p in files}) != len(files)
         or any(REPORT_NAME.fullmatch(p.name) is None for p in files)):
         raise ValueError("Missing or ambiguous report presentation output")
     REPORT_DESTINATION.mkdir(parents=True, exist_ok=True)
     for path in files:
         shutil.copyfile(path, REPORT_DESTINATION / path.name)
-    print(f"Report presentation captures collected: {len(files)} of 51.")
+    print(f"Report presentation captures collected: {len(files)} of 52.")
 
 
 def collect_person_report():

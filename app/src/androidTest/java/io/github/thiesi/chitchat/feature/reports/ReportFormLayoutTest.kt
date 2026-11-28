@@ -32,6 +32,8 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ActivityScenario
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.thiesi.chitchat.R
 import io.github.thiesi.chitchat.core.reports.ReportCategory
@@ -526,6 +528,9 @@ class ReportFormLayoutTest {
             // TL: a change that keeps the caret's line in view moves nothing.
             compose.onNodeWithTag("report_details").performTextInput("Posted the same link")
             assertCaretInView("$case short")
+            // #378 (PL): the landscape short state with the keyboard up, the caret's line flush with the bottom edge (the
+            // 8 dp yields when the kept range is the caret's line), for the PL's glyph check against the edge and divider.
+            if (landscape) captureDialog("report-light-font200-landscape-short-ime")
             val still = scrollValues()
             compose.onNodeWithTag("report_details").performTextInput(" twice")
             compose.waitForIdle()
@@ -637,6 +642,20 @@ class ReportFormLayoutTest {
         val (labelTop, labelBottom) = labelPlace()
         return CaretLine(caretTop, caretBottom, height, cut, "$detail fieldBottom=$fieldBottom label=$labelTop..$labelBottom",
             "$metrics fieldBottom=${fieldBottom.r()} label=${labelTop.r()}..${labelBottom.r()}", fieldTop, fieldBottom, labelTop, labelBottom)
+    }
+
+    /** #378 (PL): the report dialog's node as shown, into the report captures (collected by native_presentation.py). */
+    private fun captureDialog(name: String) {
+        compose.waitForIdle()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }
+            ?: checkNotNull(instrumentation.targetContext.getExternalFilesDir(null))
+        val folder = java.io.File(output, "ccm-report-presentation")
+        check(folder.isDirectory || folder.mkdirs())
+        val bitmap = compose.onNode(androidx.compose.ui.test.isDialog()).captureToImage().asAndroidBitmap()
+        try {
+            java.io.File(folder, "$name.png").outputStream().use { check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
+        } finally { bitmap.recycle() }
     }
 
     /** The text offset whose line sits at [y] in the viewport (the field's own layout), for a caret away from the edges. */
