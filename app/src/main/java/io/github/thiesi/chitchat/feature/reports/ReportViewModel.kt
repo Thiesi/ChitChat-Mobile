@@ -286,13 +286,14 @@ class ReportViewModel(private val operations: ReportOperations) : ViewModel() {
     }
 
     /** (b) The details field gained focus: the person's next interaction, so a held notice lets go (PL, TL). */
-    fun fieldFocused() = release()
+    fun fieldFocused() = io.github.thiesi.chitchat.core.ui.KeepProbe.log("HOLD fieldFocused held=${mutable.value?.noticeHeld}").let {
+        release().also { io.github.thiesi.chitchat.core.ui.KeepProbe.log("HOLD released live=${noticeHeldNow}") } }
 
     /**
      * (a) The keyboard went from hidden to shown while the details field was focused (a tap, TalkBack's activation, any
      * re-show): the person's next interaction. Returns whether a notice was held, so the form brings the field back.
      */
-    fun keyboardShown(): Boolean = release()
+    fun keyboardShown(): Boolean = io.github.thiesi.chitchat.core.ui.KeepProbe.log("HOLD keyboardShown held=${mutable.value?.noticeHeld}").let { release() }
 
     private fun release(): Boolean {
         val current = mutable.value ?: return false
