@@ -95,19 +95,49 @@ class FormDialogBoundsProbe {
     private fun automation() = instrumentation.uiAutomation.also { it.serviceInfo = it.serviceInfo.apply {
         flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS } }
 
-    /** Every node of the window that holds [marker] (the dialog), refreshed. */
+    /**
+     * Follow-up (TL, PL): the dialog window's nodes, refreshed. The window is chosen by type and package, never by a text
+     * that may scroll away (0186fa0 chose it by "Send report", which in one column is off screen and has no node): the
+     * TYPE_APPLICATION window of our package with the highest layer (the dialog sits above the activity). [marker] is
+     * unused, kept so the call sites stay as they were.
+     */
+    @Suppress("UNUSED_PARAMETER")
     private fun windowNodes(marker: String): List<AccessibilityNodeInfo> {
-        for (window in automation().windows) {
-            val nodes = mutableListOf<AccessibilityNodeInfo>()
-            fun walk(node: AccessibilityNodeInfo?) {
-                node ?: return
-                node.refresh(); nodes += node
-                for (index in 0 until node.childCount) walk(node.getChild(index))
-            }
-            walk(window.root)
-            if (nodes.any { it.text?.toString()?.contains(marker) == true }) return nodes
+        val window = automation().windows.filter { w ->
+            w.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION &&
+                w.root?.packageName?.toString() == context.packageName
+        }.maxByOrNull { it.layer } ?: return emptyList()
+        val nodes = mutableListOf<AccessibilityNodeInfo>()
+        fun walk(node: AccessibilityNodeInfo?) {
+            node ?: return
+            node.refresh(); nodes += node
+            for (index in 0 until node.childCount) walk(node.getChild(index))
         }
-        return emptyList()
+        walk(window.root)
+        return nodes
+    }
+
+    /** Every window, per state: id, type, layer, title, focus, its root's package, class and child count. */
+    private fun windows(case: String, state: String) {
+        val text = automation().windows.joinToString(" | ") { w ->
+            val r = w.root
+            "id=${w.id} type=${w.type} layer=${w.layer} title=${w.title?.toString()?.take(40)} active=${w.isActive} " +
+                "focused=${w.isFocused} root=${r?.packageName}/${r?.className?.toString()?.substringAfterLast('.')} children=${r?.childCount}"
+        }
+        log("WINDOWS $case $state $text rootInActiveWindow=${automation().rootInActiveWindow?.packageName}")
+    }
+
+    /** A dump file of the dialog window's node tree (class, text, description, bounds, flags), per state. */
+    private fun dump(case: String, state: String, nodes: List<AccessibilityNodeInfo>) {
+        val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")?.let { java.io.File(it) }
+            ?: return
+        val folder = java.io.File(output, "ccm-372-dumps").apply { mkdirs() }
+        java.io.File(folder, "$case-$state.txt").writeText(nodes.joinToString("\n") { n ->
+            "${n.className?.toString()?.substringAfterLast('.')} text=${n.text?.toString()?.take(60)} desc=${n.contentDescription?.toString()?.take(60)} " +
+                "hint=${n.hintText?.toString()?.take(60)} bounds=${n.screen()} visible=${n.isVisibleToUser} clickable=${n.isClickable} " +
+                "editable=${n.isEditable} scrollable=${n.isScrollable} focusable=${n.isFocusable} children=${n.childCount}"
+        })
+        log("DUMP $case $state nodes=${nodes.size} file=ccm-372-dumps/$case-$state.txt")
     }
 
     private fun AccessibilityNodeInfo.screen(): android.graphics.Rect = android.graphics.Rect().also { getBoundsInScreen(it) }
@@ -145,6 +175,24 @@ class FormDialogBoundsProbe {
         val nodes = windowNodes(marker)
         log("STATE $case $state mode=${mode()} ime=${ime()} decor=${decor[0]},${decor[1]} ranges=${ranges()} " +
             "innerValue=${KeepProbe.inner?.value} outerValue=${KeepProbe.outer?.value} a11yNodes=${nodes.size}")
+        windows(case, state)
+        dump(case, state, nodes)
+        // What TalkBack reads on the field, and whether the separate label has its own node (or is merged into the field).
+        val field = nodes.firstOrNull { it.isEditable }
+        val labelText = context.getString(R.string.report_details_label)
+        val labelNodes = nodes.filter { it.text?.toString() == labelText || it.contentDescription?.toString() == labelText }
+        log("READS $case $state field=${field?.let { "text=${it.text?.toString()?.take(40)} desc=${it.contentDescription?.toString()?.take(60)} " +
+            "hint=${it.hintText?.toString()?.take(60)} labeledBy=${it.labeledBy?.text?.toString()?.take(40)}" } ?: "absent"} " +
+            "labelOwnNodes=${labelNodes.size} labelNodeRects=${labelNodes.joinToString(";") { it.screen().toShortString() }}")
+        // Buttons: the node carrying the text, and its clickable ancestor (what explore-by-touch and the outline use).
+        for (name in listOf(R.string.report_send, R.string.cancel, R.string.verify_and_continue)) {
+            val text = context.getString(name)
+            val textNode = nodes.firstOrNull { it.text?.toString() == text || it.contentDescription?.toString() == text } ?: continue
+            var clickable: AccessibilityNodeInfo? = textNode
+            while (clickable != null && !clickable.isClickable) clickable = clickable.parent
+            log("BUTTON $case $state \"$text\" textNode=${textNode.screen().toShortString()} textNodeClickable=${textNode.isClickable} " +
+                "clickableAncestor=${clickable?.screen()?.toShortString()} sameNode=${clickable == textNode}")
+        }
         for ((tag, match) in pairs) {
             val sem = runCatching { compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode() }.getOrNull()
             if (sem == null) { log("NODE $case $state $tag semantics=absent"); continue }
@@ -210,16 +258,33 @@ class FormDialogBoundsProbe {
     }
 
     /** (b): accessibility focus on the field; its focus rect (boundsInScreen) against the semantics bounds. */
+    private fun touchExploration(): Boolean = context.getSystemService(android.view.accessibility.AccessibilityManager::class.java).isTouchExplorationEnabled
+
+    /**
+     * Follow-up: accessibility focus needs touch exploration (Compose's requestAccessibilityFocus returns false without it).
+     * It's switched on for this step only and off again in a finally block, before any later native tap; both logged.
+     */
     private fun focus(case: String, marker: String) {
-        val node = windowNodes(marker).firstOrNull { it.isEditable } ?: run { log("FOCUS $case field=absent"); return }
-        val done = node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
-        compose.waitForIdle(); node.refresh()
-        val b = compose.onNodeWithTag("report_details", useUnmergedTree = true).fetchSemanticsNode().boundsInWindow
-        val decor = decorOffset()
-        log("FOCUS $case performed=$done focused=${node.isAccessibilityFocused} a11y=${node.screen()} " +
-            "semantics+decor=${b.left + decor[0]},${b.top + decor[1]},${b.right + decor[0]},${b.bottom + decor[1]}")
-        DiagRecording.capture("a11y-focus")
-        node.performAction(AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS)
+        val automation = automation()
+        val before = automation.serviceInfo
+        try {
+            automation.serviceInfo = before.apply { flags = flags or AccessibilityServiceInfo.FLAG_REQUEST_TOUCH_EXPLORATION_MODE }
+            DiagRecording.hold(compose, 500)
+            log("FOCUS $case touchExploration on=${touchExploration()}")
+            val node = windowNodes(marker).firstOrNull { it.isEditable } ?: run { log("FOCUS $case field=absent"); return }
+            val done = node.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
+            compose.waitForIdle(); node.refresh()
+            val b = compose.onNodeWithTag("report_details", useUnmergedTree = true).fetchSemanticsNode().boundsInWindow
+            val decor = decorOffset()
+            log("FOCUS $case performed=$done focused=${node.isAccessibilityFocused} a11y=${node.screen()} " +
+                "semantics+decor=${b.left + decor[0]},${b.top + decor[1]},${b.right + decor[0]},${b.bottom + decor[1]}")
+            DiagRecording.capture("a11y-focus")
+            node.performAction(AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS)
+        } finally {
+            automation.serviceInfo = automation.serviceInfo.apply { flags = flags and AccessibilityServiceInfo.FLAG_REQUEST_TOUCH_EXPLORATION_MODE.inv() }
+            DiagRecording.hold(compose, 500)
+            log("FOCUS $case touchExploration off=${!touchExploration()}")
+        }
     }
 
     /** PL item 2: SCROLL_FORWARD until it stops, then SCROLL_BACKWARD until it stops, on the scroller holding the field. */

@@ -11,7 +11,7 @@ on:
         default: none
         required: true
       a3_probe:
-        description: 'DIAGNOSTIC branch only: the 372 form-dialog bounds probe on main, observation only'
+        description: 'DIAGNOSTIC branch only: the 372 bounds probe follow-up on main, observation only'
         type: choice
         options: [none, run]
         default: none
@@ -46,7 +46,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - name: State the diagnostic boundary
         run: |
-          echo "Diagnostic only (372): the form-dialog bounds probe, observation only. No retries. Not a merge gate."
+          echo "Diagnostic only (372): the bounds probe follow-up, observation only. No retries. Not a merge gate."
           echo "Observed source commit: $GITHUB_SHA"
       - name: Install ffmpeg (the recordings frames; diagnostic only)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg || echo "ffmpeg unavailable"
@@ -73,11 +73,11 @@ jobs:
           script: |
             adb shell settings put secure show_ime_with_hard_keyboard 1
             python3 -B .github/scripts/native_environment.py
-            adb logcat -G 16M || true; ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372Report200Off,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372Report200On,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372Report100,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372RotateOff,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372RotateOn,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372StepUpOff,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372StepUpOn,io.github.thiesi.chitchat.feature.auth.RegistrationLineProbe#diag372Registration100Short,io.github.thiesi.chitchat.feature.auth.RegistrationLineProbe#diag372Registration200Short,io.github.thiesi.chitchat.feature.auth.RegistrationLineProbe#diag372Registration200Portrait,io.github.thiesi.chitchat.feature.auth.RegistrationLineProbe#diag372Registration200Landscape -Pandroid.testInstrumentationRunnerArguments.a3Probe=run -Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true --max-workers=2; s=$?; echo "diagnostic gradle exit $s"; for k in window_animation_scale transition_animation_scale animator_duration_scale; do echo "after the run: $k=$(adb shell settings get global $k)"; done; mkdir -p app/build/ccm-recording app/build/ccm-device-output; for f in $(adb shell ls /data/local/tmp/ | tr -d "\r" | grep "^ccm-"); do adb pull /data/local/tmp/$f app/build/ccm-recording/ || true; done; adb logcat -d -s CCMBounds > app/build/ccm-device-output/bounds.txt || true; adb logcat -d -s CCMKeepProbe > app/build/ccm-device-output/keep-probe.txt || true; adb logcat -d -s CCMDiagScales > app/build/ccm-device-output/scales-logcat.txt || true; for n in ccm-372-report200-off ccm-372-report200-on ccm-372-rotate-off ccm-372-rotate-on ccm-372-stepup-off ccm-372-stepup-on; do v=app/build/ccm-recording/$n.mp4; if [ -f "$v" ]; then mkdir -p app/build/ccm-recording/$n-frames; ffmpeg -loglevel error -i "$v" -vsync 0 app/build/ccm-recording/$n-frames/f%05d.png || true; ffprobe -loglevel error -select_streams v -show_entries frame=pts_time -of csv=p=0 "$v" > app/build/ccm-recording/$n-frame-times.csv || true; fi; done; exit $s
+            adb logcat -G 16M || true; ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372Report200Off,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372Report200On,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372Report100,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372RotateOff,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372RotateOn,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372StepUpOff,io.github.thiesi.chitchat.feature.reports.FormDialogBoundsProbe#diag372StepUpOn -Pandroid.testInstrumentationRunnerArguments.a3Probe=run -Pandroid.testInstrumentationRunnerArguments.expectSoftKeyboard=true --max-workers=2; s=$?; echo "diagnostic gradle exit $s"; for k in window_animation_scale transition_animation_scale animator_duration_scale; do echo "after the run: $k=$(adb shell settings get global $k)"; done; mkdir -p app/build/ccm-recording app/build/ccm-device-output; for f in $(adb shell ls /data/local/tmp/ | tr -d "\r" | grep "^ccm-"); do adb pull /data/local/tmp/$f app/build/ccm-recording/ || true; done; adb logcat -d -s CCMBounds > app/build/ccm-device-output/bounds.txt || true; adb logcat -d -s CCMKeepProbe > app/build/ccm-device-output/keep-probe.txt || true; adb logcat -d -s CCMDiagScales > app/build/ccm-device-output/scales-logcat.txt || true; for n in ccm-372-report200-off ccm-372-report200-on ccm-372-rotate-off ccm-372-rotate-on ccm-372-stepup-off ccm-372-stepup-on; do v=app/build/ccm-recording/$n.mp4; if [ -f "$v" ]; then mkdir -p app/build/ccm-recording/$n-frames; ffmpeg -loglevel error -i "$v" -vsync 0 app/build/ccm-recording/$n-frames/f%05d.png || true; ffprobe -loglevel error -select_streams v -show_entries frame=pts_time -of csv=p=0 "$v" > app/build/ccm-recording/$n-frame-times.csv || true; fi; done; exit $s
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: bounds-probe-api${{ matrix.api }}
+          name: bounds-probe2-api${{ matrix.api }}
           retention-days: 7
           path: |
             app/build/outputs/connected_android_test_additional_output/
