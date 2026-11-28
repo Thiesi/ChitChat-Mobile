@@ -229,6 +229,12 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                     extent.start, extent.endInclusive, margin).roundToInt()
             }
         }
+        // Label-gap PR (PL's fallback order): every target that meets the scroll range goes through rangeEndTarget, so the
+        // range's end never leaves a published separate label half in view (a band-label field keeps today's clamp).
+        fun rangeEnd(target: Int, state: androidx.compose.foundation.ScrollState, label: androidx.compose.ui.geometry.Rect?,
+            caret: androidx.compose.ui.geometry.Rect?, v: Float): Int =
+            rangeEndTarget(target.toFloat(), state.maxValue, label?.let { it.top..it.bottom }, caret?.top, caret?.bottom, v, margin)
+                .roundToInt()
         // The after-a-frame step and the callback fallback: the inputs from the current placement.
         fun heightStep(): Pair<androidx.compose.foundation.ScrollState, Int>? {
             if (heldNow()) return null
@@ -242,7 +248,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             val label = focused.labelIn(inside)
             val before = focused.before(key, child)
             val raw = heightTarget(state, box, caret, trailing, before, viewport.toFloat(), label)
-            return state to slideTarget(raw, state, box, caret, trailing, before, viewport.toFloat(), label)
+            return state to rangeEnd(slideTarget(raw, state, box, caret, trailing, before, viewport.toFloat(), label), state,
+                label, caret, viewport.toFloat())
         }
         val sameFrame = remember { FormDialogSameFrameRestore() }
         val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -298,7 +305,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             }
             val before = focused.before(key, child)
             val raw = heightTarget(state, box, liveCaret, trailing, before, viewportHeight.toFloat(), label)
-            val target = slideTarget(raw, state, box, liveCaret, trailing, before, viewportHeight.toFloat(), label)
+            val target = rangeEnd(slideTarget(raw, state, box, liveCaret, trailing, before, viewportHeight.toFloat(), label),
+                state, label, liveCaret, viewportHeight.toFloat())
             applySameFrame(placementDelta(target, state.value, state.maxValue), apply = state::dispatchRawDelta) {
                 cancelRunning(state)
             }
@@ -357,9 +365,9 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             var target = if (caret.top < top) caret.top else if (caret.bottom > top + v) caret.bottom - v else top
             val trailing = focused.trailingIn(inside)
             target = lastLineSpan(target, box, caret, trailing, v, margin)
-            target = labelRule(target, labelExtent(box, focused.labelIn(inside), labelBand),
-                keptRange(box, caret, trailing, v, margin), v, margin)
-            val next = target.roundToInt().coerceIn(0, state.maxValue)
+            val labelNow = focused.labelIn(inside)
+            target = labelRule(target, labelExtent(box, labelNow, labelBand), keptRange(box, caret, trailing, v, margin), v, margin)
+            val next = rangeEnd(target.roundToInt(), state, labelNow, caret, v).coerceIn(0, state.maxValue)
             if (next != state.value) state.scrollTo(next)
         }
         // #378 (b): the dialog window's IME inset and Compose's animation source and target, read in the outer placement
@@ -476,8 +484,8 @@ internal fun endLayout(maxHeight: Float, navBottom: Float, ime: Float, target: F
 /**
  * #378 failure 3: a same-mode slide frame's target: the end's target [tEnd] with only this frame's floors, in order: the
  * caret line wholly in view; a half label goes out (it is above the caret, so the line stays in view); then the scroll
- * range, lowered to the label whole if the range's end lands it half and the caret line stays in view (otherwise the
- * range's end, as the end frame itself settles there: the pre-existing label/maxValue gap, its own PR).
+ * range ([rangeEndTarget]: the label whole if the range's end lands it half and the caret line stays in view, otherwise the
+ * range's end).
  */
 internal fun sameModeFrameTarget(tEnd: Float, caretTop: Float?, caretBottom: Float?, v: Float, labelTop: Float,
     labelBottom: Float, margin: Float, maxValue: Int): Float {
@@ -485,12 +493,26 @@ internal fun sameModeFrameTarget(tEnd: Float, caretTop: Float?, caretBottom: Flo
     if (caretBottom != null && caretBottom - t > v) t = caretBottom - v
     if (caretTop != null && caretTop < t) t = caretTop
     if (labelHalf(t, labelTop, labelBottom, margin)) t = labelBottom
-    if (t > maxValue) {
-        t = maxValue.toFloat()
-        val whole = labelTop - margin
-        if (labelHalf(t, labelTop, labelBottom, margin) && (caretBottom == null || caretBottom - whole <= v)) t = whole
-    }
+    t = rangeEndTarget(t, maxValue, labelTop..labelBottom, caretTop, caretBottom, v, margin)
     return t.coerceAtLeast(0f)
+}
+
+/**
+ * Label-gap PR (PL's fallback order, 2026-11-28): a target that meets the scroll range's end. In range: unchanged. Beyond it:
+ * the range's end, unless that leaves the [label] half in view; then (2) the label whole (its top [margin] below the
+ * viewport's top) with the kept range cut to the caret's line, when that line stays wholly in view. Otherwise the range's
+ * end, today's clamp: (3) the scroll-range extension isn't built (form-dialog-scaffold.md: no current form reaches it; a new
+ * FormDialog field is checked against it in the PL's inventory). A field without a published separate label ([label] null)
+ * keeps today's clamp: the caller's own coerceIn applies.
+ */
+internal fun rangeEndTarget(target: Float, maxValue: Int, label: ClosedFloatingPointRange<Float>?, caretTop: Float?,
+    caretBottom: Float?, v: Float, margin: Float): Float {
+    if (label == null || target <= maxValue) return target
+    val end = maxValue.toFloat()
+    if (!labelHalf(end, label.start, label.endInclusive, margin)) return end
+    val whole = label.start - margin
+    val caretFits = (caretTop == null || caretTop >= whole) && (caretBottom == null || caretBottom - whole <= v)
+    return if (caretFits) whole else end
 }
 
 internal fun labelHalf(t: Float, labelTop: Float, labelBottom: Float, margin: Float): Boolean =

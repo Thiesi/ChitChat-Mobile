@@ -557,15 +557,16 @@ class PresentationGateTests(unittest.TestCase):
         files = [Path("report-light-default-form-room.png"), Path("report-light-font200-form-room-end.png"),
             Path("report-dark-default-sent-sheet-room.png"), Path("report-light-font200-busy.png"),
             Path("report-light-font200-diag-landscape-stepup.png"), Path("report-light-font200-diag-landscape-form-end.png"),
-            Path("report-light-font200-diag-landscape-unknown.png"), Path("report-light-font200-landscape-short-ime.png")]
+            Path("report-light-font200-diag-landscape-unknown.png"), Path("report-light-font200-landscape-short-ime.png"),
+            Path("report-light-font150-hide-end.png"), Path("report-light-font140-hide-end.png")]
         self.report_files(files)
         self.assertEqual(5, runner.main()); self.assert_once()
         for path in files: self.copy.assert_any_call(path, runner.REPORT_DESTINATION / path.name)
-        self.assertEqual(9, self.copy.call_count) # Eight captures and the completion capture.
+        self.assertEqual(11, self.copy.call_count) # Ten captures and the completion capture.
 
     def test_excess_ambiguous_or_foreign_report_output_is_rejected_before_copy(self):
         self.results(0)
-        for files in ([Path(f"report-light-default-form-room-{n}.png") for n in range(53)],
+        for files in ([Path(f"report-light-default-form-room-{n}.png") for n in range(56)],
             [Path("a/report-light-default-review.png"), Path("b/report-light-default-review.png")],
             [Path("report-dark-default-review.png")], [Path("report-light-default-form-room-end.png")], [Path("other.png")]):
             self.copy.reset_mock(); self.mkdir.reset_mock(); self.report_files(files)

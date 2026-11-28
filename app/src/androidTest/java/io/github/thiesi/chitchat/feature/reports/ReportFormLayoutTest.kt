@@ -299,6 +299,33 @@ class ReportFormLayoutTest {
 
     @Test fun at200PercentLandscapeTextFirstThenTheKeyboardKeepsTheCaretLineInView() = textFirst(landscape = true)
 
+    /**
+     * Label-gap PR (PL, 2026-11-28): portrait, after the keyboard hides, at font scales where the hide's target lies beyond
+     * the scroll range (1.40, 1.50: main left the label half, diag run 46112715890) and where it doesn't (1.60): the label
+     * node whole or out and the caret line in view, captured as CI runs (animations off; the animations-on twins come
+     * from the proof diagnostic, never from a product test).
+     */
+    @Test fun afterTheHideTheRangesEndKeepsTheLabelWholeOrOut() {
+        for (scale in listOf(1.40f, 1.50f, 1.60f)) hideAtTheRangesEnd(scale)
+    }
+
+    private fun hideAtTheRangesEnd(scale: Float) {
+        val percent = kotlin.math.round(scale * 100f).toInt()
+        val ime = { io.github.thiesi.chitchat.core.ui.focusedWindowIme().let { if (it.visible) maxOf(1, it.imeBottom) else 0 } }
+        launchAt(scale, landscape = false, ReportViewModel(operations)) {
+            report()
+            compose.onNodeWithTag("report_details").performScrollTo()
+            compose.tapNativeInput("report_details", imeBottom = ime)
+            compose.onNodeWithTag("report_details").performTextInput("Posted the same link")
+            compose.waitForIdle()
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            compose.waitUntil(5_000) { !io.github.thiesi.chitchat.core.ui.focusedWindowIme().visible }
+            compose.waitForIdle()
+            assertCaretInView("report-font$percent hide end")
+            captureDialog("report-light-font$percent-hide-end")
+        }
+    }
+
     private fun launchAt200(landscape: Boolean, reports: ReportViewModel, body: () -> Unit) =
         launchAt(2f, landscape, reports, body)
 
