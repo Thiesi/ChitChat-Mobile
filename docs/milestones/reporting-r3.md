@@ -50,7 +50,8 @@ Measured at 200% portrait: Send disables the details field, so its focus and the
 the form switches to its pinned layout. The two level-2 notices, "Nothing was sent." (snapshot) and "Your report didn't
 arrive.", ended out of view below the field, while InlineError and the wait line already brought themselves into view.
 - **The fix:** both now bring themselves into view when they appear, as a scroll only. A notice taller than the body
-  (the snapshot one at 200%) shows from its top.
+  (the snapshot one at 200%) shows from its top. That bring keeps the details field's label whole or out (#384:
+  form-dialog-scaffold.md, the label in a held view).
 - **Precedence:** the notice holds the view until the person's next interaction, usually a tap on the field. The
   keyboard then returns and the field's caret line is brought back.
 - **No focus return:** the app never brings focus or the keyboard back after a refusal that keeps the form, for message

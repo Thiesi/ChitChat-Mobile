@@ -376,6 +376,20 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
         @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class) val imeSource = WindowInsets.imeAnimationSource
         @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class) val imeTarget = WindowInsets.imeAnimationTarget
         val navInset = WindowInsets.navigationBars
+        // #384 (PL, TL): a bring-into-view request inside the held keep (the report notice) lands by heldBringDistance, so
+        // the notice's own bring never leaves the field's separate label half in view; any other request (the field's
+        // focus, the caret, a semantic scroll-to) keeps Compose's rule. One spec per scroller, each read where its
+        // verticalScroll resolves the local; the body gets the incoming spec again, so a nested scroller (a field's own
+        // text scroller) never reads FormDialog's (the #379 fix-B pattern).
+        val fallbackSpec = androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
+        val pinnedNow by androidx.compose.runtime.rememberUpdatedState(pinned)
+        val outerSpec = remember(fallbackSpec, margin) {
+            heldBringSpec(fallbackSpec, { !pinnedNow }, outer, { focused.outerFrame }, { focused.outerContent }, focused.caret, margin)
+        }
+        val innerSpec = remember(fallbackSpec, margin) {
+            heldBringSpec(fallbackSpec, { pinnedNow }, inner, { focused.innerFrame }, { focused.innerContent }, focused.caret, margin)
+        }
+        CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides outerSpec) {
         Column(Modifier.onFocusedBoundsChanged { focused.coordinates = it; focused.record(key, pinned); focused.recordBody() }
             .onSizeChanged { focused.outerViewport = it.height }
             .onGloballyPositioned { focused.outerFrame = it }
@@ -395,7 +409,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
             .testTag(if (pinned) "form_dialog_pinned" else "form_dialog_column").padding(24.dp)) {
             Box(Modifier.padding(bottom = 16.dp).onSizeChanged { titleHeight = it.height }) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.titleContentColor,
-                    LocalTextStyle provides MaterialTheme.typography.headlineSmall) { title() }
+                    LocalTextStyle provides MaterialTheme.typography.headlineSmall,
+                    androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides fallbackSpec) { title() }
             }
             // The modes differ only in modifiers, never in the tree, so a focused field keeps its node across a switch:
             // pinned, the body gets the leftover height and scrolls inside it; one column, it takes its own height and the
@@ -404,7 +419,8 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                 .testTag("form_dialog_body_viewport")) {
                 CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.textContentColor,
                     LocalTextStyle provides MaterialTheme.typography.bodyMedium,
-                    LocalFormDialogLayout provides layoutKey, LocalFormDialogCaret provides focused.caret) {
+                    LocalFormDialogLayout provides layoutKey, LocalFormDialogCaret provides focused.caret,
+                    androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides innerSpec) {
                     Column(Modifier.onSizeChanged { focused.innerViewport = it.height }
                         .onGloballyPositioned { focused.innerFrame = it }
                         .then(if (pinned) Modifier.scrollEdgeDividers(inner, MaterialTheme.colorScheme.outline)
@@ -426,15 +442,22 @@ private fun FormDialogContent(title: @Composable () -> Unit, confirmButton: @Com
                             focused.record(key, pinned)
                             focused.recordBody()
                         },
-                        verticalArrangement = bodyArrangement, content = body)
+                        verticalArrangement = bodyArrangement) {
+                        val scope = this
+                        CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides fallbackSpec) {
+                            scope.body()
+                        }
+                    }
                 }
             }
             Box(Modifier.align(Alignment.End).onSizeChanged { buttonsHeight = it.height }) {
                 CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.primary,
-                    LocalTextStyle provides MaterialTheme.typography.labelLarge) {
+                    LocalTextStyle provides MaterialTheme.typography.labelLarge,
+                    androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides fallbackSpec) {
                     FormDialogButtons(dismissButton, confirmButton)
                 }
             }
+        }
         }
     }
 }
@@ -741,7 +764,87 @@ internal class FormDialogCaret {
         label = coordinates
         version++
     }
+
+    /**
+     * #384: the held keep, the in-form notice a held view shows (published while it exists, cleared on dispose), and its
+     * lead's height from its top (the glyph line's first line; 0 when the whole notice is its lead). Only a bring-into-view
+     * request inside it is adjusted ([heldBringDistance]). Not a restore input: no version change.
+     */
+    var heldKeep: LayoutCoordinates? = null
+        private set
+    var heldLead = 0f
+        private set
+
+    fun publishHeldKeep(coordinates: LayoutCoordinates?, leadHeight: Float = 0f) {
+        heldKeep = coordinates
+        heldLead = leadHeight
+    }
 }
+
+/** #384: the distance a held bring takes, and which step of the PL's order chose it (1 to 4). */
+internal class HeldBring(val distance: Float, val step: Int)
+
+/** #384: whether a bring-into-view request (offset and size in the container) lies inside the held keep (±1 px). */
+internal fun insideHeldKeep(offset: Float, size: Float, keepTop: Float, keepBottom: Float): Boolean =
+    offset >= keepTop - 1f && offset + size <= keepBottom + 1f
+
+/**
+ * #384 (PL's order, 2026-11-28): the distance for a bring-into-view request inside the held keep, all positions in the
+ * container's viewport now, before the distance:
+ * 1. Compose's own distance [d0], when the separate label is whole or out there;
+ * 2. with the whole notice ([keepTop]..[keepBottom], when it fits) kept whole and in view: the label out by the minimum
+ *    (its bottom to the viewport's top), else whole by the minimum (its top [margin] below it);
+ * 3. the same with the notice's lead ([keepTop]..[leadBottom]) as the keep;
+ * 4. otherwise [d0]: the lead wins, the only place a half label can remain.
+ * Every distance stays within what the scroller can scroll ([forward], [backward]), so no clamp can land the label half.
+ * Every step's target is a fixed place in the content (the label's edge, or Compose's own target, which doesn't move once
+ * the request is in view), so the calls Compose makes again on each animation frame, with every position shifted by the
+ * distance already scrolled, keep the same target: the remaining distance only shrinks.
+ */
+internal fun heldBringDistance(d0: Float, container: Float, labelTop: Float, labelBottom: Float, keepTop: Float,
+    keepBottom: Float, leadBottom: Float, forward: Float, backward: Float, margin: Float): HeldBring {
+    if (!labelHalf(d0, labelTop, labelBottom, margin)) return HeldBring(d0, 1)
+    fun fits(d: Float, bottom: Float) = d <= forward + 0.5f && d >= -backward - 0.5f &&
+        keepTop - d >= -0.5f && bottom - d <= container + 0.5f
+    val keeps = buildList {
+        if (keepBottom - keepTop <= container + 0.5f) add(2 to keepBottom)
+        add(3 to minOf(leadBottom, keepBottom))
+    }
+    for ((step, bottom) in keeps) {
+        if (fits(labelBottom, bottom)) return HeldBring(labelBottom, step)
+        val whole = labelTop - margin
+        if (fits(whole, bottom)) return HeldBring(whole, step)
+    }
+    return HeldBring(d0, 4)
+}
+
+/**
+ * #384: a scroller's bring-into-view spec: a request inside the held keep, while this scroller is the one in use, lands by
+ * [heldBringDistance]; any other request keeps [fallback]'s distance. Positions are read live, in the container's viewport
+ * ([frame]): the keep and the separate label from their published coordinates, how far the content can still scroll from
+ * the content's placed offset ([content]) and the state's range.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+internal fun heldBringSpec(fallback: androidx.compose.foundation.gestures.BringIntoViewSpec, inUse: () -> Boolean,
+    state: androidx.compose.foundation.ScrollState, frame: () -> LayoutCoordinates?, content: () -> LayoutCoordinates?,
+    caret: FormDialogCaret, margin: Float): androidx.compose.foundation.gestures.BringIntoViewSpec =
+    object : androidx.compose.foundation.gestures.BringIntoViewSpec {
+        override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+            val d0 = fallback.calculateScrollDistance(offset, size, containerSize)
+            if (!inUse()) return d0
+            val viewport = frame()?.takeIf { it.isAttached } ?: return d0
+            val keepAt = caret.heldKeep?.takeIf { it.isAttached } ?: return d0
+            val labelAt = caret.label?.takeIf { it.isAttached } ?: return d0
+            val inside = content()?.takeIf { it.isAttached } ?: return d0
+            val keep = viewport.localBoundingBoxOf(keepAt, clipBounds = false)
+            if (!insideHeldKeep(offset, size, keep.top, keep.bottom)) return d0
+            val label = viewport.localBoundingBoxOf(labelAt, clipBounds = false)
+            val placed = -viewport.localPositionOf(inside, androidx.compose.ui.geometry.Offset.Zero).y
+            val lead = if (caret.heldLead > 0f) keep.top + caret.heldLead else keep.bottom
+            return heldBringDistance(d0, containerSize, label.top, label.bottom, keep.top, keep.bottom, lead,
+                (state.maxValue - placed).coerceAtLeast(0f), placed.coerceAtLeast(0f), margin).distance
+        }
+    }
 
 /** The form dialog's caret holder, for a field inside its body to publish to; null outside a form dialog. */
 internal val LocalFormDialogCaret = androidx.compose.runtime.staticCompositionLocalOf<FormDialogCaret?> { null }

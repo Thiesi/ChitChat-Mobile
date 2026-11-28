@@ -265,6 +265,42 @@ app window's bounds, not whether the keyboard covers a node.
   focused-field effect behaves as before. It's a scroll only: no focus, caret or accessibility-focus change, and no
   announcement. Off by default, so StepUp and other form dialogs are unchanged. The report form uses it for every in-form
   line after Send.
+  - **The label in a held view (#384, PL and TL, 2026-11-28).** The notice's own bring-into-view (when it appears, and
+    again on each layout change while held) used to stop at Compose's minimum. That could leave the field's separate
+    label half under the divider (the person report's held stage at 200%: the label at -100..14 in the viewport). The
+    notice now publishes itself as the held keep (`FormDialogCaret.publishHeldKeep`, with its lead's height, cleared when
+    it leaves), and each of FormDialog's two scrollers has its own `BringIntoViewSpec`. A request inside the held keep,
+    on the scroller in use, lands by `heldBringDistance`, in the PL's order:
+    1. Compose's own distance, when the label is whole or out there;
+    2. with the whole notice (when it fits) whole and in view: the label out by the minimum, else whole by the minimum;
+    3. the same with the notice's lead (the glyph line's first line) as the keep: its bottom from the text's own layout
+       (WarningNoticeTextTop, the column's 8dp and the line's 4dp, plus getLineBottom(0)), published from the text's
+       onTextLayout. A line-height proxy (12dp + bodyLarge's line height) measured 6 px short at 200% (48 against 54: under
+       nonlinear font scaling the layout applies the line height as a ratio of the scaled font size; that cause isn't
+       verified against Compose's source). No lead until the text has laid out (the keep is then the whole notice); a new
+       layout republishes it. The internal HeldLead semantics key exposes the published value to the held-lead test only
+       (not mapped to AccessibilityNodeInfo); ReportNoticeViewportTest asserts it covers the text's first line.
+    4. otherwise Compose's distance: the lead wins, the only place a half label can remain.
+
+    Out is preferred over whole within each tier (the PL's order), not the smaller move. The keep per kind (PL): a
+    WarningNotice (the snapshot and did-not-arrive notices) keeps the whole notice when it fits, else its lead line; the
+    not-sent, picture-gone and rate lines keep the whole line (their lead is the line). The same floor broke at 100% on
+    main for the not-sent and rate lines (the label's first line, or its descenders, under the divider), and is fixed by
+    the same rule.
+
+    The re-tap after the notice: the restore keeps the field's offset from the held stage, then the label rule applies.
+    With the label out in the held stage, the re-tap keeps it out: the notice reference (snapshot, did not arrive,
+    snapshot instant, not-sent instant: the tapped fieldTop) is 32/36/32/32. Before, did not arrive was 158: its held
+    offset (26) left the label half, so the label rule pulled it whole (offset 134); now the held offset is 12 with the
+    label out, and the restore keeps it there.
+
+    The label's floor and the lead in view are floors; the whole notice is a preference. The distance stays within what
+    the scroller can scroll, so no clamp at the range's end lands the label half. Each step's target is a fixed place in
+    the content, so Compose's repeated calls during the scroll animation keep the same target. Every other request (the
+    field's focus, the caret, the re-tap's restore, a semantic scroll-to) keeps Compose's rule, so the re-tap's result
+    and #387's case are unchanged; the body gets the incoming spec again, so a nested scroller never reads FormDialog's.
+    `FormDialogHeldBringTest` (JVM) sweeps the held placement 1 px at a time and counts each step per geometry (step 4:
+    never, for the current forms).
 - **By design (PL's rule):** in one-column mode the buttons are reached by scrolling while the field keeps focus. They
   aren't pinned on screen with the keyboard up; every one is reachable above the IME by scroll. This isn't a regression.
 - **StepUpDialog and the report form (#326, R2)** use it. Tags, callbacks and copy are unchanged.
