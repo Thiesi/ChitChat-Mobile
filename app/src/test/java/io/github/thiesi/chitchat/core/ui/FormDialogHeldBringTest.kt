@@ -14,6 +14,9 @@ import org.junit.Test
  *   first line (bodyLarge 24sp: 48 px).
  * - 100%, derived from the same layout at scale 1 (label 40, field 92, the gaps 12 and 44, the notice 52, lead 36, the
  *   pinned body viewport 424); the proof diagnostic measures them.
+ * - The whole-line kinds (PL, 2026-11-28: the not-sent and rate lines keep the whole line, so their lead is the line):
+ *   200% measured (the person rate line 152 below a 128 field; the message not-sent line 114 below a 118 field), 100%
+ *   derived (the not-sent line 20, the rate line 40, below the 92 field).
  */
 class FormDialogHeldBringTest {
     private val margin = 8f
@@ -27,6 +30,10 @@ class FormDialogHeldBringTest {
         Form("200% snapshot", 114f, 12f, 146f, 56f, 360f, 60f, 336f),
         Form("100% did not arrive", 40f, 12f, 92f, 44f, 52f, 36f, 424f),
         Form("100% snapshot", 40f, 12f, 92f, 44f, 160f, 36f, 424f),
+        Form("200% rate", 114f, 12f, 128f, 56f, 152f, 152f, 336f),
+        Form("200% not sent", 114f, 12f, 118f, 56f, 114f, 114f, 288f),
+        Form("100% not sent", 40f, 12f, 92f, 44f, 20f, 20f, 424f),
+        Form("100% rate", 40f, 12f, 92f, 44f, 40f, 40f, 424f),
     )
 
     /** Compose's default distance (DefaultBringIntoViewSpec): nothing when the request is in view or fills it, else the nearer edge. */

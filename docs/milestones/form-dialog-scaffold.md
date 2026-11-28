@@ -276,6 +276,18 @@ app window's bounds, not whether the keyboard covers a node.
     3. the same with the notice's lead (the glyph line's first line) as the keep;
     4. otherwise Compose's distance: the lead wins, the only place a half label can remain.
 
+    Out is preferred over whole within each tier (the PL's order), not the smaller move. The keep per kind (PL): a
+    WarningNotice (the snapshot and did-not-arrive notices) keeps the whole notice when it fits, else its lead line; the
+    not-sent, picture-gone and rate lines keep the whole line (their lead is the line). The same floor broke at 100% on
+    main for the not-sent and rate lines (the label's first line, or its descenders, under the divider), and is fixed by
+    the same rule.
+
+    The re-tap after the notice: the restore keeps the field's offset from the held stage, then the label rule applies.
+    With the label out in the held stage, the re-tap keeps it out: the notice reference (snapshot, did not arrive,
+    snapshot instant, not-sent instant: the tapped fieldTop) is 32/36/32/32. Before, did not arrive was 158: its held
+    offset (26) left the label half, so the label rule pulled it whole (offset 134); now the held offset is 12 with the
+    label out, and the restore keeps it there.
+
     The label's floor and the lead in view are floors; the whole notice is a preference. The distance stays within what
     the scroller can scroll, so no clamp at the range's end lands the label half. Each step's target is a fixed place in
     the content, so Compose's repeated calls during the scroll animation keep the same target. Every other request (the
