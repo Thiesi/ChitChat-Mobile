@@ -176,7 +176,10 @@ app window's bounds, not whether the keyboard covers a node.
       The bottom margin keeps the scroll-edge divider from reading as an underline under the counter (in Lantern, an
       underline means a link). The label rule moves the label in only if the kept range (the span with its margin, else
       the span, else the caret's line) stays wholly in view; otherwise it takes the label entirely out if the range's top
-      stays in view; never half. `FormDialogKeepInViewTest` (JVM) checks these on the pure geometry.
+      stays in view; never half. Once the kept range is cut to the caret's line (the span doesn't fit), the 8 dp bottom
+      margin yields too: the caret's line can sit flush with the bottom edge. Both landscape cases at 200% end that way
+      (the long text, and the short one with the keyboard up: the caret's line at 44..82 of an 82 px viewport, the field's
+      top at -10, the label out). `FormDialogKeepInViewTest` (JVM) checks these on the pure geometry.
     - **Two end states, both intended (PL, 2026-11-26).** Keyboard first, typing brings the span in from below, so it ends
       8 dp above the bottom edge. Text first, A's restore keeps the person's place across the keyboard's swap, and a span
       already clear of the margin doesn't move. In both, the caret's line, the field's bottom and the counter are in view
@@ -194,7 +197,8 @@ app window's bounds, not whether the keyboard covers a node.
     - the late-keyboard order (text first, then the keyboard), which is also the keyboard showing again over existing
       text.
 
-    The label is never cut in half. A change that keeps the caret's line in view leaves every scroller where it was. In
+    The label is never cut in half, checked on the report label's own node (whole, or entirely out), which each
+    report-caret metric line records. A change that keeps the caret's line in view leaves every scroller where it was. In
     portrait, a caret placed in the viewport's upper third keeps its offset within 1 px across the keyboard hide (one
     column to pinned): the restore holds it, not the clamp.
   - **How the asserts measure:** against the container that clips the field: the pinned body's viewport

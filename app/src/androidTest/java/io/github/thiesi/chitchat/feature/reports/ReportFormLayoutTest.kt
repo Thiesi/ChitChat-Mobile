@@ -565,14 +565,21 @@ class ReportFormLayoutTest {
      * nothing here converts to the window. The dialog's viewport already ends above the keyboard (imePadding).
      */
     private class CaretLine(val top: Float, val bottom: Float, val height: Float, val cut: Float, val detail: String,
-        val metrics: String, val fieldTop: Float = 0f, val fieldBottom: Float = 0f)
+        val metrics: String, val fieldTop: Float = 0f, val fieldBottom: Float = 0f, val labelTop: Float = 0f,
+        val labelBottom: Float = 0f)
 
     private fun assertCaretInView(step: String): CaretLine {
         val line = caretLine(step)
         val case = "report-caret-" + step.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').take(50)
         io.github.thiesi.chitchat.core.ui.recordFormDialogMetrics("case=$case ${line.metrics}")
         assertTrue("The caret line is in view (${line.detail})", line.top >= -1f && line.bottom <= line.height + 1f)
-        assertTrue("The label is never cut in half (${line.detail})", line.cut <= 0.5f || line.cut >= labelBand - 0.5f)
+        // #378 (TL, PL): every caller is the report form, whose label is a separate node above the field (#326), so the
+        // label rule is checked on that node: whole (its top at least 8dp below the viewport's top) or entirely out (its
+        // bottom at or above the top), never half. The field-top cut stood in for the label only while the label was the
+        // field's own band. labelPlace() fails when the node is missing; there's no fallback.
+        val margin = with(androidx.compose.ui.unit.Density(context)) { androidx.compose.ui.unit.Dp(8f).toPx() }
+        assertTrue("The label node is whole or entirely out, never half (margin=$margin, ${line.detail})",
+            line.labelTop >= margin - 1f || line.labelBottom <= 0f)
         compose.onNodeWithTag("report_details").assertIsFocused()
         return line
     }
@@ -626,8 +633,10 @@ class ReportFormLayoutTest {
         val metrics = "caretTop=${caretTop.r()} caretBottom=${caretBottom.r()} viewport=${height.r()} fieldTop=${fieldTop.r()} " +
             "pinned=$pinned visibleTop=${visible.top.r()} crossCheck=${crossCheck.r()} cut=${cut.r()} selection=${selection.start}.${selection.end}"
         val fieldBottom = fieldTop + field.size.height
-        return CaretLine(caretTop, caretBottom, height, cut, "$detail fieldBottom=$fieldBottom", "$metrics fieldBottom=${fieldBottom.r()}",
-            fieldTop, fieldBottom)
+        // #378: the report label's node in the same viewport coordinates, recorded with the caret line.
+        val (labelTop, labelBottom) = labelPlace()
+        return CaretLine(caretTop, caretBottom, height, cut, "$detail fieldBottom=$fieldBottom label=$labelTop..$labelBottom",
+            "$metrics fieldBottom=${fieldBottom.r()} label=${labelTop.r()}..${labelBottom.r()}", fieldTop, fieldBottom, labelTop, labelBottom)
     }
 
     /** The text offset whose line sits at [y] in the viewport (the field's own layout), for a caret away from the edges. */
